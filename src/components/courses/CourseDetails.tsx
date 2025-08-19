@@ -1,29 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { 
-  ChevronRight, 
-  Clock, 
-  Calendar, 
-  Award, 
-  CheckCircle, 
-  Users, 
-  FileText, 
-  Edit,
-  GraduationCap,
+  Award,
   BookOpen,
-  MessageCircle,
-  Star,
+  Calendar,
+  CheckCircle,
+  ChevronRight,
+  Clock,
   Download,
-  Trash2,
-  UserPlus
+  Edit,
+  FileText,
+  GraduationCap,
+  MessageCircle
 } from 'lucide-react';
 import EntityProfileHeader from '../../components/shared/EntityProfileHeader';
 import { Button } from '../../design-system/atoms/Button';
+import { apiGet } from '../../api/api';
+import { Course } from '../../types';
 
 const CourseDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [course, setCourse] = useState<any>(null);
+  const [course, setCourse] = useState<Course | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
 
@@ -31,15 +29,9 @@ const CourseDetails: React.FC = () => {
     const fetchCourse = async () => {
       setLoading(true);
       try {
-        const res = await fetch(`http://localhost:4000/courses/${id}`);
-        if (!res.ok) {
-          setNotFound(true);
-          setCourse(null);
-        } else {
-          const data = await res.json();
-          setCourse(data);
-        }
-      } catch (e) {
+        const data = await apiGet(`/courses/${id}`);
+        setCourse(data);
+      } catch {
         setNotFound(true);
         setCourse(null);
       } finally {
@@ -117,7 +109,7 @@ const CourseDetails: React.FC = () => {
         extraInfo={<span className="text-sm text-gray-600">Codice: {course.code || 'N/A'}</span>}
         statusBadge={
           <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-            course.status === 'Active' 
+            course.status === 'ACTIVE' 
               ? 'bg-green-100 text-green-800' 
               : 'bg-gray-100 text-gray-800'
           }`}>

@@ -21,23 +21,23 @@ export const removeAccents = (str: string): string => {
  * @param delimiter - Carattere delimitatore (default: ';')
  * @returns Stringa CSV formattata
  */
-export const createCsvString = <T extends Record<string, any>>(
+export const createCsvString = <T extends Record<string, unknown>>(
   data: T[],
   headers: Record<string, string>,
   delimiter: string = ';'
 ): string => {
   if (!data || data.length === 0) {
-    // Se non ci sono dati, restituisce solo le intestazioni
-    return Object.keys(headers).join(delimiter);
+    // Se non ci sono dati, restituisce solo le intestazioni (valori italiani)
+    return Object.values(headers).join(delimiter);
   }
 
-  // Crea la riga di intestazione (rimuovendo accenti dalle intestazioni)
-  const headerRow = Object.keys(headers).map(header => removeAccents(header)).join(delimiter);
+  // Crea la riga di intestazione usando i valori (etichette italiane) rimuovendo accenti
+  const headerRow = Object.values(headers).map(header => removeAccents(header)).join(delimiter);
   
   // Crea le righe di dati
   const rows = data.map(item => {
     return Object.entries(headers)
-      .map(([_, field]) => {
+      .map(([, field]) => {
         // Ottiene il valore dal campo specificato
         const value = item[field];
         
@@ -61,7 +61,7 @@ export const createCsvString = <T extends Record<string, any>>(
           try {
             const jsonString = JSON.stringify(value);
             return `"${removeAccents(jsonString).replace(/"/g, '""')}"`;
-          } catch (e) {
+          } catch {
             return '';
           }
         } else {
@@ -107,7 +107,7 @@ export const downloadCsv = (csvContent: string, filename: string = 'export.csv')
  * @param filename - Nome del file da scaricare
  * @param delimiter - Carattere delimitatore (default: ';')
  */
-export function exportToCsv<T extends Record<string, any>>(
+export function exportToCsv<T extends Record<string, unknown>>(
   data: T[],
   headers: Record<string, keyof T | string>,
   filename: string,
@@ -119,22 +119,22 @@ export function exportToCsv<T extends Record<string, any>>(
   }
 
   try {
-    // Intestazioni come prima riga del CSV 
-    const headerRow = Object.keys(headers).join(delimiter);
+    // Intestazioni come prima riga del CSV - usa i valori (etichette italiane) invece delle chiavi
+    const headerRow = Object.values(headers).join(delimiter);
     
     // Converti ogni riga di dati in una riga CSV
     const csvRows = data.map(item => {
       return Object.values(headers)
         .map(propName => {
           // La proprietà potrebbe essere un percorso nidificato come 'company.name'
-          let value: any;
+          let value: unknown;
           
           if (typeof propName === 'string' && propName.includes('.')) {
             // Handle nested properties
             const parts = propName.split('.');
-            let current: any = item;
+            let current: unknown = item;
             for (const part of parts) {
-              current = current && current[part];
+              current = current && typeof current === 'object' && current !== null ? (current as Record<string, unknown>)[part] : undefined;
             }
             value = current;
           } else {
@@ -236,4 +236,4 @@ export function downloadCsvTemplate(
   } catch (error) {
     console.error('Errore nel download del template CSV:', error);
   }
-} 
+}

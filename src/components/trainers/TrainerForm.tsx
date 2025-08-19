@@ -1,34 +1,33 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { User, Phone, Mail, Award, Plus, X } from 'lucide-react';
+import { Phone, Mail } from 'lucide-react';
 import Select from 'react-select';
 import { getCourses } from '../../services/courses';
 
 type Trainer = {
   id?: string;
-  first_name: string;
-  last_name: string;
-  tax_code?: string;
+  firstName: string;
+  lastName: string;
+  taxCode?: string;
   phone?: string;
   email?: string;
   certifications?: string[];
-  vat_number?: string;
-  tariffa_oraria?: string;
-  register_code?: string;
+  vatNumber?: string;
+  hourlyRate?: string;
+  registerCode?: string;
   iban?: string;
-  birth_date?: string | null;
-  residence_address?: string;
-  residence_city?: string;
+  birthDate?: string | null;
+  residenceAddress?: string;
+  residenceCity?: string;
   province?: string;
-  postal_code?: string;
+  postalCode?: string;
   notes?: string;
   specialties: string[];
   status?: string;
-  created_at?: string;
-  updated_at?: string;
+  createdAt?: string;
+  updatedAt?: string;
 };
-type TrainerInsert = Omit<Trainer, 'id' | 'created_at' | 'updated_at'>;
-type Certification = { id: string; name: string; description?: string };
+type TrainerInsert = Omit<Trainer, 'id' | 'createdAt' | 'updatedAt'>;
+
 
 interface TrainerFormProps {
   trainer?: Trainer;
@@ -36,66 +35,52 @@ interface TrainerFormProps {
   onCancel: () => void;
 }
 
-const SPECIALTIES = [
-  'First Aid',
-  'Safety Training',
-  'Health & Wellness',
-  'Emergency Response',
-  'Fire Safety',
-  'Ergonomics',
-  'Environmental Safety',
-  'Risk Assessment',
-  'Leadership',
-  'Communication'
-];
-
 export default function TrainerForm({ trainer, onSubmit, onCancel }: TrainerFormProps) {
-  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [certOptions, setCertOptions] = useState<{ value: string; label: string }[]>([]);
 
   const [formData, setFormData] = useState<TrainerInsert>({
-    first_name: '',
-    last_name: '',
-    tax_code: '',
+    firstName: '',
+    lastName: '',
+    taxCode: '',
     phone: '',
     email: '',
     certifications: [],
-    vat_number: '',
-    tariffa_oraria: '',
-    register_code: '',
+    vatNumber: '',
+    hourlyRate: '',
+    registerCode: '',
     iban: '',
-    birth_date: '',
-    residence_address: '',
-    residence_city: '',
+    birthDate: '',
+    residenceAddress: '',
+    residenceCity: '',
     province: '',
-    postal_code: '',
+    postalCode: '',
     notes: '',
-    status: 'Active',
+    status: 'ACTIVE',
     specialties: [],
   });
 
   useEffect(() => {
     if (trainer) {
       setFormData({
-        first_name: trainer.first_name ?? '',
-        last_name: trainer.last_name ?? '',
-        tax_code: trainer.tax_code ?? '',
+        firstName: trainer.firstName ?? '',
+        lastName: trainer.lastName ?? '',
+        taxCode: trainer.taxCode ?? '',
         phone: trainer.phone ?? '',
         email: trainer.email ?? '',
         certifications: trainer.certifications ?? [],
-        vat_number: trainer.vat_number ?? '',
-        tariffa_oraria: trainer.tariffa_oraria ?? '',
-        register_code: trainer.register_code ?? '',
+        vatNumber: trainer.vatNumber ?? '',
+        hourlyRate: trainer.hourlyRate ?? '',
+        registerCode: trainer.registerCode ?? '',
         iban: trainer.iban ?? '',
-        birth_date: trainer.birth_date ?? '',
-        residence_address: trainer.residence_address ?? '',
-        residence_city: trainer.residence_city ?? '',
+        birthDate: trainer.birthDate ?? '',
+        residenceAddress: trainer.residenceAddress ?? '',
+        residenceCity: trainer.residenceCity ?? '',
         province: trainer.province ?? '',
-        postal_code: trainer.postal_code ?? '',
+        postalCode: trainer.postalCode ?? '',
         notes: trainer.notes ?? '',
-        status: trainer.status ?? 'Active',
+        status: trainer.status ?? 'ACTIVE',
         specialties: trainer.specialties ?? [],
       });
     }
@@ -106,7 +91,7 @@ export default function TrainerForm({ trainer, onSubmit, onCancel }: TrainerForm
       try {
         const courses = await getCourses();
         const allCerts: string[] = [];
-        courses.forEach((c: any) => {
+        courses.forEach((c: unknown) => {
           if (c.certifications) {
             const certs = Array.isArray(c.certifications)
               ? c.certifications
@@ -116,7 +101,7 @@ export default function TrainerForm({ trainer, onSubmit, onCancel }: TrainerForm
         });
         const uniqueCerts = Array.from(new Set(allCerts.filter(Boolean))).sort();
         setCertOptions(uniqueCerts.map(c => ({ value: c, label: c })));
-      } catch (e) {
+      } catch {
         setCertOptions([]);
       }
     }
@@ -139,7 +124,7 @@ export default function TrainerForm({ trainer, onSubmit, onCancel }: TrainerForm
     try {
       const payload = {
         ...formData,
-        birth_date: formData.birth_date ? formData.birth_date : null,
+        birthDate: formData.birthDate ? formData.birthDate : null,
         certifications: formData.certifications || [],
       };
       await onSubmit(payload);
@@ -161,7 +146,7 @@ export default function TrainerForm({ trainer, onSubmit, onCancel }: TrainerForm
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="space-y-6">
           <div>
-            <label htmlFor="first_name" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="firstName" className="block text-sm font-medium text-gray-700">
               Nome
             </label>
             <div className="mt-1 relative rounded-md shadow-sm">
@@ -170,10 +155,10 @@ export default function TrainerForm({ trainer, onSubmit, onCancel }: TrainerForm
               </div>
               <input
                 type="text"
-                name="first_name"
-                id="first_name"
+                name="firstName"
+                id="firstName"
                 required
-                value={formData.first_name ?? ''}
+                value={formData.firstName ?? ''}
                 onChange={handleChange}
                 className="focus:ring-blue-500 focus:border-blue-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md"
                 placeholder="Nome"
@@ -182,7 +167,7 @@ export default function TrainerForm({ trainer, onSubmit, onCancel }: TrainerForm
           </div>
 
           <div>
-            <label htmlFor="last_name" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="lastName" className="block text-sm font-medium text-gray-700">
               Cognome
             </label>
             <div className="mt-1 relative rounded-md shadow-sm">
@@ -191,10 +176,10 @@ export default function TrainerForm({ trainer, onSubmit, onCancel }: TrainerForm
               </div>
               <input
                 type="text"
-                name="last_name"
-                id="last_name"
+                name="lastName"
+                id="lastName"
                 required
-                value={formData.last_name ?? ''}
+                value={formData.lastName ?? ''}
                 onChange={handleChange}
                 className="focus:ring-blue-500 focus:border-blue-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md"
                 placeholder="Cognome"
@@ -203,12 +188,12 @@ export default function TrainerForm({ trainer, onSubmit, onCancel }: TrainerForm
           </div>
 
           <div>
-            <label htmlFor="tax_code" className="block text-sm font-medium text-gray-700">Codice Fiscale</label>
+            <label htmlFor="taxCode" className="block text-sm font-medium text-gray-700">Codice Fiscale</label>
             <input
               type="text"
-              name="tax_code"
-              id="tax_code"
-              value={formData.tax_code ?? ''}
+              name="taxCode"
+              id="taxCode"
+              value={formData.taxCode ?? ''}
               onChange={handleChange}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
               placeholder="Codice Fiscale"
@@ -252,12 +237,12 @@ export default function TrainerForm({ trainer, onSubmit, onCancel }: TrainerForm
           </div>
 
           <div>
-            <label htmlFor="vat_number" className="block text-sm font-medium text-gray-700">P.IVA</label>
+            <label htmlFor="vatNumber" className="block text-sm font-medium text-gray-700">P.IVA</label>
             <input
               type="text"
-              name="vat_number"
-              id="vat_number"
-              value={formData.vat_number ?? ''}
+              name="vatNumber"
+              id="vatNumber"
+              value={formData.vatNumber ?? ''}
               onChange={handleChange}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
               placeholder="P.IVA"
@@ -265,12 +250,12 @@ export default function TrainerForm({ trainer, onSubmit, onCancel }: TrainerForm
           </div>
 
           <div>
-            <label htmlFor="tariffa_oraria" className="block text-sm font-medium text-gray-700">Tariffa Oraria (€)</label>
+            <label htmlFor="hourlyRate" className="block text-sm font-medium text-gray-700">Tariffa Oraria (€)</label>
             <input
               type="number"
-              name="tariffa_oraria"
-              id="tariffa_oraria"
-              value={formData.tariffa_oraria ?? ''}
+              name="hourlyRate"
+              id="hourlyRate"
+              value={formData.hourlyRate ?? ''}
               onChange={handleChange}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
               placeholder="Tariffa Oraria"
@@ -280,12 +265,12 @@ export default function TrainerForm({ trainer, onSubmit, onCancel }: TrainerForm
           </div>
 
           <div>
-            <label htmlFor="register_code" className="block text-sm font-medium text-gray-700">Codice Albo</label>
+            <label htmlFor="registerCode" className="block text-sm font-medium text-gray-700">Codice Albo</label>
             <input
               type="text"
-              name="register_code"
-              id="register_code"
-              value={formData.register_code ?? ''}
+              name="registerCode"
+              id="registerCode"
+              value={formData.registerCode ?? ''}
               onChange={handleChange}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
               placeholder="Codice Albo"
@@ -334,24 +319,24 @@ export default function TrainerForm({ trainer, onSubmit, onCancel }: TrainerForm
           </div>
 
           <div>
-            <label htmlFor="birth_date" className="block text-sm font-medium text-gray-700">Data di Nascita</label>
+            <label htmlFor="birthDate" className="block text-sm font-medium text-gray-700">Data di Nascita</label>
             <input
               type="date"
-              name="birth_date"
-              id="birth_date"
-              value={formData.birth_date ? formData.birth_date.split('T')[0] : ''}
-              onChange={e => setFormData(prev => ({ ...prev, birth_date: e.target.value }))}
+              name="birthDate"
+              id="birthDate"
+              value={formData.birthDate ? formData.birthDate.split('T')[0] : ''}
+              onChange={e => setFormData(prev => ({ ...prev, birthDate: e.target.value }))}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
             />
           </div>
 
           <div>
-            <label htmlFor="residence_address" className="block text-sm font-medium text-gray-700">Via di Residenza</label>
+            <label htmlFor="residenceAddress" className="block text-sm font-medium text-gray-700">Via di Residenza</label>
             <input
               type="text"
-              name="residence_address"
-              id="residence_address"
-              value={formData.residence_address ?? ''}
+              name="residenceAddress"
+              id="residenceAddress"
+              value={formData.residenceAddress ?? ''}
               onChange={handleChange}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
               placeholder="Via di Residenza"
@@ -359,12 +344,12 @@ export default function TrainerForm({ trainer, onSubmit, onCancel }: TrainerForm
           </div>
 
           <div>
-            <label htmlFor="residence_city" className="block text-sm font-medium text-gray-700">Comune di Residenza</label>
+            <label htmlFor="residenceCity" className="block text-sm font-medium text-gray-700">Comune di Residenza</label>
             <input
               type="text"
-              name="residence_city"
-              id="residence_city"
-              value={formData.residence_city ?? ''}
+              name="residenceCity"
+              id="residenceCity"
+              value={formData.residenceCity ?? ''}
               onChange={handleChange}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
               placeholder="Comune di Residenza"
@@ -385,12 +370,12 @@ export default function TrainerForm({ trainer, onSubmit, onCancel }: TrainerForm
           </div>
 
           <div>
-            <label htmlFor="postal_code" className="block text-sm font-medium text-gray-700">CAP</label>
+            <label htmlFor="postalCode" className="block text-sm font-medium text-gray-700">CAP</label>
             <input
               type="text"
-              name="postal_code"
-              id="postal_code"
-              value={formData.postal_code ?? ''}
+              name="postalCode"
+              id="postalCode"
+              value={formData.postalCode ?? ''}
               onChange={handleChange}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
               placeholder="CAP"

@@ -1,5 +1,9 @@
 import React from 'react';
-import { Plus, Download, Upload } from 'lucide-react';
+import { 
+  Download,
+  Plus,
+  Upload
+} from 'lucide-react';
 import { Button } from '../../atoms/Button';
 import { Dropdown, DropdownAction } from '../../molecules/Dropdown';
 import { ViewModeToggle } from '../../molecules/ViewModeToggle';
@@ -48,7 +52,7 @@ export const HeaderPanel: React.FC<HeaderPanelProps> = ({
   const genderPrefix = entityGender === 'f' ? 'Nuova' : 'Nuovo';
   
   // Capitalizza la prima lettera del tipo di entità
-  const entityTypeCapitalized = entityType.charAt(0).toUpperCase() + entityType.slice(1);
+  const entityTypeCapitalized = entityType && typeof entityType === 'string' ? entityType.charAt(0).toUpperCase() + entityType.slice(1) : 'Elemento';
   
   // Opzioni per il dropdown di aggiunta
   const addOptions: DropdownAction[] = [];
@@ -56,7 +60,7 @@ export const HeaderPanel: React.FC<HeaderPanelProps> = ({
   // Prima opzione: Aggiungi singolo elemento
   if (onAdd) {
     addOptions.push({
-      label: `Aggiungi ${entityType} singolo`,
+      label: `Aggiungi ${entityType || 'elemento'} singolo`,
       icon: <Plus className="h-4 w-4" />,
       onClick: onAdd,
       variant: 'default',

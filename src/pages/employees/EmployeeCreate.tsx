@@ -3,11 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
 import EmployeeFormNew from '../../components/employees/EmployeeFormNew';
 import { useToast } from '../../hooks/useToast';
-
-interface Company {
-  id: string;
-  ragione_sociale: string;
-}
+import { apiGet} from '../../services/api';
+import { Company } from '../../types';
 
 const EmployeeCreate: React.FC = () => {
   const navigate = useNavigate();
@@ -35,11 +32,7 @@ const EmployeeCreate: React.FC = () => {
       isFetchingRef.current = true;
       
       try {
-        const response = await fetch('http://localhost:4000/companies');
-        if (!response.ok) {
-          throw new Error(`Failed to fetch companies: ${response.status}`);
-        }
-        const data = await response.json();
+        const data = await apiGet<Company[]>('/api/v1/companies');
         setCompanies(data);
         setLoading(false);
       } catch (error) {
@@ -100,7 +93,7 @@ const EmployeeCreate: React.FC = () => {
           className="inline-flex items-center text-sm text-blue-600 hover:text-blue-800"
         >
           <ChevronLeft className="h-4 w-4 mr-1" />
-          Torna all'elenco dipendenti
+          Torna all'elenco persone
         </Link>
       </div>
       
@@ -113,4 +106,4 @@ const EmployeeCreate: React.FC = () => {
   );
 };
 
-export default EmployeeCreate; 
+export default EmployeeCreate;

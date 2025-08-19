@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { InputFilter } from './InputFilter';
-import { Search, Filter, User, Mail } from 'lucide-react';
+import { Search, Filter, Mail } from 'lucide-react';
 import { useState } from 'react';
 
 const meta: Meta<typeof InputFilter> = {

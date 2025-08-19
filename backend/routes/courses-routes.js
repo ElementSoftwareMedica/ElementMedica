@@ -1,12 +1,14 @@
 import express from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../config/prisma-optimization.js';
 import { body, validationResult } from 'express-validator';
-import { authenticate, authorize as requirePermission, auditLog } from '../auth/middleware.js';
+import authMiddleware from '../middleware/auth.js';
+import { requirePermissions } from '../middleware/rbac.js';
+import { auditLog } from '../middleware/audit.js';
 import logger from '../utils/logger.js';
 
+const { authenticate } = authMiddleware;
 
 const router = express.Router();
-const prisma = new PrismaClient();
 
 // Middleware per la conversione automatica dei tipi numerici nelle richieste
 const convertCourseTypes = (req, res, next) => {
@@ -54,14 +56,14 @@ const convertCourseTypes = (req, res, next) => {
 router.use(convertCourseTypes);
 
 // GET /courses - Get all courses for user's company
-router.get('/', authenticate(), async (req, res) => {
+router.get('/', authenticate, async (req, res) => {
   try {
     const courses = await prisma.course.findMany({
       where: {
+        deletedAt: null,
         // Company isolation - only show courses for user's company
         // Note: This assumes courses table will be updated with company_id
         // For now, we'll show all courses but this should be filtered by company
-        eliminato: false // Only show non-deleted courses
       },
       include: {
         schedules: true
@@ -74,7 +76,7 @@ router.get('/', authenticate(), async (req, res) => {
         action: 'getCourses',
         error: error.message,
         stack: error.stack,
-        userId: req.user?.id,
+        personId: req.person?.id,
         companyId: req.query?.companyId
     });
     res.status(500).json({ 
@@ -85,18 +87,20 @@ router.get('/', authenticate(), async (req, res) => {
 });
 
 // GET /courses/:id - Get specific course
-router.get('/:id', authenticate(), async (req, res) => {
+router.get('/:id', authenticate, async (req, res) => {
   try {
-    const courseId = parseInt(req.params.id);
+    const courseId = req.params.id;
     
-    if (isNaN(courseId)) {
-      return res.status(400).json({ error: 'Invalid course ID' });
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(courseId)) {
+      return res.status(400).json({ error: 'Invalid course ID format' });
     }
     
     const course = await prisma.course.findUnique({
       where: { 
         id: courseId,
-        eliminato: false // Only show non-deleted courses
+        deletedAt: null
       },
       include: {
         schedules: true
@@ -119,7 +123,7 @@ router.get('/:id', authenticate(), async (req, res) => {
         action: 'getCourse',
         error: error.message,
         stack: error.stack,
-        userId: req.user?.id,
+        personId: req.person?.id,
         courseId: req.params?.id
     });
     res.status(500).json({ 
@@ -130,7 +134,7 @@ router.get('/:id', authenticate(), async (req, res) => {
 });
 
 // POST /courses - Create new course
-router.post('/', authenticate(), requirePermission('courses:create'), async (req, res) => {
+router.post('/', authenticate, requirePermissions('courses:create'), async (req, res) => {
   try {
     // Validate required fields
     const { name, description } = req.body;
@@ -146,8 +150,8 @@ router.post('/', authenticate(), requirePermission('courses:create'), async (req
       ...req.body,
       // TODO: Add company_id when courses table is updated
       // company_id: req.user.company_id,
-      created_by: req.user.id,
-      created_at: new Date()
+      created_by: req.person.id,
+      createdAt: new Date()
     };
     
     const course = await prisma.course.create({
@@ -164,8 +168,8 @@ router.post('/', authenticate(), requirePermission('courses:create'), async (req
         action: 'createCourse',
         error: error.message,
         stack: error.stack,
-        userId: req.user?.id,
-        courseName: req.body?.nome
+        personId: req.person?.id,
+        courseName: req.body?.title
     });
     
     if (error.code === 'P2002') {
@@ -183,19 +187,21 @@ router.post('/', authenticate(), requirePermission('courses:create'), async (req
 });
 
 // PUT /courses/:id - Update course
-router.put('/:id', authenticate(), requirePermission('courses:update'), async (req, res) => {
+router.put('/:id', authenticate, requirePermissions('courses:update'), async (req, res) => {
   try {
-    const courseId = parseInt(req.params.id);
+    const courseId = req.params.id;
     
-    if (isNaN(courseId)) {
-      return res.status(400).json({ error: 'Invalid course ID' });
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(courseId)) {
+      return res.status(400).json({ error: 'Invalid course ID format' });
     }
     
     // First check if course exists and user has access
     const existingCourse = await prisma.course.findUnique({
       where: { 
         id: courseId,
-        eliminato: false
+        deletedAt: null
       }
     });
     
@@ -210,8 +216,8 @@ router.put('/:id', authenticate(), requirePermission('courses:update'), async (r
     
     const courseData = {
       ...req.body,
-      updated_by: req.user.id,
-      updated_at: new Date()
+      updatedBy: req.person.id,
+      updatedAt: new Date()
     };
     
     const course = await prisma.course.update({
@@ -229,7 +235,7 @@ router.put('/:id', authenticate(), requirePermission('courses:update'), async (r
             action: 'updateCourse',
             error: error.message,
             stack: error.stack,
-            userId: req.user?.id,
+            personId: req.person?.id,
             courseId: req.params?.id
         });
     
@@ -248,19 +254,21 @@ router.put('/:id', authenticate(), requirePermission('courses:update'), async (r
 });
 
 // DELETE /courses/:id - Soft delete course
-router.delete('/:id', authenticate(), requirePermission('courses:delete'), async (req, res) => {
+router.delete('/:id', authenticate, requirePermissions('courses:delete'), async (req, res) => {
   try {
-    const courseId = parseInt(req.params.id);
+    const courseId = req.params.id;
     
-    if (isNaN(courseId)) {
-      return res.status(400).json({ error: 'Invalid course ID' });
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(courseId)) {
+      return res.status(400).json({ error: 'Invalid course ID format' });
     }
     
     // First check if course exists and user has access
     const existingCourse = await prisma.course.findUnique({
       where: { 
         id: courseId,
-        eliminato: false
+        deletedAt: null
       }
     });
     
@@ -277,7 +285,7 @@ router.delete('/:id', authenticate(), requirePermission('courses:delete'), async
     await prisma.course.update({
       where: { id: courseId },
       data: {
-        eliminato: true
+        deletedAt: new Date()
       }
     });
     
@@ -291,7 +299,7 @@ router.delete('/:id', authenticate(), requirePermission('courses:delete'), async
             action: 'deleteCourse',
             error: error.message,
             stack: error.stack,
-            userId: req.user?.id,
+            personId: req.person?.id,
             courseId: req.params?.id
         });
     res.status(500).json({ 

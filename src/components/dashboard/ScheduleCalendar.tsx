@@ -24,7 +24,7 @@ export interface ScheduleEvent {
   title: string;
   start: Date;
   end: Date;
-  resource?: any;
+  resource?: Record<string, unknown>;
   scheduleId?: string;
   tooltip?: string;
   sessioniTooltipHtml?: string;
@@ -32,39 +32,39 @@ export interface ScheduleEvent {
   status?: string;
 }
 
+interface SlotInfo {
+  start: Date;
+  end: Date;
+  slots: Date[];
+  action: string;
+}
+
 interface ScheduleCalendarProps {
   events: ScheduleEvent[];
-  onSelectSlot?: (slotInfo: any) => void;
+  onSelectSlot?: (slotInfo: SlotInfo) => void;
   onSelectEvent?: (event: ScheduleEvent) => void;
-  eventPropGetter?: (event: any) => any;
   view?: string;
   onView?: (view: string) => void;
 }
 
-// Custom event style
-const eventStyleGetter = () => {
-  return {
-    style: {
-      backgroundColor: '#2563eb', // Tailwind blue-600
-      color: 'white',
-      borderRadius: '0.5rem',
-      border: 'none',
-      padding: '2px 8px',
-      fontWeight: 500,
-      boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
-      cursor: 'pointer',
-    },
-  };
-};
+
+
+interface CustomToolbarProps {
+  label: string;
+  onNavigate: (action: string) => void;
+  onView: (view: string) => void;
+  views: string[];
+  view: string;
+}
 
 // Custom toolbar
-function CustomToolbar({ label, onNavigate, onView, views, view }: any) {
+function CustomToolbar({ label, onNavigate, onView, views, view }: CustomToolbarProps) {
   return (
     <div className="flex items-center justify-between mb-4">
       <div className="flex gap-2">
-        <button onClick={() => onNavigate('TODAY')} className="px-3 py-1 rounded-lg bg-blue-600 text-white font-medium shadow hover:bg-blue-700 transition">Oggi</button>
-        <button onClick={() => onNavigate('PREV')} className="px-3 py-1 rounded-lg bg-gray-100 text-gray-700 font-medium shadow hover:bg-gray-200 transition">&lt;</button>
-        <button onClick={() => onNavigate('NEXT')} className="px-3 py-1 rounded-lg bg-gray-100 text-gray-700 font-medium shadow hover:bg-gray-200 transition">&gt;</button>
+        <button onClick={() => onNavigate('TODAY')} className="px-3 py-1 rounded-full bg-blue-600 text-white font-medium shadow hover:bg-blue-700 transition">Oggi</button>
+        <button onClick={() => onNavigate('PREV')} className="px-3 py-1 rounded-full bg-gray-100 text-gray-700 font-medium shadow hover:bg-gray-200 transition">&lt;</button>
+        <button onClick={() => onNavigate('NEXT')} className="px-3 py-1 rounded-full bg-gray-100 text-gray-700 font-medium shadow hover:bg-gray-200 transition">&gt;</button>
       </div>
       <span className="text-lg font-semibold text-gray-800">{label}</span>
       <div className="flex gap-2">
@@ -99,9 +99,7 @@ function CustomEvent({ event }: { event: ScheduleEvent }) {
   );
 }
 
-const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({ events, onSelectSlot, onSelectEvent, eventPropGetter, view, onView }) => {
-  const [hoveredEventId, setHoveredEventId] = useState<string | null>(null);
-  const wrapperRef = useRef<HTMLDivElement>(null);
+const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({ events, onSelectSlot, onSelectEvent, view, onView }) => {
   const [currentView, setCurrentView] = useState(view || 'month');
 
   useEffect(() => {
@@ -109,11 +107,11 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({ events, onSelectSlo
   }, [view]);
 
   // Wrapper compatibile: clona il child e aggiunge solo overlay/tooltip
-  const EventWrapper = (props: any) => {
+  const EventWrapper = (props: { children: React.ReactElement; event: ScheduleEvent }) => {
     const { children, event } = props;
     const [mouse, setMouse] = useState<{x: number, y: number} | null>(null);
     const [hovered, setHovered] = useState(false);
-    const ref = useRef<any>(null);
+    const ref = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
       // Rimuovi il title nativo dal DOM
@@ -229,22 +227,22 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({ events, onSelectSlo
         fontSize: '0.85rem',
         boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
         cursor: 'pointer',
-        whiteSpace: event.view === 'month' ? 'nowrap' : 'normal',
-        maxWidth: event.view === 'month' ? 120 : '100%',
+        whiteSpace: currentView === 'month' ? 'nowrap' : 'normal',
+        maxWidth: currentView === 'month' ? 120 : '100%',
         minWidth: 0,
         overflow: 'hidden',
         textOverflow: 'ellipsis',
       },
-      onMouseEnter: (e: any) => {
+      onMouseEnter: (e: React.MouseEvent) => {
         setHovered(true);
         setMouse({ x: e.clientX, y: e.clientY });
         if (children.props.onMouseEnter) children.props.onMouseEnter(e);
       },
-      onMouseMove: (e: any) => {
+      onMouseMove: (e: React.MouseEvent) => {
         if (hovered) setMouse({ x: e.clientX, y: e.clientY });
         if (children.props.onMouseMove) children.props.onMouseMove(e);
       },
-      onMouseLeave: (e: any) => {
+      onMouseLeave: (e: React.MouseEvent) => {
         setHovered(false);
         if (children.props.onMouseLeave) children.props.onMouseLeave(e);
       },
@@ -301,4 +299,4 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({ events, onSelectSlo
   );
 };
 
-export default ScheduleCalendar; 
+export default ScheduleCalendar;

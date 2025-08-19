@@ -23,14 +23,14 @@ interface QueryParams {
   search?: string;
   sort?: string;
   order?: 'asc' | 'desc';
-  [key: string]: any;
+  [key: string]: string | number | boolean | undefined;
 }
 
 /**
  * Hook ottimizzato per query GET
  */
 export const useOptimizedQuery = <T>(
-  queryKey: (string | number)[],
+  queryKey: unknown[],
   queryFn: () => Promise<T>,
   options?: Omit<UseQueryOptions<T>, 'queryKey' | 'queryFn'>
 ) => {
@@ -41,10 +41,6 @@ export const useOptimizedQuery = <T>(
     queryKey,
     queryFn,
     ...options,
-    onError: (error: any) => {
-      handleError(error);
-      options?.onError?.(error);
-    },
   });
 };
 
@@ -63,7 +59,6 @@ export const useListQuery = <T>(
     queryKey,
     () => fetchFn(params),
     {
-      keepPreviousData: true, // Mantieni i dati precedenti durante il caricamento
       staleTime: 2 * 60 * 1000, // 2 minuti per le liste
       ...options,
     }

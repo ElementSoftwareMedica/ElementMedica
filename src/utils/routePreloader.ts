@@ -3,7 +3,7 @@
  * Week 11 Implementation - Intelligent Route Preloading
  */
 
-type PreloadableRoute = () => Promise<{ default: React.ComponentType<any> }>;
+type PreloadableRoute = () => Promise<{ default: React.ComponentType }>;
 
 interface RoutePreloadConfig {
   route: string;
@@ -14,7 +14,7 @@ interface RoutePreloadConfig {
 
 class RoutePreloader {
   private preloadedRoutes = new Set<string>();
-  private preloadPromises = new Map<string, Promise<any>>();
+  private preloadPromises = new Map<string, Promise<{ default: React.ComponentType }>>();
   private routeConfigs = new Map<string, RoutePreloadConfig>();
   private intersectionObserver?: IntersectionObserver;
   private idleCallback?: number;
@@ -46,7 +46,8 @@ class RoutePreloader {
     }
 
     if (this.preloadPromises.has(route)) {
-      return this.preloadPromises.get(route);
+      await this.preloadPromises.get(route);
+      return;
     }
 
     const preloadPromise = this.executePreload(config);
@@ -67,7 +68,7 @@ class RoutePreloader {
    */
   async preloadByPriority(priority: 'high' | 'medium' | 'low') {
     const routesToPreload = Array.from(this.routeConfigs.entries())
-      .filter(([_, config]) => config.priority === priority)
+      .filter(([, config]) => config.priority === priority)
       .map(([route]) => route);
 
     await Promise.allSettled(
@@ -129,7 +130,7 @@ class RoutePreloader {
     const preloadIdleRoutes = () => {
       this.idleCallback = requestIdleCallback(() => {
         const idleRoutes = Array.from(this.routeConfigs.entries())
-          .filter(([_, config]) => config.preloadOn === 'idle')
+          .filter(([, config]) => config.preloadOn === 'idle')
           .map(([route]) => route);
 
         idleRoutes.forEach(route => {

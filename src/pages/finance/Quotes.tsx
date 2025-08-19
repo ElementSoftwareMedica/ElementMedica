@@ -5,15 +5,13 @@ import { Button } from '../../design-system/atoms/Button';
 import { SearchBar } from '../../design-system/molecules';
 import { SearchBarControls } from '../../design-system/molecules/SearchBarControls';
 import ResizableTable from '../../components/shared/ResizableTable';
+import { Company } from '../../types';
 
 interface Quote {
   id: string;
   number: string;
   date: string;
-  company?: {
-    id: string;
-    ragione_sociale: string;
-  };
+  company?: Company;
   total: number;
   status: 'draft' | 'sent' | 'accepted' | 'rejected';
   expiration_date: string;
@@ -102,7 +100,7 @@ const Quotes: React.FC<QuotesProps> = ({
     try {
       setLoading(true);
       // In futuro qui verrà fatta una chiamata API reale
-      // const response = await axios.get<Quote[]>('http://localhost:4000/quotes');
+      // const response = await axios.get<Quote[]>('/api/quotes');
       // setQuotes(response.data);
       setQuotes([]);
       setError(null);
@@ -117,12 +115,13 @@ const Quotes: React.FC<QuotesProps> = ({
   const handleDeleteQuote = async (id: string, close?: () => void) => {
     try {
       // In futuro qui verrà fatta una chiamata API reale
-      // const res = await axios.delete(`http://localhost:4000/quotes/${id}`);
+      // const res = await axios.delete('/api/quotes/${id}');
       setQuotes(quotes.filter(q => q.id !== id));
       if (close) setTimeout(close, 100);
       alert('Preventivo eliminato con successo');
-    } catch (err: any) {
-      alert('Errore durante l\'eliminazione: ' + (err?.message || err));
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      alert('Errore durante l\'eliminazione: ' + errorMessage);
     }
   };
   
@@ -141,7 +140,7 @@ const Quotes: React.FC<QuotesProps> = ({
     {
       label: 'Azienda',
       value: 'company',
-      options: [...new Set(quotes.filter(q => q.company).map(q => q.company?.ragione_sociale))].map(name => ({
+      options: [...new Set(quotes.filter(q => q.company).map(q => q.company?.ragioneSociale))].map(name => ({
         label: name || '',
         value: name || ''
       }))
@@ -196,7 +195,7 @@ const Quotes: React.FC<QuotesProps> = ({
       key: 'company',
       label: 'Azienda',
       width: 200,
-      renderCell: (quote: Quote) => quote.company?.ragione_sociale || '-'
+      renderCell: (quote: Quote) => quote.company?.ragioneSociale || '-'
     },
     {
       key: 'total',
@@ -239,7 +238,7 @@ const Quotes: React.FC<QuotesProps> = ({
     filteredQuotes = quotes.filter(
       (quote) =>
         quote.number.toLowerCase().includes(lowercaseSearchTerm) ||
-        (quote.company?.ragione_sociale || '').toLowerCase().includes(lowercaseSearchTerm)
+        (quote.company?.ragioneSociale || '').toLowerCase().includes(lowercaseSearchTerm)
     );
   }
   
@@ -252,7 +251,7 @@ const Quotes: React.FC<QuotesProps> = ({
   
   if (activeFilters.company) {
     filteredQuotes = filteredQuotes.filter(
-      (quote) => quote.company?.ragione_sociale === activeFilters.company
+      (quote) => quote.company?.ragioneSociale === activeFilters.company
     );
   }
 

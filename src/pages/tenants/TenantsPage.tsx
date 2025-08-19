@@ -1,10 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit, Trash, Building, Users, Settings, Activity } from 'lucide-react';
+import { 
+  Activity,
+  Building,
+  Edit,
+  Plus,
+  Trash,
+  Users
+} from 'lucide-react';
 import { format } from 'date-fns';
 import { Company } from '../../types';
 import { getAllTenants, createTenant, updateTenant, deleteTenant, getTenantUsage, TenantCreateDTO, TenantUpdateDTO } from '../../services/tenants';
-import { useTenant } from '../../context/TenantContext';
 import { useAuth } from '../../context/AuthContext';
+import { useTenant } from '../../context/TenantContext';
 import TenantModal from './TenantModal';
 import TenantUsageModal from './TenantUsageModal';
 
@@ -18,7 +25,6 @@ const TenantsPage: React.FC = () => {
   const [currentTenant, setCurrentTenant] = useState<Company | null>(null);
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
   
-  const { hasPermission } = useTenant();
   const { user } = useAuth();
 
   // Verifica se l'utente è un SUPER_ADMIN
@@ -181,7 +187,7 @@ const TenantsPage: React.FC = () => {
                     <p className="text-sm text-gray-500">{tenant.slug}</p>
                   </div>
                 </div>
-                {getStatusBadge(tenant.is_active)}
+                {getStatusBadge(tenant.isActive)}
               </div>
 
               {/* Info */}
@@ -194,12 +200,12 @@ const TenantsPage: React.FC = () => {
                 )}
                 <div className="text-sm">
                   <span className="text-gray-500">Piano:</span>
-                  <span className="ml-2">{getPlanBadge(tenant.subscription_plan || 'FREE')}</span>
+                  <span className="ml-2">{getPlanBadge('FREE')}</span>
                 </div>
                 <div className="text-sm">
                   <span className="text-gray-500">Creato:</span>
                   <span className="ml-2 text-gray-900">
-                    {format(new Date(tenant.created_at), 'dd/MM/yyyy')}
+                    {tenant.createdAt ? format(new Date(tenant.createdAt), 'dd/MM/yyyy') : 'N/A'}
                   </span>
                 </div>
               </div>
@@ -231,7 +237,7 @@ const TenantsPage: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-1 text-sm text-gray-500">
                   <Users className="h-4 w-4" />
-                  <span>{tenant._count?.users || 0}</span>
+                  <span>0</span>
                 </div>
               </div>
             </div>

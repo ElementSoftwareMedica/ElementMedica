@@ -1,9 +1,7 @@
-import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import logger from '../utils/logger.js';
-
-const prisma = new PrismaClient();
+import prisma from '../config/prisma-optimization.js';
 
 class AuthService {
   /**
@@ -19,12 +17,14 @@ class AuthService {
             { username: identifier },
             { taxCode: identifier }
           ],
-          isActive: true,
-          isDeleted: false
+          status: 'ACTIVE',
+          deletedAt: null
         },
         include: {
           personRoles: {
-            where: { isActive: true },
+            where: {
+              deletedAt: null
+            },
             include: {
               company: true,
               tenant: true
@@ -78,7 +78,6 @@ class AuthService {
       const roles = person.personRoles.map(pr => pr.roleType);
       
       const tokenPayload = {
-        userId: person.id,
         personId: person.id,
         email: person.email,
         username: person.username,
@@ -91,9 +90,11 @@ class AuthService {
       const accessTokenExpiry = rememberMe ? '7d' : '1h';
       const refreshTokenExpiry = rememberMe ? '30d' : '7d';
 
+      const jwtSecret = process.env.JWT_SECRET || 'super-secret-jwt-key-for-development-change-in-production-2024';
+      
       const accessToken = jwt.sign(
         tokenPayload,
-        process.env.JWT_SECRET,
+        jwtSecret,
         { 
           expiresIn: accessTokenExpiry,
           issuer: 'training-platform',
@@ -101,9 +102,11 @@ class AuthService {
         }
       );
 
+      const jwtRefreshSecret = process.env.JWT_REFRESH_SECRET || 'super-secret-jwt-refresh-key-for-development-change-in-production-2024';
+      
       const refreshToken = jwt.sign(
         { personId: person.id },
-        process.env.JWT_REFRESH_SECRET,
+        jwtRefreshSecret,
         { 
           expiresIn: refreshTokenExpiry,
           issuer: 'training-platform',
@@ -127,6 +130,7 @@ class AuthService {
    */
   async updateLastLogin(personId) {
     try {
+      // Aggiorna il campo lastLogin (non lastLoginAt)
       await prisma.person.update({
         where: { id: personId },
         data: { lastLogin: new Date() }
@@ -140,8 +144,28 @@ class AuthService {
   /**
    * Salva il refresh token
    */
-  async saveRefreshToken(token, personId, expiresAt, userAgent, ipAddress) {
+  async saveRefreshToken(token, personId, expiresAt, userAgent, ipAddress, tenantId) {
     try {
+      console.log('🔍 saveRefreshToken called with:', { personId, tenantId, typeof_tenantId: typeof tenantId });
+      
+      // Se tenantId è null, cerchiamo il primo tenant disponibile o creiamo un tenant di default
+      let finalTenantId = tenantId;
+      if (!tenantId) {
+        console.log('⚠️ tenantId is null, looking for default tenant...');
+        
+        // Cerca il primo tenant disponibile
+        const defaultTenant = await prisma.tenant.findFirst({
+          where: { isActive: true }
+        });
+        
+        if (defaultTenant) {
+          finalTenantId = defaultTenant.id;
+          console.log('✅ Using default tenant:', finalTenantId);
+        } else {
+          throw new Error('No active tenant found and tenantId is null');
+        }
+      }
+      
       // Elimina i vecchi token scaduti o per questa persona
       await prisma.refreshToken.deleteMany({
         where: {
@@ -156,7 +180,8 @@ class AuthService {
       await prisma.refreshToken.create({
         data: {
           token,
-          personId: personId, // Ora usa personId invece di userId
+          personId: personId,
+          tenantId: finalTenantId,
           expiresAt,
           deviceInfo: {
             userAgent: userAgent || 'Unknown',
@@ -165,7 +190,7 @@ class AuthService {
         }
       });
       
-      logger.info('Refresh token saved successfully', { personId });
+      logger.info('Refresh token saved successfully', { personId, tenantId });
     } catch (error) {
       logger.error('Error saving refresh token:', { error: error.message });
       throw error;
@@ -183,9 +208,22 @@ class AuthService {
    * Ottiene tutti i ruoli di una persona
    */
   getPersonRoles(person) {
-    return person.personRoles
+    if (!person.personRoles) {
+      console.log('⚠️ AuthService.getPersonRoles: person.personRoles is null/undefined');
+      return [];
+    }
+    
+    const roles = person.personRoles
       .filter(pr => pr.isActive)
       .map(pr => pr.roleType);
+      
+    console.log('🔍 AuthService.getPersonRoles:', {
+      personId: person.id,
+      personRolesCount: person.personRoles.length,
+      activeRoles: roles
+    });
+    
+    return roles;
   }
 }
 

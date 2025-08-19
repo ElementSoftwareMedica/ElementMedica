@@ -1,0 +1,18 @@
+/**
+ * Monitoraggio e metriche
+ * Modulo: monitoring
+ * Generato automaticamente dalla Fase 8
+ */
+
+// === ENUM DEFINITIONS ===
+
+
+// === MODEL DEFINITIONS ===
+model TenantUsage {
+  id            String    @id @default(uuid())
+  tenantId      String
+  usageType     String
+  usageValue    Int       @default(0)
+  usageLimit    Int?
+  billingPeriod DateTime
+  metadata      Json      @default("{}

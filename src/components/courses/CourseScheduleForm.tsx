@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { X } from 'lucide-react';
+import { 
+  X
+} from 'lucide-react';
 import type { Database } from '../../types';
 
 type Course = Database['public']['Tables']['courses']['Row'];
@@ -9,11 +11,20 @@ type Trainer = {
   lastName: string;
 };
 
+interface CourseScheduleData {
+  courseId: string;
+  startDate: string;
+  endDate: string;
+  location: string;
+  trainerId: string;
+  maxParticipants: number;
+}
+
 interface CourseScheduleFormProps {
   course: Course;
   initialDate: Date | null;
   trainers: Trainer[];
-  onSubmit: (data: any) => Promise<void>;
+  onSubmit: (data: CourseScheduleData) => Promise<void>;
   onCancel: () => void;
 }
 

@@ -1,5 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { X, Plus, FileText, HelpCircle, Tag } from 'lucide-react';
+import { 
+  FileText,
+  HelpCircle,
+  Plus,
+  Tag,
+  X
+} from 'lucide-react';
 
 // Define placeholder categories and their placeholders
 export interface PlaceholderCategory {
@@ -195,22 +201,7 @@ const PlaceholderManager: React.FC<PlaceholderManagerProps> = ({
     }
   };
   
-  // Generate placeholder values for preview
-  const generatePreviewValues = () => {
-    const allPlaceholders: Placeholder[] = placeholderCategories.flatMap(category => category.placeholders);
-    const previewValues: Record<string, string> = {};
-    
-    allPlaceholders.forEach(placeholder => {
-      // Use provided preview data if available, otherwise use example
-      const placeholderName = placeholder.tag.replace(/[{}]/g, '');
-      previewValues[placeholderName] = 
-        previewData[placeholderName] || 
-        placeholder.example || 
-        `[${placeholderName}]`;
-    });
-    
-    return previewValues;
-  };
+  // generatePreviewValues removed - not used
   
   return (
     <div className="border border-gray-200 rounded-md shadow-sm">
@@ -344,4 +335,4 @@ const PlaceholderManager: React.FC<PlaceholderManagerProps> = ({
   );
 };
 
-export default PlaceholderManager; 
+export default PlaceholderManager;

@@ -7,6 +7,7 @@ const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true, // Include cookies for authentication
 });
 
 // Create a direct axios client for use with backend servers
@@ -14,6 +15,7 @@ const directApiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true, // Include cookies for authentication
 });
 
 // Funzione per aggiungere intercettori (per gestione token, errori, ecc.)
@@ -70,7 +72,7 @@ export async function create<T, D = Partial<T>>(endpoint: string, data: D, confi
     ];
     
     let lastError = null;
-    let allErrors = [];
+    const allErrors = [];
     
     // Try each endpoint until one works
     for (const url of possibleEndpoints) {

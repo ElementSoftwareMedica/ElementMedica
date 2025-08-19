@@ -3,74 +3,37 @@
  * Advanced authorization system with granular permissions
  */
 
-import { PrismaClient } from '@prisma/client';
 import logger from '../utils/logger.js';
+import RoleHierarchyService from '../services/roleHierarchyService.js';
 
-const prisma = new PrismaClient();
+import prisma from '../config/prisma-optimization.js';
 
 /**
  * RBAC Service Class
  */
 export class RBACService {
     /**
-     * Check if user has specific permission
+     * Check if person has specific permission
      */
-    static async hasPermission(userId, permission, resourceId = null) {
+    static async hasPermission(personId, permission, resourceId = null) {
         try {
-            const user = await prisma.user.findUnique({
-                where: { id: userId },
-                include: {
-                    userRoles: {
-                        where: { 
-                            isActive: true,
-                            OR: [
-                                { expiresAt: null },
-                                { expiresAt: { gt: new Date() } }
-                            ]
-                        },
-                        include: {
-                            role: true
-                        }
-                    }
-                }
-            });
+            // Get mapped permissions
+            const permissions = await this.getPersonPermissions(personId);
             
-            if (!user || !user.isActive) {
-                return false;
-            }
-            
-            // Check for global admin role
-            const hasGlobalAdmin = user.userRoles.some(ur => ur.role.name === 'global_admin');
-            if (hasGlobalAdmin) {
+            // Check if permission exists in mapped format
+            if (permissions[permission]) {
                 return true;
             }
             
-            // Check specific permissions
-            for (const userRole of user.userRoles) {
-                const rolePermissions = this.getRolePermissions(userRole.role);
-                
-                // Check for wildcard permission
-                if (rolePermissions.includes('*')) {
-                    return true;
-                }
-                
-                // Check exact permission match
-                if (rolePermissions.includes(permission)) {
-                    return true;
-                }
-                
-                // Check wildcard patterns (e.g., 'users.*' matches 'users.read')
-                const hasWildcardMatch = rolePermissions.some(perm => {
-                    if (perm.endsWith('*')) {
-                        const prefix = perm.slice(0, -1);
-                        return permission.startsWith(prefix);
-                    }
-                    return false;
-                });
-                
-                if (hasWildcardMatch) {
-                    return true;
-                }
+            // Check for wildcard patterns (e.g., 'companies:*' matches 'companies:read')
+            const [resource, action] = permission.split(':');
+            if (resource && permissions[`${resource}:*`]) {
+                return true;
+            }
+            
+            // Check for all permissions wildcard
+            if (permissions['*'] || permissions['all:*']) {
+                return true;
             }
             
             return false;
@@ -80,7 +43,7 @@ export class RBACService {
                 component: 'rbac-service',
                 action: 'hasPermission',
                 error: error.message,
-                userId,
+                personId,
                 permission,
                 resourceId
             });
@@ -89,35 +52,28 @@ export class RBACService {
     }
     
     /**
-     * Check if user has any of the specified roles
+     * Check if person has any of the specified roles
      */
-    static async hasRole(userId, roles) {
+    static async hasRole(personId, roles) {
         try {
-            const userRoles = await prisma.userRole.findMany({
+            const personRoles = await prisma.personRole.findMany({
                 where: {
-                    userId: userId,
-                    isActive: true,
-                    OR: [
-                        { expiresAt: null },
-                        { expiresAt: { gt: new Date() } }
-                    ]
-                },
-                include: {
-                    role: true
+                    personId: personId,
+                    isActive: true
                 }
             });
             
-            const userRoleNames = userRoles.map(ur => ur.role.name);
+            const personRoleTypes = personRoles.map(pr => pr.roleType);
             const requiredRoles = Array.isArray(roles) ? roles : [roles];
             
-            return requiredRoles.some(role => userRoleNames.includes(role));
+            return requiredRoles.some(role => personRoleTypes.includes(role));
             
         } catch (error) {
             logger.error('Role check failed', {
                 component: 'rbac-service',
                 action: 'hasRole',
                 error: error.message,
-                userId,
+                personId,
                 roles
             });
             return false;
@@ -125,111 +81,514 @@ export class RBACService {
     }
     
     /**
-     * Get user's effective permissions
+     * Get person's effective permissions
      */
-    static async getUserPermissions(userId) {
+    static async getPersonPermissions(personId) {
         try {
-            const user = await prisma.user.findUnique({
-                where: { id: userId },
+            const person = await prisma.person.findUnique({
+                where: { id: personId },
                 include: {
-                    userRoles: {
+                    personRoles: {
                         where: { 
-                            isActive: true,
-                            OR: [
-                                { expiresAt: null },
-                                { expiresAt: { gt: new Date() } }
-                            ]
+                            isActive: true
                         },
                         include: {
-                            role: true
+                            permissions: {
+                                where: {
+                                    isGranted: true
+                                }
+                            }
                         }
                     }
                 }
             });
             
-            if (!user) {
-                return [];
+            if (!person) {
+                logger.warn('Person not found', {
+                    component: 'rbac-service',
+                    action: 'getPersonPermissions',
+                    personId
+                });
+                return {};
             }
             
-            const permissions = new Set();
+            const permissions = {};
             
-            user.userRoles.forEach(userRole => {
-                const rolePermissions = this.getRolePermissions(userRole.role);
-                rolePermissions.forEach(permission => permissions.add(permission));
+            // Extract permissions from PersonRole -> RolePermission
+            person.personRoles.forEach(personRole => {
+                const rolePermissions = this.getRolePermissions(personRole);
+                
+                rolePermissions.forEach(permission => {
+                    // Map database permissions to frontend format
+                    switch(permission) {
+                        case 'VIEW_COMPANIES':
+                            permissions['companies:read'] = true;
+                            break;
+                        case 'CREATE_COMPANIES':
+                            permissions['companies:create'] = true;
+                            permissions['companies:write'] = true; // Compatibilità frontend
+                            break;
+                        case 'EDIT_COMPANIES':
+                            permissions['companies:edit'] = true;
+                            permissions['companies:write'] = true; // Compatibilità frontend
+                            break;
+                        case 'DELETE_COMPANIES':
+                            permissions['companies:delete'] = true;
+                            break;
+                        case 'VIEW_EMPLOYEES':
+                            permissions['employees:read'] = true;
+                            permissions['read:employees'] = true;
+                            permissions['companies:read'] = true; // Employees implies companies access
+                            break;
+                        case 'CREATE_EMPLOYEES':
+                            permissions['employees:create'] = true;
+                            permissions['create:employees'] = true;
+                            permissions['companies:read'] = true;
+                            break;
+                        case 'EDIT_EMPLOYEES':
+                            permissions['employees:edit'] = true;
+                            permissions['edit:employees'] = true;
+                            permissions['companies:read'] = true;
+                            break;
+                        case 'DELETE_EMPLOYEES':
+                            permissions['employees:delete'] = true;
+                            permissions['delete:employees'] = true;
+                            permissions['companies:read'] = true;
+                            break;
+                        case 'VIEW_TRAINERS':
+                            permissions['trainers:read'] = true;
+                            permissions['read:trainers'] = true;
+                            break;
+                        case 'CREATE_TRAINERS':
+                            permissions['trainers:create'] = true;
+                            permissions['create:trainers'] = true;
+                            break;
+                        case 'EDIT_TRAINERS':
+                            permissions['trainers:edit'] = true;
+                            permissions['edit:trainers'] = true;
+                            break;
+                        case 'DELETE_TRAINERS':
+                            permissions['trainers:delete'] = true;
+                            permissions['delete:trainers'] = true;
+                            break;
+                        // Person permissions mapping
+                        case 'VIEW_PERSONS':
+                            permissions['persons:read'] = true;
+                            permissions['persons:view_employees'] = true;
+                            permissions['persons:view_trainers'] = true;
+                            break;
+                        case 'CREATE_PERSONS':
+                            permissions['persons:create'] = true;
+                            permissions['persons:create_employees'] = true;
+                            permissions['persons:create_trainers'] = true;
+                            break;
+                        case 'EDIT_PERSONS':
+                            permissions['persons:edit'] = true;
+                            permissions['persons:edit_employees'] = true;
+                            permissions['persons:edit_trainers'] = true;
+                            break;
+                        case 'DELETE_PERSONS':
+                            permissions['persons:delete'] = true;
+                            permissions['persons:delete_employees'] = true;
+                            permissions['persons:delete_trainers'] = true;
+                            break;
+                        case 'VIEW_COURSES':
+                            permissions['courses:read'] = true;
+                            permissions['courses:create'] = true; // VIEW_COURSES implies create access
+                            break;
+                        case 'CREATE_COURSES':
+                            permissions['courses:create'] = true;
+                            break;
+                        case 'EDIT_COURSES':
+                            permissions['courses:edit'] = true;
+                            permissions['courses:update'] = true;
+                            break;
+                        case 'DELETE_COURSES':
+                            permissions['courses:delete'] = true;
+                            break;
+                        case 'VIEW_USERS':
+                            permissions['users:read'] = true;
+                            break;
+                        case 'CREATE_USERS':
+                            permissions['users:create'] = true;
+                            break;
+                        case 'EDIT_USERS':
+                            permissions['users:edit'] = true;
+                            break;
+                        case 'DELETE_USERS':
+                            permissions['users:delete'] = true;
+                            break;
+                        case 'ADMIN_PANEL':
+                            permissions['admin:access'] = true;
+                            permissions['companies:read'] = true;
+                            permissions['companies:manage'] = true;
+                            break;
+                        case 'SYSTEM_SETTINGS':
+                            permissions['system:admin'] = true;
+                            permissions['settings:manage'] = true;
+                            break;
+                        case 'USER_MANAGEMENT':
+                            permissions['users:manage'] = true;
+                            break;
+                        case 'ROLE_MANAGEMENT':
+                            permissions['roles:manage'] = true;
+                            break;
+                        case 'MANAGE_PUBLIC_CONTENT':
+                            permissions['PUBLIC_CMS:read'] = true;
+                            permissions['PUBLIC_CMS:update'] = true;
+                            permissions['PUBLIC_CMS:create'] = true;
+                            permissions['PUBLIC_CMS:delete'] = true;
+                            break;
+                        case 'READ_PUBLIC_CONTENT':
+                            permissions['PUBLIC_CMS:read'] = true;
+                            break;
+                        // CMS permissions
+                        case 'VIEW_CMS':
+                            permissions['VIEW_CMS'] = true; // Direct mapping for middleware
+                            permissions['cms:view'] = true;
+                            permissions['cms:read'] = true;
+                            break;
+                        case 'EDIT_CMS':
+                            permissions['EDIT_CMS'] = true; // Direct mapping for middleware
+                            permissions['cms:edit'] = true;
+                            permissions['cms:update'] = true;
+                            break;
+                        // Form Templates permissions
+                        case 'VIEW_FORM_TEMPLATES':
+                            permissions['VIEW_FORM_TEMPLATES'] = true; // Direct mapping for middleware
+                            permissions['form_templates:read'] = true;
+                            permissions['form_templates:view'] = true;
+                            break;
+                        case 'MANAGE_FORM_TEMPLATES':
+                            permissions['MANAGE_FORM_TEMPLATES'] = true; // Direct mapping for middleware
+                            permissions['form_templates:read'] = true;
+                            permissions['form_templates:create'] = true;
+                            permissions['form_templates:edit'] = true;
+                            permissions['form_templates:update'] = true;
+                            permissions['form_templates:delete'] = true;
+                            permissions['form_templates:manage'] = true;
+                            break;
+                        // Form Submissions permissions
+                        case 'VIEW_SUBMISSIONS':
+                            permissions['VIEW_SUBMISSIONS'] = true; // Direct mapping for middleware
+                            permissions['form_submissions:read'] = true;
+                            permissions['form_submissions:view'] = true;
+                            break;
+                        case 'MANAGE_SUBMISSIONS':
+                            permissions['MANAGE_SUBMISSIONS'] = true; // Direct mapping for middleware
+                            permissions['form_submissions:read'] = true;
+                            permissions['form_submissions:create'] = true;
+                            permissions['form_submissions:edit'] = true;
+                            permissions['form_submissions:update'] = true;
+                            permissions['form_submissions:delete'] = true;
+                            permissions['form_submissions:manage'] = true;
+                            break;
+                        case 'EXPORT_SUBMISSIONS':
+                            permissions['form_submissions:export'] = true;
+                            permissions['form_submissions:read'] = true;
+                            break;
+                        // Form Submissions permissions (new format)
+                        case 'VIEW_FORM_SUBMISSIONS':
+                            permissions['VIEW_FORM_SUBMISSIONS'] = true; // Direct mapping for middleware
+                            permissions['form_submissions:read'] = true;
+                            permissions['form_submissions:view'] = true;
+                            break;
+                        case 'MANAGE_FORM_SUBMISSIONS':
+                            permissions['MANAGE_FORM_SUBMISSIONS'] = true; // Direct mapping for middleware
+                            permissions['form_submissions:read'] = true;
+                            permissions['form_submissions:create'] = true;
+                            permissions['form_submissions:edit'] = true;
+                            permissions['form_submissions:update'] = true;
+                            permissions['form_submissions:delete'] = true;
+                            permissions['form_submissions:manage'] = true;
+                            break;
+                        default:
+                            // For any other permissions, use lowercase format
+                            const [action, resource] = permission.toLowerCase().split('_');
+                            if (resource) {
+                                permissions[`${resource}:${action}`] = true;
+                            }
+                    }
+                });
             });
             
-            return Array.from(permissions);
+            // Admin role gets all permissions
+            const isAdmin = person.personRoles.some(pr => pr.roleType === 'ADMIN' || pr.roleType === 'SUPER_ADMIN');
+            if (isAdmin) {
+                permissions['companies:read'] = true;
+                permissions['companies:create'] = true;
+                permissions['companies:edit'] = true;
+                permissions['companies:delete'] = true;
+                permissions['companies:manage'] = true;
+                permissions['system:admin'] = true;
+                // Add persons permissions for admin
+                permissions['persons:read'] = true;
+                permissions['persons:create'] = true;
+                permissions['persons:edit'] = true;
+                permissions['persons:delete'] = true;
+                permissions['persons:export'] = true;
+                permissions['persons:view_employees'] = true;
+                permissions['persons:view_trainers'] = true;
+                permissions['persons:create_employees'] = true;
+                permissions['persons:create_trainers'] = true;
+                permissions['persons:edit_employees'] = true;
+                permissions['persons:edit_trainers'] = true;
+                permissions['persons:delete_employees'] = true;
+                permissions['persons:delete_trainers'] = true;
+                // Add PUBLIC_CMS permissions for admin
+                permissions['PUBLIC_CMS:read'] = true;
+                permissions['PUBLIC_CMS:update'] = true;
+                permissions['PUBLIC_CMS:create'] = true;
+                permissions['PUBLIC_CMS:delete'] = true;
+                // Add CMS permissions for admin
+                permissions['VIEW_CMS'] = true; // Direct mapping for middleware
+                permissions['EDIT_CMS'] = true; // Direct mapping for middleware
+                permissions['cms:view'] = true;
+                permissions['cms:read'] = true;
+                permissions['cms:edit'] = true;
+                permissions['cms:update'] = true;
+                // Add form permissions for admin
+                permissions['VIEW_FORM_TEMPLATES'] = true; // Direct mapping for middleware
+                permissions['MANAGE_FORM_TEMPLATES'] = true; // Direct mapping for middleware
+                permissions['VIEW_SUBMISSIONS'] = true; // Direct mapping for middleware
+                permissions['MANAGE_SUBMISSIONS'] = true; // Direct mapping for middleware
+                permissions['VIEW_FORM_SUBMISSIONS'] = true; // Direct mapping for middleware
+                permissions['MANAGE_FORM_SUBMISSIONS'] = true; // Direct mapping for middleware
+                permissions['form_templates:read'] = true;
+                permissions['form_templates:create'] = true;
+                permissions['form_templates:edit'] = true;
+                permissions['form_templates:update'] = true;
+                permissions['form_templates:delete'] = true;
+                permissions['form_templates:manage'] = true;
+                permissions['form_submissions:read'] = true;
+                permissions['form_submissions:create'] = true;
+                permissions['form_submissions:edit'] = true;
+                permissions['form_submissions:update'] = true;
+                permissions['form_submissions:delete'] = true;
+                permissions['form_submissions:manage'] = true;
+                permissions['form_submissions:export'] = true;
+            }
+            
+            return permissions;
             
         } catch (error) {
-            logger.error('Failed to get user permissions', {
+            logger.error('Failed to get person permissions', {
                 component: 'rbac-service',
-                action: 'getUserPermissions',
+                action: 'getPersonPermissions',
                 error: error.message,
-                userId
+                personId
             });
-            return [];
+            return {};
         }
     }
     
     /**
      * Get permissions from role object
      */
-    static getRolePermissions(role) {
-        if (!role.permissions) {
+    static getRolePermissions(personRole) {
+        if (!personRole.permissions || !Array.isArray(personRole.permissions)) {
             return [];
         }
         
         try {
-            return Array.isArray(role.permissions) 
-                ? role.permissions 
-                : JSON.parse(role.permissions);
+            // Extract permission names from RolePermission objects
+            // permission is directly the enum value, not a relation
+            return personRole.permissions
+                .filter(rp => rp.isGranted)
+                .map(rp => rp.permission);
         } catch (error) {
             logger.error('Failed to parse role permissions', {
                 component: 'rbac-service',
                 action: 'getRolePermissions',
                 error: error.message,
-                roleId: role.id
+                roleId: personRole.id
             });
             return [];
         }
     }
     
     /**
-     * Check company isolation
+     * Check hierarchical permission - if manager can manage target role
      */
-    static async checkCompanyAccess(userId, targetCompanyId) {
+    static async canManageRole(managerPersonId, targetRoleId) {
         try {
-            const user = await prisma.user.findUnique({
-                where: { id: userId },
+            // Get manager's roles
+            const managerRoles = await prisma.personRole.findMany({
+                where: {
+                    personId: managerPersonId,
+                    isActive: true
+                },
+                orderBy: { level: 'asc' } // Get highest level role first
+            });
+
+            if (!managerRoles.length) {
+                return false;
+            }
+
+            // Get target role
+            const targetRole = await prisma.personRole.findUnique({
+                where: { id: targetRoleId }
+            });
+
+            if (!targetRole) {
+                return false;
+            }
+
+            // Get manager's highest role (lowest level number)
+            const managerHighestRole = managerRoles[0];
+
+            // Manager can manage roles at same or lower level (higher level number)
+            return managerHighestRole.level <= targetRole.level;
+
+        } catch (error) {
+            logger.error('Hierarchical permission check failed', {
+                component: 'rbac-service',
+                action: 'canManageRole',
+                error: error.message,
+                managerPersonId,
+                targetRoleId
+            });
+            return false;
+        }
+    }
+
+    /**
+     * Get roles that a person can manage based on hierarchy
+     */
+    static async getManageableRoles(personId, tenantId = null) {
+        try {
+            // Get person's roles
+            const personRoles = await prisma.personRole.findMany({
+                where: {
+                    personId: personId,
+                    isActive: true,
+                    ...(tenantId && { tenantId })
+                },
+                orderBy: { level: 'asc' }
+            });
+
+            if (!personRoles.length) {
+                return [];
+            }
+
+            // Get highest role level (lowest number)
+            const highestLevel = personRoles[0].level;
+
+            // Get all roles at same or lower level that this person can manage
+            const manageableRoles = await prisma.personRole.findMany({
+                where: {
+                    level: { gte: highestLevel },
+                    isActive: true,
+                    ...(tenantId && { tenantId })
+                },
                 include: {
-                    userRoles: {
-                        where: { isActive: true },
-                        include: {
-                            role: true
+                    person: {
+                        select: {
+                            id: true,
+                            firstName: true,
+                            lastName: true,
+                            email: true
                         }
                     }
                 }
             });
+
+            return manageableRoles;
+
+        } catch (error) {
+            logger.error('Failed to get manageable roles', {
+                component: 'rbac-service',
+                action: 'getManageableRoles',
+                error: error.message,
+                personId,
+                tenantId
+            });
+            return [];
+        }
+    }
+
+    /**
+     * Check if person can access resource based on hierarchy
+     */
+    static async canAccessHierarchicalResource(personId, resourceOwnerId, tenantId = null) {
+        try {
+            // If accessing own resource, always allowed
+            if (personId === resourceOwnerId) {
+                return true;
+            }
+
+            // Get person's roles
+            const personRoles = await prisma.personRole.findMany({
+                where: {
+                    personId: personId,
+                    isActive: true,
+                    ...(tenantId && { tenantId })
+                },
+                orderBy: { level: 'asc' }
+            });
+
+            // Get resource owner's roles
+            const ownerRoles = await prisma.personRole.findMany({
+                where: {
+                    personId: resourceOwnerId,
+                    isActive: true,
+                    ...(tenantId && { tenantId })
+                },
+                orderBy: { level: 'asc' }
+            });
+
+            if (!personRoles.length || !ownerRoles.length) {
+                return false;
+            }
+
+            // Person can access if they have higher or equal authority (lower or equal level number)
+            const personHighestLevel = personRoles[0].level;
+            const ownerHighestLevel = ownerRoles[0].level;
+
+            return personHighestLevel <= ownerHighestLevel;
+
+        } catch (error) {
+            logger.error('Hierarchical resource access check failed', {
+                component: 'rbac-service',
+                action: 'canAccessHierarchicalResource',
+                error: error.message,
+                personId,
+                resourceOwnerId,
+                tenantId
+            });
+            return false;
+        }
+    }
+    static async checkCompanyAccess(personId, targetCompanyId) {
+        try {
+            const person = await prisma.person.findUnique({
+                where: { id: personId },
+                include: {
+                    personRoles: {
+                        where: { isActive: true }
+                    }
+                }
+            });
             
-            if (!user) {
+            if (!person) {
                 return false;
             }
             
             // Global admin can access any company
-            const hasGlobalAdmin = user.userRoles.some(ur => ur.role.name === 'global_admin');
+            const hasGlobalAdmin = person.personRoles.some(pr => pr.roleType === 'GLOBAL_ADMIN');
             if (hasGlobalAdmin) {
                 return true;
             }
             
-            // Check if user belongs to the target company
-            return user.companyId === targetCompanyId;
+            // Check if person belongs to the target company
+            return person.companyId === targetCompanyId;
             
         } catch (error) {
             logger.error('Company access check failed', {
                 component: 'rbac-service',
                 action: 'checkCompanyAccess',
                 error: error.message,
-                userId,
+                personId,
                 targetCompanyId
             });
             return false;
@@ -246,19 +605,19 @@ export function requirePermissions(permissions, options = {}) {
     
     return async (req, res, next) => {
         try {
-            if (!req.user) {
+            if (!req.person) {
                 return res.status(401).json({
                     error: 'Authentication required',
                     code: 'AUTH_REQUIRED'
                 });
             }
             
-            const userId = req.user.userId || req.user.id;
+            const personId = req.person.personId || req.person.id;
             
-            // Check if user has required permissions
+            // Check if person has required permissions
             const permissionChecks = await Promise.all(
                 requiredPermissions.map(permission => 
-                    RBACService.hasPermission(userId, permission)
+                    RBACService.hasPermission(personId, permission)
                 )
             );
             
@@ -271,9 +630,9 @@ export function requirePermissions(permissions, options = {}) {
                 logger.warn('Unauthorized access attempt', {
                     component: 'rbac-middleware',
                     action: 'requirePermissions',
-                    userId: userId,
+                    personId: personId,
                     requiredPermissions,
-                    userPermissions: req.user.permissions || [],
+                    userPermissions: req.person.permissions || [],
                     path: req.path,
                     method: req.method,
                     ip: req.ip
@@ -283,7 +642,7 @@ export function requirePermissions(permissions, options = {}) {
                     error: 'Insufficient permissions',
                     code: 'AUTH_INSUFFICIENT_PERMISSIONS',
                     required: requiredPermissions,
-                    current: req.user.permissions || []
+                    current: req.person.permissions || []
                 });
             }
             
@@ -295,7 +654,7 @@ export function requirePermissions(permissions, options = {}) {
                 action: 'requirePermissions',
                 error: error.message,
                 stack: error.stack,
-                userId: req.user?.userId || req.user?.id
+                personId: req.person?.personId || req.person?.id
             });
             
             res.status(500).json({
@@ -315,19 +674,19 @@ export function requireRoles(roles, options = {}) {
     
     return async (req, res, next) => {
         try {
-            if (!req.user) {
+            if (!req.person) {
                 return res.status(401).json({
                     error: 'Authentication required',
                     code: 'AUTH_REQUIRED'
                 });
             }
             
-            const userId = req.user.userId || req.user.id;
+            const personId = req.person.personId || req.person.id;
             
-            // Check if user has required roles
+            // Check if person has required roles
             const roleChecks = await Promise.all(
                 requiredRoles.map(role => 
-                    RBACService.hasRole(userId, role)
+                    RBACService.hasRole(personId, role)
                 )
             );
             
@@ -339,9 +698,9 @@ export function requireRoles(roles, options = {}) {
                 logger.warn('Unauthorized role access attempt', {
                     component: 'rbac-middleware',
                     action: 'requireRoles',
-                    userId: userId,
+                    personId: personId,
                     requiredRoles,
-                    userRoles: req.user.roles || [],
+                    userRoles: req.person.roles || [],
                     path: req.path,
                     method: req.method,
                     ip: req.ip
@@ -351,7 +710,7 @@ export function requireRoles(roles, options = {}) {
                     error: 'Insufficient role privileges',
                     code: 'AUTH_INSUFFICIENT_ROLE',
                     required: requiredRoles,
-                    current: req.user.roles || []
+                    current: req.person.roles || []
                 });
             }
             
@@ -363,7 +722,7 @@ export function requireRoles(roles, options = {}) {
                 action: 'requireRoles',
                 error: error.message,
                 stack: error.stack,
-                userId: req.user?.userId || req.user?.id
+                personId: req.person?.personId || req.person?.id
             });
             
             res.status(500).json({
@@ -387,21 +746,21 @@ export function requireCompanyAccess(options = {}) {
     
     return async (req, res, next) => {
         try {
-            if (!req.user) {
+            if (!req.person) {
                 return res.status(401).json({
                     error: 'Authentication required',
                     code: 'AUTH_REQUIRED'
                 });
             }
             
-            const userId = req.user.userId || req.user.id;
+            const personId = req.person.personId || req.person.id;
             const targetCompanyId = req.params[paramName] || 
                                   req.body[bodyField] || 
                                   req.query[queryField];
             
             if (!targetCompanyId) {
-                // If no company ID specified, use user's company
-                const userCompanyId = req.user.companyId;
+                // If no company ID specified, use person's company
+                const userCompanyId = req.person.companyId;
                 if (userCompanyId) {
                     req.params[paramName] = userCompanyId;
                     req.query[queryField] = userCompanyId;
@@ -413,14 +772,14 @@ export function requireCompanyAccess(options = {}) {
             }
             
             // Check company access
-            const hasAccess = await RBACService.checkCompanyAccess(userId, targetCompanyId);
+            const hasAccess = await RBACService.checkCompanyAccess(personId, targetCompanyId);
             
             if (!hasAccess) {
                 logger.warn('Company isolation violation', {
                     component: 'rbac-middleware',
                     action: 'requireCompanyAccess',
-                    userId: userId,
-                    userCompanyId: req.user.companyId,
+                    personId: personId,
+                    userCompanyId: req.person.companyId,
                     targetCompanyId: targetCompanyId,
                     path: req.path,
                     method: req.method,
@@ -441,7 +800,7 @@ export function requireCompanyAccess(options = {}) {
                 action: 'requireCompanyAccess',
                 error: error.message,
                 stack: error.stack,
-                userId: req.user?.userId || req.user?.id
+                personId: req.person?.personId || req.person?.id
             });
             
             res.status(500).json({
@@ -457,7 +816,7 @@ export function requireCompanyAccess(options = {}) {
  */
 export function requireOwnership(resourceModel, options = {}) {
     const {
-        userIdField = 'userId',
+        userIdField = 'personId',
         paramName = 'id',
         allowCompanyAdmin = true,
         allowGlobalAdmin = true
@@ -465,14 +824,14 @@ export function requireOwnership(resourceModel, options = {}) {
     
     return async (req, res, next) => {
         try {
-            if (!req.user) {
+            if (!req.person) {
                 return res.status(401).json({
                     error: 'Authentication required',
                     code: 'AUTH_REQUIRED'
                 });
             }
             
-            const userId = req.user.userId || req.user.id;
+            const personId = req.person.personId || req.person.id;
             const resourceId = req.params[paramName];
             
             if (!resourceId) {
@@ -482,12 +841,12 @@ export function requireOwnership(resourceModel, options = {}) {
                 });
             }
             
-            // Check if user has admin privileges
-            if (allowGlobalAdmin && req.user.roles?.includes('global_admin')) {
+            // Check if person has admin privileges
+            if (allowGlobalAdmin && req.person.roles?.includes('global_admin')) {
                 return next();
             }
             
-            if (allowCompanyAdmin && req.user.roles?.includes('company_admin')) {
+            if (allowCompanyAdmin && req.person.roles?.includes('company_admin')) {
                 return next();
             }
             
@@ -503,11 +862,11 @@ export function requireOwnership(resourceModel, options = {}) {
                 });
             }
             
-            if (resource[userIdField] !== userId) {
+            if (resource[userIdField] !== personId) {
                 logger.warn('Resource ownership violation', {
                     component: 'rbac-middleware',
                     action: 'requireOwnership',
-                    userId: userId,
+                    personId: personId,
                     resourceId: resourceId,
                     resourceModel: resourceModel,
                     path: req.path,
@@ -529,7 +888,7 @@ export function requireOwnership(resourceModel, options = {}) {
                 action: 'requireOwnership',
                 error: error.message,
                 stack: error.stack,
-                userId: req.user?.userId || req.user?.id,
+                personId: req.person?.personId || req.person?.id,
                 resourceId: req.params?.[paramName]
             });
             
@@ -541,10 +900,109 @@ export function requireOwnership(resourceModel, options = {}) {
     };
 }
 
+/**
+ * Middleware: Hierarchical permission check
+ */
+export function checkHierarchicalPermission(options = {}) {
+    const { 
+        targetRoleIdParam = 'roleId',
+        targetPersonIdParam = 'personId',
+        allowSelfAccess = true 
+    } = options;
+    
+    return async (req, res, next) => {
+        try {
+            if (!req.person) {
+                return res.status(401).json({
+                    error: 'Authentication required',
+                    code: 'AUTH_REQUIRED'
+                });
+            }
+            
+            const managerPersonId = req.person.personId || req.person.id;
+            const targetRoleId = req.params[targetRoleIdParam] || req.body[targetRoleIdParam];
+            const targetPersonId = req.params[targetPersonIdParam] || req.body[targetPersonIdParam];
+            
+            // If targeting a specific role
+            if (targetRoleId) {
+                const canManage = await RBACService.canManageRole(managerPersonId, targetRoleId);
+                
+                if (!canManage) {
+                    logger.warn('Hierarchical permission violation', {
+                        component: 'rbac-middleware',
+                        action: 'checkHierarchicalPermission',
+                        managerPersonId,
+                        targetRoleId,
+                        path: req.path,
+                        method: req.method,
+                        ip: req.ip
+                    });
+                    
+                    return res.status(403).json({
+                        error: 'Insufficient hierarchical permissions',
+                        code: 'AUTH_HIERARCHICAL_VIOLATION'
+                    });
+                }
+            }
+            
+            // If targeting a specific person's resources
+            if (targetPersonId) {
+                const canAccess = await RBACService.canAccessHierarchicalResource(
+                    managerPersonId, 
+                    targetPersonId,
+                    req.person.tenantId
+                );
+                
+                if (!canAccess && !(allowSelfAccess && managerPersonId === targetPersonId)) {
+                    logger.warn('Hierarchical resource access violation', {
+                        component: 'rbac-middleware',
+                        action: 'checkHierarchicalPermission',
+                        managerPersonId,
+                        targetPersonId,
+                        path: req.path,
+                        method: req.method,
+                        ip: req.ip
+                    });
+                    
+                    return res.status(403).json({
+                        error: 'Insufficient hierarchical permissions for resource access',
+                        code: 'AUTH_HIERARCHICAL_RESOURCE_VIOLATION'
+                    });
+                }
+            }
+            
+            next();
+            
+        } catch (error) {
+            logger.error('Hierarchical permission middleware error', {
+                component: 'rbac-middleware',
+                action: 'checkHierarchicalPermission',
+                error: error.message,
+                stack: error.stack,
+                personId: req.person?.personId || req.person?.id
+            });
+            
+            res.status(500).json({
+                error: 'Hierarchical permission check failed',
+                code: 'HIERARCHICAL_CHECK_FAILED'
+            });
+        }
+    };
+}
+
+// Export rbacMiddleware as a safe middleware that doesn't require permissions by default
+export const rbacMiddleware = (req, res, next) => {
+    // Safe RBAC middleware that just passes through
+    // This is used when RBAC is applied globally but no specific permissions are required
+    next();
+};
+
 export default {
     RBACService,
     requirePermissions,
     requireRoles,
     requireCompanyAccess,
-    requireOwnership
+    requireOwnership,
+    checkHierarchicalPermission,
+    rbacMiddleware
 };

@@ -14,7 +14,7 @@ export interface UseSortingReturn<T> {
   setSorting: (key: string, direction: SortDirection) => void;
 }
 
-type SortValueGetter<T> = (item: T, key: string) => any;
+type SortValueGetter<T> = (item: T, key: string) => unknown;
 
 export function useSorting<T>({
   data,
@@ -30,7 +30,17 @@ export function useSorting<T>({
     
     // Supporto per dot notation (es. "user.name")
     const keys = key.split('.');
-    return keys.reduce((obj, k) => (obj && obj[k as keyof typeof obj] !== undefined ? obj[k as keyof typeof obj] : null), item as any);
+    let current: unknown = item;
+    
+    for (const k of keys) {
+      if (current && typeof current === 'object' && current !== null) {
+        current = (current as Record<string, unknown>)[k];
+      } else {
+        return null;
+      }
+    }
+    
+    return current;
   }, []);
   
   // Ordina i dati

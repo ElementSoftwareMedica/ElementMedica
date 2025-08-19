@@ -9,29 +9,6 @@ interface GoogleTemplateProviderProps {
   className?: string;
 }
 
-interface GoogleTemplate {
-  id: string;
-  name: string;
-  googleDocsUrl: string;
-  type: string;
-  isDefault: boolean;
-}
-
-interface GoogleTemplateResponse {
-  success: boolean;
-  template: GoogleTemplate;
-  error?: string;
-}
-
-interface GenerateDocumentResponse {
-  success: boolean;
-  message?: string;
-  fileName?: string;
-  fileUrl?: string;
-  error?: string;
-  details?: string;
-}
-
 /**
  * GoogleTemplateProvider Component
  * 

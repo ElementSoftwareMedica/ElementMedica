@@ -1,7 +1,34 @@
-import axios from 'axios';
-import { API_ENDPOINTS } from '../config/api';
+import { apiGet, apiPost, apiPut, apiDelete } from './api';
+import { API_ENDPOINTS, API_BASE_URL } from '../config/api';
 
-const API_BASE_URL = '/api'; // Prefix for backend API requests
+// Interfaces for schedule data
+interface ScheduleData {
+  id?: string;
+  title: string;
+  description?: string;
+  startDate: string;
+  endDate: string;
+  courseId?: string;
+  companyId?: string;
+  trainerId?: string;
+  location?: string;
+  maxParticipants?: number;
+  status?: string;
+}
+
+interface Employee {
+  id: string;
+  name?: string;
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  companyId?: string;
+  company_id?: string;
+  company?: {
+    id: string;
+    name?: string;
+  };
+}
 
 /**
  * Schedule service for managing course schedules
@@ -12,8 +39,8 @@ const scheduleService = {
    */
   async getAllSchedules() {
     try {
-      const response = await axios.get(`${API_BASE_URL}${API_ENDPOINTS.SCHEDULES}`);
-      return response.data;
+      const data = await apiGet(`${API_ENDPOINTS.SCHEDULES}`);
+      return data;
     } catch (error) {
       console.error('Error fetching schedules:', error);
       throw error;
@@ -25,8 +52,8 @@ const scheduleService = {
    */
   async getScheduleById(id: string) {
     try {
-      const response = await axios.get(`${API_BASE_URL}${API_ENDPOINTS.SCHEDULE_BY_ID(id)}`);
-      return response.data;
+      const data = await apiGet(`${API_ENDPOINTS.SCHEDULE_BY_ID(id)}`);
+      return data;
     } catch (error) {
       console.error(`Error fetching schedule ${id}:`, error);
       throw error;
@@ -36,10 +63,10 @@ const scheduleService = {
   /**
    * Create a new schedule
    */
-  async createSchedule(scheduleData: any) {
+  async createSchedule(scheduleData: ScheduleData) {
     try {
-      const response = await axios.post(`${API_BASE_URL}${API_ENDPOINTS.SCHEDULES}`, scheduleData);
-      return response.data;
+      const data = await apiPost(`${API_ENDPOINTS.SCHEDULES}`, scheduleData);
+      return data;
     } catch (error) {
       console.error('Error creating schedule:', error);
       throw error;
@@ -49,10 +76,10 @@ const scheduleService = {
   /**
    * Update an existing schedule
    */
-  async updateSchedule(id: string, scheduleData: any) {
+  async updateSchedule(id: string, scheduleData: Partial<ScheduleData>) {
     try {
-      const response = await axios.put(`${API_BASE_URL}${API_ENDPOINTS.SCHEDULE_BY_ID(id)}`, scheduleData);
-      return response.data;
+      const data = await apiPut(`${API_ENDPOINTS.SCHEDULE_BY_ID(id)}`, scheduleData);
+      return data;
     } catch (error) {
       console.error(`Error updating schedule ${id}:`, error);
       throw error;
@@ -64,8 +91,8 @@ const scheduleService = {
    */
   async deleteSchedule(id: string) {
     try {
-      const response = await axios.delete(`${API_BASE_URL}${API_ENDPOINTS.SCHEDULE_BY_ID(id)}`);
-      return response.data;
+      const data = await apiDelete(`${API_ENDPOINTS.SCHEDULE_BY_ID(id)}`);
+      return data;
     } catch (error) {
       console.error(`Error deleting schedule ${id}:`, error);
       throw error;
@@ -75,20 +102,20 @@ const scheduleService = {
   /**
    * Get employees by company IDs
    */
-  async getEmployeesByCompany(companyIds: string[]): Promise<any[]> {
+  async getEmployeesByCompany(companyIds: string[]): Promise<Employee[]> {
     try {
       // Get all employees and filter client-side
       // This is more reliable than using a potentially missing endpoint
       console.log(`Getting all employees and filtering for companies: ${companyIds.join(', ')}`);
-      const response = await axios.get<any[]>('/employees');
+      const data = await apiGet<Employee[]>('/employees');
       
-      if (!response.data || !Array.isArray(response.data)) {
-        console.warn('Invalid response from employees endpoint:', response.data);
+      if (!data || !Array.isArray(data)) {
+        console.warn('Invalid response from employees endpoint:', data);
         return [];
       }
       
       // Filter employees by company ID
-      const filteredEmployees = response.data.filter(emp => {
+      const filteredEmployees = data.filter(emp => {
         // Convert IDs to string for comparison
         const employeeCompanyId = String(emp.companyId || emp.company_id || (emp.company && emp.company.id) || '');
         return companyIds.some(id => String(id) === employeeCompanyId);
@@ -103,4 +130,4 @@ const scheduleService = {
   }
 };
 
-export default scheduleService; 
+export default scheduleService;

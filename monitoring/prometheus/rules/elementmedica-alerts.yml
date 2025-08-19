@@ -1,0 +1,274 @@
+# ElementMedica 2.0 - Prometheus Alerting Rules
+# Production Monitoring and Alerting Configuration
+
+groups:
+  # System Level Alerts
+  - name: elementmedica.system
+    rules:
+      - alert: HighCPUUsage
+        expr: 100 - (avg by (instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: system
+        annotations:
+          summary: "High CPU usage detected"
+          description: "CPU usage is above 80% for more than 5 minutes on {{ $labels.instance }}"
+
+      - alert: HighMemoryUsage
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+          service: system
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage is above 85% for more than 5 minutes on {{ $labels.instance }}"
+
+      - alert: DiskSpaceLow
+        expr: (node_filesystem_avail_bytes{fstype!="tmpfs"} / node_filesystem_size_bytes{fstype!="tmpfs"}) * 100 < 10
+        for: 2m
+        labels:
+          severity: critical
+          service: system
+        annotations:
+          summary: "Disk space critically low"
+          description: "Disk space is below 10% on {{ $labels.instance }} filesystem {{ $labels.mountpoint }}"
+
+  # Application Level Alerts
+  - name: elementmedica.application
+    rules:
+      - alert: APIServerDown
+        expr: up{job="elementmedica-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: api
+        annotations:
+          summary: "ElementMedica API Server is down"
+          description: "The API server has been down for more than 1 minute"
+
+      - alert: ProxyServerDown
+        expr: up{job="elementmedica-proxy"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: proxy
+        annotations:
+          summary: "ElementMedica Proxy Server is down"
+          description: "The Proxy server has been down for more than 1 minute"
+
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{job="elementmedica-api", status_code=~"5.."}[5m]) / rate(http_requests_total{job="elementmedica-api"}[5m]) * 100 > 5
+        for: 5m
+        labels:
+          severity: warning
+          service: api
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is above 5% for more than 5 minutes"
+
+      - alert: HighResponseTime
+        expr: histogram_quantile(0.95, rate(http_request_duration_ms_bucket{job="elementmedica-api"}[5m])) > 2000
+        for: 5m
+        labels:
+          severity: warning
+          service: api
+        annotations:
+          summary: "High response time detected"
+          description: "95th percentile response time is above 2000ms for more than 5 minutes"
+
+      - alert: TooManyFailedLogins
+        expr: rate(failed_login_attempts_total{job="elementmedica-api"}[5m]) > 10
+        for: 2m
+        labels:
+          severity: warning
+          service: security
+        annotations:
+          summary: "High number of failed login attempts"
+          description: "More than 10 failed login attempts per second detected"
+
+  # Database Level Alerts
+  - name: elementmedica.database
+    rules:
+      - alert: PostgreSQLDown
+        expr: up{job="postgresql"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: database
+        annotations:
+          summary: "PostgreSQL database is down"
+          description: "PostgreSQL has been down for more than 1 minute"
+
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: cache
+        annotations:
+          summary: "Redis cache is down"
+          description: "Redis has been down for more than 1 minute"
+
+      - alert: HighDatabaseConnections
+        expr: pg_stat_database_numbackends{job="postgresql"} / pg_settings_max_connections{job="postgresql"} * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: database
+        annotations:
+          summary: "High database connection usage"
+          description: "Database connections are above 80% of maximum for more than 5 minutes"
+
+      - alert: LowCacheHitRatio
+        expr: (pg_stat_database_blks_hit{job="postgresql"} / (pg_stat_database_blks_hit{job="postgresql"} + pg_stat_database_blks_read{job="postgresql"})) * 100 < 90
+        for: 10m
+        labels:
+          severity: warning
+          service: database
+        annotations:
+          summary: "Low database cache hit ratio"
+          description: "Database cache hit ratio is below 90% for more than 10 minutes"
+
+      - alert: LongRunningTransaction
+        expr: pg_stat_activity_max_tx_duration{job="postgresql"} > 300000
+        for: 2m
+        labels:
+          severity: warning
+          service: database
+        annotations:
+          summary: "Long running transaction detected"
+          description: "A transaction has been running for more than 5 minutes"
+
+  # Security and GDPR Alerts
+  - name: elementmedica.security
+    rules:
+      - alert: RateLimitExceeded
+        expr: rate_limit_blocks_total{job="elementmedica-api"} > 50
+        for: 1m
+        labels:
+          severity: warning
+          service: security
+        annotations:
+          summary: "Rate limit frequently exceeded"
+          description: "Rate limiting is blocking more than 50 requests"
+
+      - alert: CORSErrors
+        expr: rate(cors_errors_total{job="elementmedica-proxy"}[5m]) > 5
+        for: 2m
+        labels:
+          severity: warning
+          service: security
+        annotations:
+          summary: "High number of CORS errors"
+          description: "More than 5 CORS errors per second detected"
+
+      - alert: UnusualGDPRActivity
+        expr: rate(data_deletions_total{job="elementmedica-api"}[1h]) > 10
+        for: 5m
+        labels:
+          severity: info
+          service: gdpr
+        annotations:
+          summary: "Unusual GDPR data deletion activity"
+          description: "More than 10 data deletions per hour detected"
+
+  # Infrastructure Alerts
+  - name: elementmedica.infrastructure
+    rules:
+      - alert: ContainerRestarting
+        expr: rate(container_last_seen{name=~"elementmedica.*"}[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+          service: infrastructure
+        annotations:
+          summary: "Container is restarting frequently"
+          description: "Container {{ $labels.name }} is restarting frequently"
+
+      - alert: HighContainerMemoryUsage
+        expr: container_memory_usage_bytes{name=~"elementmedica.*"} / container_spec_memory_limit_bytes{name=~"elementmedica.*"} * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: infrastructure
+        annotations:
+          summary: "High container memory usage"
+          description: "Container {{ $labels.name }} memory usage is above 80%"
+
+      - alert: SSLCertificateExpiring
+        expr: probe_ssl_earliest_cert_expiry - time() < 86400 * 30
+        for: 1h
+        labels:
+          severity: warning
+          service: infrastructure
+        annotations:
+          summary: "SSL certificate expiring soon"
+          description: "SSL certificate will expire in less than 30 days"
+
+  # Business Logic Alerts
+  - name: elementmedica.business
+    rules:
+      - alert: NoActiveUsers
+        expr: active_sessions_total{job="elementmedica-api"} == 0
+        for: 30m
+        labels:
+          severity: info
+          service: business
+        annotations:
+          summary: "No active user sessions"
+          description: "No active user sessions detected for 30 minutes"
+
+      - alert: HighDocumentUploadFailures
+        expr: rate(document_upload_failures_total{job="elementmedica-api"}[5m]) > 1
+        for: 5m
+        labels:
+          severity: warning
+          service: business
+        annotations:
+          summary: "High document upload failure rate"
+          description: "Document upload failures are above 1 per second"
+
+      - alert: DatabaseBackupFailed
+        expr: time() - last_backup_timestamp > 86400
+        for: 1h
+        labels:
+          severity: critical
+          service: backup
+        annotations:
+          summary: "Database backup failed or overdue"
+          description: "No successful database backup in the last 24 hours"
+
+  # Performance Alerts
+  - name: elementmedica.performance
+    rules:
+      - alert: HighRequestVolume
+        expr: rate(http_requests_total{job="elementmedica-api"}[5m]) > 100
+        for: 10m
+        labels:
+          severity: info
+          service: performance
+        annotations:
+          summary: "High request volume detected"
+          description: "Request rate is above 100 requests per second for more than 10 minutes"
+
+      - alert: SlowDatabaseQueries
+        expr: pg_stat_activity_max_tx_duration{job="postgresql"} > 60000
+        for: 5m
+        labels:
+          severity: warning
+          service: performance
+        annotations:
+          summary: "Slow database queries detected"
+          description: "Database queries are taking more than 1 minute to complete"
+
+      - alert: HighRedisMemoryUsage
+        expr: redis_memory_used_bytes{job="redis"} / redis_memory_max_bytes{job="redis"} * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: cache
+        annotations:
+          summary: "High Redis memory usage"
+          description: "Redis memory usage is above 80% for more than 5 minutes"

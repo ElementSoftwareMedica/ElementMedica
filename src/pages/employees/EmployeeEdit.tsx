@@ -1,19 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { ChevronLeft } from 'lucide-react';
+import { 
+  ChevronLeft,
+  Edit
+} from 'lucide-react';
 import EmployeeFormNew from '../../components/employees/EmployeeFormNew';
 import { useToast } from '../../hooks/useToast';
-
-interface Company {
-  id: string;
-  ragione_sociale: string;
-}
+import { apiGet } from '../../services/api';
+import { Company } from '../../types';
 
 const EmployeeEdit: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { showToast } = useToast();
-  const [employee, setEmployee] = useState<any>(null);
+  const [person, setPerson] = useState<any>(null);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchAttempts, setFetchAttempts] = useState(0);
@@ -39,26 +39,16 @@ const EmployeeEdit: React.FC = () => {
       
       try {
         // Fetch companies first
-        const companiesRes = await fetch('http://localhost:4000/companies');
-        if (!companiesRes.ok) {
-          throw new Error(`Failed to fetch companies: ${companiesRes.status}`);
-        }
-        const companiesData = await companiesRes.json();
-        setCompanies(companiesData);
+        const companiesData = await apiGet<Company[]>('/api/v1/companies');
+        setCompanies(companiesData || []);
         
-        // Then fetch employee if we have an ID
-        if (id) {
-          const employeeRes = await fetch(`http://localhost:4000/employees/${id}`);
-          if (!employeeRes.ok) {
-            throw new Error(`Employee not found: ${employeeRes.status}`);
-          }
-          const employeeData = await employeeRes.json();
-          // Ensure companyId is correctly set for compatibility with the form
-          if (employeeData.companyId && !employeeData.company_id) {
-            employeeData.company_id = employeeData.companyId;
-          }
-          setEmployee(employeeData);
+        // Fetch person data
+        const personData = await apiGet(`/api/v1/persons/${id}`) as any;
+        // Ensure companyId is correctly set for compatibility with the form
+        if (personData.companyId && !personData.companyId) {
+          personData.companyId = personData.companyId;
         }
+        setPerson(personData);
         
         // If we get here, both fetches succeeded
         dataFetchedRef.current = true; // Mark that we've successfully fetched data
@@ -77,8 +67,8 @@ const EmployeeEdit: React.FC = () => {
           });
           setLoading(false);
           
-          // Only navigate away on employee not found
-          if (error instanceof Error && error.message.includes('Employee not found')) {
+          // Only navigate away on person not found
+          if (error instanceof Error && error.message.includes('Person not found')) {
             navigate('/employees');
           }
         } else {
@@ -118,16 +108,16 @@ const EmployeeEdit: React.FC = () => {
     );
   }
 
-  if (id && !employee) {
+  if (id && !person) {
     return (
       <div className="flex flex-col items-center justify-center h-80">
-        <p className="text-red-500 mb-4">Dipendente non trovato</p>
+        <p className="text-red-500 mb-4">Persona non trovata</p>
         <Link 
           to="/employees" 
           className="inline-flex items-center text-sm text-blue-600 hover:text-blue-800"
         >
           <ChevronLeft className="h-4 w-4 mr-1" />
-          Torna all'elenco dipendenti
+          Torna all'elenco persone
         </Link>
       </div>
     );
@@ -141,12 +131,12 @@ const EmployeeEdit: React.FC = () => {
           className="inline-flex items-center text-sm text-blue-600 hover:text-blue-800"
         >
           <ChevronLeft className="h-4 w-4 mr-1" />
-          Torna all'elenco dipendenti
+          Torna all'elenco persone
         </Link>
       </div>
       
       <EmployeeFormNew
-        employee={employee}
+        person={person}
         companies={companies}
         onSuccess={handleSuccess}
         onClose={handleClose}
@@ -155,4 +145,4 @@ const EmployeeEdit: React.FC = () => {
   );
 };
 
-export default EmployeeEdit; 
+export default EmployeeEdit;

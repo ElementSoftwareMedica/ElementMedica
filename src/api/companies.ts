@@ -1,3 +1,4 @@
+/* eslint-disable */
 // Mock API per le aziende - da sostituire con implementazione reale
 
 import type { Company, CompanyFilters } from '../hooks/resources/useCompaniesOptimized';

@@ -1,23 +1,34 @@
 # Frequently Asked Questions (FAQ)
 
-**Versione:** 1.0  
-**Data:** 27 Gennaio 2025  
-**Autore:** Team Development
+**Versione:** 2.0 Post-Refactoring  
+**Data:** 25 Gennaio 2025  
+**Sistema:** Architettura Tre Server GDPR-Compliant
 
 ## 📋 Panoramica
 
-Questa sezione contiene le risposte alle domande più frequenti sul Sistema di Gestione Documenti, organizzate per categoria per facilitare la ricerca delle informazioni.
+Questa sezione contiene le risposte alle domande più frequenti sul Sistema Unificato Person con architettura a tre server, organizzate per categoria per facilitare la ricerca delle informazioni.
+
+## 🏗️ Architettura Sistema
+
+**Domanda:** Come è strutturato il nuovo sistema?
+
+**Risposta:** Il sistema utilizza un'architettura a tre server:
+- **API Server (3000)**: Gestisce Person CRUD, autenticazione, GDPR
+- **Documents Server (3001)**: Genera PDF e gestisce file
+- **Proxy Server (3002)**: Load balancing e routing
+
+Tutti i server comunicano con un database PostgreSQL unificato.
 
 ## 🚀 Domande Generali
 
-### Cos'è il Sistema di Gestione Documenti?
+### Cos'è il Sistema Unificato Person?
 
-Il Sistema di Gestione Documenti è una piattaforma web completa per l'archiviazione, organizzazione e condivisione sicura di documenti aziendali. Supporta multi-tenancy, controllo versioni, ricerca avanzata e compliance GDPR.
+Il Sistema Unificato Person è una piattaforma GDPR-compliant che gestisce tutte le tipologie di utenti (admin, user, customer) attraverso un'unica entità "Person" con sistema di ruoli flessibile. Include gestione documenti, autenticazione sicura PKCE+JWT, e compliance GDPR completa con audit trail.
 
 ### Quali browser sono supportati?
 
 **Browser Supportati:**
-- ✅ **Chrome** 90+ (Consigliato)
+- ✅ **Chrome** 90+ (Consigliato per sviluppo)
 - ✅ **Firefox** 88+
 - ✅ **Safari** 14+
 - ✅ **Edge** 90+
@@ -27,18 +38,29 @@ Il Sistema di Gestione Documenti è una piattaforma web completa per l'archiviaz
 - ❌ Chrome < 90
 - ❌ Firefox < 88
 
+**Note per Sviluppatori:**
+- Usare sempre Chrome DevTools per debugging
+- Testare su tutti i browser supportati
+- Verificare compatibilità JWT e PKCE
+
 ### È disponibile un'app mobile?
 
 **Stato Attuale:**
-- 📱 **App iOS:** In sviluppo (Beta Q2 2025)
-- 📱 **App Android:** In sviluppo (Beta Q2 2025)
-- 🌐 **Web Mobile:** Completamente supportata
+- 📱 **App iOS:** Pianificata Q3 2025
+- 📱 **App Android:** Pianificata Q3 2025
+- 🌐 **Web Mobile:** Supportata (responsive design)
 
 **Funzionalità Web Mobile:**
+- Gestione Person (CRUD)
+- Autenticazione PKCE
+- Export dati GDPR
+- Gestione consensi
 - Visualizzazione documenti
-- Upload foto/documenti
-- Ricerca e navigazione
-- Condivisione base
+
+**Considerazioni GDPR Mobile:**
+- Stesso livello di compliance
+- Audit trail completo
+- Gestione consensi mobile-friendly
 
 ### Quali formati di file sono supportati?
 
@@ -70,43 +92,101 @@ Il Sistema di Gestione Documenti è una piattaforma web completa per l'archiviaz
 
 ## 👤 Domande su Account e Accesso
 
-### Come posso reimpostare la mia password?
+### Quali sono le credenziali di test standard?
 
-**Metodo 1 - Self Service:**
-1. Vai alla pagina di login
-2. Clicca "Password dimenticata?"
-3. Inserisci la tua email
-4. Controlla la tua casella email
-5. Clicca sul link ricevuto
-6. Imposta la nuova password
+**Credenziali Test Obbligatorie:**
+```
+Email: admin@example.com
+Password: Admin123!
+```
 
-**Metodo 2 - Contatta Admin:**
-- Se non ricevi l'email, contatta il tuo amministratore
+**⚠️ IMPORTANTE:**
+- Usare SEMPRE queste credenziali per test
+- Mai usare credenziali reali in development
+- Mai hardcodare credenziali nel codice
+- Configurare via variabili ambiente in production
+
+### Come funziona l'autenticazione PKCE?
+
+**PKCE (Proof Key for Code Exchange)** è il metodo di autenticazione sicura utilizzato:
+
+1. **Code Verifier**: Stringa random generata dal client
+2. **Code Challenge**: Hash SHA256 del code verifier
+3. **Authorization**: Server verifica challenge
+4. **Token Exchange**: Rilascio JWT con verifier
+
+**Vantaggi:**
+- Protezione contro attacchi man-in-the-middle
+- Sicurezza per applicazioni pubbliche
+- Standard OAuth 2.1
+
+### Come posso reimpostare la password?
+
+**⚠️ Solo per Ambiente di Test:**
+
+**Metodo 1 - Script Reset (Autorizzato):**
+```bash
+# Solo con autorizzazione Tech Lead
+./scripts/reset-test-user.sh
+```
+
+**Metodo 2 - Database Reset (Emergenza):**
+```sql
+-- Solo in development, mai in production
+UPDATE "Person" 
+SET "passwordHash" = '[new-hash]' 
+WHERE email = 'admin@example.com';
+```
+
+**Metodo 3 - Contatta Tech Lead:**
 - Fornisci la tua email aziendale
-- L'admin può resettare la password manualmente
+- Specifica ambiente (dev/staging/prod)
+- Richiedi reset autorizzato
 
 ### Perché non riesco ad accedere?
 
-**Possibili Cause:**
+**Possibili Cause Sistema Person:**
 
-1. **Password Errata**
-   - Verifica CAPS LOCK
-   - Prova il reset password
-   - Controlla la tastiera (layout)
+1. **Credenziali Errate**
+   - Verifica di usare: admin@example.com / Admin123!
+   - Controlla CAPS LOCK
+   - Verifica layout tastiera
 
-2. **Account Disabilitato**
-   - Contatta l'amministratore
-   - Verifica se sei ancora dipendente
+2. **Person Soft-Deleted**
+   ```sql
+   -- Verifica se Person è attiva
+   SELECT email, "deletedAt" 
+   FROM "Person" 
+   WHERE email = 'admin@example.com';
+   ```
 
-3. **Problemi Browser**
-   - Svuota cache e cookie
-   - Prova in modalità incognito
-   - Usa un browser diverso
+3. **Ruoli Disattivati**
+   ```sql
+   -- Verifica ruoli attivi
+   SELECT pr."roleType", pr."isActive" 
+   FROM "PersonRole" pr 
+   JOIN "Person" p ON pr."personId" = p.id 
+   WHERE p.email = 'admin@example.com';
+   ```
 
-4. **Problemi di Rete**
-   - Verifica connessione internet
-   - Controlla firewall aziendale
-   - Prova da rete diversa
+4. **Problemi JWT/PKCE**
+   - Svuota localStorage del browser
+   - Verifica configurazione JWT_SECRET
+   - Controlla logs API Server: `pm2 logs api-server`
+
+5. **Server Issues**
+   ```bash
+   # Verifica health dei server
+   curl http://localhost:3000/health
+   curl http://localhost:3001/health
+   curl http://localhost:3002/health
+   ```
+
+6. **Database Connectivity**
+   ```bash
+   # Test connessione database
+   psql -d person_system -c "SELECT 1;"
+   ```
 
 ### Come posso cambiare la mia password?
 
@@ -126,23 +206,76 @@ Il Sistema di Gestione Documenti è una piattaforma web completa per l'archiviaz
 - Almeno 1 numero
 - Almeno 1 carattere speciale (!@#$%^&*)
 
-### Cos'è l'autenticazione a due fattori (2FA)?
+### Come funziona il sistema di ruoli Person?
 
-L'autenticazione a due fattori aggiunge un livello extra di sicurezza richiedendo:
-1. **Qualcosa che conosci** (password)
-2. **Qualcosa che possiedi** (telefono/app)
+**Sistema Unificato PersonRole:**
 
-**Come Abilitare 2FA:**
-1. Vai in "⚙️ Impostazioni" → "🔒 Sicurezza"
-2. Clicca "📱 Abilita 2FA"
-3. Scansiona il QR code con un'app authenticator
-4. Inserisci il codice di verifica
-5. Salva i codici di backup
+Tutte le tipologie di utenti sono gestite tramite l'entità `Person` con ruoli associati:
 
-**App Consigliate:**
-- Google Authenticator
-- Microsoft Authenticator
-- Authy
+```prisma
+enum RoleType {
+  ADMIN
+  USER  
+  CUSTOMER
+  MANAGER
+  VIEWER
+}
+```
+
+**Esempi di Utilizzo:**
+```javascript
+// Verifica se Person ha ruolo ADMIN
+const hasAdminRole = person.roles.some(role => 
+  role.roleType === 'ADMIN' && role.isActive
+);
+
+// Assegna nuovo ruolo
+await prisma.personRole.create({
+  data: {
+    personId: person.id,
+    roleType: 'MANAGER',
+    isActive: true
+  }
+});
+```
+
+**Vantaggi:**
+- Flessibilità: Una Person può avere più ruoli
+- Scalabilità: Facile aggiungere nuovi ruoli
+- GDPR: Audit trail completo
+- Sicurezza: Controllo granulare permessi
+
+### Cos'è il Soft Delete?
+
+**Implementazione GDPR-Compliant:**
+
+Invece di eliminare fisicamente i record, il sistema usa `deletedAt`:
+
+```javascript
+// ✅ CORRETTO - Soft delete
+const deletePerson = async (id) => {
+  return await prisma.person.update({
+    where: { id },
+    data: { 
+      deletedAt: new Date(),
+      email: `deleted_${id}@deleted.local`,
+      firstName: '[DELETED]',
+      lastName: '[DELETED]'
+    }
+  });
+};
+
+// ✅ CORRETTO - Query solo record attivi
+const activePersons = await prisma.person.findMany({
+  where: { deletedAt: null }
+});
+```
+
+**Vantaggi:**
+- **GDPR Compliance**: Mantiene audit trail
+- **Recuperabilità**: Possibile ripristino
+- **Integrità**: Preserva relazioni database
+- **Audit**: Tracciabilità completa
 
 ## 📁 Domande sui Documenti
 

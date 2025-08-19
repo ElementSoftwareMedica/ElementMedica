@@ -22,21 +22,17 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
   LineChart,
   Line
 } from 'recharts';
-import {
-  Shield,
-  Users,
-  FileText,
+import { 
   AlertTriangle,
   CheckCircle,
   Clock,
+  Download,
+  FileText,
   TrendingUp,
-  Download
+  Users
 } from 'lucide-react';
 import { ComplianceReport as ComplianceReportType } from '../../types/gdpr';
 
@@ -46,7 +42,7 @@ interface ComplianceReportProps {
   onRefresh?: () => void;
 }
 
-const COLORS = ['#10b981', '#f59e0b', '#ef4444', '#6366f1'];
+
 
 const getComplianceColor = (score: number): string => {
   if (score >= 90) return 'text-green-600';
@@ -142,7 +138,7 @@ export const ComplianceReport: React.FC<ComplianceReportProps> = ({
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Shield className="h-5 w-5" />
+            <CheckCircle className="h-5 w-5" />
             Overall Compliance Score
           </CardTitle>
         </CardHeader>

@@ -1,0 +1,60 @@
+/**
+ * Modelli core del sistema (Tenant, Permission, etc.)
+ * Modulo: core
+ * Generato automaticamente dalla Fase 8
+ */
+
+// === ENUM DEFINITIONS ===
+
+
+// === MODEL DEFINITIONS ===
+model Tenant {
+  id             String                @id @default(uuid())
+  name           String
+  slug           String                @unique
+  domain         String?               @unique
+  settings       Json                  @default("{}
+
+model TenantConfiguration {
+  id          String    @id @default(uuid())
+  tenantId    String
+  configKey   String
+  configValue Json?
+  configType  String    @default("general")
+  isEncrypted Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, configKey])
+  @@index([tenantId])
+  @@map("tenant_configurations")
+}
+
+model Permission {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  description String?
+  resource    String
+  action      String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+}
+
+model RefreshToken {
+  id         String    @id @default(uuid())
+  personId   String
+  token      String    @unique
+  expiresAt  DateTime
+  deviceInfo Json?
+  createdAt  DateTime  @default(now())
+  revokedAt  DateTime?
+  deletedAt  DateTime?
+  updatedAt  DateTime  @updatedAt @default(now())
+  person     Person    @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  @@index([personId])
+  @@map("refresh_tokens")
+}

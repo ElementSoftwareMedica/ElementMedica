@@ -4,7 +4,14 @@
  */
 
 import React, { useState } from 'react';
-import { Bell, Mail, Smartphone, Clock, Volume2, VolumeX } from 'lucide-react';
+import { 
+  Bell,
+  Clock,
+  Mail,
+  Smartphone,
+  Volume2,
+  VolumeX
+} from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Switch } from '../ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -13,8 +20,10 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Separator } from '../ui/separator';
 import { Alert, AlertDescription } from '../ui/alert';
-import { useUserPreferences } from '../../hooks/useUserPreferences';
-import { NotificationFrequency } from '../../types/preferences';
+import { usePreferences } from '../../context/PreferencesContext';
+
+// Define notification frequency type locally
+type NotificationFrequency = 'immediate' | 'daily' | 'weekly' | 'never';
 
 interface NotificationSettingsProps {
   className?: string;
@@ -72,7 +81,7 @@ const NOTIFICATION_TYPES = {
 };
 
 const NotificationSettings: React.FC<NotificationSettingsProps> = ({ className = '' }) => {
-  const { preferences, updatePreferences, loading } = useUserPreferences();
+  const { preferences, updatePreferences, loading } = usePreferences();
   const [testingNotification, setTestingNotification] = useState(false);
 
   const handleNotificationChange = async (path: string, value: any) => {
@@ -168,7 +177,6 @@ const NotificationSettings: React.FC<NotificationSettingsProps> = ({ className =
                   onValueChange={(value: NotificationFrequency) => 
                     handleNotificationChange('email.frequency', value)
                   }
-                  disabled={loading}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -207,7 +215,7 @@ const NotificationSettings: React.FC<NotificationSettingsProps> = ({ className =
                       </div>
                       <Switch
                         checked={value}
-                        onCheckedChange={(checked) => 
+                        onCheckedChange={(checked: boolean) => 
                           handleNotificationChange(`email.types.${key}`, checked)
                         }
                         disabled={loading}
@@ -265,7 +273,7 @@ const NotificationSettings: React.FC<NotificationSettingsProps> = ({ className =
                       </div>
                       <Switch
                         checked={value}
-                        onCheckedChange={(checked) => 
+                        onCheckedChange={(checked: boolean) => 
                           handleNotificationChange(`push.types.${key}`, checked)
                         }
                         disabled={loading}
@@ -355,7 +363,6 @@ const NotificationSettings: React.FC<NotificationSettingsProps> = ({ className =
                 <Select
                   value={preferences.notifications.inApp.position}
                   onValueChange={(value) => handleNotificationChange('inApp.position', value)}
-                  disabled={loading}
                 >
                   <SelectTrigger className="w-32">
                     <SelectValue />

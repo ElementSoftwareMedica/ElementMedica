@@ -4,23 +4,35 @@
  */
 
 import React, { useState } from 'react';
-import { Layout, Grid, BarChart3, Users, Calendar, Settings, Eye, EyeOff, GripVertical } from 'lucide-react';
+import { 
+  BarChart3,
+  Calendar,
+  Eye,
+  Grid,
+  GripVertical,
+  Layout,
+  Settings,
+  Users
+} from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Switch } from '../ui/switch';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+// SelectItem, SelectTrigger, SelectValue removed - not used
 import { Label } from '../ui/label';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Separator } from '../ui/separator';
 import { Alert, AlertDescription } from '../ui/alert';
-import { useUserPreferences } from '../../hooks/useUserPreferences';
-import { DashboardLayout, DashboardWidget } from '../../types/preferences';
+import { usePreferences } from '../../context/PreferencesContext';
+import { DashboardWidget } from '../../types/preferences';
 
 interface DashboardCustomizationProps {
   className?: string;
 }
 
-const LAYOUT_OPTIONS: { value: DashboardLayout; label: string; description: string; icon: React.ReactNode }[] = [
+// Define layout type for UI selection
+type DashboardLayoutType = 'grid' | 'masonry' | 'sidebar';
+
+const LAYOUT_OPTIONS: { value: DashboardLayoutType; label: string; description: string; icon: React.ReactNode }[] = [
   {
     value: 'grid',
     label: 'Griglia',
@@ -96,11 +108,11 @@ const WIDGET_CATEGORIES = [
 ];
 
 const DashboardCustomization: React.FC<DashboardCustomizationProps> = ({ className = '' }) => {
-  const { preferences, updatePreferences, loading } = useUserPreferences();
+  const { preferences, updatePreferences, loading } = usePreferences();
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [draggedWidget, setDraggedWidget] = useState<string | null>(null);
 
-  const handleLayoutChange = async (layout: DashboardLayout) => {
+  const handleLayoutChange = async (layout: DashboardLayoutType) => {
     if (!preferences) return;
     
     const updatedDashboard = {
@@ -114,7 +126,7 @@ const DashboardCustomization: React.FC<DashboardCustomizationProps> = ({ classNa
   const handleWidgetToggle = async (widgetId: string, enabled: boolean) => {
     if (!preferences) return;
     
-    const updatedWidgets = preferences.dashboard.widgets.map(widget =>
+    const updatedWidgets = preferences.dashboard.widgets.map((widget: DashboardWidget) =>
       widget.id === widgetId ? { ...widget, enabled } : widget
     );
     
@@ -162,7 +174,7 @@ const DashboardCustomization: React.FC<DashboardCustomizationProps> = ({ classNa
     if (!preferences) return;
     
     const defaultDashboard = {
-      layout: 'grid' as DashboardLayout,
+      layout: 'grid' as DashboardLayoutType,
       widgets: AVAILABLE_WIDGETS.map((widget, index) => ({
         id: widget.id,
         enabled: index < 4, // Enable first 4 widgets by default
@@ -272,7 +284,7 @@ const DashboardCustomization: React.FC<DashboardCustomizationProps> = ({ classNa
             {WIDGET_CATEGORIES.map((category) => (
               <Button
                 key={category.id}
-                variant={selectedCategory === category.id ? 'default' : 'outline'}
+                variant={selectedCategory === category.id ? 'secondary' : 'outline'}
                 size="sm"
                 onClick={() => setSelectedCategory(category.id)}
               >
@@ -288,7 +300,7 @@ const DashboardCustomization: React.FC<DashboardCustomizationProps> = ({ classNa
             <Label className="text-base font-medium">Widget Disponibili</Label>
             <div className="space-y-2">
               {filteredWidgets.map((widget) => {
-                const userWidget = preferences.dashboard.widgets.find(w => w.id === widget.id);
+                const userWidget = preferences.dashboard.widgets.find((w: DashboardWidget) => w.id === widget.id);
                 const isEnabled = userWidget?.enabled || false;
                 
                 return (
@@ -326,7 +338,7 @@ const DashboardCustomization: React.FC<DashboardCustomizationProps> = ({ classNa
                       )}
                       <Switch
                         checked={isEnabled}
-                        onCheckedChange={(checked) => handleWidgetToggle(widget.id, checked)}
+                        onCheckedChange={(checked: boolean) => handleWidgetToggle(widget.id, checked)}
                         disabled={loading}
                       />
                     </div>
@@ -354,10 +366,10 @@ const DashboardCustomization: React.FC<DashboardCustomizationProps> = ({ classNa
               </p>
               
               {preferences.dashboard.widgets
-                .filter(w => w.enabled)
-                .sort((a, b) => a.order - b.order)
-                .map((widget, index) => {
-                  const widgetInfo = AVAILABLE_WIDGETS.find(w => w.id === widget.id);
+                .filter((w: DashboardWidget) => w.enabled)
+                .sort((a: DashboardWidget, b: DashboardWidget) => a.order - b.order)
+                .map((widget: DashboardWidget, index: number) => {
+                  const widgetInfo = AVAILABLE_WIDGETS.find((w) => w.id === widget.id);
                   if (!widgetInfo) return null;
                   
                   return (
@@ -400,7 +412,7 @@ const DashboardCustomization: React.FC<DashboardCustomizationProps> = ({ classNa
             <p className="font-medium">Anteprima Configurazione</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
               <div>
-                <span className="font-medium">Layout:</span> {LAYOUT_OPTIONS.find(l => l.value === preferences.dashboard.layout)?.label}
+                <span className="font-medium">Layout:</span> {LAYOUT_OPTIONS.find((l) => l.value === preferences.dashboard.layout)?.label}
               </div>
               <div>
                 <span className="font-medium">Widget attivi:</span> {preferences.dashboard.widgets.filter(w => w.enabled).length}

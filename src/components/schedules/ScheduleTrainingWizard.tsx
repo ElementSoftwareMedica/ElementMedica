@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import AsyncSelect from 'react-select/async';
+import { apiGet } from '../../api/api';
 
 const deliveryModes = [
   { value: 'in-person', label: 'In presenza' },
@@ -23,25 +24,29 @@ const ScheduleTrainingWizard: React.FC = () => {
   const [step, setStep] = useState(1);
   const [form, setForm] = useState({
     course: null as CourseOption | null,
-    requiredCerts: [] as string[],
     trainer: null as TrainerOption | null,
     coTrainer: null as TrainerOption | null,
+    requiredCerts: [] as string[],
     dates: [{ date: '', start: '', end: '' }],
     location: '',
     deliveryMode: '',
     notes: '',
     companies: [] as string[],
-    employees: [] as string[],
+    persons: [] as string[],
   });
-  const [companiesList, setCompaniesList] = useState<any[]>([]);
-  const [employeesList, setEmployeesList] = useState<any[]>([]);
-  const [employeeSearch, setEmployeeSearch] = useState('');
+  const [companiesList, setCompaniesList] = useState<Array<{id: string; name: string; employees_count?: number; industry?: string}>>([]);
+  const [personsList, setPersonsList] = useState<Array<{id: string; firstName: string; lastName: string; email?: string; company?: {name: string}}>>([]);
+  const [personSearch, setPersonSearch] = useState('');
 
   // Load courses from backend
   const loadCourses = async (inputValue: string) => {
-    const res = await fetch(`http://localhost:4000/courses?search=${encodeURIComponent(inputValue)}`);
-    const data = await res.json();
-    return data.map((course: any) => ({
+    interface CourseResponse {
+      id: string;
+      title: string;
+      certifications?: string;
+    }
+    const data = await apiGet(`/courses?search=${encodeURIComponent(inputValue)}`) as CourseResponse[];
+    return data.map((course: CourseResponse) => ({
       value: course.id,
       label: course.title,
       certifications: course.certifications ? course.certifications.split(',').map((c: string) => c.trim()) : [],
@@ -50,20 +55,25 @@ const ScheduleTrainingWizard: React.FC = () => {
 
   // Load trainers from backend, filter by certifications if needed
   const loadTrainers = async (inputValue: string) => {
-    const res = await fetch(`http://localhost:4000/trainers?search=${encodeURIComponent(inputValue)}`);
-    const data = await res.json();
+    interface TrainerResponse {
+      id: string;
+      firstName: string;
+      lastName: string;
+      certifications?: string[];
+    }
+    const data = await apiGet(`/trainers?search=${encodeURIComponent(inputValue)}`) as TrainerResponse[];
     if (form.course && form.course.certifications && form.course.certifications.length > 0) {
       return data
-        .filter((trainer: any) => Array.isArray(trainer.certifications) && form.course!.certifications.every((cert: string) => trainer.certifications.includes(cert)))
-        .map((trainer: any) => ({
+        .filter((trainer: TrainerResponse) => Array.isArray(trainer.certifications) && form.course!.certifications.every((cert: string) => trainer.certifications!.includes(cert)))
+        .map((trainer: TrainerResponse) => ({
           value: trainer.id,
-          label: `${trainer.first_name} ${trainer.last_name}`,
-          certifications: trainer.certifications,
+          label: `${trainer.firstName} ${trainer.lastName}`,
+          certifications: trainer.certifications || [],
         })) as TrainerOption[];
     }
-    return data.map((trainer: any) => ({
+    return data.map((trainer: TrainerResponse) => ({
       value: trainer.id,
-      label: `${trainer.first_name} ${trainer.last_name}`,
+      label: `${trainer.firstName} ${trainer.lastName}`,
       certifications: trainer.certifications,
     })) as TrainerOption[];
   };
@@ -81,25 +91,31 @@ const ScheduleTrainingWizard: React.FC = () => {
 
   useEffect(() => {
     if (step === 2 && companiesList.length === 0) {
-      fetch('http://localhost:4000/companies')
-        .then(res => res.json())
-        .then(setCompaniesList);
+      apiGet('/companies')
+        .then((data: unknown) => {
+          const companies = data as { id: string; name: string; employees_count?: number; industry?: string; }[];
+          setCompaniesList(companies);
+        })
+        .catch(console.error);
     }
   }, [step, companiesList.length]);
 
   useEffect(() => {
     if (step === 3 && form.companies.length > 0) {
-      fetch(`http://localhost:4000/employees?companyIds=${form.companies.join(',')}`)
-        .then(res => res.json())
-        .then(setEmployeesList);
+      apiGet(`/api/v1/persons?companyIds=${form.companies.join(',')}&roleType=EMPLOYEE`)
+        .then((response: unknown) => {
+          const data = response as { persons?: { id: string; firstName: string; lastName: string; email?: string; company?: { name: string; }; }[] };
+          setPersonsList(data.persons || []);
+        })
+        .catch(console.error);
     }
   }, [step, form.companies]);
 
-  const filteredEmployees = employeesList.filter((emp: any) =>
-    employeeSearch === '' ||
-    emp.first_name.toLowerCase().includes(employeeSearch.toLowerCase()) ||
-    emp.last_name.toLowerCase().includes(employeeSearch.toLowerCase()) ||
-    emp.email?.toLowerCase().includes(employeeSearch.toLowerCase())
+  const filteredPersons = personsList.filter((person: { id: string; firstName: string; lastName: string; email?: string; company?: { name: string; }; }) =>
+    personSearch === '' ||
+    person.firstName.toLowerCase().includes(personSearch.toLowerCase()) ||
+    person.lastName.toLowerCase().includes(personSearch.toLowerCase()) ||
+    person.email?.toLowerCase().includes(personSearch.toLowerCase())
   );
 
   return (
@@ -109,7 +125,7 @@ const ScheduleTrainingWizard: React.FC = () => {
         {[1, 2, 3].map((s) => (
           <div key={s} className="flex-1 text-center">
             <div className={`mx-auto w-8 h-8 rounded-full flex items-center justify-center font-bold text-lg ${step === s ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500'}`}>{s}</div>
-            <div className={`mt-2 text-sm font-medium ${step === s ? 'text-blue-600' : 'text-gray-500'}`}>{s === 1 ? 'Dettagli Evento' : s === 2 ? 'Aziende' : 'Dipendenti'}</div>
+            <div className={`mt-2 text-sm font-medium ${step === s ? 'text-blue-600' : 'text-gray-500'}`}>{s === 1 ? 'Dettagli Evento' : s === 2 ? 'Aziende' : 'Persone'}</div>
           </div>
         ))}
       </div>
@@ -222,7 +238,7 @@ const ScheduleTrainingWizard: React.FC = () => {
                   <div>
                     <div className="font-medium text-gray-800">{company.name}</div>
                     <div className="text-xs text-gray-500">
-                      {company.employees_count || 0} dipendenti
+                      {company.employees_count || 0} persone
                       {company.industry && ` · ${company.industry}`}
                     </div>
                   </div>
@@ -233,46 +249,46 @@ const ScheduleTrainingWizard: React.FC = () => {
         </div>
       )}
 
-      {/* Step 3: Employees */}
+      {/* Step 3: Persons */}
       {step === 3 && (
         <div className="space-y-6">
-          <h2 className="text-lg font-semibold text-gray-800 mb-2">Seleziona Dipendenti</h2>
+          <h2 className="text-lg font-semibold text-gray-800 mb-2">Seleziona Persone</h2>
           <input
             type="text"
-            placeholder="Cerca dipendenti..."
+            placeholder="Cerca persone..."
             className="mb-3 w-full border rounded px-3 py-2"
-            value={employeeSearch}
-            onChange={e => setEmployeeSearch(e.target.value)}
+            value={personSearch}
+            onChange={e => setPersonSearch(e.target.value)}
           />
           <button
             type="button"
             className="mb-2 px-3 py-1 rounded bg-gray-100 text-gray-700 text-sm"
-            onClick={() => setForm(f => ({ ...f, employees: filteredEmployees.map((emp: any) => emp.id) }))}
+            onClick={() => setForm(f => ({ ...f, persons: filteredPersons.map((person: { id: string; firstName: string; lastName: string; email?: string; company?: { name: string; }; }) => person.id) }))}
           >
             Seleziona Tutti
           </button>
           <div className="bg-gray-50 rounded-lg p-4 max-h-72 overflow-y-auto">
-            {filteredEmployees.length === 0 ? (
-              <div className="text-gray-400">Nessun dipendente trovato.</div>
+            {filteredPersons.length === 0 ? (
+              <div className="text-gray-400">Nessuna persona trovata.</div>
             ) : (
-              filteredEmployees.map(emp => (
-                <label key={emp.id} className="flex items-center gap-3 py-2 border-b last:border-0 cursor-pointer">
+              filteredPersons.map(person => (
+                <label key={person.id} className="flex items-center gap-3 py-2 border-b last:border-0 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={form.employees.includes(emp.id)}
+                    checked={form.persons.includes(person.id)}
                     onChange={e => {
                       setForm(f => ({
                         ...f,
-                        employees: e.target.checked
-                          ? [...f.employees, emp.id]
-                          : f.employees.filter((id: string) => id !== emp.id)
+                        persons: e.target.checked
+                          ? [...f.persons, person.id]
+                          : f.persons.filter((id: string) => id !== person.id)
                       }));
                     }}
                   />
                   <div>
-                    <div className="font-medium text-gray-800">{emp.first_name} {emp.last_name}</div>
-                    <div className="text-xs text-gray-500">{emp.email}</div>
-                    <div className="text-xs text-gray-400">{emp.company?.name}</div>
+                    <div className="font-medium text-gray-800">{person.firstName} {person.lastName}</div>
+                    <div className="text-xs text-gray-500">{person.email}</div>
+                    <div className="text-xs text-gray-400">{person.company?.name}</div>
                   </div>
                 </label>
               ))
@@ -290,4 +306,4 @@ const ScheduleTrainingWizard: React.FC = () => {
   );
 };
 
-export default ScheduleTrainingWizard; 
+export default ScheduleTrainingWizard;

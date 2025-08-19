@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import AsyncSelect from 'react-select/async';
+import { apiGet } from '../../api/api';
+import { Company } from '../../types';
 
 interface Course {
   id: string;
@@ -10,13 +12,19 @@ interface Course {
 
 interface Trainer {
   id: string;
-  first_name: string;
-  last_name: string;
+  firstName: string;
+  lastName: string;
 }
 
-interface Company {
-  id: string;
-  name: string;
+interface ScheduleData {
+  courseId: string;
+  trainerId: string;
+  companyId: string;
+  startDate: string;
+  endDate: string;
+  location: string;
+  maxParticipants: number;
+  notes: string;
 }
 
 interface ScheduleFormProps {
@@ -34,7 +42,7 @@ interface ScheduleFormProps {
   courses: Course[];
   trainers: Trainer[];
   companies: Company[];
-  onSubmit: (data: any) => Promise<void>;
+  onSubmit: (data: ScheduleData) => Promise<void>;
   onCancel: () => void;
 }
 
@@ -63,17 +71,16 @@ const ScheduleForm: React.FC<ScheduleFormProps> = ({
     e.preventDefault();
     const data = {
       ...formData,
-      start_date: new Date(`${formData.startDate}T${formData.startTime}`).toISOString(),
-      end_date: new Date(`${formData.endDate}T${formData.endTime}`).toISOString(),
+      startDate: new Date(`${formData.startDate}T${formData.startTime}`).toISOString(),
+      endDate: new Date(`${formData.endDate}T${formData.endTime}`).toISOString(),
     };
     await onSubmit(data);
   };
 
   // Async load courses for react-select
   const loadCourses = async (inputValue: string) => {
-    const res = await fetch(`http://localhost:4000/courses?search=${encodeURIComponent(inputValue)}`);
-    const data = await res.json();
-    const options = data.map((course: any) => ({
+    const data = await apiGet(`/courses?search=${encodeURIComponent(inputValue)}`) as Course[];
+    const options = data.map((course: Course) => ({
       value: course.id,
       label: course.title || course.name || String(course.id)
     }));
@@ -122,7 +129,7 @@ const ScheduleForm: React.FC<ScheduleFormProps> = ({
               <option value="">Seleziona un docente</option>
               {trainers.map((trainer) => (
                 <option key={trainer.id} value={trainer.id}>
-                  {trainer.first_name} {trainer.last_name}
+                  {trainer.firstName} {trainer.lastName}
                 </option>
               ))}
             </select>
@@ -138,7 +145,7 @@ const ScheduleForm: React.FC<ScheduleFormProps> = ({
               <option value="">Seleziona un'azienda</option>
               {companies.map((company) => (
                 <option key={company.id} value={company.id}>
-                  {company.name}
+                  {company.ragioneSociale}
                 </option>
               ))}
             </select>
@@ -244,4 +251,4 @@ const ScheduleForm: React.FC<ScheduleFormProps> = ({
   );
 };
 
-export default ScheduleForm; 
+export default ScheduleForm;

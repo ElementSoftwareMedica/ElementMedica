@@ -5,7 +5,12 @@ import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import { PDFDownloadLink } from '@react-pdf/renderer';
-import { Clock, MapPin, Users, Download } from 'lucide-react';
+import { 
+  Clock,
+  Download,
+  MapPins,
+  Users
+} from 'lucide-react';
 import { useCourses } from '../../hooks/useCourses';
 import { useTrainers } from '../../hooks/useTrainers';
 import CourseParticipantsList from '../../components/courses/CourseParticipantsList';

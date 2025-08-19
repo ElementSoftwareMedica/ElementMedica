@@ -1,5 +1,5 @@
 import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Pagination } from './Pagination';
 
 describe('Pagination', () => {
@@ -16,22 +16,22 @@ describe('Pagination', () => {
   it('renders correctly with basic props', () => {
     render(<Pagination {...defaultProps} />);
     
-    expect(screen.getByRole('button', { name: /1/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /2/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /10/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '1' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '2' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '10' })).toBeInTheDocument();
   });
 
   it('disables previous button on first page', () => {
     render(<Pagination {...defaultProps} currentPage={1} />);
     
-    const prevButton = screen.getByRole('button', { name: /previous/i });
+    const prevButton = screen.getByRole('button', { name: /previous page/i });
     expect(prevButton).toBeDisabled();
   });
 
   it('disables next button on last page', () => {
     render(<Pagination {...defaultProps} currentPage={10} totalPages={10} />);
     
-    const nextButton = screen.getByRole('button', { name: /next/i });
+    const nextButton = screen.getByRole('button', { name: /next page/i });
     expect(nextButton).toBeDisabled();
   });
 
@@ -47,7 +47,7 @@ describe('Pagination', () => {
     const onPageChange = vi.fn();
     render(<Pagination {...defaultProps} currentPage={5} onPageChange={onPageChange} />);
     
-    fireEvent.click(screen.getByRole('button', { name: /previous/i }));
+    fireEvent.click(screen.getByRole('button', { name: /previous page/i }));
     expect(onPageChange).toHaveBeenCalledWith(4);
   });
 
@@ -55,15 +55,16 @@ describe('Pagination', () => {
     const onPageChange = vi.fn();
     render(<Pagination {...defaultProps} currentPage={5} onPageChange={onPageChange} />);
     
-    fireEvent.click(screen.getByRole('button', { name: /next/i }));
+    fireEvent.click(screen.getByRole('button', { name: /next page/i }));
     expect(onPageChange).toHaveBeenCalledWith(6);
   });
 
   it('shows ellipsis for many pages', () => {
     render(<Pagination {...defaultProps} currentPage={15} totalPages={50} />);
     
-    const ellipsis = screen.getAllByText('…');
-    expect(ellipsis.length).toBeGreaterThan(0);
+    // L'ellipsis è rappresentato dall'icona MoreHorizontal, non dal testo
+    const ellipsisIcons = document.querySelectorAll('.lucide-more-horizontal');
+    expect(ellipsisIcons.length).toBeGreaterThan(0);
   });
 
   it('shows all pages when total pages <= 7', () => {
@@ -78,7 +79,7 @@ describe('Pagination', () => {
     render(<Pagination {...defaultProps} currentPage={3} />);
     
     const currentPageButton = screen.getByRole('button', { name: '3' });
-    expect(currentPageButton).toHaveClass('bg-blue-600'); // Assuming default variant styling
+    expect(currentPageButton).toHaveClass('bg-primary-600'); // Primary variant styling
   });
 
   it('shows info text when enabled', () => {
@@ -172,8 +173,8 @@ describe('Pagination', () => {
   it('handles single page correctly', () => {
     render(<Pagination {...defaultProps} totalPages={1} />);
     
-    const prevButton = screen.getByRole('button', { name: /previous/i });
-    const nextButton = screen.getByRole('button', { name: /next/i });
+    const prevButton = screen.getByRole('button', { name: /previous page/i });
+    const nextButton = screen.getByRole('button', { name: /next page/i });
     
     expect(prevButton).toBeDisabled();
     expect(nextButton).toBeDisabled();

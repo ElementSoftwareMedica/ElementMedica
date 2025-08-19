@@ -13,9 +13,51 @@ const Bar = React.lazy(() => import('react-chartjs-2').then(module => ({ default
 const Pie = React.lazy(() => import('react-chartjs-2').then(module => ({ default: module.Pie })));
 const Doughnut = React.lazy(() => import('react-chartjs-2').then(module => ({ default: module.Doughnut })));
 
-interface LazyChartProps {
+// Chart.js type definitions
+interface ChartDataset {
+  label?: string;
+  data: number[];
+  backgroundColor?: string | string[];
+  borderColor?: string | string[];
+  borderWidth?: number;
+}
+
+interface ChartData {
+  labels: string[];
+  datasets: ChartDataset[];
+}
+
+interface ChartOptions {
+  responsive?: boolean;
+  maintainAspectRatio?: boolean;
+  plugins?: {
+    legend?: {
+      position?: 'top' | 'bottom' | 'left' | 'right';
+    };
+    title?: {
+      display?: boolean;
+      text?: string;
+    };
+  };
+  scales?: {
+    x?: {
+      display?: boolean;
+    };
+    y?: {
+      display?: boolean;
+    };
+  };
+}
+
+interface BaseChartProps {
+  data: ChartData;
+  options?: ChartOptions;
+  width?: number;
+  height?: number;
+}
+
+interface LazyChartProps extends BaseChartProps {
   type: 'line' | 'bar' | 'pie' | 'doughnut';
-  [key: string]: any;
 }
 
 const ChartFallback = () => (
@@ -50,7 +92,7 @@ export const LazyChart: React.FC<LazyChartProps> = ({ type, ...props }) => {
 };
 
 // Individual lazy chart components
-export const LazyLineChart: React.FC<any> = (props) => (
+export const LazyLineChart: React.FC<BaseChartProps> = (props) => (
   <ErrorBoundary>
     <Suspense fallback={<ChartFallback />}>
       <Line {...props} />
@@ -58,7 +100,7 @@ export const LazyLineChart: React.FC<any> = (props) => (
   </ErrorBoundary>
 );
 
-export const LazyBarChart: React.FC<any> = (props) => (
+export const LazyBarChart: React.FC<BaseChartProps> = (props) => (
   <ErrorBoundary>
     <Suspense fallback={<ChartFallback />}>
       <Bar {...props} />
@@ -66,7 +108,7 @@ export const LazyBarChart: React.FC<any> = (props) => (
   </ErrorBoundary>
 );
 
-export const LazyPieChart: React.FC<any> = (props) => (
+export const LazyPieChart: React.FC<BaseChartProps> = (props) => (
   <ErrorBoundary>
     <Suspense fallback={<ChartFallback />}>
       <Pie {...props} />
@@ -74,7 +116,7 @@ export const LazyPieChart: React.FC<any> = (props) => (
   </ErrorBoundary>
 );
 
-export const LazyDoughnutChart: React.FC<any> = (props) => (
+export const LazyDoughnutChart: React.FC<BaseChartProps> = (props) => (
   <ErrorBoundary>
     <Suspense fallback={<ChartFallback />}>
       <Doughnut {...props} />

@@ -1,0 +1,55 @@
+-- Script SQL per ricreare l'enum PersonPermission
+-- Rimuove i valori obsoleti e ricrea l'enum con i valori corretti
+
+BEGIN;
+
+-- 1. Rimuovi tutti i record con valori obsoleti da entrambe le tabelle
+DELETE FROM custom_role_permissions 
+WHERE permission::text IN (
+  'VIEW_ROLES', 'CREATE_ROLES', 'EDIT_ROLES', 'DELETE_ROLES',
+  'MANAGE_USERS', 'ASSIGN_ROLES', 'REVOKE_ROLES', 'VIEW_ADMINISTRATION',
+  'VIEW_HIERARCHY', 'CREATE_HIERARCHY', 'EDIT_HIERARCHY', 'DELETE_HIERARCHY',
+  'MANAGE_HIERARCHY', 'HIERARCHY_MANAGEMENT'
+);
+
+DELETE FROM role_permissions 
+WHERE permission::text IN (
+  'VIEW_ROLES', 'CREATE_ROLES', 'EDIT_ROLES', 'DELETE_ROLES',
+  'MANAGE_USERS', 'ASSIGN_ROLES', 'REVOKE_ROLES', 'VIEW_ADMINISTRATION',
+  'VIEW_HIERARCHY', 'CREATE_HIERARCHY', 'EDIT_HIERARCHY', 'DELETE_HIERARCHY',
+  'MANAGE_HIERARCHY', 'HIERARCHY_MANAGEMENT'
+);
+
+-- 2. Crea un nuovo enum con i valori corretti
+CREATE TYPE person_permissions_new AS ENUM (
+  'VIEW_COMPANIES', 'CREATE_COMPANIES', 'EDIT_COMPANIES', 'DELETE_COMPANIES',
+  'VIEW_EMPLOYEES', 'CREATE_EMPLOYEES', 'EDIT_EMPLOYEES', 'DELETE_EMPLOYEES',
+  'VIEW_TRAINERS', 'CREATE_TRAINERS', 'EDIT_TRAINERS', 'DELETE_TRAINERS',
+  'VIEW_USERS', 'CREATE_USERS', 'EDIT_USERS', 'DELETE_USERS',
+  'VIEW_COURSES', 'CREATE_COURSES', 'EDIT_COURSES', 'DELETE_COURSES',
+  'MANAGE_ENROLLMENTS', 'VIEW_DOCUMENTS', 'CREATE_DOCUMENTS', 'EDIT_DOCUMENTS',
+  'DELETE_DOCUMENTS', 'DOWNLOAD_DOCUMENTS', 'ADMIN_PANEL', 'SYSTEM_SETTINGS',
+  'USER_MANAGEMENT', 'ROLE_MANAGEMENT', 'ROLE_CREATE', 'ROLE_EDIT', 'ROLE_DELETE',
+  'TENANT_MANAGEMENT', 'VIEW_TENANTS', 'CREATE_TENANTS', 'EDIT_TENANTS', 'DELETE_TENANTS',
+  'CREATE_ADMINISTRATION', 'EDIT_ADMINISTRATION', 'DELETE_ADMINISTRATION',
+  'VIEW_GDPR', 'CREATE_GDPR', 'EDIT_GDPR', 'DELETE_GDPR', 'VIEW_GDPR_DATA',
+  'EXPORT_GDPR_DATA', 'DELETE_GDPR_DATA', 'MANAGE_CONSENTS',
+  'VIEW_REPORTS', 'CREATE_REPORTS', 'EDIT_REPORTS', 'DELETE_REPORTS', 'EXPORT_REPORTS'
+);
+
+-- 3. Aggiorna le colonne per usare il nuovo enum
+ALTER TABLE custom_role_permissions 
+ALTER COLUMN permission TYPE person_permissions_new 
+USING permission::text::person_permissions_new;
+
+ALTER TABLE role_permissions 
+ALTER COLUMN permission TYPE person_permissions_new 
+USING permission::text::person_permissions_new;
+
+-- 4. Rimuovi il vecchio enum
+DROP TYPE person_permissions;
+
+-- 5. Rinomina il nuovo enum
+ALTER TYPE person_permissions_new RENAME TO person_permissions;
+
+COMMIT;

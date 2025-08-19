@@ -1,7 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Building2, Mail, Phone, Map, Hash, FileText, CreditCard, User } from 'lucide-react';
+import { 
+  Building2,
+  CreditCard,
+  FileText,
+  Hash,
+  Mail,
+  Map,
+  Phone,
+  User
+} from 'lucide-react';
 import { useToast } from '../../hooks/useToast';
-import { API_BASE_URL } from '../../config/api';
+import { getSavingErrorMessage } from '../../utils/errorUtils';
+import { apiPost, apiPut } from '../../services/api';
 
 import EntityFormLayout from '../shared/form/EntityFormLayout';
 import EntityFormField from '../shared/form/EntityFormField';
@@ -11,18 +21,18 @@ interface CompanyFormNewProps {
   /** Dati dell'azienda in caso di modifica */
   company?: {
     id: string;
-    ragione_sociale: string;
-    codice_ateco?: string;
+    ragioneSociale: string;
+    codiceAteco?: string;
     piva?: string;
-    codice_fiscale?: string;
+    codiceFiscale?: string;
     sdi?: string;
     pec?: string;
     iban?: string;
-    sede_azienda?: string;
+    sedeAzienda?: string;
     citta?: string;
     provincia?: string;
     cap?: string;
-    persona_riferimento?: string;
+    personaRiferimento?: string;
     mail?: string;
     telefono?: string;
     note?: string;
@@ -43,18 +53,18 @@ const CompanyFormNew: React.FC<CompanyFormNewProps> = ({
 }) => {
   // Stato per i dati del form
   const [formData, setFormData] = useState({
-    ragione_sociale: '',
-    codice_ateco: '',
+    ragioneSociale: '',
+    codiceAteco: '',
     piva: '',
-    codice_fiscale: '',
+    codiceFiscale: '',
     sdi: '',
     pec: '',
     iban: '',
-    sede_azienda: '',
+    sedeAzienda: '',
     citta: '',
     provincia: '',
     cap: '',
-    persona_riferimento: '',
+    personaRiferimento: '',
     mail: '',
     telefono: '',
     note: '',
@@ -81,18 +91,18 @@ const CompanyFormNew: React.FC<CompanyFormNewProps> = ({
     if (company && !initializedRef.current) {
       console.log("Setting company data:", company);
       setFormData({
-        ragione_sociale: company.ragione_sociale || '',
-        codice_ateco: company.codice_ateco || '',
+        ragioneSociale: company.ragioneSociale || '',
+        codiceAteco: company.codiceAteco || '',
         piva: company.piva || '',
-        codice_fiscale: company.codice_fiscale || '',
+        codiceFiscale: company.codiceFiscale || '',
         sdi: company.sdi || '',
         pec: company.pec || '',
         iban: company.iban || '',
-        sede_azienda: company.sede_azienda || '',
+        sedeAzienda: company.sedeAzienda || '',
         citta: company.citta || '',
         provincia: company.provincia || '',
         cap: company.cap || '',
-        persona_riferimento: company.persona_riferimento || '',
+        personaRiferimento: company.personaRiferimento || '',
         mail: company.mail || '',
         telefono: company.telefono || '',
         note: company.note || '',
@@ -125,14 +135,14 @@ const CompanyFormNew: React.FC<CompanyFormNewProps> = ({
     const newErrors: Record<string, string> = {};
     
     // Validazione campi obbligatori
-    if (!formData.ragione_sociale.trim()) {
-      newErrors.ragione_sociale = 'La Ragione Sociale è obbligatoria';
+    if (!formData.ragioneSociale.trim()) {
+      newErrors.ragioneSociale = 'La Ragione Sociale è obbligatoria';
     }
     
     // Almeno uno tra P.IVA e Codice Fiscale deve essere presente
-    if (!formData.piva.trim() && !formData.codice_fiscale.trim()) {
+    if (!formData.piva.trim() && !formData.codiceFiscale.trim()) {
       newErrors.piva = 'Almeno uno tra P.IVA e Codice Fiscale deve essere inserito';
-      newErrors.codice_fiscale = 'Almeno uno tra P.IVA e Codice Fiscale deve essere inserito';
+      newErrors.codiceFiscale = 'Almeno uno tra P.IVA e Codice Fiscale deve essere inserito';
     }
     
     // Validazione P.IVA (se presente)
@@ -141,13 +151,13 @@ const CompanyFormNew: React.FC<CompanyFormNewProps> = ({
     }
     
     // Validazione sede aziendale
-    if (!formData.sede_azienda.trim()) {
-      newErrors.sede_azienda = 'La Sede Aziendale è obbligatoria';
+    if (!formData.sedeAzienda.trim()) {
+      newErrors.sedeAzienda = 'La Sede Aziendale è obbligatoria';
     }
     
     // Validazione persona di riferimento
-    if (!formData.persona_riferimento.trim()) {
-      newErrors.persona_riferimento = 'La Persona di Riferimento è obbligatoria';
+    if (!formData.personaRiferimento.trim()) {
+      newErrors.personaRiferimento = 'La Persona di Riferimento è obbligatoria';
     }
     
     // Validazione email
@@ -182,23 +192,13 @@ const CompanyFormNew: React.FC<CompanyFormNewProps> = ({
       
       console.log("Payload being sent to API:", payload);
       
-      // Determina l'URL e il metodo in base a se stiamo creando o modificando
-      const url = company 
-        ? `${API_BASE_URL}/companies/${company.id}` 
-        : `${API_BASE_URL}/companies`;
-      const method = company ? 'PUT' : 'POST';
-      
-      // Invia la richiesta
-      const response = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      
-      // Gestisci la risposta
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || 'Errore durante il salvataggio');
+      // Invia la richiesta usando il servizio API centralizzato
+      if (company) {
+        // Modifica azienda esistente
+        await apiPut(`/api/v1/companies/${company.id}`, payload);
+      } else {
+        // Crea nuova azienda
+        await apiPost('/api/v1/companies', payload);
       }
       
       // Mostra notifica di successo
@@ -211,9 +211,10 @@ const CompanyFormNew: React.FC<CompanyFormNewProps> = ({
       onSuccess();
     } catch (error) {
       console.error('Error saving company:', error);
-      setGeneralError(error instanceof Error ? error.message : 'Errore durante il salvataggio');
+      const sanitizedError = getSavingErrorMessage('companies', error);
+      setGeneralError(sanitizedError);
       showToast({
-        message: `Errore: ${error instanceof Error ? error.message : 'Errore durante il salvataggio'}`,
+        message: `Errore: ${sanitizedError}`,
         type: 'error'
       });
     } finally {
@@ -224,7 +225,7 @@ const CompanyFormNew: React.FC<CompanyFormNewProps> = ({
   return (
     <EntityFormLayout
       title={company ? 'Modifica Azienda' : 'Nuova Azienda'}
-      subtitle={company ? `Modifica i dati dell'azienda ${company.ragione_sociale}` : 'Inserisci i dati della nuova azienda'}
+      subtitle={company ? `Modifica i dati dell'azienda ${company.ragioneSociale}` : 'Inserisci i dati della nuova azienda'}
       onSubmit={handleSubmit}
       onClose={onClose}
       isSaving={isSaving}
@@ -236,20 +237,20 @@ const CompanyFormNew: React.FC<CompanyFormNewProps> = ({
         <EntityFormGrid>
           <EntityFormField
             label="Ragione Sociale"
-            name="ragione_sociale"
-            value={formData.ragione_sociale}
+            name="ragioneSociale"
+            value={formData.ragioneSociale}
             onChange={handleChange}
-            error={errors.ragione_sociale}
+            error={errors.ragioneSociale}
             required
             icon={<Building2 className="h-5 w-5 text-gray-400" />}
           />
           
           <EntityFormField
             label="Codice Ateco"
-            name="codice_ateco"
-            value={formData.codice_ateco}
+            name="codiceAteco"
+            value={formData.codiceAteco}
             onChange={handleChange}
-            error={errors.codice_ateco}
+            error={errors.codiceAteco}
             icon={<Hash className="h-5 w-5 text-gray-400" />}
           />
           
@@ -264,10 +265,10 @@ const CompanyFormNew: React.FC<CompanyFormNewProps> = ({
           
           <EntityFormField
             label="Codice Fiscale"
-            name="codice_fiscale"
-            value={formData.codice_fiscale}
+            name="codiceFiscale"
+            value={formData.codiceFiscale}
             onChange={handleChange}
-            error={errors.codice_fiscale}
+            error={errors.codiceFiscale}
             icon={<FileText className="h-5 w-5 text-gray-400" />}
           />
           
@@ -304,10 +305,10 @@ const CompanyFormNew: React.FC<CompanyFormNewProps> = ({
         <EntityFormGrid>
           <EntityFormField
             label="Sede Aziendale"
-            name="sede_azienda"
-            value={formData.sede_azienda}
+            name="sedeAzienda"
+            value={formData.sedeAzienda}
             onChange={handleChange}
-            error={errors.sede_azienda}
+            error={errors.sedeAzienda}
             required
             icon={<Building2 className="h-5 w-5 text-gray-400" />}
           />
@@ -341,10 +342,10 @@ const CompanyFormNew: React.FC<CompanyFormNewProps> = ({
           
           <EntityFormField
             label="Persona di Riferimento"
-            name="persona_riferimento"
-            value={formData.persona_riferimento}
+            name="personaRiferimento"
+            value={formData.personaRiferimento}
             onChange={handleChange}
-            error={errors.persona_riferimento}
+            error={errors.personaRiferimento}
             required
             icon={<User className="h-5 w-5 text-gray-400" />}
           />
@@ -386,4 +387,4 @@ const CompanyFormNew: React.FC<CompanyFormNewProps> = ({
   );
 };
 
-export default CompanyFormNew; 
+export default CompanyFormNew;

@@ -1,359 +1,326 @@
 import React, { useState, useEffect } from 'react';
-import { Role, Permission, RoleCreateDTO, RoleUpdateDTO } from '../../types';
-import { getRoles, createRole, updateRole, deleteRole, getPermissions } from '../../services/roles';
-import { Plus, Edit, Trash, Users, Shield } from 'lucide-react';
+import { Shield, CheckCircle, AlertCircle, AlertTriangle, Save } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { useRoles, type Role } from '../../hooks/useRoles';
+import { useTenants } from '../../hooks/useTenants';
+import OptimizedPermissionManager from '../../components/roles/OptimizedPermissionManager';
 
 const RolesTab: React.FC = () => {
-  const [roles, setRoles] = useState<Role[]>([]);
-  const [permissions, setPermissions] = useState<Permission[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
-  const [currentRole, setCurrentRole] = useState<Role | null>(null);
-
-  // Form state
-  const [formData, setFormData] = useState<RoleCreateDTO | RoleUpdateDTO>({
-    name: '',
-    description: '',
-    permissionIds: []
-  });
-
-  // Group permissions by resource for better organization
-  const groupedPermissions: Record<string, Permission[]> = permissions.reduce((acc, permission) => {
-    const { resource } = permission;
-    if (!acc[resource]) acc[resource] = [];
-    acc[resource].push(permission);
-    return acc;
-  }, {} as Record<string, Permission[]>);
-
-  // Fetch roles and permissions
+  const { hasPermission } = useAuth();
+  const { roles, selectedRole, loading: rolesLoading, loadRoles, selectRole, deleteRole, setSelectedRole } = useRoles();
+  const { tenants, loadTenants } = useTenants();
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isChangingRole, setIsChangingRole] = useState(false);
+  const [pendingRoleChange, setPendingRoleChange] = useState<Role | null>(null);
+  const [showUnsavedChangesModal, setShowUnsavedChangesModal] = useState(false);
+  // Carica ruoli e tenants all'avvio (solo una volta)
   useEffect(() => {
-    const fetchData = async () => {
-      setIsLoading(true);
-      try {
-        const [rolesData, permissionsData] = await Promise.all([
-          getRoles(),
-          getPermissions()
-        ]);
-        setRoles(rolesData);
-        setPermissions(permissionsData);
-        setError(null);
-      } catch (err: any) {
-        setError(err.message || 'Errore nel caricamento dei ruoli');
-      } finally {
-        setIsLoading(false);
+    console.log('🔄 RolesTab: Initial load');
+    loadRoles();
+    loadTenants();
+  }, []); // Rimuovo le dipendenze per evitare loop
+
+  // Ricarica i ruoli quando la tab diventa visibile (con debouncing)
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+    
+    const handleVisibilityChange = () => {
+      if (!document.hidden && roles.length > 0) {
+        // Debounce per evitare troppe richieste
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => {
+          console.log('🔄 RolesTab: Tab became visible, refreshing data');
+          loadRoles(true); // Force refresh
+        }, 500);
       }
     };
 
-    fetchData();
-  }, []);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      clearTimeout(timeoutId);
+    };
+  }, [roles.length]); // Solo roles.length come dipendenza
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
+  // Mostra messaggio temporaneo
+  const showMessage = (type: 'success' | 'error', text: string) => {
+    setMessage({ type, text });
+    setTimeout(() => setMessage(null), 5000);
   };
 
-  const handlePermissionChange = (permissionId: string) => {
-    const permissionIds = formData.permissionIds || [];
-    const newPermissionIds = permissionIds.includes(permissionId)
-      ? permissionIds.filter(id => id !== permissionId)
-      : [...permissionIds, permissionId];
-    
-    setFormData({ ...formData, permissionIds: newPermissionIds });
-  };
 
-  const handleResourcePermissions = (resource: string, checked: boolean) => {
-    const resourcePermissionIds = permissions
-      .filter(p => p.resource === resource)
-      .map(p => p.id);
-    
-    let currentPermissionIds = formData.permissionIds || [];
-    
-    if (checked) {
-      // Aggiungi tutte le autorizzazioni per questa risorsa che non sono già selezionate
-      const newIds = resourcePermissionIds.filter(id => !currentPermissionIds.includes(id));
-      currentPermissionIds = [...currentPermissionIds, ...newIds];
-    } else {
-      // Rimuovi tutte le autorizzazioni per questa risorsa
-      currentPermissionIds = currentPermissionIds.filter(id => !resourcePermissionIds.includes(id));
+
+  // Gestione cambio ruolo con controllo modifiche non salvate
+  const handleRoleChange = async (role: Role) => {
+    if (hasUnsavedChanges && selectedRole) {
+      setPendingRoleChange(role);
+      setShowUnsavedChangesModal(true);
+      return;
     }
     
-    setFormData({ ...formData, permissionIds: currentPermissionIds });
+    await performRoleChange(role);
   };
 
-  const isResourceFullyChecked = (resource: string): boolean => {
-    const resourcePermissionIds = permissions
-      .filter(p => p.resource === resource)
-      .map(p => p.id);
+  // Esegue il cambio ruolo
+  const performRoleChange = async (role: Role | null) => {
+    if (!role) return;
     
-    const selectedPermissionIds = formData.permissionIds || [];
-    return resourcePermissionIds.every(id => selectedPermissionIds.includes(id));
+    setIsChangingRole(true);
+    try {
+      await selectRole(role);
+      setHasUnsavedChanges(false);
+      // Rimosso il messaggio di successo per la selezione del ruolo
+    } catch (error) {
+      showMessage('error', 'Errore nel cambio ruolo');
+    } finally {
+      setIsChangingRole(false);
+    }
   };
 
-  const resetForm = () => {
-    setFormData({
-      name: '',
-      description: '',
-      permissionIds: []
-    });
-    setCurrentRole(null);
-    setIsEditing(false);
-    setIsFormOpen(false);
+  // Salva e cambia ruolo
+  const saveAndChangeRole = async () => {
+    // Per ora procediamo direttamente al cambio ruolo
+    // In futuro si potrà implementare il salvataggio automatico
+    if (pendingRoleChange) {
+      await performRoleChange(pendingRoleChange);
+      setPendingRoleChange(null);
+    }
+    setShowUnsavedChangesModal(false);
   };
 
-  const handleEditRole = (role: Role) => {
-    setCurrentRole(role);
-    setFormData({
-      name: role.name,
+  // Cambia ruolo senza salvare
+  const changeRoleWithoutSaving = async () => {
+    if (pendingRoleChange) {
+      await performRoleChange(pendingRoleChange);
+      setPendingRoleChange(null);
+    }
+    setShowUnsavedChangesModal(false);
+  };
+
+  // Annulla cambio ruolo
+  const cancelRoleChange = () => {
+    setPendingRoleChange(null);
+    setShowUnsavedChangesModal(false);
+  };
+
+  // Torna alla selezione dei ruoli
+  const handleBackToRoleSelection = () => {
+    setSelectedRole(null);
+    setHasUnsavedChanges(false);
+  };
+
+  // Converte il ruolo da useRoles al formato richiesto da OptimizedPermissionManager
+  const convertRole = (role: Role | null) => {
+    if (!role) return null;
+    return {
+      ...role,
       description: role.description || '',
-      permissionIds: role.permissions.map(p => p.id)
-    });
-    setIsEditing(true);
-    setIsFormOpen(true);
+      userCount: role.userCount || 0,
+      isActive: true
+    };
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    
-    try {
-      if (isEditing && currentRole) {
-        const updatedRole = await updateRole(currentRole.id, formData);
-        setRoles(roles.map(role => role.id === updatedRole.id ? updatedRole : role));
-      } else {
-        // Casting formData to RoleCreateDTO to ensure name is not undefined
-        const createData: RoleCreateDTO = {
-          name: formData.name as string,
-          description: formData.description,
-          permissionIds: formData.permissionIds
-        };
-        const newRole = await createRole(createData);
-        setRoles([...roles, newRole]);
-      }
-      resetForm();
-    } catch (err: any) {
-      setError(err.response?.data?.error || err.message || 'Errore durante il salvataggio');
-    }
-  };
-
-  const handleDeleteRole = async (roleId: string) => {
-    if (!window.confirm('Sei sicuro di voler eliminare questo ruolo?')) return;
-    
-    try {
-      await deleteRole(roleId);
-      setRoles(roles.filter(role => role.id !== roleId));
-    } catch (err: any) {
-      setError(err.response?.data?.error || err.message || 'Errore durante l\'eliminazione');
-    }
-  };
-
-  if (isLoading) {
-    return <div className="p-4 flex justify-center">Caricamento...</div>;
+  // Verifica permessi di lettura ruoli
+  if (!hasPermission('roles', 'read')) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center p-8">
+          <Shield className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Accesso negato</h3>
+          <p className="text-gray-600">Non hai i permessi necessari per visualizzare i ruoli.</p>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-xl font-medium text-gray-900">Gestione Ruoli</h2>
-        <button 
-          onClick={() => { resetForm(); setIsFormOpen(!isFormOpen); }}
-          className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Nuovo Ruolo
-        </button>
+    <div className="h-full flex flex-col bg-gray-50">
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200 px-6 py-4 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <div className="p-3 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl shadow-lg">
+              <Shield className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <div className="flex items-center space-x-3">
+                <h1 className="text-2xl font-bold text-gray-900">Gestione Ruoli e Permessi</h1>
+                {hasUnsavedChanges && (
+                  <div className="flex items-center space-x-1 px-2 py-1 bg-amber-100 border border-amber-300 rounded-lg">
+                    <AlertTriangle className="w-4 h-4 text-amber-600" />
+                    <span className="text-xs font-medium text-amber-700">Modifiche non salvate</span>
+                  </div>
+                )}
+                {isChangingRole && (
+                  <div className="flex items-center space-x-1 px-2 py-1 bg-blue-100 border border-blue-300 rounded-lg">
+                    <div className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                    <span className="text-xs font-medium text-blue-700">Cambio ruolo...</span>
+                  </div>
+                )}
+              </div>
+              <p className="text-sm text-gray-600">Configura ruoli, permessi CRUD, scope tenant e campi specifici</p>
+            </div>
+          </div>
+          
+          {/* Statistiche rapide */}
+          <div className="flex items-center space-x-6">
+            <div className="text-center">
+              <div className="text-2xl font-bold text-blue-600">{roles.length}</div>
+              <div className="text-xs text-gray-500">Ruoli</div>
+            </div>
+            {selectedRole && (
+              <div className="text-center">
+                <div className="text-2xl font-bold text-green-600">{selectedRole.userCount || 0}</div>
+                <div className="text-xs text-gray-500">Utenti</div>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-          {error}
+      {/* Messaggi di stato */}
+      {message && (
+        <div className={`mx-6 mt-4 p-4 rounded-lg border shadow-sm ${
+          message.type === 'success' 
+            ? 'bg-green-50 border-green-200 text-green-800' 
+            : 'bg-red-50 border-red-200 text-red-800'
+        }`}>
+          <div className="flex items-center">
+            {message.type === 'success' ? (
+              <CheckCircle className="w-5 h-5 mr-2" />
+            ) : (
+              <AlertCircle className="w-5 h-5 mr-2" />
+            )}
+            <span>{message.text}</span>
+          </div>
         </div>
       )}
 
-      {isFormOpen && (
-        <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm">
-          <h3 className="text-lg font-medium mb-4">
-            {isEditing ? 'Modifica Ruolo' : 'Nuovo Ruolo'}
-          </h3>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Nome Ruolo
-                </label>
-                <input
-                  type="text"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleInputChange}
-                  required
-                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Descrizione
-                </label>
-                <textarea
-                  name="description"
-                  value={formData.description || ''}
-                  onChange={handleInputChange}
-                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3"
-                  rows={3}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Permessi
-                </label>
-                <div className="border border-gray-200 rounded-md p-3 max-h-96 overflow-y-auto">
-                  {Object.entries(groupedPermissions).map(([resource, perms]) => (
-                    <div key={resource} className="mb-4">
-                      <div className="flex items-center mb-2">
-                        <input
-                          type="checkbox"
-                          id={`resource-${resource}`}
-                          checked={isResourceFullyChecked(resource)}
-                          onChange={(e) => handleResourcePermissions(resource, e.target.checked)}
-                          className="h-4 w-4 text-blue-600 border-gray-300 rounded"
-                        />
-                        <label htmlFor={`resource-${resource}`} className="ml-2 text-sm font-medium text-gray-700 capitalize">
-                          {resource}
-                        </label>
-                      </div>
-                      <div className="ml-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
-                        {perms.map(permission => (
-                          <div key={permission.id} className="flex items-center">
-                            <input
-                              type="checkbox"
-                              id={permission.id}
-                              checked={(formData.permissionIds || []).includes(permission.id)}
-                              onChange={() => handlePermissionChange(permission.id)}
-                              className="h-4 w-4 text-blue-600 border-gray-300 rounded"
-                            />
-                            <label htmlFor={permission.id} className="ml-2 text-sm text-gray-600 capitalize">
-                              {permission.action}
-                            </label>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
+      {/* Selezione ruolo se nessuno è selezionato */}
+      {!selectedRole && !rolesLoading && (
+        <div className="mx-6 mt-4 p-6 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="flex items-center space-x-3">
+            <Shield className="w-6 h-6 text-blue-600" />
+            <div>
+              <h3 className="font-semibold text-blue-900">Seleziona un ruolo</h3>
+              <p className="text-sm text-blue-700">
+                Scegli un ruolo dalla lista per configurare i permessi CRUD, scope tenant e campi specifici
+              </p>
+            </div>
+          </div>
+          
+          {/* Lista ruoli rapida */}
+          <div className="mt-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            {roles.map((role, index) => (
+              <button
+                key={role?.type || `role-${index}`}
+                onClick={() => role && handleRoleChange(role)}
+                disabled={isChangingRole || !role}
+                className={`p-3 bg-white border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors text-left relative ${
+                  isChangingRole || !role ? 'opacity-50 cursor-not-allowed' : ''
+                } ${
+                  selectedRole?.type === role?.type ? 'ring-2 ring-blue-500 bg-blue-50' : ''
+                }`}
+              >
+                <div className="font-medium text-blue-900 text-sm">{role?.name || 'Ruolo sconosciuto'}</div>
+                <div className="text-xs text-blue-600 mt-1">{role?.userCount || 0} utenti</div>
+                {selectedRole?.type === role?.type && (
+                  <div className="absolute top-2 right-2">
+                    <CheckCircle className="w-4 h-4 text-blue-600" />
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Gestore permessi unificato */}
+      {selectedRole && (
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Header sezione permessi */}
+          <div className="bg-white border-b border-gray-200 px-6 py-4">
+            <div className="flex items-center space-x-2">
+              <Shield className="w-5 h-5 text-blue-600" />
+              <h3 className="text-lg font-semibold text-gray-900">
+                Gestione Permessi - {selectedRole.name}
+              </h3>
+            </div>
+            <p className="text-sm text-gray-600 mt-1">
+              Configura i permessi per tutte le entità del sistema, incluse quelle virtuali (Dipendenti e Formatori)
+            </p>
+          </div>
+
+          {/* Contenuto principale */}
+          <div className="flex-1 overflow-hidden">
+            <div className="h-full p-6 overflow-hidden">
+              <OptimizedPermissionManager
+                role={convertRole(selectedRole)!}
+                tenants={tenants}
+                onBack={handleBackToRoleSelection}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Loading state */}
+      {rolesLoading && (
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Caricamento ruoli...</p>
+          </div>
+        </div>
+      )}
+
+      {/* Modale conferma cambio ruolo */}
+      {showUnsavedChangesModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="p-6">
+              <div className="flex items-center space-x-3 mb-4">
+                <div className="p-2 bg-amber-100 rounded-full">
+                  <AlertTriangle className="w-6 h-6 text-amber-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Modifiche non salvate</h3>
+                  <p className="text-sm text-gray-600">
+                    Hai modifiche non salvate per il ruolo "{selectedRole?.name}"
+                  </p>
                 </div>
               </div>
+              
+              <p className="text-gray-700 mb-6">
+                Vuoi salvare le modifiche prima di cambiare ruolo o procedere senza salvare?
+              </p>
+              
+              <div className="flex space-x-3">
+                <button
+                  onClick={saveAndChangeRole}
+                  className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>Salva e cambia</span>
+                </button>
+                <button
+                  onClick={changeRoleWithoutSaving}
+                  className="flex-1 bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors"
+                >
+                  Non salvare
+                </button>
+                <button
+                  onClick={cancelRoleChange}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Annulla
+                </button>
+              </div>
             </div>
-
-            <div className="flex justify-end space-x-2">
-              <button
-                type="button"
-                onClick={resetForm}
-                className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-              >
-                Annulla
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
-              >
-                {isEditing ? 'Aggiorna' : 'Salva'}
-              </button>
-            </div>
-          </form>
+          </div>
         </div>
       )}
-
-      <div className="bg-white shadow-sm rounded-2xl overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Ruolo
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Descrizione
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Utenti
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Permessi
-              </th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Azioni
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {roles.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500">
-                  Nessun ruolo trovato
-                </td>
-              </tr>
-            ) : (
-              roles.map(role => (
-                <tr key={role.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">
-                      {role.name}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {role.description || 'Nessuna descrizione'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <Users className="h-4 w-4 text-gray-400 mr-1" />
-                      <span className="text-sm text-gray-500">
-                        {role._count?.users || 0} utenti
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex flex-wrap gap-1">
-                      {/* Raggruppa i permessi per risorsa e mostra il numero di permessi per tipo */}
-                      {Object.entries(role.permissions.reduce((acc, p) => {
-                        if (!acc[p.resource]) acc[p.resource] = 0;
-                        acc[p.resource]++;
-                        return acc;
-                      }, {} as Record<string, number>)).map(([resource, count]) => (
-                        <span 
-                          key={resource} 
-                          className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 capitalize"
-                        >
-                          <Shield className="w-3 h-3 mr-1" />
-                          {resource} ({count})
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button
-                      onClick={() => handleEditRole(role)}
-                      className="text-blue-600 hover:text-blue-900 mr-3"
-                    >
-                      <Edit className="w-4 h-4" />
-                    </button>
-                    {/* Non permettere l'eliminazione se ci sono utenti associati */}
-                    <button
-                      onClick={() => handleDeleteRole(role.id)}
-                      className={`text-red-600 hover:text-red-900 ${role._count && role._count.users > 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
-                      disabled={role._count && role._count.users > 0}
-                      title={role._count && role._count.users > 0 ? 
-                        'Impossibile eliminare un ruolo con utenti associati' : 
-                        'Elimina ruolo'
-                      }
-                    >
-                      <Trash className="w-4 h-4" />
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
     </div>
   );
 };

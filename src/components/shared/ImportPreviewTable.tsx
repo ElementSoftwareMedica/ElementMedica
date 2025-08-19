@@ -1,12 +1,20 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { CheckCircle, AlertCircle } from 'lucide-react';
-import { formatDate } from '../../design-system/utils';
 
 export interface ImportPreviewColumn {
   key: string;
   label: string;
   minWidth: number;
   width: number;
+}
+
+export interface ConflictInfo {
+  type: 'duplicate' | 'invalid_company';
+  existingPerson?: any;
+  suggestedCompanies?: any[];
+  resolution?: 'skip' | 'overwrite' | 'assign_company';
+  selectedCompanyId?: string;
+  selectedCompanyName?: string;
 }
 
 interface ImportPreviewTableProps<T> {
@@ -22,26 +30,33 @@ interface ImportPreviewTableProps<T> {
   /** Funzione opzionale per cambiare l'azienda di un dipendente selezionato */
   onCompanyChange?: (selectedIds: string[], companyId: string) => void;
   /** Lista delle aziende disponibili per il menu a pillola */
-  availableCompanies?: Array<{id: string, name: string}>;
+  availableCompanies?: Array<{id: string, name?: string, ragioneSociale?: string}>;
   overwriteIds?: string[];
+  /** NUOVO: Conflitti rilevati per riga */
+  conflicts?: { [rowIdx: number]: ConflictInfo };
+  /** NUOVO: Callback per aggiornare la risoluzione di un conflitto */
+  onConflictResolutionChange?: (rowIdx: number, resolution: Partial<ConflictInfo>) => void;
+  /** NUOVO: Righe selezionate per l'import */
+  selectedRows?: Set<number>;
+  /** NUOVO: Callback per gestire la selezione delle righe */
+  onRowSelectionChange?: (selectedRows: Set<number>) => void;
 }
 
 // Mappa dei campi tra nomi diversi (CSV e database)
 const fieldMappings: Record<string, string[]> = {
   // CSV key: [possibili chiavi nel database]
-  'nome': ['first_name', 'firstName', 'nome'],
-  'cognome': ['last_name', 'lastName', 'cognome'],
-  'codice_fiscale': ['codice_fiscale', 'codiceFiscale'],
-  'company_name': ['company_name', 'companyName', 'companyId'],
-  'mansione': ['title', 'mansione', 'position'],
+  'nome': ['firstName', 'nome'],
+  'cognome': ['lastName', 'cognome'],
+  'codice_fiscale': ['codiceFiscale', 'codice_fiscale', 'taxCode'],
+  'company_name': ['companyName', 'company_name', 'companyId'],
+  'profilo_professionale': ['title', 'profilo_professionale', 'mansione', 'position'],
   'email': ['email'],
   'telefono': ['phone', 'telefono'],
-  'indirizzo': ['address', 'indirizzo'],
+  'indirizzo': ['residenceAddress', 'indirizzo'],
   'citta': ['city', 'citta'],
   'provincia': ['province', 'provincia'],
-  'cap': ['postal_code', 'postalCode', 'cap'],
-  'data_nascita': ['birth_date', 'birthDate', 'data_nascita'],
-  'luogo_nascita': ['birth_place', 'birthPlace', 'luogo_nascita'],
+  'cap': ['postalCode', 'postal_code', 'cap'],
+  'data_nascita': ['birthDate', 'birth_date', 'data_nascita'],
   'department_id': ['departmentId', 'department_id']
 };
 
@@ -56,7 +71,11 @@ export default function ImportPreviewTable<T extends Record<string, any>>({
   useSingleCheckboxColumn = false,
   onCompanyChange,
   availableCompanies = [],
-  overwriteIds = []
+  overwriteIds = [],
+  conflicts = {},
+  onConflictResolutionChange,
+  selectedRows = new Set(Array.from({ length: preview.length }, (_, i) => i)), // Default: tutte le righe selezionate
+  onRowSelectionChange
 }: ImportPreviewTableProps<T>) {
   const [colWidths, setColWidths] = useState<Record<string, number>>(() => 
     columns.reduce((acc, col) => ({ ...acc, [col.key]: col.width }), {} as Record<string, number>)
@@ -72,12 +91,12 @@ export default function ImportPreviewTable<T extends Record<string, any>>({
   const startWidth = useRef<number>(0);
   const dropdownRef = useRef<HTMLDivElement>(null);
   
-  // Identifica le righe duplicate utilizzando la chiave univoca
+  // Identifica le righe duplicate utilizzando la chiave univoca (con normalizzazione)
   const existingKeys = new Set(
     existing
       .map(item => item[uniqueKey])
       .filter(Boolean)
-      .map(String)
+      .map(value => String(value).toLowerCase().trim())
   );
 
   // Imposta i toggle predefiniti per i duplicati all'inizializzazione, solo una volta
@@ -125,7 +144,95 @@ export default function ImportPreviewTable<T extends Record<string, any>>({
     };
   }, []);
 
-  // Gestione del ridimensionamento delle colonne
+  // Gestione selezione righe per l'import
+  const handleRowSelectionToggle = (rowIndex: number) => {
+    if (!onRowSelectionChange) return;
+    
+    const newSelectedRows = new Set(selectedRows);
+    const item = preview[rowIndex];
+    
+    if (newSelectedRows.has(rowIndex)) {
+      // Deseleziona la riga per l'importazione
+      newSelectedRows.delete(rowIndex);
+      
+      // Se la riga è un duplicato, deseleziona anche dalla sovrascrittura
+      if (item && item[uniqueKey] && existingKeys.has(String(item[uniqueKey]).toLowerCase().trim())) {
+        const existingItem = existing.find(e => 
+          String(e[uniqueKey]).toLowerCase().trim() === String(item[uniqueKey]).toLowerCase().trim()
+        );
+        if (existingItem && existingItem.id) {
+          setOverwriteToggles(prev => ({
+            ...prev,
+            [String(existingItem.id)]: false
+          }));
+        }
+      }
+    } else {
+      // Seleziona la riga per l'importazione
+      newSelectedRows.add(rowIndex);
+      
+      // Se la riga è un duplicato, seleziona anche per la sovrascrittura
+      if (item && item[uniqueKey] && existingKeys.has(String(item[uniqueKey]).toLowerCase().trim())) {
+        const existingItem = existing.find(e => 
+          String(e[uniqueKey]).toLowerCase().trim() === String(item[uniqueKey]).toLowerCase().trim()
+        );
+        if (existingItem && existingItem.id) {
+          setOverwriteToggles(prev => ({
+            ...prev,
+            [String(existingItem.id)]: true
+          }));
+        }
+      }
+    }
+    
+    onRowSelectionChange(newSelectedRows);
+  };
+
+  const handleSelectAllRows = () => {
+    if (!onRowSelectionChange) return;
+    
+    const allRowsSelected = selectedRows.size === preview.length;
+    if (allRowsSelected) {
+      // Deseleziona tutte le righe
+      onRowSelectionChange(new Set());
+      
+      // Deseleziona anche tutti i toggle di sovrascrittura
+      const noToggles: { [id: string]: boolean } = {};
+      preview.forEach(item => {
+        const key = item[uniqueKey];
+        if (key && existingKeys.has(String(key).toLowerCase().trim())) {
+          const existingItem = existing.find(e => 
+            String(e[uniqueKey]).toLowerCase().trim() === String(key).toLowerCase().trim()
+          );
+          if (existingItem && existingItem.id) {
+            noToggles[String(existingItem.id)] = false;
+          }
+        }
+      });
+      setOverwriteToggles(noToggles);
+    } else {
+      // Seleziona tutte le righe
+      onRowSelectionChange(new Set(Array.from({ length: preview.length }, (_, i) => i)));
+      
+      // Seleziona anche tutti i toggle di sovrascrittura per i duplicati
+      const allToggles: { [id: string]: boolean } = { ...overwriteToggles };
+      preview.forEach(item => {
+        const key = item[uniqueKey];
+        if (key && existingKeys.has(String(key).toLowerCase().trim())) {
+          const existingItem = existing.find(e => 
+            String(e[uniqueKey]).toLowerCase().trim() === String(key).toLowerCase().trim()
+          );
+          if (existingItem && existingItem.id) {
+            allToggles[String(existingItem.id)] = true;
+          }
+        }
+      });
+      setOverwriteToggles(allToggles);
+    }
+  };
+
+  const areAllRowsSelected = selectedRows.size === preview.length && preview.length > 0;
+  const areSomeRowsSelected = selectedRows.size > 0 && selectedRows.size < preview.length;
   const handleResizeStart = (col: string, e: React.MouseEvent) => {
     resizingCol.current = col;
     startX.current = e.clientX;
@@ -159,6 +266,29 @@ export default function ImportPreviewTable<T extends Record<string, any>>({
         [id]: !prev[id]
       };
       
+      // Sincronizza con la selezione delle righe
+      if (onRowSelectionChange) {
+        const existingItem = existing.find(e => String(e.id) === id);
+        if (existingItem) {
+          const rowIndex = preview.findIndex(item => 
+            item[uniqueKey] && 
+            String(item[uniqueKey]).toLowerCase().trim() === String(existingItem[uniqueKey]).toLowerCase().trim()
+          );
+          
+          if (rowIndex !== -1) {
+            const newSelectedRows = new Set(selectedRows);
+            if (newState[id]) {
+              // Se viene selezionato per sovrascrittura, seleziona anche per importazione
+              newSelectedRows.add(rowIndex);
+            } else {
+              // Se viene deselezionato per sovrascrittura, deseleziona anche per importazione
+              newSelectedRows.delete(rowIndex);
+            }
+            onRowSelectionChange(newSelectedRows);
+          }
+        }
+      }
+      
       return newState;
     });
   };
@@ -170,9 +300,14 @@ export default function ImportPreviewTable<T extends Record<string, any>>({
     // Assicurati che tutti gli ID presenti in existingKeys abbiano un toggle
     preview.forEach(item => {
       const key = item[uniqueKey];
-      if (key && existingKeys.has(String(key))) {
-        const stringKey = String(key);
-        allToggles[stringKey] = true;
+      if (key && existingKeys.has(String(key).toLowerCase().trim())) {
+        // Trova l'elemento esistente corrispondente per ottenere l'ID corretto
+        const existingItem = existing.find(e => 
+          String(e[uniqueKey]).toLowerCase().trim() === String(key).toLowerCase().trim()
+        );
+        if (existingItem && existingItem.id) {
+          allToggles[String(existingItem.id)] = true;
+        }
       }
     });
     
@@ -193,9 +328,14 @@ export default function ImportPreviewTable<T extends Record<string, any>>({
     // Assicurati che tutti gli ID presenti in existingKeys abbiano un toggle
     preview.forEach(item => {
       const key = item[uniqueKey];
-      if (key && existingKeys.has(String(key))) {
-        const stringKey = String(key);
-        noToggles[stringKey] = false;
+      if (key && existingKeys.has(String(key).toLowerCase().trim())) {
+        // Trova l'elemento esistente corrispondente per ottenere l'ID corretto
+        const existingItem = existing.find(e => 
+          String(e[uniqueKey]).toLowerCase().trim() === String(key).toLowerCase().trim()
+        );
+        if (existingItem && existingItem.id) {
+          noToggles[String(existingItem.id)] = false;
+        }
       }
     });
     
@@ -213,22 +353,27 @@ export default function ImportPreviewTable<T extends Record<string, any>>({
     setIsCompanyDropdownOpen(false);
     
     if (onCompanyChange) {
-      // Ottieni gli ID selezionati
-      const selectedIds = Object.keys(overwriteToggles).filter(key => overwriteToggles[key]);
-      if (selectedIds.length > 0) {
-        onCompanyChange(selectedIds, companyId);
+      // Se ci sono righe selezionate tramite checkbox, applica solo a quelle
+      if (selectedRows.size > 0) {
+        // Passa gli indici delle righe selezionate come stringhe
+        const selectedRowIndices = Array.from(selectedRows).map(index => String(index));
+        onCompanyChange(selectedRowIndices, companyId);
+      } else {
+        // Se non ci sono righe selezionate tramite checkbox, applica a tutte le righe
+        const allRowIndices = Array.from({ length: preview.length }, (_, index) => String(index));
+        onCompanyChange(allRowIndices, companyId);
       }
     }
   };
 
   // Filtra le aziende in base al termine di ricerca
   const filteredCompanies = availableCompanies.filter(company => 
-    company.name.toLowerCase().includes(searchTerm.toLowerCase())
+    (company.ragioneSociale || company.name || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   // Controlla se tutte le righe duplicate sono selezionate
   const duplicateCount = preview.filter(item => item[uniqueKey] && existingKeys.has(String(item[uniqueKey]))).length;
-  const selectedCount = Object.values(overwriteToggles).filter(Boolean).length;
+  const selectedCount = selectedRows.size;
   const areAllDuplicatesSelected = duplicateCount > 0 && selectedCount === duplicateCount;
   
   // Stato per il checkbox "seleziona tutto"
@@ -240,29 +385,50 @@ export default function ImportPreviewTable<T extends Record<string, any>>({
     }
   };
 
+  // Funzione unificata per formattare le date in formato dd/mm/yyyy
+  const formatDateForComparison = (dateString: string | null | undefined): string => {
+    if (!dateString) return '';
+    
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return String(dateString);
+      
+      const day = date.getDate().toString().padStart(2, '0');
+      const month = (date.getMonth() + 1).toString().padStart(2, '0');
+      const year = date.getFullYear();
+      
+      return `${day}/${month}/${year}`;
+    } catch (error) {
+      return String(dateString);
+    }
+  };
+
   // Trova il valore corrispondente nel database tramite mappatura dei campi
   const getDbValue = (existingItem: Record<string, any>, csvKey: string): string => {
+    // Rimuovi l'indice dalla chiave se presente (es. "postalCode-0" -> "postalCode")
+    const originalKey = csvKey.replace(/-\d+$/, '');
+    
     // Ottieni possibili nomi di campi nel database per questa chiave CSV
-    const possibleKeys = fieldMappings[csvKey] || [csvKey];
+    const possibleKeys = fieldMappings[originalKey] || [originalKey];
     
     // Prova ogni possibile chiave nel database
     for (const dbKey of possibleKeys) {
-      if (existingItem[dbKey] !== undefined) {
+      if (existingItem[dbKey] !== undefined && existingItem[dbKey] !== null) {
         const value = existingItem[dbKey];
         
         // Gestione speciale per i campi di tipo data
-        if (csvKey === 'data_nascita' && value) {
-          return formatDate(value);
+        if (originalKey === 'data_nascita' && value) {
+          return formatDateForComparison(value);
         }
         
         // Gestione speciale per il campo company_name/companyId
-        if (csvKey === 'company_name' && (dbKey === 'companyId' || dbKey === 'company_id') && value) {
+        if (originalKey === 'company_name' && (dbKey === 'companyId' || dbKey === 'companyName') && value) {
           // Trova il nome dell'azienda dall'ID
           const company = availableCompanies.find(c => c.id === value);
-          return company ? company.name : value;
+          return company ? (company.ragioneSociale || company.name || '') : String(value);
         }
         
-        return String(value !== null ? value : '');
+        return String(value);
       }
     }
     
@@ -272,68 +438,159 @@ export default function ImportPreviewTable<T extends Record<string, any>>({
   // Controlla se qualche riga è selezionata
   const hasSelectedRows = selectedCount > 0;
   
-  // Stato della riga (nuovo, aggiornato, errore)
+  // Stato della riga (nuovo, aggiornato, errore, conflitto)
   const renderRowStatus = (item: T, index: number) => {
     const hasErrors = rowErrors[index] && rowErrors[index].length > 0;
+    const errors = rowErrors[index] || [];
+    const conflict = conflicts[index];
+    const isRowSelected = selectedRows.has(index);
+    
+    // Controlla se ci sono errori specifici del codice fiscale
+    const hasFiscalCodeError = errors.some(error => 
+      error.toLowerCase().includes('codice fiscale') || 
+      error.toLowerCase().includes('fiscal') ||
+      error.toLowerCase().includes('cf')
+    );
     
     // Se l'elemento ha già un ID, è un record esistente
-    const isExisting = item.id !== undefined || (
-      item[uniqueKey] && existingKeys.has(String(item[uniqueKey]))
-    );
+    // Oppure se c'è un conflitto di tipo duplicate, è anche esistente
+    // Oppure se ha il flag _isExisting impostato da EmployeeImport
+    const isExisting = item.id !== undefined || 
+      item._isExisting === true ||
+      (item[uniqueKey] && existingKeys.has(String(item[uniqueKey]).toLowerCase().trim())) ||
+      (conflict && conflict.type === 'duplicate');
+    
+
     
     // Se l'elemento ha un ID, usiamo quello per il checkbox
     const id = item.id || (() => {
       // Altrimenti, troviamo l'ID corrispondente nel dataset esistente
       if (item[uniqueKey]) {
-        const existingItem = existing.find(e => String(e[uniqueKey]) === String(item[uniqueKey]));
+        const existingItem = existing.find(e => 
+          String(e[uniqueKey]).toLowerCase().trim() === String(item[uniqueKey]).toLowerCase().trim()
+        );
         return existingItem?.id;
       }
       return null;
     })();
     
-    if (hasErrors) {
+    // Gestione conflitti
+    if (conflict) {
       return (
-        <div className="flex items-center text-red-500">
-          <AlertCircle size={16} />
-        </div>
-      );
-    } else if (isExisting) {
-      return (
-        <div className="flex items-center text-blue-500">
-          {useSingleCheckboxColumn ? (
-            <div className="flex justify-center">
-              <input
-                type="checkbox"
-                checked={id ? overwriteToggles[String(id)] || false : false}
-                onChange={() => id && handleToggleOverwrite(String(id))}
-                className="accent-blue-600"
-                title="Seleziona per importare/aggiornare"
-              />
-            </div>
-          ) : (
-            <CheckCircle size={16} className="text-blue-500" aria-label="Duplicato" />
+        <div className="flex flex-col items-center space-y-1 p-1 min-w-[160px]">
+          {/* Checkbox di selezione per l'import */}
+          <div className="flex items-center justify-center">
+            <input
+              type="checkbox"
+              checked={isRowSelected}
+              onChange={() => handleRowSelectionToggle(index)}
+              className="accent-blue-600 mr-1"
+              title="Seleziona per importare"
+            />
+            <span className="text-xs text-gray-600 font-medium">Importa</span>
+          </div>
+          
+          {conflict.type === 'duplicate' && (
+            <>
+              <div className="flex items-center justify-center text-blue-600 bg-blue-50 px-2 py-1 rounded-md border border-blue-200 w-full">
+                <span className="text-xs font-medium">⚠️ Duplicato CF</span>
+              </div>
+              <div className="flex space-x-1 w-full">
+                <button
+                  onClick={() => onConflictResolutionChange?.(index, { resolution: 'skip' })}
+                  className={`flex-1 px-2 py-1 text-xs rounded font-medium transition-colors ${
+                    conflict.resolution === 'skip' 
+                      ? 'bg-red-500 text-white shadow-sm' 
+                      : 'bg-gray-100 text-gray-700 hover:bg-red-50 hover:text-red-600 border border-gray-300'
+                  }`}
+                  title="Mantieni il record esistente"
+                >
+                  Salta
+                </button>
+                <button
+                  onClick={() => onConflictResolutionChange?.(index, { resolution: 'overwrite' })}
+                  className={`flex-1 px-2 py-1 text-xs rounded font-medium transition-colors ${
+                    conflict.resolution === 'overwrite' 
+                      ? 'bg-blue-500 text-white shadow-sm' 
+                      : 'bg-gray-100 text-gray-700 hover:bg-blue-50 hover:text-blue-600 border border-gray-300'
+                  }`}
+                  title="Sostituisci con i nuovi dati"
+                >
+                  Sovrascrivi
+                </button>
+              </div>
+            </>
           )}
-        </div>
-      );
-    } else {
-      return (
-        <div className="flex items-center text-green-500">
-          {useSingleCheckboxColumn ? (
-            <div className="flex justify-center">
-              <input
-                type="checkbox"
-                checked={true}
-                disabled
-                className="accent-green-600 opacity-50"
-                title="Nuova voce (sempre importata)"
-              />
-            </div>
-          ) : (
-            <CheckCircle size={16} className="text-green-500" aria-label="Nuova voce" />
+          
+          {conflict.type === 'invalid_company' && (
+            <>
+              <div className="flex items-center justify-center text-orange-600 bg-orange-50 px-2 py-1 rounded-md border border-orange-200 w-full">
+                <span className="text-xs font-medium">🏢 Azienda non trovata</span>
+              </div>
+              <select
+                value={conflict.selectedCompanyId || ''}
+                onChange={(e) => {
+                  const selectedCompany = availableCompanies.find(c => c.id === e.target.value);
+                  onConflictResolutionChange?.(index, { 
+                    resolution: e.target.value ? 'assign_company' : undefined,
+                    selectedCompanyId: e.target.value || undefined,
+                    selectedCompanyName: selectedCompany?.ragioneSociale || selectedCompany?.name
+                  });
+                }}
+                className="w-full text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                title="Seleziona un'azienda"
+              >
+                <option value="">🔍 Seleziona azienda...</option>
+                {availableCompanies.map(company => (
+                  <option key={company.id} value={company.id}>
+                    {company.ragioneSociale || company.name}
+                  </option>
+                ))}
+              </select>
+            </>
           )}
         </div>
       );
     }
+    
+    // Gestione normale (senza conflitti)
+    return (
+      <div className="flex flex-col items-center space-y-1 p-1">
+        {/* Checkbox di selezione per l'import */}
+        <div className="flex items-center justify-center">
+          <input
+            type="checkbox"
+            checked={isRowSelected}
+            onChange={() => handleRowSelectionToggle(index)}
+            className="accent-blue-600 mr-1"
+            title="Seleziona per importare"
+          />
+          <span className="text-xs text-gray-600 font-medium">Importa</span>
+        </div>
+        
+        {/* Indicatore di stato compatto */}
+        <div className="flex items-center justify-center">
+          {hasErrors ? (
+            <div className="flex items-center text-red-600 bg-red-50 px-2 py-1 rounded-md border border-red-200" title={errors.join(', ')}>
+              <AlertCircle size={12} className="mr-1" />
+              <span className="text-xs font-medium">
+                {hasFiscalCodeError ? '❌ CF Invalido' : '❌ Errore'}
+              </span>
+            </div>
+          ) : isExisting ? (
+            <div className="flex items-center text-blue-600 bg-blue-50 px-2 py-1 rounded-md border border-blue-200">
+              <CheckCircle size={12} className="mr-1" />
+              <span className="text-xs font-medium">🔄 Esistente</span>
+            </div>
+          ) : (
+            <div className="flex items-center text-green-600 bg-green-50 px-2 py-1 rounded-md border border-green-200">
+              <CheckCircle size={12} className="mr-1" />
+              <span className="text-xs font-medium">✨ Nuovo</span>
+            </div>
+          )}
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -352,48 +609,78 @@ export default function ImportPreviewTable<T extends Record<string, any>>({
               )}
             </div>
             
-            {availableCompanies && availableCompanies.length > 0 && hasSelectedRows && (
+            {availableCompanies && availableCompanies.length > 0 && (
               <div className="relative" ref={dropdownRef}>
                 <div 
                   onClick={() => setIsCompanyDropdownOpen(!isCompanyDropdownOpen)}
-                  className="px-3 py-1.5 text-sm bg-blue-100 text-blue-800 rounded-full border border-blue-300 cursor-pointer flex items-center gap-2"
+                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded-full border border-blue-700 cursor-pointer flex items-center gap-2 hover:bg-blue-700 transition-colors shadow-sm"
                 >
-                  <span className="inline-block w-2 h-2 bg-blue-500 rounded-full"></span>
-                  {selectedCompanyId ? 
-                    availableCompanies.find(c => c.id === selectedCompanyId)?.name || 'Cambia azienda' : 
-                    'Cambia azienda'}
-                  <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-4m-5 0H3m2 0h3M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+                  </svg>
+                  <span>
+                    {selectedCompanyId ? 
+                      (availableCompanies.find(c => c.id === selectedCompanyId)?.ragioneSociale || 
+                       availableCompanies.find(c => c.id === selectedCompanyId)?.name || 'Seleziona azienda') : 
+                      'Assegna azienda'}
+                  </span>
+                  <svg className={`w-4 h-4 transition-transform ${isCompanyDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
                   </svg>
                 </div>
                 
                 {isCompanyDropdownOpen && (
-                  <div className="absolute right-0 mt-1 w-64 bg-white border border-gray-300 rounded-md shadow-lg z-[999]">
-                    <div className="p-2 border-b border-gray-200">
-                      <input
-                        type="text"
-                        placeholder="Cerca azienda..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        autoFocus
-                      />
+                  <div className="absolute right-0 mt-2 w-80 bg-white border border-gray-300 rounded-lg shadow-xl z-[999] overflow-hidden">
+                    <div className="p-3 border-b border-gray-200 bg-gray-50">
+                      <div className="flex items-center gap-2 mb-2">
+                        <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                        </svg>
+                        <input
+                          type="text"
+                          placeholder="Cerca azienda per nome..."
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          autoFocus
+                        />
+                      </div>
+                      <p className="text-xs text-gray-600">
+                        {selectedRows.size > 0 && selectedRows.size < preview.length
+                          ? `Assegna azienda alle ${selectedRows.size} righe selezionate` 
+                          : 'Assegna azienda a tutte le righe'}
+                      </p>
                     </div>
-                    <div className="max-h-56 overflow-y-auto py-1">
+                    <div className="max-h-64 overflow-y-auto">
                       {filteredCompanies.length > 0 ? (
                         filteredCompanies.map((company) => (
                           <div
                             key={company.id}
                             onClick={() => handleCompanySelect(company.id)}
-                            className={`px-3 py-2 text-sm cursor-pointer hover:bg-blue-100 ${
-                              selectedCompanyId === company.id ? "bg-blue-50 text-blue-700" : ""
+                            className={`px-4 py-3 text-sm cursor-pointer hover:bg-blue-50 border-b border-gray-100 last:border-b-0 transition-colors ${
+                              selectedCompanyId === company.id ? "bg-blue-100 text-blue-800 border-blue-200" : "text-gray-700"
                             }`}
                           >
-                            {company.name}
+                            <div className="flex items-center justify-between">
+                               <div className="flex-1">
+                                 <div className="font-medium">{company.ragioneSociale || company.name}</div>
+                               </div>
+                               {selectedCompanyId === company.id && (
+                                 <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+                                 </svg>
+                               )}
+                             </div>
                           </div>
                         ))
                       ) : (
-                        <div className="px-3 py-2 text-sm text-gray-500">Nessun risultato</div>
+                        <div className="px-4 py-6 text-center">
+                          <svg className="w-8 h-8 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-4m-5 0H3m2 0h3M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+                          </svg>
+                          <p className="text-sm text-gray-500">Nessuna azienda trovata</p>
+                          <p className="text-xs text-gray-400 mt-1">Prova a modificare i criteri di ricerca</p>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -419,18 +706,24 @@ export default function ImportPreviewTable<T extends Record<string, any>>({
           <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
             <tr>
               <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                {duplicateCount > 0 && (
-                  <div className="flex items-center justify-center">
+                <div className="flex flex-col items-center space-y-1">
+                  <span className="text-xs font-medium">Stato</span>
+                  <div className="flex items-center space-x-1">
                     <input
                       type="checkbox"
-                      checked={areAllDuplicatesSelected}
-                      onChange={handleToggleAllDuplicates}
+                      checked={areAllRowsSelected}
+                      ref={(el) => {
+                        if (el) {
+                          el.indeterminate = areSomeRowsSelected && !areAllRowsSelected;
+                        }
+                      }}
+                      onChange={handleSelectAllRows}
                       className="accent-blue-600"
-                      title="Seleziona/deseleziona tutti i duplicati"
+                      title={areAllRowsSelected ? "Deseleziona tutto" : "Seleziona tutto"}
                     />
+                    <span className="text-xs text-gray-600">Tutti</span>
                   </div>
-                )}
-                {duplicateCount === 0 && "Stato"}
+                </div>
               </th>
               {columns.map(col => (
                 <th 
@@ -472,8 +765,12 @@ export default function ImportPreviewTable<T extends Record<string, any>>({
               // Determina se il checkbox deve essere mostrato
               const showCheckbox = isExisting && useSingleCheckboxColumn;
               
+              // Genera una chiave unica stabile basata solo sull'indice della riga
+              // Questo garantisce che ogni riga abbia sempre una chiave unica e stabile
+              const uniqueRowKey = `import-row-${idx}`;
+              
               return (
-                <tr key={idx} className={errors.length ? 'bg-red-50' : (idx % 2 === 0 ? 'bg-white' : 'bg-gray-50')}>
+                <tr key={uniqueRowKey} className={errors.length ? 'bg-red-50' : (idx % 2 === 0 ? 'bg-white' : 'bg-gray-50')}>
                   <td className="text-center p-2">
                     <div className="flex justify-center items-center h-full">
                       {renderRowStatus(item, idx)}
@@ -481,35 +778,48 @@ export default function ImportPreviewTable<T extends Record<string, any>>({
                   </td>
                   
                   {columns.map(col => {
+                    // Estrai la chiave originale rimuovendo l'indice aggiunto per l'unicità
+                    const originalKey = col.key.replace(/-\d+$/, '');
+                    
                     // Determina se questo campo è diverso nell'elemento esistente
                     let isDifferent = false;
                     let existingValue = '';
                     
                     if (isExisting && existingItem) {
-                      const newValue = String(item[col.key] ?? '').trim();
-                      existingValue = getDbValue(existingItem, col.key);
-                      isDifferent = newValue !== '' && newValue !== existingValue;
+                      // Normalizza i valori per il confronto
+                      let newValue = String(item[originalKey] ?? '').trim();
+                      
+                      // Formattazione speciale per le date nel confronto
+                      if ((originalKey === 'data_nascita' || originalKey === 'birthDate') && newValue) {
+                        newValue = formatDateForComparison(newValue);
+                      }
+                      
+                      existingValue = getDbValue(existingItem, originalKey).trim();
+                      
+                      // Evidenzia le differenze in tutti i casi:
+                      // - Nuovo valore diverso da quello esistente (anche se vuoto)
+                      // - Valore esistente diverso da quello nuovo (anche se vuoto)
+                      isDifferent = newValue !== existingValue;
                     }
                     
-                    const value = item[col.key];
+                    const value = item[originalKey];
                     let displayValue = '';
                     
                     // Formattazione speciale per la data di nascita
-                    if (col.key === 'data_nascita' && value) {
-                      try {
-                        displayValue = formatDate(value);
-                      } catch (e) {
-                        displayValue = String(value);
-                      }
+                    if ((originalKey === 'data_nascita' || originalKey === 'birthDate') && value) {
+                      displayValue = formatDateForComparison(value);
                     } else {
                       displayValue = value !== undefined && value !== null 
                         ? String(value) 
                         : '';
                     }
                     
+                    // Genera una chiave unica per la cella che combina indice riga e chiave colonna
+                    const cellKey = `${uniqueRowKey}-${col.key}`;
+                    
                     return (
                       <td
-                        key={col.key}
+                        key={cellKey}
                         className={`px-3 py-2 whitespace-nowrap overflow-hidden text-sm ${
                           isDifferent ? 'text-blue-600 font-medium' : 'text-gray-900'
                         }`}

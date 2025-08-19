@@ -1,6 +1,13 @@
 import React, { useState } from 'react';
 import { Button } from '../../../design-system/atoms/Button';
-import { FileDown, FileText, Eye, Printer, RefreshCw, FileType } from 'lucide-react';
+import { 
+  Eye,
+  FileDown,
+  FileText,
+  FileType,
+  Printer,
+  RefreshCw
+} from 'lucide-react';
 import googleApiClient from '../../../services/googleApiClient';
 
 interface GoogleDocsPreviewProps {

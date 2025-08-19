@@ -1,5 +1,6 @@
 import React from 'react';
-import { AlertCircle, HelpCircle, File, UploadCloud, Download } from 'lucide-react';
+import { AlertCircle, HelpCircle, UploadCloud, Download } from 'lucide-react';
+import { sanitizeErrorMessage } from '../../utils/errorUtils';
 
 interface CSVFormatErrorProps {
   message: string;
@@ -28,7 +29,7 @@ const CSVFormatError: React.FC<CSVFormatErrorProps> = ({
         <div className="ml-3 flex-1">
           <h3 className="text-sm font-medium text-red-800">Errore nel formato CSV</h3>
           <div className="mt-2 text-sm text-red-700">
-            <p>{message}</p>
+            <p>{sanitizeErrorMessage(message, 'Errore nel formato del file CSV')}</p>
             
             {(expectedHeaders.length > 0 || foundHeaders.length > 0) && (
               <div className="mt-3 border-t border-red-200 pt-3">
@@ -113,4 +114,4 @@ const CSVFormatError: React.FC<CSVFormatErrorProps> = ({
   );
 };
 
-export default CSVFormatError; 
+export default CSVFormatError;

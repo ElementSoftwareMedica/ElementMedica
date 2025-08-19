@@ -4,7 +4,6 @@
  */
 
 import { JWTService } from './jwt.js';
-import { PrismaClient } from '@prisma/client';
 import logger from '../utils/logger.js';
 
 const prisma = new PrismaClient();
@@ -58,7 +57,7 @@ export function authenticateDebug(options = {}) {
             if (!token) {
                 logger.info(`🔍 [DEBUG AUTH] No token found, optional=${optional}`);
                 if (optional) {
-                    req.user = null;
+                    req.person = null;
                     return next();
                 }
                 return res.status(401).json({
@@ -74,21 +73,21 @@ export function authenticateDebug(options = {}) {
                 5000,
                 'JWT verification'
             );
-            logger.info(`✅ [DEBUG AUTH] JWT verified successfully for user: ${decoded.userId || decoded.personId}`);
+            logger.info(`✅ [DEBUG AUTH] JWT verified successfully for user: ${decoded.personId}`);
             
             // Step 3: Get person data with timeout
-            logger.info(`🔍 [DEBUG AUTH] Step 3: Fetching person data for ID: ${decoded.userId || decoded.personId}`);
+            logger.info(`🔍 [DEBUG AUTH] Step 3: Fetching person data for ID: ${decoded.personId}`);
             const person = await withTimeout(
                 prisma.person.findUnique({
-                    where: { id: decoded.userId || decoded.personId }
+                    where: { id: decoded.personId }
                 }),
                 5000,
                 'Person query'
             );
             logger.info(`✅ [DEBUG AUTH] Person query completed: ${person ? 'FOUND' : 'NOT FOUND'}`);
             
-            if (!person || !person.isActive || person.isDeleted) {
-                logger.info(`🔍 [DEBUG AUTH] Person validation failed: active=${person?.isActive}, deleted=${person?.isDeleted}`);
+            if (!person || person.status !== 'ACTIVE' || person.deletedAt !== null) {
+        logger.info(`🔍 [DEBUG AUTH] Person validation failed: active=${person?.status === 'ACTIVE'}, deleted=${person?.deletedAt !== null}`);
                 return res.status(401).json({
                     error: 'Person not found or inactive',
                     code: 'AUTH_USER_INACTIVE'
@@ -158,7 +157,7 @@ export function authenticateDebug(options = {}) {
             
             // Step 10: Attach user info to request
             logger.info(`🔍 [DEBUG AUTH] Step 10: Attaching user info to request...`);
-            req.user = {
+            req.person = {
                 id: person.id,
                 personId: person.id,
                 email: person.email,

@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPut, apiDelete, apiDeleteWithPayload } from './api';
+import { apiGet, apiDelete, apiDeleteWithPayload } from './api';
 
 interface ServiceMethods<T, C, U> {
   getAll: () => Promise<T[]>;

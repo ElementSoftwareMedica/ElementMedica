@@ -67,7 +67,7 @@ test.describe('Accessibility Tests', () => {
     
     // Test tab navigation
     await page.keyboard.press('Tab');
-    let focusedElement = await page.locator(':focus').getAttribute('data-testid');
+    const focusedElement = await page.locator(':focus').getAttribute('data-testid');
     expect(focusedElement).toBeTruthy();
     
     // Continue tabbing through interactive elements

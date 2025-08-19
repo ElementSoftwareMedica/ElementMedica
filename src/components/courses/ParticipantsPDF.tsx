@@ -48,8 +48,26 @@ const styles = StyleSheet.create({
   },
 });
 
+interface Participant {
+  firstName: string;
+  lastName: string;
+  company: string;
+  department: string;
+}
+
+interface CourseEvent {
+  title: string;
+  start: Date;
+  end: Date;
+  extendedProps: {
+    location: string;
+    trainer: string;
+    participants: Participant[];
+  };
+}
+
 interface ParticipantsPDFProps {
-  event: any;
+  event: CourseEvent;
 }
 
 const ParticipantsPDF: React.FC<ParticipantsPDFProps> = ({ event }) => (
@@ -92,7 +110,7 @@ const ParticipantsPDF: React.FC<ParticipantsPDFProps> = ({ event }) => (
           <Text style={styles.col2}>Company</Text>
           <Text style={styles.col3}>Department</Text>
         </View>
-        {event.extendedProps.participants.map((participant: any, index: number) => (
+        {event.extendedProps.participants.map((participant: Participant, index: number) => (
           <View key={index} style={styles.tableRow}>
             <Text style={styles.col1}>
               {participant.firstName} {participant.lastName}

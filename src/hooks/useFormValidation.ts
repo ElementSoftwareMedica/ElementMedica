@@ -2,7 +2,7 @@ import React, { useState, useCallback, Dispatch, SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useErrorHandler } from './index';
 
-type ValidationRuleFn = (value: any, formData?: Record<string, any>) => string | null;
+type ValidationRuleFn = (value: unknown, formData?: Record<string, unknown>) => string | null;
 
 export interface ValidationRule {
   required?: boolean;
@@ -18,20 +18,20 @@ export interface ValidationRule {
 
 export type ValidationSchema = Record<string, ValidationRule>;
 
-interface UseFormValidationReturn<T extends Record<string, any>> {
+interface UseFormValidationReturn<T extends Record<string, unknown>> {
   formData: T;
   errors: Record<string, string>;
   touched: Record<string, boolean>;
   setFormData: Dispatch<SetStateAction<T>>;
   handleChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => void;
   handleBlur: (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => void;
-  validateField: (fieldName: string, value?: any) => string | null;
+  validateField: (fieldName: string, value?: unknown) => string | null;
   validateForm: () => boolean;
   resetForm: () => void;
-  setFieldValue: (fieldName: string, value: any) => void;
+  setFieldValue: (fieldName: string, value: unknown) => void;
   getFieldProps: (fieldName: string) => {
     name: string;
-    value: any;
+    value: unknown;
     onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => void;
     onBlur: (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => void;
     error: string | undefined;
@@ -41,7 +41,7 @@ interface UseFormValidationReturn<T extends Record<string, any>> {
 /**
  * Hook per gestire la validazione dei form con uno schema definito
  */
-export function useFormValidation<T extends Record<string, any>>(
+export function useFormValidation<T extends Record<string, unknown>>(
   initialValues: T,
   validationSchema: ValidationSchema = {},
   onSubmit?: (values: T) => void
@@ -56,7 +56,7 @@ export function useFormValidation<T extends Record<string, any>>(
    * Validazione di un singolo campo con lo schema
    */
   const validateField = useCallback(
-    (fieldName: string, value: any = undefined): string | null => {
+    (fieldName: string, value: unknown = undefined): string | null => {
       const fieldValue = value !== undefined ? value : formData[fieldName];
       const rules = validationSchema[fieldName];
 
@@ -144,7 +144,7 @@ export function useFormValidation<T extends Record<string, any>>(
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
       const { name, value, type } = e.target as HTMLInputElement;
-      let finalValue: any = value;
+      let finalValue: unknown = value;
 
       // Converti i valori in base al tipo di input
       if (type === 'number') {
@@ -197,7 +197,7 @@ export function useFormValidation<T extends Record<string, any>>(
    * Imposta direttamente il valore di un campo
    */
   const setFieldValue = useCallback(
-    (fieldName: string, value: any) => {
+    (fieldName: string, value: unknown) => {
       setFormData((prevData) => ({
         ...prevData,
         [fieldName]: value,

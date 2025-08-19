@@ -1,42 +1,45 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Pencil, Trash2, FileText, Download, Calendar, Table } from 'lucide-react';
+import { 
+  Calendar,
+  Download,
+  Pencil,
+  Table,
+  Trash2
+} from 'lucide-react';
 import ScheduleCalendar, { ScheduleEvent } from '../../components/dashboard/ScheduleCalendar';
 import ScheduleEventModalLazy from '../../components/schedules/ScheduleEventModal.lazy';
 import EntityListLayout from '../../components/layouts/EntityListLayout';
 import ResizableTable from '../../components/shared/ResizableTable';
-import { useNavigate } from 'react-router-dom';
-import { Button } from '../../design-system/atoms/Button';
 import { HeaderPanel } from '../../design-system/organisms/HeaderPanel';
 import { SearchBarControls } from '../../design-system/molecules/SearchBarControls';
-import { ActionButton } from '../../components/shared/ui';
-import { ViewModeToggle } from '../../design-system/molecules/ViewModeToggle';
 import { FilterPanel } from '../../design-system/organisms/FilterPanel';
 import { SearchBar } from '../../design-system/molecules/SearchBar';
-import { useToast } from '../../hooks/useToast';
 import { exportToCsv } from '../../utils/csvExport';
+import { apiGet, apiPost, apiPut, apiDelete } from '../../services/api';
+import { Company } from '../../types';
 
 interface Schedule {
   id: string;
   course: { id: string; name: string; title?: string };
-  start_date: string;
-  end_date: string;
+  startDate: string;
+  endDate: string;
   location?: string;
-  max_participants?: number;
+  maxParticipants?: number;
   notes?: string;
-  delivery_mode?: string;
+  deliveryMode?: string;
   sessions?: Array<{
     id: string;
     date: string;
     start: string;
     end: string;
-    trainer?: { id: string; first_name: string; last_name: string };
-    co_trainer?: { id: string; first_name: string; last_name: string };
+    trainer?: { id: string; firstName: string; lastName: string };
+    co_trainer?: { id: string; firstName: string; lastName: string };
   }>;
   companies?: Array<{
-    company: { id: string; ragione_sociale?: string; name?: string };
+    company: { id: string; ragioneSociale?: string; name?: string };
   }>;
   enrollments?: Array<{
-    employee: { id: string; first_name: string; last_name: string };
+    employee: { id: string; firstName: string; lastName: string };
   }>;
 }
 
@@ -47,21 +50,15 @@ interface Course {
 
 interface Trainer {
   id: string;
-  first_name: string;
-  last_name: string;
-}
-
-interface Company {
-  id: string;
-  name?: string;
-  ragione_sociale: string;
+  firstName: string;
+  lastName: string;
 }
 
 interface Employee {
   id: string;
-  first_name: string;
-  last_name: string;
-  company_id: string;
+  firstName: string;
+  lastName: string;
+  companyId: string;
   email?: string;
   position?: string;
 }
@@ -80,8 +77,6 @@ function combineDateAndTime(dateStr: string, timeStr: string) {
 }
 
 const SchedulesPage: React.FC = () => {
-  const navigate = useNavigate();
-  const { showToast } = useToast();
   
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
@@ -102,7 +97,6 @@ const SchedulesPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilters, setActiveFilters] = useState<Record<string, string>>({});
   const [activeSort, setActiveSort] = useState<{ field: string, direction: 'asc' | 'desc' } | undefined>(undefined);
-  const [isImportOpen, setIsImportOpen] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -112,26 +106,19 @@ const SchedulesPage: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [schedulesRes, coursesRes, trainersRes, companiesRes] = await Promise.all([
-        fetch('http://localhost:4000/schedules'),
-        fetch('http://localhost:4000/courses'),
-        fetch('http://localhost:4000/trainers'),
-        fetch('http://localhost:4000/companies')
+      const [schedulesData, coursesData, trainersData, companiesData, employeesData] = await Promise.all([
+        apiGet('/schedules'),
+        apiGet('/courses'),
+        apiGet('/trainers'),
+        apiGet('/companies'),
+        apiGet('/persons')
       ]);
-      const [schedulesData, coursesData, trainersData, companiesData] = await Promise.all([
-        schedulesRes.json(),
-        coursesRes.json(),
-        trainersRes.json(),
-        companiesRes.json()
-      ]);
-      const employeesRes = await fetch('http://localhost:4000/employees');
-      const employeesData = await employeesRes.json();
 
-      setSchedules(schedulesData);
-      setCourses(coursesData);
-      setTrainers(trainersData);
-      setCompanies(companiesData);
-      setEmployees(employeesData);
+      setSchedules(schedulesData as Schedule[]);
+      setCourses(coursesData as Course[]);
+      setTrainers(trainersData as Trainer[]);
+      setCompanies(companiesData as Company[]);
+      setEmployees(employeesData as Employee[]);
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
@@ -139,43 +126,12 @@ const SchedulesPage: React.FC = () => {
     }
   };
 
-  const handleCreate = async (data: any) => {
-    try {
-      const response = await fetch('http://localhost:4000/schedules', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      });
-      if (!response.ok) throw new Error('Failed to create schedule');
-      await fetchData();
-      setShowForm(false);
-    } catch (error) {
-      console.error('Error creating schedule:', error);
-    }
-  };
 
-  const handleUpdate = async (data: any) => {
-    if (!editingSchedule) return;
-    try {
-      const response = await fetch(`http://localhost:4000/schedules/${editingSchedule.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      });
-      if (!response.ok) throw new Error('Failed to update schedule');
-      await fetchData();
-      setShowForm(false);
-      setEditingSchedule(null);
-    } catch (error) {
-      console.error('Error updating schedule:', error);
-    }
-  };
 
   const handleDelete = async (id: string) => {
     if (!confirm('Sei sicuro di voler eliminare questo programma?')) return;
     try {
-      const response = await fetch(`http://localhost:4000/schedules/${id}`, { method: 'DELETE' });
-      if (!response.ok) throw new Error('Failed to delete schedule');
+      await apiDelete(`/schedules/${id}`);
       setAlert({ type: 'success', message: 'Corso eliminato con successo.' });
       await fetchData();
     } catch (error) {
@@ -189,7 +145,7 @@ const SchedulesPage: React.FC = () => {
     if (!confirm('Sei sicuro di voler eliminare i corsi selezionati?')) return;
     setLoading(true);
     try {
-      await Promise.all(selectedIds.map(id => fetch(`http://localhost:4000/schedules/${id}`, { method: 'DELETE' })));
+      await Promise.all(selectedIds.map(id => apiDelete(`/schedules/${id}`)));
       setSelectedIds([]);
       setSelectionMode(false);
       setAlert({ type: 'success', message: 'Corsi eliminati con successo.' });
@@ -215,18 +171,18 @@ const SchedulesPage: React.FC = () => {
   const data = schedules.map(schedule => {
     // Estrai i nomi delle aziende
     const companyNames = schedule.companies
-      ?.map(c => c.company.ragione_sociale || c.company.name)
+      ?.map(c => c.company.ragioneSociale || c.company.name)
       .filter(Boolean)
       .join(', ');
 
     // Estrai il formatore della prima sessione
     const trainer = schedule.sessions?.[0]?.trainer
-      ? `${schedule.sessions[0].trainer.first_name} ${schedule.sessions[0].trainer.last_name}`
+      ? `${schedule.sessions[0].trainer.firstName} ${schedule.sessions[0].trainer.lastName}`
       : 'N/A';
 
     // Estrai il co-formatore della prima sessione
     const coTrainer = schedule.sessions?.[0]?.co_trainer
-      ? `${schedule.sessions[0].co_trainer.first_name} ${schedule.sessions[0].co_trainer.last_name}`
+      ? `${schedule.sessions[0].co_trainer.firstName} ${schedule.sessions[0].co_trainer.lastName}`
       : '-';
 
     // Conta i partecipanti
@@ -242,9 +198,9 @@ const SchedulesPage: React.FC = () => {
 
     // Determina la modalità di erogazione in italiano
     let deliveryModeItalian = 'N/D';
-    if (schedule.delivery_mode === 'IN_PERSON') deliveryModeItalian = 'In presenza';
-    if (schedule.delivery_mode === 'ONLINE') deliveryModeItalian = 'Online';
-    if (schedule.delivery_mode === 'HYBRID') deliveryModeItalian = 'Ibrida';
+    if (schedule.deliveryMode === 'IN_PERSON') deliveryModeItalian = 'In presenza';
+    if (schedule.deliveryMode === 'ONLINE') deliveryModeItalian = 'Online';
+    if (schedule.deliveryMode === 'HYBRID') deliveryModeItalian = 'Ibrida';
 
     return {
       id: schedule.id,
@@ -253,8 +209,8 @@ const SchedulesPage: React.FC = () => {
       formatore: trainer,
       coFormatore: coTrainer,
       partecipanti: participantsCount,
-      dataInizio: new Date(schedule.start_date).toLocaleDateString('it-IT'),
-      dataFine: new Date(schedule.end_date).toLocaleDateString('it-IT'),
+      dataInizio: new Date(schedule.startDate).toLocaleDateString('it-IT'),
+      dataFine: new Date(schedule.endDate).toLocaleDateString('it-IT'),
       sessioni: sessionDates || 'N/D',
       modalità: deliveryModeItalian,
       location: schedule.location || 'N/D',
@@ -268,7 +224,7 @@ const SchedulesPage: React.FC = () => {
   schedules.forEach(schedule => {
     const courseName = schedule.course.title || schedule.course.name;
     const companyNames = schedule.companies
-      ?.map(c => c.company.ragione_sociale || c.company.name)
+      ?.map(c => c.company.ragioneSociale || c.company.name)
       .filter(Boolean)
       .join(', ');
 
@@ -286,11 +242,11 @@ const SchedulesPage: React.FC = () => {
           
           // Estrai i nomi dei formatori
           const trainerName = session.trainer
-            ? `${session.trainer.first_name} ${session.trainer.last_name}`
+            ? `${session.trainer.firstName} ${session.trainer.lastName}`
             : '';
           
           const coTrainerName = session.co_trainer
-            ? `${session.co_trainer.first_name} ${session.co_trainer.last_name}`
+            ? `${session.co_trainer.firstName} ${session.co_trainer.lastName}`
             : '';
           
           // Formatta il titolo dell'evento
@@ -318,8 +274,8 @@ const SchedulesPage: React.FC = () => {
     } else {
       // Se non ci sono sessioni, crea un evento basato sulle date di inizio e fine
       try {
-        const startDate = new Date(schedule.start_date);
-        const endDate = new Date(schedule.end_date);
+        const startDate = new Date(schedule.startDate);
+        const endDate = new Date(schedule.endDate);
         
         // Se le date sono valide, aggiungi l'evento
         if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
@@ -340,9 +296,7 @@ const SchedulesPage: React.FC = () => {
     }
   });
 
-  const handleOpenImport = () => {
-    setIsImportOpen(true);
-  };
+  // Funzione rimossa - non utilizzata
 
   const handleDownloadTemplate = () => {
     const template = [
@@ -447,6 +401,7 @@ const SchedulesPage: React.FC = () => {
           className="w-4 h-4"
             />
       ) : null,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       cell: (info: any) => selectionMode ? (
             <input
               type="checkbox"
@@ -522,6 +477,7 @@ const SchedulesPage: React.FC = () => {
     { 
       id: 'actions',
       header: 'Azioni',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       cell: (info: any) => (
         <div className="flex space-x-1">
           <button
@@ -609,7 +565,7 @@ const SchedulesPage: React.FC = () => {
           setEditingSchedule(null);
           setShowForm(true);
         }}
-        onImport={handleOpenImport}
+        onImport={() => {/* TODO: Implementare import */}}
         onDownload={handleDownloadTemplate}
         viewMode={view}
         onViewModeChange={(newView) => setView(newView as 'table' | 'calendar')}
@@ -675,28 +631,28 @@ const SchedulesPage: React.FC = () => {
       {showForm && (
         <ScheduleEventModalLazy
           key={editingSchedule?.id || 'new-schedule'}
-          trainings={courses.map((c: any) => ({ ...c, title: c.title || c.name }))}
+          trainings={courses.map((c: Course & { title?: string }) => ({ ...c, title: c.title || c.name }))}
           trainers={trainers}
           companies={companies}
           employees={employees}
           existingEvent={editingSchedule ? {
             ...editingSchedule,
-            training_id: editingSchedule.course.id,
-            trainer_id: editingSchedule.sessions?.[0]?.trainer?.id || '',
-            co_trainer_id: editingSchedule.sessions?.[0]?.co_trainer?.id || '',
+            trainingId: editingSchedule.course.id,
+            trainerId: editingSchedule.sessions?.[0]?.trainer?.id || '',
+            coTrainerId: editingSchedule.sessions?.[0]?.co_trainer?.id || '',
             dates: editingSchedule.sessions?.map(sess => ({
               date: sess.date.split('T')[0],
               start: sess.start,
               end: sess.end,
-              trainer_id: sess.trainer?.id || '',
-              co_trainer_id: sess.co_trainer?.id || '',
+              trainerId: sess.trainer?.id || '',
+              coTrainerId: sess.co_trainer?.id || '',
             })) || [],
             location: editingSchedule.location,
-            max_participants: editingSchedule.max_participants,
+            maxParticipants: editingSchedule.maxParticipants,
             notes: editingSchedule.notes,
-            delivery_mode: editingSchedule.delivery_mode,
-            company_ids: editingSchedule.companies?.map((c: any) => c.company.id) || [],
-            employee_ids: editingSchedule.enrollments?.map((e: any) => e.employee.id) || [],
+            deliveryMode: editingSchedule.deliveryMode,
+            companyIds: editingSchedule.companies?.map((c) => c.company.id) || [],
+            personIds: editingSchedule.enrollments?.map((e) => e.employee.id) || [],
           } : undefined}
           initialDate={
             selectedSlot

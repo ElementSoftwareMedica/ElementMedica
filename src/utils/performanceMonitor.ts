@@ -91,9 +91,10 @@ class PerformanceMonitor {
       let clsValue = 0;
       const clsObserver = new PerformanceObserver((list) => {
         const entries = list.getEntries();
-        entries.forEach((entry: any) => {
-          if (!entry.hadRecentInput) {
-            clsValue += entry.value;
+        entries.forEach((entry) => {
+          const layoutShiftEntry = entry as PerformanceEntry & { hadRecentInput?: boolean; value?: number };
+          if (!layoutShiftEntry.hadRecentInput && layoutShiftEntry.value) {
+            clsValue += layoutShiftEntry.value;
             this.metrics.cumulativeLayoutShift = clsValue;
           }
         });
@@ -111,7 +112,8 @@ class PerformanceMonitor {
         entries.forEach((entry) => {
           if (entry.name.includes('.js') || entry.name.includes('.css')) {
             const chunkName = this.extractChunkName(entry.name);
-            const loadTime = entry.responseEnd - entry.requestStart;
+            const resourceEntry = entry as PerformanceResourceTiming;
+            const loadTime = resourceEntry.responseEnd - resourceEntry.requestStart;
             this.metrics.chunkLoadTimes?.set(chunkName, loadTime);
           }
         });
@@ -166,7 +168,8 @@ class PerformanceMonitor {
     resources.forEach((resource) => {
       if (resource.name.includes('.js') || resource.name.includes('.css')) {
         // Estimate size from transfer size or encoded body size
-        const size = (resource as any).transferSize || (resource as any).encodedBodySize || 0;
+        const resourceWithSize = resource as PerformanceResourceTiming & { transferSize?: number; encodedBodySize?: number };
+        const size = resourceWithSize.transferSize || resourceWithSize.encodedBodySize || 0;
         totalSize += size;
       }
     });
@@ -326,7 +329,7 @@ if (process.env.NODE_ENV === 'development') {
   }, 3000);
   
   // Make it available globally for debugging
-  (window as any).performanceMonitor = performanceMonitor;
+  (window as typeof window & { performanceMonitor?: typeof performanceMonitor }).performanceMonitor = performanceMonitor;
 }
 
 export default performanceMonitor;

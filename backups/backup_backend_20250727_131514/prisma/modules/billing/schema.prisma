@@ -1,0 +1,62 @@
+/**
+ * Sistema fatturazione e preventivi
+ * Modulo: billing
+ * Generato automaticamente dalla Fase 8
+ */
+
+// === ENUM DEFINITIONS ===
+
+
+// === MODEL DEFINITIONS ===
+model Preventivo {
+  id                String                   @id @default(uuid())
+  scheduledCourseId String
+  nomeFile          String
+  url               String
+  dataGenerazione   DateTime                 @default(now())
+  numeroProgressivo Int
+  annoProgressivo   Int
+  deletedAt         DateTime?
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+  scheduledCourse   CourseSchedule           @relation(fields: [scheduledCourseId], references: [id], onDelete: Cascade)
+  aziende           PreventivoAzienda[]
+  partecipanti      PreventivoPartecipante[]
+
+  @@index([scheduledCourseId])
+  @@map("preventivi")
+}
+
+model PreventivoPartecipante {
+  id           String     @id @default(uuid())
+  preventivoId String
+  personId     String     @map("partecipante_id") // Mapped for DB compatibility
+  deletedAt    DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  person       Person     @relation("PreventivoPartecipante_Person", fields: [personId], references: [id], onDelete: Cascade)
+  preventivo   Preventivo @relation(fields: [preventivoId], references: [id], onDelete: Cascade)
+
+  @@unique([preventivoId, personId])
+  @@index([personId])
+  @@index([preventivoId])
+  @@map("preventivo_partecipanti")
+}
+
+model Fattura {
+  id                String           @id @default(uuid())
+  scheduledCourseId String
+  nomeFile          String
+  url               String
+  dataGenerazione   DateTime         @default(now())
+  numeroProgressivo Int
+  annoProgressivo   Int
+  deletedAt         DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  scheduledCourse   CourseSchedule   @relation(fields: [scheduledCourseId], references: [id], onDelete: Cascade)
+  aziende           FatturaAzienda[]
+
+  @@index([scheduledCourseId])
+  @@map("fatture")
+}

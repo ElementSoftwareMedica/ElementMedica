@@ -13,73 +13,74 @@ export const useToast = () => {
     throw new Error('useToast must be used within a ToastProvider');
   }
 
-  const { toasts, addToast, removeToast, clearToasts } = context;
+  const { toasts, toast, removeToast, clearToasts } = context;
 
   // Funzioni memoizzate per evitare re-render
   const toastActions = useMemo(() => ({
     // Funzioni base
-    add: addToast,
+    add: toast,
     remove: removeToast,
     clear: clearToasts,
     
     // Funzioni specifiche per tipo
     success: (message: string, options?: Omit<ToastOptions, 'type'>) => {
-      addToast(message, { ...options, type: 'success' });
+      toast({ message, ...options, type: 'success' });
     },
     
     error: (message: string, options?: Omit<ToastOptions, 'type'>) => {
-      addToast(message, { ...options, type: 'error' });
+      toast({ message, ...options, type: 'error' });
     },
     
     warning: (message: string, options?: Omit<ToastOptions, 'type'>) => {
-      addToast(message, { ...options, type: 'warning' });
+      toast({ message, ...options, type: 'warning' });
     },
     
     info: (message: string, options?: Omit<ToastOptions, 'type'>) => {
-      addToast(message, { ...options, type: 'info' });
+      toast({ message, ...options, type: 'info' });
     },
     
     // Funzioni per azioni comuni
     saveSuccess: (entity?: string) => {
       const message = entity ? `${entity} salvato con successo` : 'Salvato con successo';
-      addToast(message, { type: 'success' });
+      toast({ message, type: 'success' });
     },
     
     saveError: (entity?: string, error?: string) => {
       const message = entity 
         ? `Errore nel salvare ${entity}${error ? `: ${error}` : ''}`
         : `Errore nel salvare${error ? `: ${error}` : ''}`;
-      addToast(message, { type: 'error' });
+      toast({ message, type: 'error' });
     },
     
     deleteSuccess: (entity?: string) => {
       const message = entity ? `${entity} eliminato con successo` : 'Eliminato con successo';
-      addToast(message, { type: 'success' });
+      toast({ message, type: 'success' });
     },
     
     deleteError: (entity?: string, error?: string) => {
       const message = entity 
         ? `Errore nell'eliminare ${entity}${error ? `: ${error}` : ''}`
         : `Errore nell'eliminare${error ? `: ${error}` : ''}`;
-      addToast(message, { type: 'error' });
+      toast({ message, type: 'error' });
     },
     
     loadingError: (entity?: string, error?: string) => {
       const message = entity 
         ? `Errore nel caricare ${entity}${error ? `: ${error}` : ''}`
         : `Errore nel caricamento${error ? `: ${error}` : ''}`;
-      addToast(message, { type: 'error' });
+      toast({ message, type: 'error' });
     },
     
     networkError: () => {
-      addToast('Errore di connessione. Verifica la tua connessione internet.', { 
+      toast({ 
+        message: 'Errore di connessione. Verifica la tua connessione internet.', 
         type: 'error',
         duration: 5000
       });
     },
     
     validationError: (message?: string) => {
-      addToast(message || 'Verifica i dati inseriti', { type: 'warning' });
+      toast({ message: message || 'Verifica i dati inseriti', type: 'warning' });
     },
     
     // Funzioni per operazioni asincrone
@@ -88,13 +89,13 @@ export const useToast = () => {
       messages: {
         loading?: string;
         success?: string | ((data: T) => string);
-        error?: string | ((error: any) => string);
+        error?: string | ((error: unknown) => string);
       }
     ): Promise<T> => {
       let loadingToastId: string | undefined;
       
       if (messages.loading) {
-        loadingToastId = addToast(messages.loading, { type: 'info', duration: 0 });
+        toast({ message: messages.loading, type: 'info', duration: 0 });
       }
       
       try {
@@ -108,7 +109,7 @@ export const useToast = () => {
           const successMessage = typeof messages.success === 'function' 
             ? messages.success(result)
             : messages.success;
-          addToast(successMessage, { type: 'success' });
+          toast({ message: successMessage, type: 'success' });
         }
         
         return result;
@@ -121,14 +122,14 @@ export const useToast = () => {
           const errorMessage = typeof messages.error === 'function'
             ? messages.error(error)
             : messages.error;
-          addToast(errorMessage, { type: 'error' });
+          toast({ message: errorMessage, type: 'error' });
         }
         
         throw error;
       }
     }
     
-  }), [addToast, removeToast, clearToasts]);
+  }), [toast, removeToast, clearToasts]);
 
   return {
     toasts,

@@ -1,0 +1,20 @@
+{
+  "success": true,
+  "user": {
+    "id": "0c49ba4a-4fd5-4a5c-96c3-37aed2755948",
+    "email": "admin@example.com",
+    "firstName": "Admin",
+    "lastName": "User",
+    "globalRole": "ADMIN",
+    "status": "ACTIVE",
+    "companyId": null,
+    "tenantId": "5d4e6415-c7e3-4921-bba4-d4cc3f858193",
+    "company": null
+  },
+  "tokens": {
+    "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJwZXJzb25JZCI6IjBjNDliYTRhLTRmZDUtNGE1Yy05NmMzLTM3YWVkMjc1NTk0OCIsImVtYWlsIjoiYWRtaW5AZXhhbXBsZS5jb20iLCJ1c2VybmFtZSI6ImFkbWluIiwidGF4Q29kZSI6bnVsbCwiY29tcGFueUlkIjpudWxsLCJ0ZW5hbnRJZCI6IjVkNGU2NDE1LWM3ZTMtNDkyMS1iYmE0LWQ0Y2MzZjg1ODE5MyIsInJvbGVzIjpbIkFETUlOIl0sImlhdCI6MTc1Mzk1Mzk5MiwiZXhwIjoxNzUzOTU3NTkyLCJhdWQiOiJ0cmFpbmluZy1wbGF0Zm9ybS11c2VycyIsImlzcyI6InRyYWluaW5nLXBsYXRmb3JtIn0.5bNFFqTdsJXU7ZTc7dwyTNRPmd_JOuIWqQyQsMr0nKA",
+    "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJwZXJzb25JZCI6IjBjNDliYTRhLTRmZDUtNGE1Yy05NmMzLTM3YWVkMjc1NTk0OCIsImlhdCI6MTc1Mzk1Mzk5MiwiZXhwIjoxNzU0NTU4NzkyLCJhdWQiOiJ0cmFpbmluZy1wbGF0Zm9ybS11c2VycyIsImlzcyI6InRyYWluaW5nLXBsYXRmb3JtIn0.xKd1V_ZfoSPputuSZ3aEhQfnGa13_-vHnP0ASj52XM0",
+    "expires_in": 3600,
+    "token_type": "Bearer"
+  }
+}

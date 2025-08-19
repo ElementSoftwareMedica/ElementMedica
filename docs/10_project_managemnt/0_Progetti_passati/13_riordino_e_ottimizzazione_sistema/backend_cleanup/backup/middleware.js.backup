@@ -1,0 +1,472 @@
+/**
+ * Authentication and Authorization Middleware
+ * Handles JWT validation, role-based access control, and company isolation
+ */
+
+import { JWTService } from './jwt.js';
+import { PrismaClient } from '@prisma/client';
+import logger from '../utils/logger.js';
+
+const prisma = new PrismaClient();
+
+/**
+ * Extract token from request headers
+ */
+function extractToken(req) {
+    const authHeader = req.headers.authorization;
+    
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+        return authHeader.substring(7);
+    }
+    
+    // Also check for token in cookies (for web app)
+    if (req.cookies && req.cookies.accessToken) {
+        return req.cookies.accessToken;
+    }
+    
+    return null;
+}
+
+/**
+ * Authentication middleware
+ * Validates JWT token and attaches user info to request
+ */
+export function authenticate(options = {}) {
+    const { optional = false } = options;
+    
+    return async (req, res, next) => {
+        try {
+            const token = extractToken(req);
+            
+            if (!token) {
+                if (optional) {
+                    req.user = null;
+                    return next();
+                }
+                return res.status(401).json({
+                    error: 'Authentication required',
+                    code: 'AUTH_TOKEN_MISSING'
+                });
+            }
+            
+            // Verify JWT token
+            const decoded = JWTService.verifyAccessToken(token);
+            
+            // Get person with roles and permissions (simplified for debugging)
+            const person = await prisma.person.findUnique({
+                where: { id: decoded.userId || decoded.personId }
+            });
+            
+            // Get roles separately to avoid complex joins
+            const personRoles = person ? await prisma.personRole.findMany({
+                where: { 
+                    personId: person.id,
+                    isActive: true 
+                },
+                include: {
+                    company: true,
+                    tenant: true
+                }
+            }) : [];
+            
+            // Get company and tenant separately
+            const company = person?.companyId ? await prisma.company.findUnique({
+                where: { id: person.companyId }
+            }) : null;
+            
+            const tenant = person?.tenantId ? await prisma.tenant.findUnique({
+                where: { id: person.tenantId }
+            }) : null;
+            
+            if (!person || !person.isActive || person.isDeleted) {
+                return res.status(401).json({
+                    error: 'Person not found or inactive',
+                    code: 'AUTH_USER_INACTIVE'
+                });
+            }
+            
+            // Check if person is locked
+            if (person.lockedUntil && person.lockedUntil > new Date()) {
+                return res.status(423).json({
+                    error: 'Account is temporarily locked',
+                    code: 'AUTH_ACCOUNT_LOCKED',
+                    lockedUntil: person.lockedUntil
+                });
+            }
+            
+            // Set user context for audit logging
+            // TODO: Temporarily disabled to debug timeout issue
+            // await prisma.$executeRaw`SELECT set_config('app.current_user_id', ${person.id}, true)`;
+            
+            // Update last activity (skip for verify endpoint to avoid unnecessary DB writes)
+            if (!req.path.includes('/verify')) {
+                await prisma.person.update({
+                    where: { id: person.id },
+                    data: { lastLogin: new Date() }
+                });
+            }
+            
+            // Attach user to request
+            req.user = {
+                id: person.id,
+                personId: person.id,
+                email: person.email,
+                username: person.username,
+                taxCode: person.taxCode,
+                firstName: person.firstName,
+                lastName: person.lastName,
+                companyId: person.companyId,
+                tenantId: person.tenantId,
+                roles: personRoles.map(pr => pr.roleType).filter(Boolean),
+                company: company,
+                tenant: tenant,
+                isVerified: person.isVerified,
+                lastLogin: person.lastLogin
+            };
+            
+            next();
+            
+        } catch (error) {
+            logger.error('Authentication failed', {
+            component: 'auth-middleware',
+            action: 'authenticate',
+            error: error.message,
+            stack: error.stack,
+            ip: req.ip,
+            userAgent: req.get('User-Agent')
+        });
+            
+            if (error.message.includes('jwt expired')) {
+                return res.status(401).json({
+                    error: 'Token expired',
+                    code: 'AUTH_TOKEN_EXPIRED'
+                });
+            }
+            
+            return res.status(401).json({
+                error: 'Invalid token',
+                code: 'AUTH_TOKEN_INVALID'
+            });
+        }
+    };
+}
+
+/**
+ * Authorization middleware
+ * Checks if user has required permissions
+ */
+export function authorize(requiredPermissions = [], options = {}) {
+    const { 
+        requireAll = false, // If true, user must have ALL permissions; if false, ANY permission
+        allowSameCompany = true, // Allow access to same company resources
+        allowSameUser = true // Allow access to own resources
+    } = options;
+    
+    return (req, res, next) => {
+        if (!req.user) {
+            return res.status(401).json({
+                error: 'Authentication required',
+                code: 'AUTH_REQUIRED'
+            });
+        }
+        
+        const userPermissions = req.user.permissions || [];
+        const userRoles = req.user.roles || [];
+        
+        // Global admin has all permissions
+        if (userRoles.includes('global_admin') || userPermissions.includes('*')) {
+            return next();
+        }
+        
+        // Check specific permissions
+        if (requiredPermissions.length > 0) {
+            const hasPermission = requireAll
+                ? requiredPermissions.every(perm => 
+                    userPermissions.includes(perm) || 
+                    userPermissions.some(userPerm => 
+                        userPerm.endsWith('*') && perm.startsWith(userPerm.slice(0, -1))
+                    )
+                )
+                : requiredPermissions.some(perm => 
+                    userPermissions.includes(perm) || 
+                    userPermissions.some(userPerm => 
+                        userPerm.endsWith('*') && perm.startsWith(userPerm.slice(0, -1))
+                    )
+                );
+            
+            if (!hasPermission) {
+                return res.status(403).json({
+                    error: 'Insufficient permissions',
+                    code: 'AUTH_INSUFFICIENT_PERMISSIONS',
+                    required: requiredPermissions,
+                    current: userPermissions
+                });
+            }
+        }
+        
+        next();
+    };
+}
+
+/**
+ * Company isolation middleware
+ * Ensures users can only access resources from their company
+ */
+export function requireSameCompany(options = {}) {
+    const { 
+        paramName = 'companyId', // Parameter name in URL
+        bodyField = 'companyId', // Field name in request body
+        allowGlobalAdmin = true // Allow global admin to access any company
+    } = options;
+    
+    return (req, res, next) => {
+        if (!req.user) {
+            return res.status(401).json({
+                error: 'Authentication required',
+                code: 'AUTH_REQUIRED'
+            });
+        }
+        
+        // Global admin can access any company
+        if (allowGlobalAdmin && req.user.roles.includes('global_admin')) {
+            return next();
+        }
+        
+        const userCompanyId = req.user.companyId;
+        const requestedCompanyId = req.params[paramName] || req.body[bodyField] || req.query[paramName];
+        
+        if (requestedCompanyId && requestedCompanyId !== userCompanyId) {
+            return res.status(403).json({
+                error: 'Access denied: Company isolation violation',
+                code: 'AUTH_COMPANY_ISOLATION_VIOLATION'
+            });
+        }
+        
+        // If no company ID in request, add user's company ID
+        if (!requestedCompanyId) {
+            if (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') {
+                req.body[bodyField] = userCompanyId;
+            }
+            req.query[paramName] = userCompanyId;
+        }
+        
+        next();
+    };
+}
+
+/**
+ * Role-based middleware
+ * Checks if user has one of the required roles
+ */
+export function requireRole(requiredRoles = [], options = {}) {
+    const { requireAll = false } = options;
+    
+    return (req, res, next) => {
+        if (!req.user) {
+            return res.status(401).json({
+                error: 'Authentication required',
+                code: 'AUTH_REQUIRED'
+            });
+        }
+        
+        const userRoles = req.user.roles || [];
+        
+        // Global admin has all roles
+        if (userRoles.includes('global_admin')) {
+            return next();
+        }
+        
+        const hasRole = requireAll
+            ? requiredRoles.every(role => userRoles.includes(role))
+            : requiredRoles.some(role => userRoles.includes(role));
+        
+        if (!hasRole) {
+            return res.status(403).json({
+                error: 'Insufficient role privileges',
+                code: 'AUTH_INSUFFICIENT_ROLE',
+                required: requiredRoles,
+                current: userRoles
+            });
+        }
+        
+        next();
+    };
+}
+
+/**
+ * Resource ownership middleware
+ * Ensures users can only access their own resources
+ */
+export function requireOwnership(options = {}) {
+    const {
+        userIdField = 'userId', // Field name that contains the user ID
+        paramName = 'id', // Parameter name in URL
+        allowCompanyAdmin = true, // Allow company admin to access any resource in company
+        allowGlobalAdmin = true // Allow global admin to access any resource
+    } = options;
+    
+    return async (req, res, next) => {
+        if (!req.user) {
+            return res.status(401).json({
+                error: 'Authentication required',
+                code: 'AUTH_REQUIRED'
+            });
+        }
+        
+        // Global admin can access any resource
+        if (allowGlobalAdmin && req.user.roles.includes('global_admin')) {
+            return next();
+        }
+        
+        // Company admin can access any resource in their company
+        if (allowCompanyAdmin && req.user.roles.includes('company_admin')) {
+            return next();
+        }
+        
+        const resourceId = req.params[paramName];
+        const userId = req.user.id;
+        
+        if (!resourceId) {
+            return res.status(400).json({
+                error: 'Resource ID required',
+                code: 'RESOURCE_ID_MISSING'
+            });
+        }
+        
+        // This would need to be customized based on the resource type
+        // For now, we'll assume the resource has a direct userId field
+        try {
+            // This is a generic check - in practice, you'd customize this per resource
+            const resource = await prisma.$queryRaw`
+                SELECT ${userIdField} as user_id 
+                FROM ${req.baseUrl.split('/').pop()} 
+                WHERE id = ${resourceId}
+            `;
+            
+            if (!resource || resource[0]?.user_id !== userId) {
+                return res.status(403).json({
+                    error: 'Access denied: Resource ownership violation',
+                    code: 'AUTH_OWNERSHIP_VIOLATION'
+                });
+            }
+            
+            next();
+            
+        } catch (error) {
+            logger.error('Ownership check failed', {
+            component: 'auth-middleware',
+            action: 'checkOwnership',
+            error: error.message,
+            stack: error.stack,
+            userId: req.user?.id,
+            resourceId: req.params?.id
+        });
+            return res.status(500).json({
+                error: 'Failed to verify resource ownership',
+                code: 'AUTH_OWNERSHIP_CHECK_FAILED'
+            });
+        }
+    };
+}
+
+/**
+ * Rate limiting middleware
+ * Prevents abuse by limiting requests per user
+ */
+export function rateLimit(options = {}) {
+    const {
+        windowMs = 15 * 60 * 1000, // 15 minutes
+        maxRequests = 100, // Max requests per window
+        skipSuccessfulRequests = false,
+        skipFailedRequests = false
+    } = options;
+    
+    const requests = new Map();
+    
+    return (req, res, next) => {
+        const userId = req.user?.id || req.ip;
+        const now = Date.now();
+        const windowStart = now - windowMs;
+        
+        // Clean old entries
+        if (!requests.has(userId)) {
+            requests.set(userId, []);
+        }
+        
+        const userRequests = requests.get(userId);
+        const validRequests = userRequests.filter(timestamp => timestamp > windowStart);
+        
+        if (validRequests.length >= maxRequests) {
+            return res.status(429).json({
+                error: 'Too many requests',
+                code: 'RATE_LIMIT_EXCEEDED',
+                retryAfter: Math.ceil((validRequests[0] + windowMs - now) / 1000)
+            });
+        }
+        
+        // Add current request
+        validRequests.push(now);
+        requests.set(userId, validRequests);
+        
+        next();
+    };
+}
+
+/**
+ * GDPR compliance middleware
+ * Logs user actions for audit trail
+ */
+export function auditLog(action, resourceType) {
+    return async (req, res, next) => {
+        const originalSend = res.send;
+        
+        res.send = function(data) {
+            // Log the action after response is sent
+            setImmediate(async () => {
+                try {
+                    if (req.user) {
+                        await prisma.audit_logs.create({
+                            data: {
+                                user_id: req.user.id,
+                                action: action || req.method,
+                                resource_type: resourceType || req.baseUrl.split('/').pop(),
+                                resource_id: req.params.id || null,
+                                old_values: req.method === 'PUT' || req.method === 'PATCH' ? req.body : null,
+                                new_values: req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH' ? req.body : null,
+                                ip_address: req.ip,
+                                user_agent: req.get('User-Agent'),
+                                company_id: req.user.companyId
+                            }
+                        });
+                    }
+                } catch (error) {
+                    logger.error('Audit logging failed', {
+            component: 'auth-middleware',
+            action: 'auditLog',
+            error: error.message,
+            stack: error.stack,
+            userId: req.user?.id,
+            action: action
+        });
+                }
+            });
+            
+            return originalSend.call(this, data);
+        };
+        
+        next();
+    };
+}
+
+/**
+ * Export all middleware functions
+ */
+export default {
+    authenticate,
+    authorize,
+    requireSameCompany,
+    requireRole,
+    requireOwnership,
+    rateLimit,
+    auditLog
+};

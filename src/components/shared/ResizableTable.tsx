@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { ArrowUp, ArrowDown, ArrowUpDown, GripHorizontal, ChevronUp, ChevronDown } from 'lucide-react';
-import { saveTablePreferences } from '../../services/userPreferences';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { ChevronUp, ChevronDown } from 'lucide-react';
+// Removed unused imports: ArrowUpDown, GripHorizontal, saveTablePreferences
 import { cn } from '../../design-system/utils';
 
-export interface ResizableTableColumn<T = any> {
+export interface ResizableTableColumn<T = Record<string, unknown> & { id?: string | number }> {
   key: string;
   label: string;
   width?: number;
@@ -17,7 +17,7 @@ export interface ResizableTableColumn<T = any> {
 
 export type SortDirection = 'asc' | 'desc' | null;
 
-interface ResizableTableProps<T = any> {
+interface ResizableTableProps<T = Record<string, unknown> & { id?: string | number }> {
   columns: ResizableTableColumn<T>[];
   data: T[];
   tableProps?: React.TableHTMLAttributes<HTMLTableElement>;
@@ -29,15 +29,14 @@ interface ResizableTableProps<T = any> {
   onSort?: (key: string, direction: SortDirection) => void;
   sortKey?: string;
   sortDirection?: SortDirection;
-  onColumnVisibilityChange?: (hiddenColumns: string[]) => void;
   hiddenColumns?: string[];
-  onColumnOrderChange?: (columnOrder: Record<string, number>) => void;
+  // Removed unused props: onColumnVisibilityChange, onColumnOrderChange
   columnOrder?: Record<string, number>;
   tableName?: string;
   zebra?: boolean;
 }
 
-const ResizableTable = <T extends { id?: string } = any>({
+const ResizableTable = <T extends Record<string, unknown> & { id?: string | number } = Record<string, unknown> & { id?: string | number }>({
   columns,
   data,
   tableProps = {},
@@ -49,9 +48,8 @@ const ResizableTable = <T extends { id?: string } = any>({
   onSort,
   sortKey,
   sortDirection,
-  onColumnVisibilityChange,
   hiddenColumns = [],
-  onColumnOrderChange,
+  // Removed unused props: onColumnVisibilityChange, onColumnOrderChange
   columnOrder = {},
   tableName = 'table',
   zebra = false,
@@ -110,9 +108,7 @@ const ResizableTable = <T extends { id?: string } = any>({
   const startWidth = useRef<number>(0);
   const tableContainerRef = useRef<HTMLDivElement>(null);
   
-  // Handle column dragging
-  const [draggingCol, setDraggingCol] = useState<string | null>(null);
-  const [dropTargetCol, setDropTargetCol] = useState<string | null>(null);
+  // Removed draggingCol and dropTargetCol - drag and drop not used
   
   const minColWidth = 50; // Minimum column width
   
@@ -138,7 +134,7 @@ const ResizableTable = <T extends { id?: string } = any>({
   const sortedColumns = orderedColumns.filter(col => !localHiddenColumns.includes(col.key));
   
   // Save preferences to localStorage only
-  const savePreferences = (type: 'widths' | 'hiddenColumns' | 'order', data: any) => {
+  const savePreferences = (type: 'widths' | 'hiddenColumns' | 'order', data: unknown) => {
     // Only save to localStorage - no API calls
     if (typeof window === 'undefined') return;
     
@@ -246,98 +242,8 @@ const ResizableTable = <T extends { id?: string } = any>({
     );
   };
 
-  // Handle column drag start
-  const handleColumnDragStart = (colKey: string, e: React.DragEvent) => {
-    e.dataTransfer.effectAllowed = 'move';
-    try {
-      e.dataTransfer.setData('text/plain', colKey);
-    } catch (err) {
-      // Fallback for IE
-      e.dataTransfer.setData('text', colKey);
-    }
-    
-    setDraggingCol(colKey);
-    
-    // Hide preview image
-    const dragIcon = document.createElement('div');
-    dragIcon.style.position = 'absolute';
-    dragIcon.style.top = '-9999px';
-    document.body.appendChild(dragIcon);
-    e.dataTransfer.setDragImage(dragIcon, 0, 0);
-    setTimeout(() => document.body.removeChild(dragIcon), 0);
-  };
-
-  // Handle column drag over
-  const handleColumnDragOver = (colKey: string, e: React.DragEvent) => {
-    e.preventDefault();
-    if (draggingCol === colKey || !draggingCol) return;
-    
-    setDropTargetCol(colKey);
-    
-    // Set the dropEffect to move
-    e.dataTransfer.dropEffect = 'move';
-  };
-
-  // Handle column drop
-  const handleColumnDrop = (colKey: string, e: React.DragEvent) => {
-    e.preventDefault();
-    if (draggingCol === colKey || !draggingCol) return;
-    
-    // Get the current order values
-    const sourceIdx = sortedColumns.findIndex(c => c.key === draggingCol);
-    const targetIdx = sortedColumns.findIndex(c => c.key === colKey);
-    
-    if (sourceIdx === -1 || targetIdx === -1) return;
-    
-    // Create new order with swapped values
-    const newOrder = { ...effectiveColumnOrder };
-    
-    // Adjust the order of columns between source and target
-    if (sourceIdx < targetIdx) {
-      // Moving right - all columns between source and target move left
-      for (let i = sourceIdx + 1; i <= targetIdx; i++) {
-        newOrder[sortedColumns[i].key] = i - 1;
-      }
-    } else {
-      // Moving left - all columns between target and source move right
-      for (let i = targetIdx; i < sourceIdx; i++) {
-        newOrder[sortedColumns[i].key] = i + 1;
-      }
-    }
-    
-    // Set the dragged column to the target position
-    newOrder[draggingCol] = targetIdx;
-    
-    setEffectiveColumnOrder(newOrder);
-    if (onColumnOrderChange) {
-      onColumnOrderChange(newOrder);
-    }
-    
-    // Save to localStorage
-    savePreferences('order', newOrder);
-    
-    // Reset drag state
-    setDraggingCol(null);
-    setDropTargetCol(null);
-  };
-
-  // Handle column drag end
-  const handleColumnDragEnd = () => {
-    setDraggingCol(null);
-    setDropTargetCol(null);
-  };
-
-  // Handle column visibility change
-  const handleColumnVisibilityChange = (newHiddenColumns: string[]) => {
-    setLocalHiddenColumns(newHiddenColumns);
-    
-    if (onColumnVisibilityChange) {
-      onColumnVisibilityChange(newHiddenColumns);
-    }
-    
-    // Save to localStorage
-    savePreferences('hiddenColumns', newHiddenColumns);
-  };
+  // Removed drag and drop functions - not used in current implementation
+  // Removed handleColumnVisibilityChange - not used in current implementation
 
   // Apply column visibility changes from external sources
   useEffect(() => {
@@ -468,7 +374,7 @@ const ResizableTable = <T extends { id?: string } = any>({
   };
   
   // Utility function to reset column widths in localStorage
-  const resetColumnWidths = () => {
+  const resetColumnWidths = useCallback(() => {
     const itemsToRemove = [];
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
@@ -484,13 +390,13 @@ const ResizableTable = <T extends { id?: string } = any>({
     // Non ricaricare la pagina per evitare loop infiniti
     // Reimpostare solo lo stato delle larghezze
     setColWidths({...defaultWidths, ...initialWidths});
-  };
+  }, [defaultWidths, initialWidths]);
   
   // Esegui il reset una sola volta all'avvio per risolvere il problema
   useEffect(() => {
     resetColumnWidths();
     // Importante: Il secondo parametro vuoto [] indica che l'effetto viene eseguito solo una volta
-  }, []);
+  }, [resetColumnWidths]);
   
   return (
     <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm" ref={tableContainerRef}>
@@ -518,7 +424,7 @@ const ResizableTable = <T extends { id?: string } = any>({
                 onRowClick ? 'cursor-pointer hover:bg-gray-50' : ''
               )}
             >
-              {sortedColumns.map((col, colIndex) => renderCell(row, col, rowIndex))}
+              {sortedColumns.map((col) => renderCell(row, col, rowIndex))}
             </tr>
           ))}
           

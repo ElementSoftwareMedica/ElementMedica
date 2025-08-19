@@ -3,8 +3,8 @@
  */
 
 // Base URL per tutte le richieste API
-// Usa proxy Vite locale invece del collegamento diretto al proxy server
-export const API_BASE_URL = '';
+// Usa proxy server sulla porta 4003 come specificato nelle regole del progetto
+export const API_BASE_URL = 'http://localhost:4003';
 
 // Prefissi specifici dei server
 export const API_ENDPOINTS = {
@@ -24,6 +24,7 @@ export const API_ENDPOINTS = {
   TEMPLATES: '/templates',
   TEMPLATE_LINKS: '/template-links',
   USER_PREFERENCES: '/user-preferences',
+  ACTIVITY_LOGS: '/activity-logs',
   
   // Endpoint che accettano ID
   COMPANY_BY_ID: (id: string) => `/companies/${id}`,

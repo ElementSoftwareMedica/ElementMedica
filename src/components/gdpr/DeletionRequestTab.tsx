@@ -10,7 +10,6 @@ import {
   Grid,
   Card,
   CardContent,
-  CardActions,
   Button,
   Alert,
   Chip,
@@ -40,7 +39,6 @@ import {
 } from '@mui/material';
 import {
   Delete as DeleteIcon,
-  Add as AddIcon,
   Refresh as RefreshIcon,
   Cancel as CancelIcon,
   CheckCircle as CheckCircleIcon,
@@ -51,7 +49,7 @@ import {
   ExpandMore as ExpandMoreIcon
 } from '@mui/icons-material';
 import { UseDeletionRequestReturn, DeletionRequestFormData, DeletionRequest } from '../../types/gdpr';
-import { format, formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 
 interface DeletionRequestTabProps {
   hook: UseDeletionRequestReturn;

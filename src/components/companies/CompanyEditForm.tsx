@@ -1,6 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, Phone, Mail, MapPin, Globe, User, Calendar } from 'lucide-react';
+import { 
+  Building2,
+  Calendar,
+  Globe,
+  Mail,
+  MapPin,
+  Phone
+} from 'lucide-react';
 import { Company } from '../../types';
 
 interface CompanyEditFormProps {

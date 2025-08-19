@@ -1,5 +1,6 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { vi } from 'vitest';
 import { SearchBar } from './SearchBar';
 
 describe('SearchBar', () => {
@@ -33,11 +34,11 @@ describe('SearchBar', () => {
   });
 
   it('calls onSearch when search button is clicked', async () => {
-    const onSearch = jest.fn();
+    const onSearch = vi.fn();
     render(<SearchBar onSearch={onSearch} />);
     
     const input = screen.getByPlaceholderText('Cerca...');
-    const searchButton = screen.getByRole('button');
+    const searchButton = screen.getByTestId('search-bar-search-button');
     
     await user.type(input, 'test query');
     await user.click(searchButton);
@@ -46,7 +47,7 @@ describe('SearchBar', () => {
   });
 
   it('calls onSearch when Enter key is pressed', async () => {
-    const onSearch = jest.fn();
+    const onSearch = vi.fn();
     render(<SearchBar onSearch={onSearch} />);
     
     const input = screen.getByPlaceholderText('Cerca...');
@@ -58,23 +59,24 @@ describe('SearchBar', () => {
   });
 
   it('trims whitespace when searching', async () => {
-    const onSearch = jest.fn();
+    const onSearch = vi.fn();
     render(<SearchBar onSearch={onSearch} />);
     
     const input = screen.getByPlaceholderText('Cerca...');
     
-    await user.type(input, '  test query  ');
-    await user.keyboard('{Enter}');
+    fireEvent.change(input, { target: { value: '  test query  ' } });
+    input.focus();
+    fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
     
     expect(onSearch).toHaveBeenCalledWith('test query');
   });
 
   it('does not call onSearch with empty or whitespace-only input', async () => {
-    const onSearch = jest.fn();
+    const onSearch = vi.fn();
     render(<SearchBar onSearch={onSearch} />);
     
     const input = screen.getByPlaceholderText('Cerca...');
-    const searchButton = screen.getByRole('button');
+    const searchButton = screen.getByTestId('search-bar-search-button');
     
     // Test empty input
     await user.click(searchButton);
@@ -87,7 +89,7 @@ describe('SearchBar', () => {
   });
 
   it('calls onChange when input value changes', async () => {
-    const onChange = jest.fn();
+    const onChange = vi.fn();
     render(<SearchBar onChange={onChange} />);
     
     const input = screen.getByPlaceholderText('Cerca...');
@@ -99,7 +101,7 @@ describe('SearchBar', () => {
   });
 
   it('works as controlled component', async () => {
-    const onChange = jest.fn();
+    const onChange = vi.fn();
     const { rerender } = render(
       <SearchBar value="initial" onChange={onChange} />
     );
@@ -121,30 +123,27 @@ describe('SearchBar', () => {
     const input = screen.getByPlaceholderText('Cerca...');
     
     // Initially no clear button
-    expect(screen.queryByRole('button', { name: /clear/i })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('search-bar-clear-button')).not.toBeInTheDocument();
     
     await user.type(input, 'test');
     
     // Clear button should appear
-    const clearButton = screen.getByRole('button', { name: '' }); // Clear button has no text, just icon
+    const clearButton = screen.getByTestId('search-bar-clear-button');
     expect(clearButton).toBeInTheDocument();
   });
 
   it('clears input when clear button is clicked', async () => {
-    const onChange = jest.fn();
+    const onChange = vi.fn();
     render(<SearchBar onChange={onChange} />);
     
     const input = screen.getByPlaceholderText('Cerca...');
     
     await user.type(input, 'test');
     
-    const clearButtons = screen.getAllByRole('button');
-    const clearButton = clearButtons.find(btn => btn !== screen.getByRole('button')); // Not the search button
+    const clearButton = screen.getByTestId('search-bar-clear-button');
     
-    if (clearButton) {
-      await user.click(clearButton);
-      expect(onChange).toHaveBeenLastCalledWith('');
-    }
+    await user.click(clearButton);
+    expect(onChange).toHaveBeenLastCalledWith('');
   });
 
   it('hides clear button when showClearButton is false', async () => {
@@ -159,14 +158,14 @@ describe('SearchBar', () => {
     render(<SearchBar disabled value="test" />);
     
     const input = screen.getByPlaceholderText('Cerca...');
-    const searchButton = screen.getByRole('button');
+    const searchButton = screen.getByTestId('search-bar-search-button');
     
     expect(input).toBeDisabled();
     expect(searchButton).toBeDisabled();
   });
 
   it('searches on type when searchOnType is true', async () => {
-    const onSearch = jest.fn();
+    const onSearch = vi.fn();
     render(
       <SearchBar 
         searchOnType 
@@ -186,7 +185,7 @@ describe('SearchBar', () => {
   });
 
   it('debounces search on type', async () => {
-    const onSearch = jest.fn();
+    const onSearch = vi.fn();
     render(
       <SearchBar 
         searchOnType 
@@ -213,29 +212,29 @@ describe('SearchBar', () => {
   it('applies size classes correctly', () => {
     const { rerender } = render(<SearchBar size="sm" />);
     
-    let container = screen.getByPlaceholderText('Cerca...').closest('div');
+    let container = screen.getByTestId('search-bar-container');
     expect(container).toHaveClass('h-8');
     
     rerender(<SearchBar size="md" />);
-    container = screen.getByPlaceholderText('Cerca...').closest('div');
+    container = screen.getByTestId('search-bar-container');
     expect(container).toHaveClass('h-10');
     
     rerender(<SearchBar size="lg" />);
-    container = screen.getByPlaceholderText('Cerca...').closest('div');
+    container = screen.getByTestId('search-bar-container');
     expect(container).toHaveClass('h-12');
   });
 
   it('applies custom className', () => {
     render(<SearchBar className="custom-class" />);
     
-    const container = screen.getByPlaceholderText('Cerca...').closest('div');
+    const container = screen.getByTestId('search-bar-container');
     expect(container).toHaveClass('custom-class');
   });
 
   it('disables search button when input is empty', () => {
     render(<SearchBar />);
     
-    const searchButton = screen.getByRole('button');
+    const searchButton = screen.getByTestId('search-bar-search-button');
     expect(searchButton).toBeDisabled();
   });
 
@@ -243,7 +242,7 @@ describe('SearchBar', () => {
     render(<SearchBar />);
     
     const input = screen.getByPlaceholderText('Cerca...');
-    const searchButton = screen.getByRole('button');
+    const searchButton = screen.getByTestId('search-bar-search-button');
     
     await user.type(input, 'test');
     

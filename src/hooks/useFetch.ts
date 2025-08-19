@@ -1,13 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import axios from 'axios';
-import { API_BASE_URL } from '../config/api';
-
-interface AxiosRequestConfig {
-  signal?: AbortSignal;
-  timeout?: number;
-  headers?: Record<string, string>;
-  [key: string]: any;
-}
+import { apiGet } from '../services/api';
 
 interface UseFetchOptions<T> {
   initialData?: T;
@@ -17,9 +9,9 @@ interface UseFetchOptions<T> {
   onError?: (error: string) => void;
 }
 
-function useFetch<T = any>(
+function useFetch<T = unknown>(
   url: string, 
-  options?: AxiosRequestConfig, 
+  options?: Record<string, unknown>, 
   fetchOptions?: UseFetchOptions<T>
 ) {
   const [data, setData] = useState<T | undefined>(fetchOptions?.initialData);
@@ -29,22 +21,6 @@ function useFetch<T = any>(
   // Track if we're using fallback data
   const [usingFallback, setUsingFallback] = useState(false);
 
-  // Function to ensure URL has the correct base
-  const getFullUrl = (urlPath: string): string => {
-    // If already a full URL with protocol, return as is
-    if (urlPath.startsWith('http://') || urlPath.startsWith('https://')) {
-      return urlPath;
-    }
-    
-    // If it starts with a slash, append to API_BASE_URL
-    if (urlPath.startsWith('/')) {
-      return `${API_BASE_URL}${urlPath}`;
-    }
-    
-    // Otherwise, add a slash between API_BASE_URL and the path
-    return `${API_BASE_URL}/${urlPath}`;
-  };
-
   const fetchData = async (abortController?: AbortController) => {
     if (!url) return;
     
@@ -52,40 +28,29 @@ function useFetch<T = any>(
     setError(null);
     
     try {
-      // Create axios config with timeout if specified
-      const requestConfig: AxiosRequestConfig = {
-        ...options,
-        signal: abortController?.signal,
-        timeout: fetchOptions?.timeoutMs || 10000
-      };
+      console.log(`Fetching from: ${url}`);
       
-      // Use the proper full URL
-      const fullUrl = getFullUrl(url);
-      console.log(`Fetching from: ${fullUrl}`);
+      const response = await apiGet<T>(url);
       
-      const response = await axios.get<T>(fullUrl, requestConfig);
-      
-      if (response.status === 200) {
-        setData(response.data);
-        setUsingFallback(false);
-        fetchOptions?.onSuccess?.(response.data);
-      } else {
-        throw new Error(`Error: ${response.status} ${response.statusText}`);
-      }
-    } catch (err: any) {
+      setData(response);
+      setUsingFallback(false);
+      fetchOptions?.onSuccess?.(response);
+    } catch (err: unknown) {
       console.warn(`Fetch error:`, err);
+      
+      const errorMessage = err instanceof Error ? err.message : 'An error occurred';
       
       // Handle fallback data if provided
       if (fetchOptions?.fallbackData !== undefined) {
         console.log(`Using fallback data for ${url}`);
         setData(fetchOptions.fallbackData);
         setUsingFallback(true);
-        setError(`Using demo data (${err.message})`);
+        setError(`Using demo data (${errorMessage})`);
       } else {
-        setError(err.message || 'An error occurred');
+        setError(errorMessage);
       }
       
-      fetchOptions?.onError?.(err.message || 'An error occurred');
+      fetchOptions?.onError?.(errorMessage);
     } finally {
       setLoading(false);
     }

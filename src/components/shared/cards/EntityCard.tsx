@@ -35,8 +35,6 @@ interface EntityCardProps {
   selectable?: boolean;
   selectionMode?: boolean;
   onViewDetails?: () => void;
-  onEdit?: () => void;
-  onDelete?: () => void;
   data?: DataItem[];
   /** Azioni che appaiono nel menu a comparsa */
   actions?: CardAction[];
@@ -47,7 +45,6 @@ interface EntityCardProps {
 }
 
 const EntityCard: React.FC<EntityCardProps> = ({
-  id,
   title,
   subtitle,
   icon,
@@ -61,9 +58,6 @@ const EntityCard: React.FC<EntityCardProps> = ({
   selected = false,
   onSelect,
   selectionMode = false,
-  onViewDetails,
-  onEdit,
-  onDelete,
   data,
   actions,
   details,
@@ -241,4 +235,4 @@ const EntityCard: React.FC<EntityCardProps> = ({
   );
 };
 
-export default EntityCard; 
+export default EntityCard;

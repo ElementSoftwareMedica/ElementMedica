@@ -1,10 +1,10 @@
 import { createService } from './serviceFactory';
 import type { Course, CourseSchedule, CourseEnrollment } from '../types/courses';
-import { apiPost, apiGet } from './api';
+import { apiGet } from './api';
 import { ImportWithTemplateResponse } from '../types';
 
 // Definizione dei tipi per il pattern factory
-export interface CourseCreate extends Omit<Course, 'id' | 'created_at' | 'updated_at'> {}
+export interface CourseCreate extends Omit<Course, 'id' | 'createdAt' | 'updatedAt'> {}
 export interface CourseUpdate extends Partial<Course> {}
 
 // Funzione per convertire le stringhe in numeri
@@ -91,7 +91,7 @@ const courseService = baseService.extend({
   },
   
   // Metodi specifici per i corsi
-  createCourseSchedule: async (schedule: Omit<CourseSchedule, 'id' | 'created_at' | 'updated_at'>): Promise<CourseSchedule> => {
+  createCourseSchedule: async (schedule: Omit<CourseSchedule, 'id' | 'createdAt' | 'updatedAt'>): Promise<CourseSchedule> => {
     return await apiPost<CourseSchedule>('/course-schedules', schedule);
   },
   

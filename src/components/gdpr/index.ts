@@ -9,6 +9,8 @@ export { DataExportTab } from './DataExportTab';
 export { DeletionRequestTab } from './DeletionRequestTab';
 export { AuditTrailTab } from './AuditTrailTab';
 export { ComplianceReport } from './ComplianceReport';
+export { GDPROverviewCard } from './GDPROverviewCard';
+export { ComplianceScoreCard } from './ComplianceScoreCard';
 
 // Re-export types for convenience
 export type {

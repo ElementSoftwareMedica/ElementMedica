@@ -1,4 +1,5 @@
 import { render, screen, fireEvent } from '@testing-library/react';
+import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { SelectionPills } from './SelectionPills';
 import { Edit, Trash2 } from 'lucide-react';
 
@@ -6,13 +7,13 @@ describe('SelectionPills', () => {
   const mockActions = [
     {
       label: 'Modifica',
-      onClick: jest.fn(),
+      onClick: vi.fn(),
       icon: <Edit className="w-4 h-4" />,
       variant: 'primary' as const,
     },
     {
       label: 'Elimina',
-      onClick: jest.fn(),
+      onClick: vi.fn(),
       icon: <Trash2 className="w-4 h-4" />,
       variant: 'danger' as const,
     },
@@ -75,7 +76,7 @@ describe('SelectionPills', () => {
   });
 
   it('calls onClear when clear button is clicked', () => {
-    const mockOnClear = jest.fn();
+    const mockOnClear = vi.fn();
     render(
       <SelectionPills
         actions={[]}
@@ -90,7 +91,7 @@ describe('SelectionPills', () => {
   });
 
   it('calls onClearSelection when clear button is clicked', () => {
-    const mockOnClearSelection = jest.fn();
+    const mockOnClearSelection = vi.fn();
     render(
       <SelectionPills
         actions={[]}

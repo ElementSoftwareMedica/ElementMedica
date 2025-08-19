@@ -51,7 +51,7 @@ export interface DashboardWidget {
     height: number;
   };
   visible: boolean;
-  config: Record<string, any>;
+  config: Record<string, unknown>;
 }
 
 export interface DashboardLayout {
@@ -130,7 +130,7 @@ export interface BackupSettings {
   includeFiles: boolean;
   includeDatabase: boolean;
   destination: 'local' | 's3' | 'ftp';
-  config: Record<string, any>;
+  config: Record<string, unknown>;
 }
 
 export interface AdminSettings {
@@ -164,7 +164,7 @@ export interface AdminSettings {
 }
 
 // API response types
-export interface PreferencesApiResponse<T = any> {
+export interface PreferencesApiResponse<T = unknown> {
   success: boolean;
   data: T;
   error?: string;
@@ -172,15 +172,7 @@ export interface PreferencesApiResponse<T = any> {
 }
 
 // Hook return types
-export interface UseUserPreferencesReturn {
-  preferences: UserPreferences | null;
-  loading: boolean;
-  error: string | null;
-  updatePreferences: (updates: Partial<UserPreferences>) => Promise<void>;
-  resetPreferences: () => Promise<void>;
-  exportPreferences: () => void;
-  importPreferences: (file: File) => Promise<void>;
-}
+// Removed UseUserPreferencesReturn - now using unified PreferencesContextType
 
 export interface UseThemeReturn {
   theme: ThemeMode;
@@ -196,7 +188,7 @@ export interface UseLanguageReturn {
   language: LanguageCode;
   setLanguage: (language: LanguageCode) => void;
   availableLanguages: { code: LanguageCode; name: string; flag: string }[];
-  t: (key: string, params?: Record<string, any>) => string;
+  t: (key: string, params?: Record<string, unknown>) => string;
 }
 
 export interface UseNotificationsReturn {
@@ -243,6 +235,16 @@ export interface PreferencesContextType {
   error: string | null;
   updatePreferences: (updates: Partial<UserPreferences>) => Promise<void>;
   resetPreferences: () => Promise<void>;
+  exportPreferences: () => void;
+  importPreferences: (file: File) => Promise<void>;
+  // Additional utility methods
+  getPreference: <K extends keyof UserPreferences>(key: K) => UserPreferences[K] | undefined;
+  updateSinglePreference: <K extends keyof UserPreferences>(key: K, value: UserPreferences[K]) => Promise<void>;
+  isLoaded: () => boolean;
+  getThemePreferences: () => { theme: ThemeMode; themeColor: ThemeColor; accessibility: UserPreferences['accessibility'] } | null;
+  getNotificationPreferences: () => NotificationPreferences | null;
+  getDashboardPreferences: () => UserPreferences['dashboard'] | null;
+  refresh: () => Promise<void>;
 }
 
 export interface ThemeContextType {
@@ -258,7 +260,7 @@ export interface LanguageContextType {
   language: LanguageCode;
   setLanguage: (language: LanguageCode) => void;
   availableLanguages: { code: LanguageCode; name: string; flag: string }[];
-  t: (key: string, params?: Record<string, any>) => string;
+  t: (key: string, params?: Record<string, unknown>) => string;
 }
 
 // Default values

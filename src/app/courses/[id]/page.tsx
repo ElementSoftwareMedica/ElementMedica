@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Course } from '@prisma/client';
+// Removed unused Course import - using CourseFormData type instead
 import { createCourse, getCourse, updateCourse } from '@/api/courses';
 import { Button } from '@/design-system/atoms/Button';
 import { Input } from '@/design-system/atoms/Input';
@@ -10,7 +10,13 @@ import { Label } from '@/design-system/atoms/Label';
 import { Select } from '@/design-system/atoms/Select';
 import { toast } from 'sonner';
 
-type CourseFormData = Omit<Course, 'id' | 'created_at' | 'updated_at'>;
+type CourseFormData = {
+  title: string;
+  category: string;
+  description: string;
+  duration: string;
+  status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+};
 
 const initialFormData: CourseFormData = {
   title: '',
@@ -25,13 +31,7 @@ export default function CourseForm({ params }: { params: { id: string } }) {
   const [formData, setFormData] = useState<CourseFormData>(initialFormData);
   const isEditing = params.id !== 'new';
 
-  useEffect(() => {
-    if (isEditing) {
-      loadCourse();
-    }
-  }, [isEditing]);
-
-  const loadCourse = async () => {
+  const loadCourse = useCallback(async () => {
     try {
       const course = await getCourse(params.id);
       if (course) {
@@ -43,11 +43,17 @@ export default function CourseForm({ params }: { params: { id: string } }) {
           status: course.status || 'DRAFT',
         });
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to load course');
       router.push('/courses');
     }
-  };
+  }, [params.id, router]);
+
+  useEffect(() => {
+    if (isEditing) {
+      loadCourse();
+    }
+  }, [isEditing, loadCourse]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,7 +66,7 @@ export default function CourseForm({ params }: { params: { id: string } }) {
         toast.success('Course created successfully');
       }
       router.push('/courses');
-    } catch (error) {
+    } catch {
       toast.error(isEditing ? 'Failed to update course' : 'Failed to create course');
     }
   };

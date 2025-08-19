@@ -7,17 +7,14 @@ import type { Meta, StoryObj } from '@storybook/react';
 import {
   Icon,
   ChevronDownIcon,
-  ChevronUpIcon,
-  PlusIcon,
+  ChevronUpIconIcon,
   XIcon,
   CheckIcon,
   SearchIcon,
   EditIcon,
   DeleteIcon,
   LoadingIcon,
-  HomeIcon,
-  UserIcon,
-  SettingsIcon
+  HomeIconIconIcon
 } from './Icon';
 
 const meta: Meta<typeof Icon> = {

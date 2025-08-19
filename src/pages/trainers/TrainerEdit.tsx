@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import TrainerForm from '../../components/trainers/TrainerForm';
+import { apiGet, apiPost, apiPut } from '../../services/api';
 
 export default function TrainerEdit() {
   const { id } = useParams<{ id: string }>();
@@ -13,35 +14,20 @@ export default function TrainerEdit() {
   useEffect(() => {
     if (id) {
       setLoading(true);
-      fetch(`http://localhost:4000/trainers/${id}`)
-        .then(res => {
-          if (!res.ok) throw new Error('Trainer not found');
-          return res.json();
-        })
+      apiGet(`/trainers/${id}`)
         .then(data => setTrainer(data))
-        .catch(err => setError(err.message))
+        .catch(err => setError(err.message || 'Trainer not found'))
         .finally(() => setLoading(false));
     }
   }, [id]);
 
-  const handleSubmit = async (data: any) => {
+  const handleSubmit = async (data: Record<string, unknown>) => {
     try {
       if (id) {
-        const response = await fetch(`http://localhost:4000/trainers/${id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data),
-        });
-        if (!response.ok) throw new Error('Failed to update trainer');
+        await apiPut(`/trainers/${id}`, data);
         navigate(`/trainers/${id}`);
       } else {
-        const response = await fetch('http://localhost:4000/trainers', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data),
-        });
-        if (!response.ok) throw new Error('Failed to create trainer');
-        const created = await response.json();
+        const created = await apiPost('/trainers', data) as any;
         navigate(`/trainers/${created.id}`);
       }
     } catch (err) {
@@ -90,4 +76,4 @@ export default function TrainerEdit() {
       </div>
     </div>
   );
-} 
+}

@@ -1,5 +1,12 @@
 import React, { useEffect, useRef } from 'react';
-import { FileText, Presentation, Upload, ExternalLink, Layout, Edit } from 'lucide-react';
+import { 
+  Edit,
+  ExternalLink,
+  FileText,
+  Layout,
+  Presentation,
+  Upload
+} from 'lucide-react';
 
 interface NewTemplateDropdownProps {
   isOpen: boolean;

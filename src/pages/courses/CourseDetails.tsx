@@ -1,169 +1,198 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { 
-  ChevronRight, 
-  Clock, 
-  Calendar, 
-  Award, 
-  CheckCircle, 
-  Users, 
-  FileText, 
-  Edit,
-  GraduationCap,
+  Award,
   BookOpen,
-  MessageCircle,
+  Calendar,
+  CheckCircle,
+  ChevronRight,
+  Clock,
+  Edit,
+  Euro,
+  FileText,
+  GraduationCap,
+  MapPin,
   Star,
-  Download,
-  Trash2,
-  UserPlus
+  Target,
+  User,
+  Users
 } from 'lucide-react';
-import EntityProfileHeader from '../../components/shared/EntityProfileHeader';
 import { Button } from '../../design-system/atoms/Button';
 import { useToast } from '../../hooks/useToast';
 import { getCourse } from '../../services/courses';
+import { useValidatedParams } from '../../hooks/routing/useValidatedParams';
 
 const CourseDetails: React.FC = () => {
-  const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
+  const { id, isValidating, isValid, errorMessage } = useValidatedParams();
   const { showToast } = useToast();
-  
   const [course, setCourse] = useState<any>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [notFound, setNotFound] = useState<boolean>(false);
-  
-  // Limitiamo i tentativi di caricamento per evitare cicli infiniti
-  const MAX_FETCH_ATTEMPTS = 1; // Ridotto a 1 solo tentativo aggiuntivo
-  const [fetchAttempt, setFetchAttempt] = useState(0);
-  const [isRetrying, setIsRetrying] = useState(false);
+  const [notFound, setNotFound] = useState(false);
+  const [activeTab, setActiveTab] = useState('overview');
 
-  // Implemento il fetching come funzione esterna e memo per maggiore controllo
-  const fetchCourse = useCallback(async (shouldSetLoading = true) => {
-    if (!id) return;
-    
-    if (shouldSetLoading) {
-      setLoading(true);
+  // Mock data for course modules
+  const mockModules = [
+    {
+      id: '1',
+      title: 'Introduzione alla Sicurezza sul Lavoro',
+      duration: '2 ore',
+      description: 'Panoramica generale sui principi di sicurezza'
+    },
+    {
+      id: '2',
+      title: 'Normative e Regolamenti',
+      duration: '3 ore',
+      description: 'Studio delle normative vigenti in materia di sicurezza'
+    },
+    {
+      id: '3',
+      title: 'Dispositivi di Protezione Individuale',
+      duration: '2 ore',
+      description: 'Utilizzo corretto dei DPI'
+    },
+    {
+      id: '4',
+      title: 'Gestione delle Emergenze',
+      duration: '3 ore',
+      description: 'Procedure di evacuazione e primo soccorso'
     }
-    
+  ];
+
+  // Mock data for upcoming sessions
+  const mockSessions = [
+    {
+      id: '1',
+      startDate: '2024-02-15',
+      endDate: '2024-02-16',
+      location: 'Aula A - Sede Principale',
+      instructor: 'Dott. Mario Rossi',
+      availableSpots: 8,
+      totalSpots: 20
+    },
+    {
+      id: '2',
+      startDate: '2024-03-10',
+      endDate: '2024-03-11',
+      location: 'Aula B - Sede Secondaria',
+      instructor: 'Ing. Laura Bianchi',
+      availableSpots: 15,
+      totalSpots: 20
+    }
+  ];
+
+  // Mock data for enrolled employees
+  const mockEnrolledEmployees = [
+    {
+      id: '1',
+      firstName: 'Marco',
+      lastName: 'Verdi',
+      company: 'ABC S.r.l.',
+      enrollmentDate: '2024-01-15',
+      status: 'Confermato'
+    },
+    {
+      id: '2',
+      firstName: 'Anna',
+      lastName: 'Neri',
+      company: 'XYZ S.p.A.',
+      enrollmentDate: '2024-01-20',
+      status: 'In attesa'
+    }
+  ];
+
+  const fetchCourse = async (courseId: string, retryCount = 0) => {
     try {
-      // Chiamata API con timeout più breve per evitare blocchi prolungati
-      const data = await getCourse(id);
-      setCourse(data);
+      setLoading(true);
       setError(null);
+      const data = await getCourse(courseId);
+      setCourse(data);
       setNotFound(false);
-    } catch (e) {
-      console.error('Error fetching course:', e);
+    } catch (err: any) {
+      console.error('Error fetching course:', err);
       
-      // Per qualsiasi tipo di errore di caricamento, impostiamo un messaggio appropriato
-      if (e instanceof Error) {
-        setError(`Errore durante il caricamento: ${e.message}`);
-      } else {
-        setError('Errore durante il caricamento del corso');
-      }
-      
-      if (e instanceof Error && e.message.includes('404')) {
+      if (err.status === 404) {
         setNotFound(true);
+        setError(null);
+      } else if (retryCount < 2) {
+        // Retry up to 2 times for non-404 errors
+        setTimeout(() => fetchCourse(courseId, retryCount + 1), 1000);
+        return;
+      } else {
+        setError(err.message || 'Errore nel caricamento del corso');
+        setNotFound(false);
       }
+      setCourse(null);
     } finally {
       setLoading(false);
-      setIsRetrying(false);
     }
-  }, [id]);
-
-  // Gestione del ricaricamento manuale
-  const handleRetry = useCallback(() => {
-    // Preveniamo multipli clic del pulsante retry
-    if (isRetrying) return;
-    
-    setIsRetrying(true);
-    setFetchAttempt(prev => prev + 1);
-    
-    // Aggiungiamo un piccolo delay prima di ritentare per dare tempo al browser di liberare risorse
-    setTimeout(() => {
-      fetchCourse(true);
-    }, 1500);
-  }, [fetchCourse, isRetrying]);
+  };
 
   useEffect(() => {
-    // Caricamento iniziale
-    fetchCourse();
-  }, [fetchCourse]);
-  
-  const [activeTab, setActiveTab] = useState<'overview' | 'sessions' | 'employees'>('overview');
-  
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-80 text-gray-500">
-        <div className="flex flex-col items-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-          <p className="mt-4">
-            {isRetrying ? 'Ritentativo di caricamento...' : 'Caricamento corso...'}
-          </p>
-        </div>
-      </div>
-    );
-  }
-  
-  if (error) {
-    return (
-      <div className="flex items-center justify-center h-80">
-        <div className="text-center bg-red-50 border border-red-200 rounded-md p-6 max-w-md">
-          <h2 className="text-xl font-semibold text-red-700 mb-3">Errore</h2>
-          <p className="text-gray-700 mb-4">{error}</p>
-          <div className="flex justify-center space-x-3">
-            <button 
-              onClick={handleRetry}
-              disabled={isRetrying}
-              className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors disabled:opacity-50"
-            >
-              {isRetrying ? 'Caricamento...' : 'Riprova'}
-            </button>
-            <Link to="/courses" className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-100 transition-colors">
-              Torna ai corsi
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
-  
-  if (notFound || !course) {
+    if (isValidating) return;
+    
+    if (!isValid) {
+        if (errorMessage) {
+          showToast({ message: errorMessage, type: 'error' });
+        }
+        return;
+      }
+
+    if (id) {
+      fetchCourse(id);
+    }
+  }, [id, isValid, isValidating, errorMessage]);
+
+  if (isValidating || loading) {
     return (
       <div className="flex items-center justify-center h-80">
         <div className="text-center">
-          <h2 className="text-xl font-semibold text-gray-800">Course not found</h2>
-          <p className="text-gray-600 mt-2">The course you're looking for doesn't exist or has been removed.</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Caricamento corso...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isValid || notFound) {
+    return (
+      <div className="flex items-center justify-center h-80">
+        <div className="text-center">
+          <h2 className="text-xl font-semibold text-gray-800">Corso non trovato</h2>
+          <p className="text-gray-600 mt-2">Il corso che stai cercando non esiste o è stato rimosso.</p>
           <Link to="/courses" className="mt-4 inline-block text-blue-600 hover:text-blue-800">
-            Back to Courses
+            Torna ai Corsi
           </Link>
         </div>
       </div>
     );
   }
 
-  // Mock data for course details
-  const courseModules = [
-    { id: 1, title: 'Introduction to Safety Principles', duration: '45 mins' },
-    { id: 2, title: 'Identifying Emergency Situations', duration: '60 mins' },
-    { id: 3, title: 'Basic First Aid Techniques', duration: '90 mins' },
-    { id: 4, title: 'CPR and AED Training', duration: '120 mins' },
-    { id: 5, title: 'Handling Specific Injuries', duration: '60 mins' },
-    { id: 6, title: 'Practical Assessment', duration: '90 mins' }
-  ];
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-80">
+        <div className="text-center">
+          <h2 className="text-xl font-semibold text-red-600">Errore nel caricamento</h2>
+          <p className="text-gray-600 mt-2">{error}</p>
+          <div className="mt-4 space-x-4">
+            <Button 
+              onClick={() => fetchCourse(id!)} 
+              variant="primary"
+            >
+              Riprova
+            </Button>
+            <Link to="/courses" className="text-blue-600 hover:text-blue-800">
+              Torna ai Corsi
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
-  const courseSessions = [
-    { id: 1, date: 'June 15, 2023', time: '9:00 AM - 5:00 PM', location: 'Training Room A', instructor: 'Dr. Sarah Johnson', seats: 20, available: 8 },
-    { id: 2, date: 'July 10, 2023', time: '9:00 AM - 5:00 PM', location: 'Training Room B', instructor: 'Dr. Michael Chen', seats: 20, available: 15 },
-    { id: 3, date: 'August 5, 2023', time: '9:00 AM - 5:00 PM', location: 'Conference Center', instructor: 'Dr. Sarah Johnson', seats: 30, available: 30 }
-  ];
-
-  const enrolledEmployees = [
-    { id: 'e1', name: 'Michael Johnson', company: 'Acme Corporation', status: 'Completed', completionDate: 'May 12, 2023' },
-    { id: 'e2', name: 'Emma Martinez', company: 'Acme Corporation', status: 'In Progress', completionDate: '-' },
-    { id: 'e4', name: 'Sophia Garcia', company: 'HealthPlus Medical', status: 'Completed', completionDate: 'Apr 28, 2023' },
-    { id: 'e6', name: 'Olivia Brown', company: 'EduForward Academy', status: 'Enrolled', completionDate: '-' },
-    { id: 'e8', name: 'Ava Miller', company: 'Acme Corporation', status: 'Completed', completionDate: 'May 15, 2023' }
-  ];
+  if (!course) {
+    return null;
+  }
 
   return (
     <div className="space-y-6">
@@ -171,377 +200,358 @@ const CourseDetails: React.FC = () => {
       <div>
         <Link 
           to="/courses" 
-          className="inline-flex items-center text-sm text-blue-600 hover:text-blue-800 transition-colors"
+          className="inline-flex items-center text-sm text-blue-600 hover:text-blue-800"
         >
           <span className="transform rotate-180">
             <ChevronRight className="h-4 w-4 mr-1" />
           </span>
-          Back to Courses
+          Torna ai Corsi
         </Link>
       </div>
 
-      {/* Course Header */}
-      <EntityProfileHeader
-        icon={<GraduationCap className="h-16 w-16" />}
-        title={course.title}
-        subtitle={
-          <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded">{course.category}</span>
-        }
-        extraInfo={<span className="text-sm text-gray-600">Codice: {course.code || 'N/A'}</span>}
-        statusBadge={
-          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-            course.status === 'Active' 
-              ? 'bg-green-100 text-green-800' 
-              : 'bg-gray-100 text-gray-800'
-          }`}>
-            {course.status}
-          </span>
-        }
-        actionButton={
-          <Button
-            variant="primary"
-            shape="pill"
-            leftIcon={<Edit className="h-4 w-4" />}
-            onClick={() => navigate(`/courses/${id}/edit`)}
-          >
-            Modifica
-          </Button>
-        }
-        bgGradient="from-amber-500 to-amber-600"
-      />
+      {/* Header */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center">
+            <div className="h-16 w-16 bg-gradient-to-r from-purple-500 to-purple-600 rounded-lg flex items-center justify-center">
+              <GraduationCap className="h-8 w-8 text-white" />
+            </div>
+            <div className="ml-4">
+              <div className="flex items-center space-x-2 mb-1">
+                <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
+                  {course.category || 'Sicurezza'}
+                </span>
+                <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full">
+                  {course.code || 'CORSO-001'}
+                </span>
+                <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                  course.status === 'active' 
+                    ? 'bg-green-100 text-green-800' 
+                    : 'bg-yellow-100 text-yellow-800'
+                }`}>
+                  {course.status === 'active' ? 'Attivo' : 'Bozza'}
+                </span>
+              </div>
+              <h1 className="text-2xl font-bold text-gray-800">
+                {course.title || 'Corso di Sicurezza sul Lavoro'}
+              </h1>
+            </div>
+          </div>
+          <div className="mt-4 md:mt-0">
+            <Link to={`/courses/${course.id}/edit`} className="btn-primary flex items-center rounded-full">
+              <Edit className="h-4 w-4 mr-1" />
+              Modifica Corso
+            </Link>
+          </div>
+        </div>
 
-      {/* Course Details Section */}
-      <div className="bg-white rounded-lg shadow p-6 mt-4">
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">Dettagli Corso</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="mt-4 border-t border-gray-200 pt-4 grid grid-cols-1 md:grid-cols-3 gap-6">
           <div>
-            <div className="mb-2"><span className="font-medium">Corso:</span> {course.title}</div>
-            <div className="mb-2"><span className="font-medium">Durata corso:</span> {course.duration}</div>
-            <div className="mb-2"><span className="font-medium">Anni validità:</span> {course.validityYears || 'N/A'}</div>
-            <div className="mb-2"><span className="font-medium">Durata corso aggiornamento:</span> {course.renewalDuration || 'N/A'}</div>
-            <div className="mb-2"><span className="font-medium">€/persona:</span> {course.pricePerPerson ? `€${course.pricePerPerson}` : 'N/A'}</div>
-            <div className="mb-2"><span className="font-medium">Certificazioni:</span> {course.certifications || 'N/A'}</div>
+            <h2 className="text-lg font-semibold text-gray-800 mb-3">Informazioni Generali</h2>
+            <ul className="space-y-2">
+              <li className="flex items-start">
+                <Clock className="h-4 w-4 text-gray-400 mt-0.5" />
+                <div className="ml-2">
+                  <span className="block text-xs font-medium text-gray-800">Durata</span>
+                  <span className="block text-sm text-gray-600">{course.duration || '10 ore'}</span>
+                </div>
+              </li>
+              <li className="flex items-start">
+                <Calendar className="h-4 w-4 text-gray-400 mt-0.5" />
+                <div className="ml-2">
+                  <span className="block text-xs font-medium text-gray-800">Validità</span>
+                  <span className="block text-sm text-gray-600">{course.validity || '3 anni'}</span>
+                </div>
+              </li>
+              <li className="flex items-start">
+                <Users className="h-4 w-4 text-gray-400 mt-0.5" />
+                <div className="ml-2">
+                  <span className="block text-xs font-medium text-gray-800">Max Partecipanti</span>
+                  <span className="block text-sm text-gray-600">{course.maxParticipants || '20'}</span>
+                </div>
+              </li>
+              <li className="flex items-start">
+                <Star className="h-4 w-4 text-gray-400 mt-0.5" />
+                <div className="ml-2">
+                  <span className="block text-xs font-medium text-gray-800">Valutazione</span>
+                  <span className="block text-sm text-gray-600">{course.rating || '4.5'}/5</span>
+                </div>
+              </li>
+            </ul>
           </div>
           <div>
-            <div className="mb-2"><span className="font-medium">Max persone:</span> {course.maxPeople || 'N/A'}</div>
-            <div className="mb-2"><span className="font-medium">Normativa:</span> {course.regulation || 'N/A'}</div>
-            <div className="mb-2"><span className="font-medium">Contenuti:</span> {course.contents || 'N/A'}</div>
-            <div className="mb-2"><span className="font-medium">Codice:</span> {course.code || 'N/A'}</div>
+            <h2 className="text-lg font-semibold text-gray-800 mb-3">Dettagli Commerciali</h2>
+            <ul className="space-y-2">
+              <li className="flex items-start">
+                <Euro className="h-4 w-4 text-gray-400 mt-0.5" />
+                <div className="ml-2">
+                  <span className="block text-xs font-medium text-gray-800">Prezzo</span>
+                  <span className="block text-sm text-gray-600">€{course.price || '150,00'}</span>
+                </div>
+              </li>
+              <li className="flex items-start">
+                <Award className="h-4 w-4 text-gray-400 mt-0.5" />
+                <div className="ml-2">
+                  <span className="block text-xs font-medium text-gray-800">Certificazioni</span>
+                  <span className="block text-sm text-gray-600">{course.certifications || 'Attestato di Partecipazione'}</span>
+                </div>
+              </li>
+              <li className="flex items-start">
+                <FileText className="h-4 w-4 text-gray-400 mt-0.5" />
+                <div className="ml-2">
+                  <span className="block text-xs font-medium text-gray-800">Normativa</span>
+                  <span className="block text-sm text-gray-600">{course.regulation || 'D.Lgs. 81/08'}</span>
+                </div>
+              </li>
+            </ul>
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-gray-800 mb-3">Descrizione</h2>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              {course.content || course.description || 'Questo corso fornisce una formazione completa sui principi fondamentali della sicurezza sul lavoro, in conformità con le normative vigenti.'}
+            </p>
           </div>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="mt-6 border-b border-gray-200">
-        <nav className="-mb-px flex space-x-8">
-          <button
-            onClick={() => setActiveTab('overview')}
-            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-              activeTab === 'overview'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            Overview
-          </button>
-          <button
-            onClick={() => setActiveTab('sessions')}
-            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-              activeTab === 'sessions'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            Upcoming Sessions
-          </button>
-          <button
-            onClick={() => setActiveTab('employees')}
-            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-              activeTab === 'employees'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            Enrolled Employees
-          </button>
-        </nav>
-      </div>
+      <div className="bg-white rounded-lg shadow">
+        <div className="border-b border-gray-200">
+          <nav className="-mb-px flex space-x-8 px-6">
+            <button
+              onClick={() => setActiveTab('overview')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'overview'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <BookOpen className="h-4 w-4 inline mr-2" />
+              Panoramica
+            </button>
+            <button
+              onClick={() => setActiveTab('sessions')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'sessions'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <Calendar className="h-4 w-4 inline mr-2" />
+              Sessioni Programmate
+            </button>
+            <button
+              onClick={() => setActiveTab('enrolled')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'enrolled'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <Users className="h-4 w-4 inline mr-2" />
+              Dipendenti Iscritti
+            </button>
+          </nav>
+        </div>
 
-      {/* Tab Content */}
-      <div className="bg-white rounded-lg shadow p-6">
-        {activeTab === 'overview' && (
-          <div className="space-y-8">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-800 mb-3">Description</h2>
-              <p className="text-gray-600">{course.description}</p>
-            </div>
-            
-            <div>
-              <h2 className="text-lg font-semibold text-gray-800 mb-3">What You'll Learn</h2>
-              <ul className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                <li className="flex items-start">
-                  <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 flex-shrink-0" />
-                  <span className="ml-2 text-gray-600">Handle emergency situations with confidence</span>
-                </li>
-                <li className="flex items-start">
-                  <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 flex-shrink-0" />
-                  <span className="ml-2 text-gray-600">Perform basic first aid procedures</span>
-                </li>
-                <li className="flex items-start">
-                  <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 flex-shrink-0" />
-                  <span className="ml-2 text-gray-600">Administer CPR correctly</span>
-                </li>
-                <li className="flex items-start">
-                  <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 flex-shrink-0" />
-                  <span className="ml-2 text-gray-600">Use AED devices effectively</span>
-                </li>
-                <li className="flex items-start">
-                  <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 flex-shrink-0" />
-                  <span className="ml-2 text-gray-600">Respond to various injury scenarios</span>
-                </li>
-                <li className="flex items-start">
-                  <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 flex-shrink-0" />
-                  <span className="ml-2 text-gray-600">Meet workplace safety requirements</span>
-                </li>
-              </ul>
-            </div>
-            
-            <div>
-              <h2 className="text-lg font-semibold text-gray-800 mb-3">Course Content</h2>
-              <div className="border border-gray-200 rounded-lg overflow-hidden">
-                {courseModules.map((module, index) => (
-                  <div key={module.id} className={`flex items-center justify-between p-4 ${
-                    index !== courseModules.length - 1 ? 'border-b border-gray-200' : ''
-                  }`}>
-                    <div className="flex items-start">
-                      <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
-                        <span className="text-sm font-medium text-blue-600">{module.id}</span>
+        <div className="p-6">
+          {activeTab === 'overview' && (
+            <div className="space-y-6">
+              {/* Course Description */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">Descrizione del Corso</h3>
+                <p className="text-gray-600 leading-relaxed">
+                  {course.description || 'Questo corso fornisce una formazione completa sui principi fondamentali della sicurezza sul lavoro, in conformità con le normative vigenti. I partecipanti acquisiranno le competenze necessarie per identificare i rischi, implementare misure preventive e gestire situazioni di emergenza nel proprio ambiente lavorativo.'}
+                </p>
+              </div>
+
+              {/* What You'll Learn */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center">
+                  <Target className="h-5 w-5 mr-2 text-blue-600" />
+                  Cosa Imparerai
+                </h3>
+                <ul className="space-y-2">
+                  <li className="flex items-start">
+                    <CheckCircle className="h-5 w-5 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
+                    <span className="text-gray-600">Principi fondamentali della sicurezza sul lavoro</span>
+                  </li>
+                  <li className="flex items-start">
+                    <CheckCircle className="h-5 w-5 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
+                    <span className="text-gray-600">Identificazione e valutazione dei rischi</span>
+                  </li>
+                  <li className="flex items-start">
+                    <CheckCircle className="h-5 w-5 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
+                    <span className="text-gray-600">Utilizzo corretto dei dispositivi di protezione individuale</span>
+                  </li>
+                  <li className="flex items-start">
+                    <CheckCircle className="h-5 w-5 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
+                    <span className="text-gray-600">Procedure di emergenza e primo soccorso</span>
+                  </li>
+                  <li className="flex items-start">
+                    <CheckCircle className="h-5 w-5 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
+                    <span className="text-gray-600">Normative e regolamenti vigenti</span>
+                  </li>
+                </ul>
+              </div>
+
+              {/* Course Content */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">Contenuto del Corso</h3>
+                <div className="space-y-3">
+                  {mockModules.map((module, index) => (
+                    <div key={module.id} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center">
+                          <div className="h-8 w-8 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-sm font-medium mr-3">
+                            {index + 1}
+                          </div>
+                          <div>
+                            <h4 className="font-medium text-gray-900">{module.title}</h4>
+                            <p className="text-sm text-gray-600">{module.description}</p>
+                          </div>
+                        </div>
+                        <span className="text-sm text-gray-500 font-medium">{module.duration}</span>
                       </div>
-                      <div className="ml-3">
-                        <h3 className="text-sm font-medium text-gray-800">{module.title}</h3>
-                        <div className="flex items-center mt-1">
-                          <Clock className="h-3.5 w-3.5 text-gray-400" />
-                          <span className="ml-1 text-xs text-gray-500">{module.duration}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'sessions' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-gray-900">Sessioni Programmate</h3>
+                <Button variant="primary" size="sm">
+                  <Calendar className="h-4 w-4 mr-1" />
+                  Nuova Sessione
+                </Button>
+              </div>
+              {mockSessions.length > 0 ? (
+                <div className="space-y-4">
+                  {mockSessions.map((session) => (
+                    <div key={session.id} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-start">
+                          <Calendar className="h-5 w-5 text-blue-600 mr-3 mt-0.5" />
+                          <div>
+                            <h4 className="font-medium text-gray-900">
+                              {new Date(session.startDate).toLocaleDateString('it-IT')} - {new Date(session.endDate).toLocaleDateString('it-IT')}
+                            </h4>
+                            <div className="mt-1 space-y-1">
+                              <p className="text-sm text-gray-600 flex items-center">
+                                <MapPin className="h-4 w-4 mr-1" />
+                                {session.location}
+                              </p>
+                              <p className="text-sm text-gray-600 flex items-center">
+                                <User className="h-4 w-4 mr-1" />
+                                Formatore: {session.instructor}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-medium text-gray-900">
+                            {session.availableSpots}/{session.totalSpots} posti disponibili
+                          </p>
+                          <div className="w-24 bg-gray-200 rounded-full h-2 mt-2">
+                            <div 
+                              className="bg-blue-600 h-2 rounded-full" 
+                              style={{ width: `${((session.totalSpots - session.availableSpots) / session.totalSpots) * 100}%` }}
+                            ></div>
+                          </div>
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center">
-                      <span className="text-xs font-medium text-gray-500">
-                        {index < 2 ? 'Preview Available' : 'Full Access'}
-                      </span>
-                      <BookOpen className={`ml-2 h-4 w-4 ${
-                        index < 2 ? 'text-blue-500' : 'text-gray-400'
-                      }`} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            
-            <div>
-              <h2 className="text-lg font-semibold text-gray-800 mb-3">Requirements</h2>
-              <ul className="space-y-2">
-                <li className="flex items-start">
-                  <div className="h-5 w-5 text-blue-500 flex items-center justify-center mt-0.5">•</div>
-                  <span className="ml-2 text-gray-600">No prerequisites required - this course is suitable for beginners</span>
-                </li>
-                <li className="flex items-start">
-                  <div className="h-5 w-5 text-blue-500 flex items-center justify-center mt-0.5">•</div>
-                  <span className="ml-2 text-gray-600">Participants should be physically able to perform CPR techniques</span>
-                </li>
-                <li className="flex items-start">
-                  <div className="h-5 w-5 text-blue-500 flex items-center justify-center mt-0.5">•</div>
-                  <span className="ml-2 text-gray-600">Comfortable clothing recommended for practical exercises</span>
-                </li>
-              </ul>
-            </div>
-            
-            <div>
-              <h2 className="text-lg font-semibold text-gray-800 mb-3">Certification</h2>
-              <div className="bg-blue-50 p-4 rounded-lg flex items-start">
-                <Award className="h-10 w-10 text-blue-600 mt-1 flex-shrink-0" />
-                <div className="ml-4">
-                  <h3 className="font-medium text-gray-800">Official First Aid Certification</h3>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Upon successful completion of this course, participants will receive an official First Aid certification valid for 2 years.
-                    This certification meets OSHA workplace requirements and is recognized nationwide.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'sessions' && (
-          <div>
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-gray-800">Upcoming Sessions</h2>
-              <Button
-                variant="primary"
-                shape="pill"
-                leftIcon={<Calendar className="h-4 w-4" />}
-                onClick={() => {/* Implementare logica */}}
-              >
-                Nuova sessione
-              </Button>
-            </div>
-
-            <div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 md:rounded-lg">
-              <table className="min-w-full divide-y divide-gray-300">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900">
-                      Date
-                    </th>
-                    <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
-                      Time
-                    </th>
-                    <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
-                      Location
-                    </th>
-                    <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
-                      Instructor
-                    </th>
-                    <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
-                      Availability
-                    </th>
-                    <th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-6">
-                      <span className="sr-only">Actions</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 bg-white">
-                  {courseSessions.map((session) => (
-                    <tr key={session.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900">
-                        {session.date}
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
-                        {session.time}
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
-                        {session.location}
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
-                        {session.instructor}
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-4 text-sm">
-                        <span className={`${session.available > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {session.available} / {session.seats} seats available
-                        </span>
-                      </td>
-                      <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium">
-                        <button className="text-blue-600 hover:text-blue-900 transition-colors">
-                          View Details
-                        </button>
-                      </td>
-                    </tr>
                   ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="mt-8 p-4 bg-amber-50 rounded-full">
-              <div className="flex items-start">
-                <Calendar className="h-6 w-6 text-amber-600 mt-1 flex-shrink-0" />
-                <div className="ml-3">
-                  <h3 className="text-sm font-medium text-gray-800">Session Information</h3>
-                  <p className="text-sm text-gray-600 mt-1">
-                    All sessions include the same curriculum and hands-on practice. Participants only need to attend one full-day session to complete the course. 
-                    Additional dates will be added based on demand.
-                  </p>
                 </div>
+              ) : (
+                <div className="text-center py-8">
+                  <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-600">Nessuna sessione programmata al momento.</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'enrolled' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-gray-900">Dipendenti Iscritti</h3>
+                <Button variant="primary" size="sm">
+                  <Users className="h-4 w-4 mr-1" />
+                  Aggiungi Dipendente
+                </Button>
               </div>
+              {mockEnrolledEmployees.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Dipendente
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Azienda
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Data Iscrizione
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Stato
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {mockEnrolledEmployees.map((employee) => (
+                        <tr key={employee.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="h-8 w-8 bg-gradient-to-r from-green-500 to-green-600 rounded-full flex items-center justify-center">
+                                <span className="text-xs font-bold text-white">
+                                  {employee.firstName.charAt(0)}{employee.lastName.charAt(0)}
+                                </span>
+                              </div>
+                              <div className="ml-3">
+                                <div className="text-sm font-medium text-gray-900">
+                                  {employee.firstName} {employee.lastName}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-600">{employee.company}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-600">
+                              {new Date(employee.enrollmentDate).toLocaleDateString('it-IT')}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                              employee.status === 'Confermato' 
+                                ? 'bg-green-100 text-green-800' 
+                                : 'bg-yellow-100 text-yellow-800'
+                            }`}>
+                              {employee.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-600">Nessun dipendente iscritto al momento.</p>
+                </div>
+              )}
             </div>
-          </div>
-        )}
-
-        {activeTab === 'employees' && (
-          <div>
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-gray-800">Enrolled Employees</h2>
-              <Button
-                variant="primary"
-                shape="pill"
-                leftIcon={<UserPlus className="h-4 w-4" />}
-                onClick={() => {/* Implementare logica */}}
-              >
-                Iscrivi Dipendenti
-              </Button>
-            </div>
-
-            <div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 md:rounded-lg">
-              <table className="min-w-full divide-y divide-gray-300">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900">
-                      Employee
-                    </th>
-                    <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
-                      Company
-                    </th>
-                    <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
-                      Status
-                    </th>
-                    <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
-                      Completion Date
-                    </th>
-                    <th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-6">
-                      <span className="sr-only">Actions</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 bg-white">
-                  {enrolledEmployees.map((employee) => (
-                    <tr key={employee.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900">
-                        {employee.name}
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
-                        {employee.company}
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-4 text-sm">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          employee.status === 'Completed' 
-                            ? 'bg-green-100 text-green-800' 
-                            : employee.status === 'In Progress'
-                              ? 'bg-blue-100 text-blue-800'
-                              : 'bg-gray-100 text-gray-800'
-                        }`}>
-                          {employee.status}
-                        </span>
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
-                        {employee.completionDate}
-                      </td>
-                      <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium">
-                        <Button
-                          variant="outline"
-                          shape="pill"
-                          size="sm"
-                          leftIcon={employee.status === 'Completed' ? <Download className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
-                        >
-                          {employee.status === 'Completed' ? 'Scarica Certificato' : 'Visualizza Dettagli'}
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="mt-8 p-4 bg-blue-50 rounded-full flex items-start">
-              <MessageCircle className="h-6 w-6 text-blue-600 mt-1 flex-shrink-0" />
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-gray-800">Feedback Summary</h3>
-                <p className="text-sm text-gray-600 mt-1">
-                  Overall, course participants have rated this course {course.rating}/5 with positive feedback on the practical exercises 
-                  and instructor knowledge. Most commonly requested improvement is additional practice time.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );

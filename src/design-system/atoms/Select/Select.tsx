@@ -39,9 +39,9 @@ const sizeStyles: Record<SelectSize, string> = {
 
 // Variant styles
 const variantStyles: Record<SelectVariant, string> = {
-  default: 'border-gray-300 bg-white focus:border-blue-500 focus:ring-blue-500',
-  outlined: 'border-2 border-gray-300 bg-white focus:border-blue-500 focus:ring-blue-500',
-  filled: 'border-gray-200 bg-gray-50 focus:border-blue-500 focus:ring-blue-500 focus:bg-white'
+  default: 'border-gray-300 bg-white focus:border-primary-500 focus:ring-primary-500',
+    outlined: 'border-2 border-gray-300 bg-white focus:border-primary-500 focus:ring-primary-500',
+    filled: 'border-gray-200 bg-gray-50 focus:border-primary-500 focus:ring-primary-500 focus:bg-white'
 };
 
 /**

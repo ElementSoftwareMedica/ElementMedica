@@ -7,7 +7,7 @@ import React, { forwardRef } from 'react';
 import { cn } from '../../utils';
 
 // Input variants and sizes
-export type InputVariant = 'default' | 'filled' | 'outline';
+export type InputVariant = 'default' | 'filled' | 'outline' | 'flushed';
 export type InputSize = 'sm' | 'md' | 'lg';
 export type InputState = 'default' | 'error' | 'success' | 'disabled';
 
@@ -40,23 +40,27 @@ export interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElem
 const variantStyles: Record<InputVariant, string> = {
   default: `
     border border-gray-300 bg-white
-    focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20
+    focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20
   `,
   filled: `
-    border border-transparent bg-gray-100
-    focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20 focus:bg-white
+    border border-transparent bg-gray-50
+    focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:bg-white
   `,
   outline: `
     border-2 border-gray-300 bg-transparent
-    focus:border-blue-500 focus:ring-0
+    focus:border-primary-500 focus:ring-0
+  `,
+  flushed: `
+    border-0 border-b-2 border-gray-300 bg-transparent rounded-none
+    focus:border-primary-500 focus:ring-0
   `,
 };
 
 // Size styles
 const sizeStyles: Record<InputSize, string> = {
   sm: 'px-3 py-1.5 text-sm min-h-[32px]',
-  md: 'px-3 py-2 text-sm min-h-[40px]',
-  lg: 'px-4 py-3 text-base min-h-[48px]',
+  md: 'px-3 py-2 text-base min-h-[40px]',
+  lg: 'px-4 py-3 text-lg min-h-[48px]',
 };
 
 // State styles
@@ -64,7 +68,7 @@ const stateStyles: Record<InputState, string> = {
   default: '',
   error: 'border-red-500 focus:border-red-500 focus:ring-red-500',
   success: 'border-green-500 focus:border-green-500 focus:ring-green-500',
-  disabled: 'bg-gray-50 text-gray-500 cursor-not-allowed border-gray-200',
+  disabled: '!bg-gray-50 text-gray-500 cursor-not-allowed',
 };
 
 // Base input styles
@@ -101,7 +105,6 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
       leftIcon,
       rightIcon,
       fullWidth = true,
-      required = false,
       disabled,
       className,
       id,
@@ -110,14 +113,18 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
     ref
   ) => {
     const inputId = id || `input-${Math.random().toString(36).substr(2, 9)}`;
-    const currentState = disabled ? 'disabled' : errorMessage ? 'error' : successMessage ? 'success' : state;
+    const currentState = errorMessage ? 'error' : successMessage ? 'success' : state;
     const hasIcons = leftIcon || rightIcon;
+    const messageId = `${inputId}-message`;
+    const hasMessage = errorMessage || successMessage || helperText;
 
     const inputClasses = cn(
       baseStyles,
       variantStyles[variant],
       sizeStyles[size],
       stateStyles[currentState],
+      disabled && stateStyles.disabled,
+      props.readOnly && '!bg-gray-50',
       hasIcons && 'flex items-center',
       leftIcon && 'pl-10',
       rightIcon && 'pr-10',
@@ -136,9 +143,14 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         <input
           ref={ref}
           id={inputId}
+          type="text"
           disabled={disabled}
           className={inputClasses}
+          aria-describedby={hasMessage ? messageId : undefined}
+          aria-invalid={currentState === 'error' ? 'true' : undefined}
           {...props}
+          onChange={disabled ? undefined : props.onChange}
+          onFocus={disabled ? undefined : props.onFocus}
         />
         
         {rightIcon && (
@@ -152,7 +164,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
     const renderMessage = () => {
       if (errorMessage) {
         return (
-          <p className={cn(helperTextStyles, 'text-red-600')}>
+          <p id={messageId} className={cn(helperTextStyles, 'text-red-600')}>
             {errorMessage}
           </p>
         );
@@ -160,7 +172,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
       
       if (successMessage) {
         return (
-          <p className={cn(helperTextStyles, 'text-green-600')}>
+          <p id={messageId} className={cn(helperTextStyles, 'text-green-600')}>
             {successMessage}
           </p>
         );
@@ -168,7 +180,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
       
       if (helperText) {
         return (
-          <p className={cn(helperTextStyles, 'text-gray-500')}>
+          <p id={messageId} className={cn(helperTextStyles, 'text-gray-500')}>
             {helperText}
           </p>
         );
@@ -182,7 +194,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         <div className={cn('w-full', !fullWidth && 'w-auto')}>
           <label htmlFor={inputId} className={labelStyles}>
             {label}
-            {required && <span className="text-red-500 ml-1">*</span>}
+            {props.required && <span className="text-red-500 ml-1">*</span>}
           </label>
           {renderInput()}
           {renderMessage()}

@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { 
+  ChevronLeft,
+  ChevronRight,
+  Edit
+} from 'lucide-react';
 import { CourseForm } from '../../components/courses/CourseForm';
 import { useToast } from '../../hooks/useToast';
 import { getCourse, updateCourse } from '../../services/courses';

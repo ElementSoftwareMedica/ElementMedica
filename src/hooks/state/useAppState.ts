@@ -1,5 +1,6 @@
 import { useContext, useMemo, useCallback } from 'react';
 import { AppStateContext } from '../../context/AppStateContext';
+import type { AppStateContextType } from '../../context/AppStateContext';
 
 /**
  * Hook ottimizzato per lo stato globale dell'applicazione
@@ -19,7 +20,7 @@ export const useAppState = () => {
  * Hook con selettore per ottimizzare le performance
  * Permette di sottoscriversi solo a parti specifiche dello stato
  */
-export const useAppStateSelector = <T>(selector: (state: any) => T) => {
+export const useAppStateSelector = <T>(selector: (state: AppStateContextType) => T) => {
   const state = useAppState();
   
   return useMemo(() => selector(state), [selector, state]);
@@ -30,26 +31,23 @@ export const useAppStateSelector = <T>(selector: (state: any) => T) => {
  */
 export const useLanguage = () => {
   return useAppStateSelector(state => ({
-    language: state.language,
+    language: state.state.language,
     setLanguage: state.setLanguage
   }));
 };
 
 export const useTheme = () => {
   return useAppStateSelector(state => ({
-    theme: state.theme,
-    setTheme: state.setTheme,
-    isDarkMode: state.theme === 'dark'
+    theme: state.state.theme,
+    toggleTheme: state.toggleTheme,
+    isDarkMode: state.state.theme === 'dark'
   }));
 };
 
 export const useSidebar = () => {
   return useAppStateSelector(state => ({
-    isExpanded: state.sidebarExpanded,
-    setSidebarExpanded: state.setSidebarExpanded,
-    toggleSidebar: useCallback(() => {
-      state.setSidebarExpanded(!state.sidebarExpanded);
-    }, [state.sidebarExpanded, state.setSidebarExpanded])
+    isExpanded: state.state.sidebarExpanded,
+    toggleSidebar: state.toggleSidebar
   }));
 };
 
@@ -65,22 +63,18 @@ export const useAttestatiProgress = () => {
  * Hook per azioni globali dell'applicazione
  */
 export const useAppActions = () => {
-  const { setLanguage, setTheme, setSidebarExpanded, setAttestatiGenerationProgress } = useAppState();
+  const { setLanguage, toggleTheme, toggleSidebar, setAttestatiGenerationProgress } = useAppState();
   
   return useMemo(() => ({
     // Azioni per il tema
-    toggleTheme: () => {
-      setTheme(prev => prev === 'light' ? 'dark' : 'light');
-    },
+    toggleTheme,
     
     // Azioni per la lingua
     switchToItalian: () => setLanguage('it'),
     switchToEnglish: () => setLanguage('en'),
     
     // Azioni per la sidebar
-    expandSidebar: () => setSidebarExpanded(true),
-    collapseSidebar: () => setSidebarExpanded(false),
-    toggleSidebar: () => setSidebarExpanded(prev => !prev),
+    toggleSidebar,
     
     // Azioni per il progresso
     startAttestatiGeneration: () => setAttestatiGenerationProgress(0),
@@ -88,7 +82,7 @@ export const useAppActions = () => {
     completeAttestatiGeneration: () => setAttestatiGenerationProgress(100),
     resetAttestatiProgress: () => setAttestatiGenerationProgress(0),
     
-  }), [setLanguage, setTheme, setSidebarExpanded, setAttestatiGenerationProgress]);
+  }), [setLanguage, toggleTheme, toggleSidebar, setAttestatiGenerationProgress]);
 };
 
 export default useAppState;

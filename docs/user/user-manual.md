@@ -1,12 +1,12 @@
-# User Manual
+# User Manual - Sistema Unificato Person
 
-**Versione:** 1.0  
-**Data:** 27 Gennaio 2025  
-**Autore:** Team Development
+**Versione:** 2.0 Post-Refactoring  
+**Data:** 25 Gennaio 2025  
+**Sistema:** GDPR-Compliant Person Management System
 
 ## 📋 Panoramica
 
-Benvenuto nel Sistema di Gestione Documenti! Questo manuale ti guiderà attraverso tutte le funzionalità disponibili per gestire i tuoi documenti in modo efficiente e sicuro.
+Benvenuto nel Sistema Unificato Person! Questo manuale ti guiderà attraverso tutte le funzionalità disponibili per gestire persone, aziende, corsi e documenti in modo efficiente e conforme al GDPR.
 
 ## 🚀 Primi Passi
 
@@ -14,190 +14,230 @@ Benvenuto nel Sistema di Gestione Documenti! Questo manuale ti guiderà attraver
 
 1. **Apertura dell'applicazione**
    - Apri il browser web
-   - Naviga all'indirizzo fornito dal tuo amministratore
-   - Vedrai la schermata di login
+   - Naviga all'indirizzo: http://localhost:4003 (ambiente di sviluppo)
+   - Vedrai la schermata di login del Sistema Person
 
-2. **Login**
-   - Inserisci la tua email
-   - Inserisci la password
-   - Clicca su "Accedi"
-   - Se è la prima volta, potresti dover cambiare la password temporanea
+2. **🔑 Credenziali Test Standard (OBBLIGATORIE)**
+   - **Email:** `admin@example.com`
+   - **Password:** `Admin123!`
+   - **Ruolo:** ADMIN (accesso completo al sistema)
+   - **Permessi:** Gestione completa di Person, Company, Course, Documents
 
 3. **Dashboard principale**
    - Dopo il login, vedrai la dashboard con:
-     - Documenti recenti
-     - Statistiche di utilizzo
-     - Notifiche importanti
-     - Accesso rapido alle funzioni principali
+     - Statistiche persone attive
+     - Corsi programmati
+     - Aziende registrate
+     - Accesso rapido alle sezioni principali
 
 ### Interfaccia Utente
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ [Logo] Sistema Gestione Documenti    [🔔] [👤] [⚙️] [🚪]    │
+│ [Logo] Sistema Person GDPR           [🔔] [👤] [⚙️] [🚪]    │
 ├─────────────────────────────────────────────────────────────┤
-│ 📁 Documenti │ 🔍 Ricerca │ 📊 Dashboard │ ⚙️ Impostazioni │
+│ 👥 Persone │ 🏢 Aziende │ 📚 Corsi │ 📊 Dashboard │ ⚙️ Admin │
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
 │  📊 Dashboard                                               │
 │  ┌─────────────────┐  ┌─────────────────┐                 │
-│  │ Documenti Recenti│  │ Statistiche     │                 │
-│  │ • File1.pdf     │  │ 📄 125 documenti│                 │
-│  │ • Report.docx   │  │ 📁 15 cartelle  │                 │
-│  │ • Contratto.pdf │  │ 💾 2.5 GB usati │                 │
+│  │ Persone Attive  │  │ Corsi Attivi    │                 │
+│  │ 👥 1,247        │  │ 📚 45 corsi     │                 │
+│  │ 📈 +12 oggi     │  │ 🎓 156 iscritti │                 │
 │  └─────────────────┘  └─────────────────┘                 │
 │                                                             │
 │  ┌─────────────────────────────────────────────────────┐   │
-│  │ Attività Recenti                                    │   │
-│  │ • Mario ha caricato "Budget 2025.xlsx"             │   │
-│  │ • Anna ha condiviso "Presentazione.pptx"           │   │
-│  │ • Luca ha modificato "Relazione Q4.docx"           │   │
+│  │ Attività Recenti (GDPR Tracked)                    │   │
+│  │ • Mario ha aggiornato profilo persona              │   │
+│  │ • Anna ha creato nuovo corso "Sicurezza"           │   │
+│  │ • Luca ha registrato nuova azienda                 │   │
 │  └─────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-## 📁 Gestione Documenti
+## 👥 Gestione Persone (GDPR-Compliant)
 
-### Caricamento Documenti
+### Visualizzazione Persone
 
-#### Metodo 1: Drag & Drop
-1. Vai alla sezione "Documenti"
-2. Trascina i file dalla tua cartella direttamente nell'area di caricamento
-3. I file verranno caricati automaticamente
-4. Vedrai una barra di progresso per ogni file
+Il sistema utilizza il **GDPREntityTemplate** unificato per la gestione delle persone con piena conformità GDPR.
 
-#### Metodo 2: Pulsante Carica
-1. Clicca sul pulsante "📤 Carica Documento"
-2. Seleziona i file dal tuo computer
-3. Aggiungi informazioni opzionali:
-   - **Nome:** Nome personalizzato per il documento
-   - **Descrizione:** Breve descrizione del contenuto
-   - **Cartella:** Seleziona la cartella di destinazione
-   - **Tag:** Aggiungi tag per facilitare la ricerca
-
-#### Formati Supportati
-- **Documenti:** PDF, DOC, DOCX, TXT, RTF
-- **Fogli di calcolo:** XLS, XLSX, CSV
-- **Presentazioni:** PPT, PPTX
-- **Immagini:** JPG, PNG, GIF, SVG
-- **Altri:** ZIP, RAR
-
-#### Limiti di Caricamento
-- **Dimensione massima per file:** 10 MB
-- **Numero massimo di file simultanei:** 10
-- **Spazio totale disponibile:** Varia in base al piano
-
-### Organizzazione con Cartelle
-
-#### Creazione Cartelle
-1. Clicca su "📁 Nuova Cartella"
-2. Inserisci il nome della cartella
-3. Seleziona la cartella padre (opzionale)
-4. Clicca "Crea"
-
-#### Struttura Cartelle
-```
-📁 Documenti Aziendali
-├── 📁 Amministrazione
-│   ├── 📁 Contratti
-│   ├── 📁 Fatture
-│   └── 📁 Corrispondenza
-├── 📁 Progetti
-│   ├── 📁 Progetto Alpha
-│   └── 📁 Progetto Beta
-└── 📁 Risorse Umane
-    ├── 📁 Curriculum
-    └── 📁 Formazione
-```
-
-#### Spostamento Documenti
-1. **Drag & Drop:** Trascina il documento nella cartella desiderata
-2. **Menu contestuale:** 
-   - Clicca destro sul documento
-   - Seleziona "Sposta in..."
-   - Scegli la cartella di destinazione
-
-### Visualizzazione Documenti
-
-#### Vista Lista
+#### Interfaccia Template GDPR
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ Nome                │ Tipo │ Dimensione │ Modificato       │
+│ 👥 Gestione Persone                    [🔍] [⚙️] [➕]        │
 ├─────────────────────────────────────────────────────────────┤
-│ 📄 Relazione Q4.pdf │ PDF  │ 2.3 MB     │ 25/01/2025 14:30│
-│ 📊 Budget 2025.xlsx │ Excel│ 856 KB     │ 24/01/2025 09:15│
-│ 📝 Note riunione.txt│ Testo│ 12 KB      │ 23/01/2025 16:45│
+│ [📊 Tabella] [🔲 Griglia]  [➕ Aggiungi ▼] [📥 Importa CSV] │
+│ [🔍 Filtra] [📋 Colonne] [✏️ Modifica Batch]               │
+├─────────────────────────────────────────────────────────────┤
+│ 🔍 [Cerca persone...]                                      │
+├─────────────────────────────────────────────────────────────┤
+│ ☐ │Nome           │Email              │Ruolo    │Stato    │
+│ ☐ │Mario Rossi    │mario@company.com  │EMPLOYEE │Attivo   │
+│ ☐ │Anna Bianchi   │anna@company.com   │MANAGER  │Attivo   │
+│ ☐ │Luca Verdi     │luca@company.com   │TRAINER  │Sospeso  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### Componenti UI Integrati
+- **ViewModeToggle:** Passa tra vista tabella e griglia
+- **AddEntityDropdown:** Aggiungi singola persona, importa CSV, scarica template
+- **FilterPanel:** Filtri avanzati per ruolo, stato, data creazione
+- **ColumnSelector:** Personalizza colonne visibili
+- **BatchEditButton:** Azioni multiple su persone selezionate
+- **SearchBar:** Ricerca in tempo reale
+
+#### Permessi GDPR
+- **persons:read** - Visualizzazione dati persone
+- **persons:write** - Creazione/modifica persone
+- **persons:delete** - Eliminazione (soft delete)
+- **persons:export** - Esportazione dati GDPR
+
+### Aggiunta Nuove Persone
+
+#### Creazione Singola Persona
+1. Clicca su "➕ Aggiungi" → "👤 Nuova Persona"
+2. Compila il form GDPR-compliant:
+   ```
+   ┌─────────────────────────────────────────────────────────────┐
+   │ ➕ Nuova Persona (GDPR-Compliant)                          │
+   ├─────────────────────────────────────────────────────────────┤
+   │ Nome: [________________]  Cognome: [________________]       │
+   │ Email: [_________________________________________]          │
+   │ Telefono: [_________________]                              │
+   │ Ruolo: [EMPLOYEE ▼] [MANAGER] [TRAINER] [ADMIN]           │
+   │                                                             │
+   │ 🔒 Consensi GDPR (Obbligatori)                            │
+   │ ☑️ Consenso trattamento dati essenziali                   │
+   │ ☐ Consenso marketing                                       │
+   │ ☐ Consenso profilazione                                    │
+   │                                                             │
+   │ 📅 Data Retention: [7 anni ▼]                             │
+   │ 📝 Note: [_________________________]                       │
+   │                                                             │
+   │ [Annulla] [Crea Persona]                                   │
+   └─────────────────────────────────────────────────────────────┘
+   ```
+
+#### Importazione CSV
+1. Clicca su "➕ Aggiungi" → "📥 Importa da CSV"
+2. Scarica template CSV con campi GDPR
+3. Compila il file con dati persone
+4. Carica e verifica anteprima
+5. Conferma importazione con audit log automatico
+
+### Modalità di Visualizzazione
+
+#### Vista Tabella (Default)
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Nome              │Email              │Ruolo    │Stato    │
+├─────────────────────────────────────────────────────────────┤
+│ 👤 Mario Rossi    │mario@company.com  │EMPLOYEE │🟢 Attivo│
+│ 👤 Anna Bianchi   │anna@company.com   │MANAGER  │🟢 Attivo│
+│ 👤 Luca Verdi     │luca@company.com   │TRAINER  │🔴 Sospeso│
 └─────────────────────────────────────────────────────────────┘
 ```
 
 #### Vista Griglia
 ```
 ┌─────────────┐ ┌─────────────┐ ┌─────────────┐
-│ 📄          │ │ 📊          │ │ 📝          │
-│ Relazione   │ │ Budget      │ │ Note        │
-│ Q4.pdf      │ │ 2025.xlsx   │ │ riunione.txt│
-│ 2.3 MB      │ │ 856 KB      │ │ 12 KB       │
+│ 👤          │ │ 👤          │ │ 👤          │
+│ Mario Rossi │ │ Anna Bianchi│ │ Luca Verdi  │
+│ EMPLOYEE    │ │ MANAGER     │ │ TRAINER     │
+│ 🟢 Attivo   │ │ 🟢 Attivo   │ │ 🔴 Sospeso  │
 └─────────────┘ └─────────────┘ └─────────────┘
 ```
 
-#### Anteprima Documenti
-- **PDF:** Visualizzazione diretta nel browser
-- **Immagini:** Anteprima a dimensione reale
-- **Documenti Office:** Anteprima con Google Docs Viewer
-- **Testo:** Visualizzazione diretta del contenuto
+#### Dettagli Persona GDPR
+- **Dati personali:** Nome, cognome, email, telefono
+- **Informazioni professionali:** Ruolo, azienda, data assunzione
+- **Consensi GDPR:** Stato consensi e date
+- **Audit trail:** Cronologia modifiche automatica
+- **Data retention:** Scadenza conservazione dati
 
-### Gestione Versioni
+## 🏢 Gestione Aziende
 
-#### Caricamento Nuova Versione
-1. Clicca sul documento esistente
-2. Seleziona "📤 Carica Nuova Versione"
-3. Scegli il file aggiornato
-4. Aggiungi note sulla versione (opzionale)
-5. Clicca "Carica"
+### Visualizzazione Aziende
 
-#### Cronologia Versioni
+Le aziende utilizzano lo stesso **GDPREntityTemplate** con configurazione specifica per entità aziendali.
+
+#### Interfaccia Aziende
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ Versioni di "Contratto_Servizi.pdf"                        │
+│ 🏢 Gestione Aziende                    [🔍] [⚙️] [➕]        │
 ├─────────────────────────────────────────────────────────────┤
-│ v3.0 │ 27/01/2025 10:30 │ Mario R. │ Aggiornate clausole │
-│ v2.1 │ 25/01/2025 14:15 │ Anna B.  │ Correzioni minori  │
-│ v2.0 │ 20/01/2025 09:00 │ Luca M.  │ Revisione completa │
-│ v1.0 │ 15/01/2025 16:30 │ Mario R. │ Versione iniziale  │
+│ [📊 Tabella] [🔲 Griglia]  [➕ Aggiungi ▼] [📥 Importa CSV] │
+│ [🔍 Filtra] [📋 Colonne] [✏️ Modifica Batch]               │
+├─────────────────────────────────────────────────────────────┤
+│ ☐ │Nome Azienda      │P.IVA         │Settore    │Dipendenti│
+│ ☐ │Acme Corp         │12345678901   │Tech       │150       │
+│ ☐ │Beta Industries   │09876543210   │Manufacturing│75     │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-#### Ripristino Versione Precedente
-1. Apri la cronologia versioni
-2. Clicca su "🔄 Ripristina" accanto alla versione desiderata
-3. Conferma l'operazione
-4. La versione selezionata diventerà la versione corrente
+#### Permessi Aziende
+- **companies:read** - Visualizzazione dati aziende
+- **companies:write** - Creazione/modifica aziende
+- **companies:delete** - Eliminazione aziende
+- **companies:export** - Esportazione dati aziende
 
-## 🔍 Ricerca Documenti
+### Aggiunta Nuove Aziende
 
-### Ricerca Semplice
-1. Utilizza la barra di ricerca in alto
-2. Digita parole chiave:
-   - Nome del file
-   - Contenuto del documento
-   - Tag associati
-   - Nome dell'autore
-3. Premi Invio o clicca sulla lente di ingrandimento
+#### Creazione Singola Azienda
+1. Clicca su "➕ Aggiungi" → "🏢 Nuova Azienda"
+2. Compila i dati aziendali:
+   - **Ragione sociale**
+   - **Partita IVA**
+   - **Codice fiscale**
+   - **Indirizzo completo**
+   - **Settore di attività**
+   - **Numero dipendenti**
+   - **Referente aziendale**
 
-### Ricerca Avanzata
+## 📚 Gestione Corsi
 
-#### Filtri Disponibili
-- **Tipo di file:** PDF, Word, Excel, PowerPoint, Immagini
-- **Dimensione:** Piccoli (<1MB), Medi (1-10MB), Grandi (>10MB)
-- **Data creazione:** Oggi, Ultima settimana, Ultimo mese, Personalizzato
-- **Autore:** Seleziona da lista utenti
-- **Cartella:** Cerca solo in cartelle specifiche
-- **Tag:** Filtra per tag specifici
+### Visualizzazione Corsi
 
-#### Operatori di Ricerca
-- **"frase esatta"** - Cerca la frase esatta
-- **parola1 AND parola2** - Entrambe le parole devono essere presenti
-- **parola1 OR parola2** - Almeno una delle parole deve essere presente
+I corsi utilizzano il **GDPREntityTemplate** con funzionalità specifiche per la formazione.
+
+#### Interfaccia Corsi
+```
+┌─────────────────────────────────────────────────────────────┐
+│ 📚 Gestione Corsi                      [🔍] [⚙️] [➕]        │
+├─────────────────────────────────────────────────────────────┤
+│ [📊 Tabella] [🔲 Griglia]  [➕ Aggiungi ▼] [📥 Importa CSV] │
+│ [🔍 Filtra] [📋 Colonne] [✏️ Modifica Batch]               │
+├─────────────────────────────────────────────────────────────┤
+│ ☐ │Nome Corso        │Trainer       │Durata    │Iscritti  │
+│ ☐ │Sicurezza Lavoro  │Mario Rossi   │8 ore     │25        │
+│ ☐ │Excel Avanzato    │Anna Bianchi  │16 ore    │15        │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### Permessi Corsi
+- **courses:read** - Visualizzazione corsi
+- **courses:write** - Creazione/modifica corsi
+- **courses:delete** - Eliminazione corsi
+- **courses:export** - Esportazione dati corsi
+
+### Funzionalità Avanzate
+
+#### Ricerca Unificata
+- **Ricerca globale** attraverso tutte le entità (Persone, Aziende, Corsi)
+- **Filtri intelligenti** basati sui permessi utente
+- **Ricerca GDPR-compliant** con audit automatico
+
+#### Operazioni Batch
+- **Selezione multipla** con checkbox
+- **Azioni di massa** su entità selezionate
+- **Esportazione GDPR** con consensi verificati
+- **Eliminazione batch** con soft delete
+
+#### Audit Trail GDPR
+- **Tracciamento automatico** di tutte le operazioni
+- **Log delle modifiche** con timestamp e utente
+- **Cronologia accessi** ai dati personali
+- **Report conformità** GDPR automatici
 - **-parola** - Esclude documenti contenenti questa parola
 - **file:pdf** - Cerca solo file PDF
 - **author:mario** - Cerca documenti creati da Mario

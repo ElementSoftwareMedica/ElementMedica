@@ -10,7 +10,6 @@ import {
   Grid,
   Card,
   CardContent,
-  CardActions,
   Button,
   Alert,
   Chip,
@@ -25,7 +24,6 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Paper,
   LinearProgress,
   Tooltip,
   IconButton,
@@ -34,11 +32,7 @@ import {
   RadioGroup,
   FormControlLabel,
   Radio,
-  Checkbox,
-  TextField,
-  Stepper,
-  Step,
-  StepLabel
+  Checkbox
 } from '@mui/material';
 import {
   Download as DownloadIcon,
@@ -456,7 +450,7 @@ export const DataExportTab: React.FC<DataExportTabProps> = ({ hook }) => {
                   <FormLabel component="legend">Export Format</FormLabel>
                   <RadioGroup
                     value={exportForm.format}
-                    onChange={(e) => setExportForm(prev => ({ ...prev, format: e.target.value as any }))}
+                    onChange={(e) => setExportForm(prev => ({ ...prev, format: e.target.value as 'json' | 'csv' | 'pdf' }))}
                   >
                     <FormControlLabel value="json" control={<Radio />} label="JSON (Structured data)" />
                     <FormControlLabel value="csv" control={<Radio />} label="CSV (Spreadsheet format)" />

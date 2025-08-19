@@ -1,6 +1,10 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Plus, Filter } from 'lucide-react';
+import { 
+  Filter,
+  Plus,
+  X
+} from 'lucide-react';
 import { Button } from '../../../design-system/atoms/Button';
 
 export type FilterOperator = 

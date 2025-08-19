@@ -3,13 +3,12 @@
  * Handles data protection, privacy rights, and compliance requirements
  */
 
-import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
 import logger from '../utils/logger.js';
 import fs from 'fs/promises';
 import path from 'path';
 
-const prisma = new PrismaClient();
+import prisma from '../config/prisma-optimization.js';
 
 /**
  * GDPR Service Class
@@ -18,11 +17,11 @@ export class GDPRService {
     /**
      * Record consent for data processing
      */
-    static async recordConsent(userId, consentType, purpose, legalBasis = 'consent') {
+    static async recordConsent(personId, consentType, purpose, legalBasis = 'consent') {
         try {
             const consent = await prisma.consentRecord.create({
                 data: {
-                    userId,
+                    personId,
                     consentType,
                     purpose,
                     legalBasis,
@@ -36,7 +35,7 @@ export class GDPRService {
             
             // Log consent recording
             await this.logGDPRActivity({
-                userId,
+                personId,
                 action: 'CONSENT_RECORDED',
                 dataType: consentType,
                 purpose,
@@ -51,7 +50,7 @@ export class GDPRService {
             logger.info('Consent recorded', {
                 component: 'gdpr-service',
                 action: 'recordConsent',
-                userId,
+                personId,
                 consentType,
                 purpose,
                 consentId: consent.id
@@ -64,7 +63,7 @@ export class GDPRService {
                 component: 'gdpr-service',
                 action: 'recordConsent',
                 error: error.message,
-                userId,
+                personId,
                 consentType,
                 purpose
             });
@@ -75,11 +74,11 @@ export class GDPRService {
     /**
      * Withdraw consent
      */
-    static async withdrawConsent(userId, consentType, reason = null) {
+    static async withdrawConsent(personId, consentType, reason = null) {
         try {
             const consent = await prisma.consentRecord.findFirst({
                 where: {
-                    userId,
+                    personId,
                     consentType,
                     consentGiven: true,
                     withdrawnAt: null
@@ -104,7 +103,7 @@ export class GDPRService {
             
             // Log consent withdrawal
             await this.logGDPRActivity({
-                userId,
+                personId,
                 action: 'CONSENT_WITHDRAWN',
                 dataType: consentType,
                 purpose: consent.purpose,
@@ -119,7 +118,7 @@ export class GDPRService {
             logger.info('Consent withdrawn', {
                 component: 'gdpr-service',
                 action: 'withdrawConsent',
-                userId,
+                personId,
                 consentType,
                 consentId: consent.id,
                 reason
@@ -132,7 +131,7 @@ export class GDPRService {
                 component: 'gdpr-service',
                 action: 'withdrawConsent',
                 error: error.message,
-                userId,
+                personId,
                 consentType
             });
             throw error;
@@ -142,11 +141,11 @@ export class GDPRService {
     /**
      * Check if user has given consent for specific purpose
      */
-    static async hasConsent(userId, consentType) {
+    static async hasConsent(personId, consentType) {
         try {
             const consent = await prisma.consentRecord.findFirst({
                 where: {
-                    userId,
+                    personId,
                     consentType,
                     consentGiven: true,
                     withdrawnAt: null
@@ -163,7 +162,7 @@ export class GDPRService {
                 component: 'gdpr-service',
                 action: 'hasConsent',
                 error: error.message,
-                userId,
+                personId,
                 consentType
             });
             return false;
@@ -173,14 +172,14 @@ export class GDPRService {
     /**
      * Export user data (Right to Data Portability)
      */
-    static async exportUserData(userId, format = 'json') {
+    static async exportUserData(personId, format = 'json') {
         try {
             // Get user data from all relevant tables
-            const userData = await this.collectUserData(userId);
+            const userData = await this.collectUserData(personId);
             
             // Log data export
             await this.logGDPRActivity({
-                userId,
+                personId,
                 action: 'DATA_EXPORTED',
                 dataType: 'ALL_USER_DATA',
                 purpose: 'Data portability request',
@@ -195,7 +194,7 @@ export class GDPRService {
             logger.info('User data exported', {
                 component: 'gdpr-service',
                 action: 'exportUserData',
-                userId,
+                personId,
                 format,
                 dataTypes: Object.keys(userData)
             });
@@ -213,7 +212,7 @@ export class GDPRService {
                 component: 'gdpr-service',
                 action: 'exportUserData',
                 error: error.message,
-                userId,
+                personId,
                 format
             });
             throw error;
@@ -223,7 +222,7 @@ export class GDPRService {
     /**
      * Delete user data (Right to be Forgotten)
      */
-    static async deleteUserData(userId, options = {}) {
+    static async deleteUserData(personId, options = {}) {
         const {
             anonymize = true,
             keepAuditLogs = true,
@@ -235,7 +234,7 @@ export class GDPRService {
             // Start transaction for data deletion
             const result = await prisma.$transaction(async (tx) => {
                 const deletionSummary = {
-                    userId,
+                    personId,
                     deletionDate: new Date(),
                     reason,
                     deletedTables: [],
@@ -244,14 +243,14 @@ export class GDPRService {
                 };
                 
                 // Get user data before deletion for audit
-                const userData = await this.collectUserData(userId);
+                const userData = await this.collectUserData(personId);
                 
                 if (anonymize) {
-                    // Anonymize user record instead of deleting
-                    await tx.user.update({
-                        where: { id: userId },
+                    // Anonymize person record instead of deleting
+                    await tx.person.update({
+                        where: { id: personId },
                         data: {
-                            email: `deleted_${userId}@anonymized.local`,
+                            email: `deleted_${personId}@anonymized.local`,
                             firstName: 'Deleted',
                             lastName: 'User',
                             phone: null,
@@ -259,20 +258,19 @@ export class GDPRService {
                             deletedAt: new Date()
                         }
                     });
-                    deletionSummary.anonymizedTables.push('users');
+                    deletionSummary.anonymizedTables.push('persons');
                 } else {
                     // Complete deletion
-                    await tx.user.delete({
-                        where: { id: userId }
+                    await tx.person.delete({
+                        where: { id: personId }
                     });
-                    deletionSummary.deletedTables.push('users');
+                    deletionSummary.deletedTables.push('persons');
                 }
                 
                 // Delete or anonymize related data
                 const tablesToProcess = [
-                    'userSessions',
                     'refreshTokens',
-                    'userRoles',
+                    'personRoles',
                     'consentRecords'
                 ];
                 
@@ -289,7 +287,7 @@ export class GDPRService {
                     
                     try {
                         await tx[table].deleteMany({
-                            where: { userId }
+                            where: { personId }
                         });
                         deletionSummary.deletedTables.push(table);
                     } catch (err) {
@@ -297,7 +295,7 @@ export class GDPRService {
                             component: 'gdpr-service',
                             action: 'deleteUserData',
                             error: err.message,
-                            userId,
+                            personId,
                             table
                         });
                     }
@@ -308,7 +306,7 @@ export class GDPRService {
             
             // Log data deletion
             await this.logGDPRActivity({
-                userId,
+                personId,
                 action: 'DATA_DELETED',
                 dataType: 'ALL_USER_DATA',
                 purpose: 'Right to be forgotten',
@@ -323,7 +321,7 @@ export class GDPRService {
             logger.info('User data deleted/anonymized', {
                 component: 'gdpr-service',
                 action: 'deleteUserData',
-                userId,
+                personId,
                 anonymized: anonymize,
                 deletedTables: result.deletionSummary.deletedTables,
                 anonymizedTables: result.deletionSummary.anonymizedTables
@@ -336,7 +334,7 @@ export class GDPRService {
                 component: 'gdpr-service',
                 action: 'deleteUserData',
                 error: error.message,
-                userId,
+                personId,
                 options
             });
             throw error;
@@ -346,13 +344,13 @@ export class GDPRService {
     /**
      * Collect all user data from database
      */
-    static async collectUserData(userId) {
+    static async collectUserData(personId) {
         try {
             const userData = {};
             
-            // User profile data
-            userData.profile = await prisma.user.findUnique({
-                where: { id: userId },
+            // Person profile data
+            userData.profile = await prisma.person.findUnique({
+                where: {id: personId,},
                 select: {
                     id: true,
                     email: true,
@@ -366,9 +364,9 @@ export class GDPRService {
                 }
             });
             
-            // User roles
-            userData.roles = await prisma.userRole.findMany({
-                where: { userId },
+            // Person roles
+            userData.roles = await prisma.personRole.findMany({
+                where: { personId: personId },
                 include: {
                     role: {
                         select: {
@@ -379,22 +377,21 @@ export class GDPRService {
                 }
             });
             
-            // User sessions
-            userData.sessions = await prisma.userSession.findMany({
-                where: { userId },
+            // Refresh tokens (session data)
+            userData.sessions = await prisma.refreshToken.findMany({
+                where: { personId: personId },
                 select: {
                     id: true,
                     createdAt: true,
-                    lastActivityAt: true,
-                    ipAddress: true,
-                    userAgent: true,
+                    expiresAt: true,
+                    revokedAt: true,
                     isActive: true
                 }
             });
             
             // Consent records
             userData.consents = await prisma.consentRecord.findMany({
-                where: { userId },
+                where: { personId: personId },
                 select: {
                     consentType: true,
                     purpose: true,
@@ -407,7 +404,7 @@ export class GDPRService {
             
             // Activity logs (limited to user's own actions)
             userData.activities = await prisma.gdprAuditLog.findMany({
-                where: { userId },
+                where: { personId: personId },
                 select: {
                     action: true,
                     dataType: true,
@@ -428,7 +425,7 @@ export class GDPRService {
                 component: 'gdpr-service',
                 action: 'collectUserData',
                 error: error.message,
-                userId
+                personId
             });
             throw error;
         }
@@ -440,7 +437,7 @@ export class GDPRService {
     static async logGDPRActivity(activityData) {
         try {
             const {
-                userId,
+                personId,
                 action,
                 dataType,
                 purpose,
@@ -452,7 +449,7 @@ export class GDPRService {
             
             await prisma.gdprAuditLog.create({
                 data: {
-                    userId,
+                    personId: personId,
                     action,
                     dataType,
                     purpose,
@@ -478,7 +475,7 @@ export class GDPRService {
     /**
      * Get user's GDPR audit trail
      */
-    static async getAuditTrail(userId, options = {}) {
+    static async getAuditTrail(personId, options = {}) {
         const {
             limit = 50,
             offset = 0,
@@ -488,7 +485,7 @@ export class GDPRService {
         } = options;
         
         try {
-            const where = { userId };
+            const where = { personId };
             
             if (action) {
                 where.action = action;
@@ -523,7 +520,7 @@ export class GDPRService {
                 component: 'gdpr-service',
                 action: 'getAuditTrail',
                 error: error.message,
-                userId,
+                personId,
                 options
             });
             throw error;
@@ -645,7 +642,7 @@ export class GDPRService {
                 details: {}
             };
             
-            const whereClause = companyId ? { user: { companyId } } : {};
+            const whereClause = companyId ? { person: { companyId } } : {};
             
             // Count active consents by type
             const consentStats = await prisma.consentRecord.groupBy({

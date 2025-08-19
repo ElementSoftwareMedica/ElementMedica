@@ -1,8 +1,9 @@
 import { render, screen, fireEvent } from '@testing-library/react';
+import { vi, describe, it, beforeEach, expect } from 'vitest';
 import { ViewModeToggle } from './ViewModeToggle';
 
 describe('ViewModeToggle', () => {
-  const mockOnChange = jest.fn();
+  const mockOnChange = vi.fn();
 
   beforeEach(() => {
     mockOnChange.mockClear();

@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import Papa from 'papaparse';
-import ImportModal from './ImportModal';
+import ImportModal from './modals/ImportModal';
 import { ImportPreviewColumn } from './ImportPreviewTable';
-import { Upload } from 'lucide-react';
+
 import { useToast } from '../../hooks/useToast';
 
 export interface GenericImportProps<T> {
@@ -11,13 +11,15 @@ export interface GenericImportProps<T> {
   /** Campo univoco per identificare un'entità esistente */
   uniqueField: keyof T | string;
   /** Funzione di callback per l'importazione */
-  onImport: (data: T[], overwriteIds?: string[]) => Promise<void>;
+  onImport: (data: T[], overwriteIds?: string[], selectedRowIndices?: Set<number>) => Promise<void>;
   /** Funzione di callback per la chiusura */
   onClose: () => void;
   /** Array di entità esistenti */
   existingEntities?: T[];
   /** Mappatura dei campi CSV ai campi dell'entità */
   csvHeaderMap?: Record<string, string>;
+  /** Ordine personalizzato delle colonne (array di chiavi dal csvHeaderMap) */
+  columnOrder?: string[];
   /** Titolo del componente */
   title?: string;
   /** Sottotitolo del componente */
@@ -42,6 +44,10 @@ export interface GenericImportProps<T> {
   onCompanyChange?: (selectedIds: string[], companyId: string) => void;
   /** Dati iniziali per la preview */
   initialPreviewData?: T[];
+  /** Conflitti rilevati per riga */
+  conflicts?: { [rowIdx: number]: any };
+  /** Callback per aggiornare la risoluzione di un conflitto */
+  onConflictResolutionChange?: (rowIdx: number, resolution: any) => void;
 }
 
 /**
@@ -55,11 +61,111 @@ const normalizeString = (str: string | null | undefined): string => {
 /**
  * Processa un file CSV con le opzioni predefinite
  */
+// Funzione di parsing manuale come fallback
+const manualCsvParse = (text: string, delimiter: string = ';'): any[] => {
+  const lines = text.split('\n').filter(line => line.trim());
+  if (lines.length < 2) return [];
+  
+  const headers = lines[0].split(delimiter).map(h => h.trim().replace(/^"|"$/g, ''));
+  const data = [];
+  
+  for (let i = 1; i < lines.length; i++) {
+    const values = lines[i].split(delimiter).map(v => v.trim().replace(/^"|"$/g, ''));
+    const row: Record<string, any> = {};
+    
+    headers.forEach((header, index) => {
+      row[header] = values[index] || '';
+    });
+    
+    data.push(row);
+  }
+  
+  return data;
+};
+
 export const defaultProcessFile = async (file: File, csvHeaderMap: Record<string, string>, csvDelimiter = ';'): Promise<any[]> => {
   const text = await file.text();
-  const result = Papa.parse(text, { header: true, delimiter: csvDelimiter });
+  // Rimuovi il BOM (Byte Order Mark) se presente
+  const cleanText = text.replace(/^\uFEFF/, '');
+  
+  // Prova prima con il delimitatore specificato
+  let result = Papa.parse(cleanText, {
+    header: true,
+    delimiter: csvDelimiter,
+    skipEmptyLines: true,
+    transformHeader: (header: string) => header.trim()
+  });
+  
+  // Se il parsing non ha prodotto colonne multiple, prova con auto-detect
+  if (result.data.length > 0) {
+    const firstRow = result.data[0] as Record<string, any>;
+    const columnCount = Object.keys(firstRow).length;
+    
+    if (columnCount <= 1) {
+      // Prova con auto-detect del delimitatore
+      result = Papa.parse(cleanText, {
+        header: true,
+        skipEmptyLines: true,
+        transformHeader: (header: string) => header.trim()
+      });
+      
+      if (result.data.length > 0) {
+        const autoFirstRow = result.data[0] as Record<string, any>;
+        
+        // Se ancora non funziona, prova con virgola
+        if (Object.keys(autoFirstRow).length <= 1) {
+          result = Papa.parse(cleanText, {
+            header: true,
+            delimiter: ',',
+            skipEmptyLines: true,
+            transformHeader: (header: string) => header.trim()
+          });
+          
+          if (result.data.length > 0) {
+             const commaFirstRow = result.data[0] as Record<string, any>;
+             
+             // Se anche la virgola fallisce, prova parsing manuale
+             if (Object.keys(commaFirstRow).length <= 1) {
+               // Prova prima con punto e virgola
+                let manualData = manualCsvParse(cleanText, ';');
+                if (manualData.length > 0 && Object.keys(manualData[0]).length > 1) {
+                  result = { 
+                    data: manualData, 
+                    errors: [], 
+                    meta: { 
+                      delimiter: ';', 
+                      linebreak: '\n', 
+                      aborted: false, 
+                      truncated: false, 
+                      cursor: 0 
+                    } 
+                  };
+                } else {
+                  // Prova con virgola
+                  manualData = manualCsvParse(cleanText, ',');
+                  if (manualData.length > 0 && Object.keys(manualData[0]).length > 1) {
+                    result = { 
+                      data: manualData, 
+                      errors: [], 
+                      meta: { 
+                        delimiter: ',', 
+                        linebreak: '\n', 
+                        aborted: false, 
+                        truncated: false, 
+                        cursor: 0 
+                      } 
+                    };
+                  }
+                }
+             }
+           }
+        }
+      }
+    }
+  }
   
   if (result.errors.length > 0) {
+    console.error('Errori durante il parsing CSV:', result.errors);
     throw new Error(`Errore nel parsing del file CSV: ${result.errors[0].message}`);
   }
   
@@ -69,10 +175,10 @@ export const defaultProcessFile = async (file: File, csvHeaderMap: Record<string
   }
   
   // Verifica che le intestazioni del CSV corrispondano alle mappature previste
-  const csvHeaders = Object.keys(result.data[0] || {});
+  const csvHeaders = Object.keys((result.data[0] as Record<string, any>) || {});
   const mappedHeaders = Object.keys(csvHeaderMap);
   
-  // Verifica se almeno una delle intestazioni richieste è presente
+  // Verifica se almeno una delle intestazioni richieste è presente (case-insensitive)
   const foundHeaders = mappedHeaders.filter(header => 
     csvHeaders.some(csvHeader => csvHeader.trim().toLowerCase() === header.toLowerCase())
   );
@@ -81,8 +187,8 @@ export const defaultProcessFile = async (file: File, csvHeaderMap: Record<string
     throw new Error(`Il formato del CSV non è compatibile. Intestazioni attese: ${mappedHeaders.join(', ')}. Intestazioni trovate: ${csvHeaders.join(', ')}`);
   }
   
-  // Se abbiamo meno del 30% delle intestazioni richieste, mostra un avviso
-  if (foundHeaders.length < mappedHeaders.length * 0.3) {
+  // Se abbiamo meno del 10% delle intestazioni richieste, mostra un avviso
+  if (foundHeaders.length < mappedHeaders.length * 0.1) {
     throw new Error(`Formato del file non compatibile: solo ${foundHeaders.length} delle ${mappedHeaders.length} intestazioni attese sono state trovate. Intestazioni attese: ${mappedHeaders.join(', ')}. Intestazioni trovate: ${csvHeaders.join(', ')}`);
   }
   
@@ -90,11 +196,20 @@ export const defaultProcessFile = async (file: File, csvHeaderMap: Record<string
   return (result.data as any[]).map(row => {
     const mapped: Record<string, any> = {};
     Object.entries(row).forEach(([k, v]) => {
-      const key = csvHeaderMap[k.trim()] || k.trim();
-      // Ignora valori vuoti
-      if (v !== null && v !== undefined && v !== '') {
-        mapped[key] = v.toString().trim();
+      // Cerca la mappatura corretta per l'intestazione CSV
+      const csvHeader = k.trim();
+      let mappedKey = csvHeader; // Default: usa l'intestazione originale
+      
+      // Cerca una corrispondenza nel csvHeaderMap (case-insensitive)
+      for (const [headerKey, fieldKey] of Object.entries(csvHeaderMap)) {
+        if (headerKey.toLowerCase() === csvHeader.toLowerCase()) {
+          mappedKey = fieldKey;
+          break;
+        }
       }
+      
+      // Mantieni tutti i campi, anche se vuoti (importante per i template)
+      mapped[mappedKey] = v !== null && v !== undefined ? v.toString().trim() : '';
     });
     return mapped;
   });
@@ -123,7 +238,7 @@ export const validateCommonFields = (item: Record<string, any>): string[] => {
   const errors: string[] = [];
   
   // Controllo campi data
-  const dateFields = ['birth_date', 'birthDate', 'data_nascita', 'date', 'startDate', 'endDate'];
+  const dateFields = ['birthDate', 'birth_date', 'data_nascita', 'date', 'startDate', 'endDate'];
   dateFields.forEach(field => {
     if (item[field] && !isValidISODate(item[field])) {
       errors.push(`Il campo ${field} contiene una data non valida: ${item[field]}`);
@@ -177,6 +292,7 @@ export default function GenericImport<T extends Record<string, any>>({
   onClose,
   existingEntities = [],
   csvHeaderMap = {},
+  columnOrder,
   title,
   subtitle,
   customValidation,
@@ -187,11 +303,14 @@ export default function GenericImport<T extends Record<string, any>>({
   availableCompanies,
   onCompanyChange,
   initialPreviewData,
-  requiredFields = []
+  requiredFields = [],
+  conflicts,
+  onConflictResolutionChange
 }: GenericImportProps<T>) {
-  const defaultTitle = `Importa ${entityType.charAt(0).toUpperCase() + entityType.slice(1)}`;
-  const defaultSubtitle = `Carica un file CSV con i dati dei ${entityType} da importare`;
+  const defaultTitle = `Importa ${entityType && typeof entityType === 'string' ? entityType.charAt(0).toUpperCase() + entityType.slice(1) : 'Elementi'}`;
+  const defaultSubtitle = `Carica un file CSV con i dati dei ${entityType || 'elementi'} da importare`;
   const [selectedRows, setSelectedRows] = useState<string[]>([]);
+  const [selectedRowsForImport, setSelectedRowsForImport] = useState<Set<number>>(new Set());
   const [previewData, setPreviewData] = useState<any[]>(initialPreviewData || []);
   const { showToast } = useToast();
   // Aggiungiamo gli stati mancanti
@@ -200,13 +319,93 @@ export default function GenericImport<T extends Record<string, any>>({
   const [rowErrors, setRowErrors] = useState<{ [rowIdx: number]: string[] }>({});
   const [validationErrors, setValidationErrors] = useState<{ [rowIdx: number]: string[] }>({});
 
-  // Definizione delle colonne per la tabella di anteprima
-  const previewColumns: ImportPreviewColumn[] = Object.entries(csvHeaderMap).map(([header, key]) => ({
-    key,
-    label: header,
-    minWidth: 80,
-    width: 120,
-  }));
+  // Aggiorna previewData quando initialPreviewData cambia
+  useEffect(() => {
+    console.log('🔄 GenericImport useEffect triggered - initialPreviewData:', initialPreviewData?.length || 0, 'elementi');
+    // Aggiorna sempre previewData quando initialPreviewData cambia
+    // Questo include anche il caso di array vuoto per reset
+    if (initialPreviewData !== undefined) {
+      console.log('🔄 GenericImport: Aggiornamento previewData da initialPreviewData:', initialPreviewData.length, 'elementi');
+      console.log('📊 GenericImport: Primo elemento:', initialPreviewData[0]);
+      console.log('🏢 GenericImport: Aziende assegnate:', initialPreviewData.filter(item => item.companyId || item.company_name).length);
+      console.log('🔍 GenericImport: Dettaglio aziende:', initialPreviewData.slice(0, 3).map(item => ({ 
+        nome: item.nome, 
+        cognome: item.cognome, 
+        company_name: item.company_name, 
+        companyId: item.companyId,
+        _assignedCompany: item._assignedCompany 
+      })));
+      setPreviewData([...initialPreviewData]); // Crea una nuova copia per forzare il re-render
+    }
+  }, [initialPreviewData]);
+
+  // Definizione delle colonne per la tabella di anteprima (memoizzata per evitare ricalcoli)
+  const previewColumns = useMemo(() => {
+    const columns: ImportPreviewColumn[] = [];
+    const usedKeys = new Set<string>();
+    const fieldToLabelMap = new Map<string, string>();
+
+    // Prima passata: crea una mappa dei campi ai loro label preferiti
+    Object.entries(csvHeaderMap).forEach(([header, key]) => {
+      if (!fieldToLabelMap.has(key)) {
+        // Preferisci i label più leggibili (con spazi e maiuscole)
+        fieldToLabelMap.set(key, header);
+      } else {
+        const currentLabel = fieldToLabelMap.get(key)!;
+        // Sostituisci se il nuovo header è più leggibile (contiene spazi o maiuscole)
+        if (header.includes(' ') || /[A-Z]/.test(header)) {
+          if (!currentLabel.includes(' ') && !/[A-Z]/.test(currentLabel)) {
+            fieldToLabelMap.set(key, header);
+          }
+        }
+      }
+    });
+
+    // Se è fornito un ordine personalizzato, usalo
+    if (columnOrder && columnOrder.length > 0) {
+      // Prima aggiungi le colonne nell'ordine specificato
+      columnOrder.forEach((key: string) => {
+        if (fieldToLabelMap.has(key) && !usedKeys.has(key)) {
+          const label = fieldToLabelMap.get(key)!;
+          columns.push({
+            key: key,
+            label: label,
+            minWidth: 80,
+            width: 120,
+          });
+          usedKeys.add(key);
+        }
+      });
+      
+      // Poi aggiungi eventuali colonne rimanenti non specificate nell'ordine
+      fieldToLabelMap.forEach((label, key) => {
+        if (!usedKeys.has(key)) {
+          columns.push({
+            key: key,
+            label: label,
+            minWidth: 80,
+            width: 120,
+          });
+          usedKeys.add(key);
+        }
+      });
+    } else {
+      // Comportamento originale se non è specificato un ordine
+      fieldToLabelMap.forEach((label, key) => {
+        if (!usedKeys.has(key)) {
+          columns.push({
+            key: key,
+            label: label,
+            minWidth: 80,
+            width: 120,
+          });
+          usedKeys.add(key);
+        }
+      });
+    }
+
+    return columns;
+  }, [csvHeaderMap, columnOrder]);
 
   // Funzione per processare il file CSV (usiamo customProcessFile se fornito)
   const processFile = async (file: File): Promise<any[]> => {
@@ -267,7 +466,7 @@ export default function GenericImport<T extends Record<string, any>>({
             rowErrors.push('Ragione Sociale obbligatoria');
           }
           
-          if (!row.piva && !row.codice_fiscale) {
+          if (!row.piva && !row.codiceFiscale && !row.codice_fiscale) {
             rowErrors.push('P.IVA o Codice Fiscale obbligatori');
           }
           
@@ -277,33 +476,33 @@ export default function GenericImport<T extends Record<string, any>>({
         } 
         // Per i dipendenti
         else if (entityType === 'dipendenti') {
-          if (!row.nome) {
+          if (!row.firstName && !row.nome) {
             rowErrors.push('Nome obbligatorio');
           }
           
-          if (!row.cognome) {
+          if (!row.lastName && !row.cognome) {
             rowErrors.push('Cognome obbligatorio');
           }
           
-          if (!row.codice_fiscale) {
+          if (!row.codiceFiscale && !row.codice_fiscale) {
             rowErrors.push('Codice Fiscale obbligatorio');
-          } else if (row.codice_fiscale.length !== 16) {
+          } else if ((row.codiceFiscale && row.codiceFiscale.length !== 16) || (row.codice_fiscale && row.codice_fiscale.length !== 16)) {
             rowErrors.push('Codice Fiscale deve essere di 16 caratteri');
           }
         }
         // Per i formatori
         else if (entityType === 'formatori') {
-          if (!row.nome) {
+          if (!row.firstName && !row.nome) {
             rowErrors.push('Nome obbligatorio');
           }
           
-          if (!row.cognome) {
+          if (!row.lastName && !row.cognome) {
             rowErrors.push('Cognome obbligatorio');
           }
           
-          if (!row.codice_fiscale) {
+          if (!row.codiceFiscale && !row.codice_fiscale) {
             rowErrors.push('Codice Fiscale obbligatorio');
-          } else if (row.codice_fiscale.length !== 16) {
+          } else if ((row.codiceFiscale && row.codiceFiscale.length !== 16) || (row.codice_fiscale && row.codice_fiscale.length !== 16)) {
             rowErrors.push('Codice Fiscale deve essere di 16 caratteri');
           }
         }
@@ -327,7 +526,7 @@ export default function GenericImport<T extends Record<string, any>>({
     return errors;
   };
 
-  // Toggle per gestire le righe selezionate
+  // Toggle per gestire le righe selezionate per la sovrascrittura
   const handleToggleOverwrite = (rowId: string) => {
     const newSelectedRows = selectedRows.includes(rowId) 
       ? selectedRows.filter(id => id !== rowId)
@@ -341,6 +540,20 @@ export default function GenericImport<T extends Record<string, any>>({
     }
   };
 
+  // Callback per gestire la selezione delle righe da importare
+  const handleRowSelectionChange = useCallback((selectedRows: Set<number>) => {
+    setSelectedRowsForImport(selectedRows);
+  }, []);
+
+  // Inizializza la selezione delle righe quando cambiano i dati di preview
+  useEffect(() => {
+    if (previewData && previewData.length > 0) {
+      // Seleziona tutte le righe di default
+      const allRowIndices = new Set(Array.from({ length: previewData.length }, (_, i) => i));
+      setSelectedRowsForImport(allRowIndices);
+    }
+  }, [previewData]);
+
   // Gestore dell'importazione
   const handleImport = async (entities: any[], overwriteIds?: string[]) => {
     if (!entities || entities.length === 0) {
@@ -349,11 +562,23 @@ export default function GenericImport<T extends Record<string, any>>({
       return;
     }
     
+    // MODIFICA: Non filtrare qui le righe selezionate, lascia che sia la funzione personalizzata
+    // a gestire la logica di filtraggio basata su selectedRowsForImport e overwriteIds
+    // Questo permette una gestione più flessibile della selezione
+    const selectedEntities = entities; // Passa tutti i dati
+    
+    // Verifica che ci siano righe selezionate per l'importazione
+    if (selectedRowsForImport.size === 0) {
+      setError('Nessuna riga selezionata per l\'importazione');
+      setImporting(false);
+      return;
+    }
+    
     setImporting(true);
     setError('');
     
     try {
-      const dataToProcess = [...entities];
+      const dataToProcess = [...selectedEntities];
       
       // Ottimizzazione: utilizza una Map per lookups più veloci
       let existingEntitiesMap = new Map<string, any>();
@@ -447,37 +672,16 @@ export default function GenericImport<T extends Record<string, any>>({
       }
         
       try {
-        // MODIFICA: Rimuoviamo il JSON.parse(JSON.stringify()) che causa problema con payload grande
-        // e manteniamo i tipi di dati corretti (number, boolean, etc)
-        await onImport(finalPayload as T[], idsToOverwrite);
+        // MODIFICA: Passa le informazioni sulle righe selezionate alla funzione personalizzata
+        // per permettere una gestione più flessibile della selezione
+        await onImport(finalPayload as T[], idsToOverwrite, selectedRowsForImport);
       
-        // Mostra una notifica di successo con il numero di elementi importati
-        const newCount = newEntities.length;
-        const updateCount = updateEntities.length;
-        const skippedCount = skippedEntities.length;
-      
-        let successMessage = '';
-        if (newCount > 0 && updateCount > 0) {
-          successMessage = `Importazione completata: ${newCount} nuovi elementi, ${updateCount} aggiornati`;
-        } else if (newCount > 0) {
-          successMessage = `Importazione completata: ${newCount} nuovi elementi`;
-        } else if (updateCount > 0) {
-          successMessage = `Importazione completata: ${updateCount} elementi aggiornati`;
-        } else {
-          successMessage = `Importazione completata con successo`;
-        }
-      
-        if (skippedCount > 0) {
-          successMessage += `, ${skippedCount} saltati`;
-        }
-      
-        showToast({
-          message: successMessage,
-          type: 'success'
-        });
-      
-        // Chiudi il modale di importazione
-        onClose();
+        // MODIFICA: Non mostrare toast di successo automaticamente - lascia che sia il componente padre a decidere
+        // Questo permette ai componenti di gestire modal di conflitti o altre interazioni prima di mostrare il successo
+        
+        // MODIFICA: Non chiudere automaticamente il modal - lascia che sia il componente padre a decidere
+        // Questo permette ai componenti di gestire modal di conflitti o altre interazioni
+        // onClose();
       } catch (error: any) {
         let errorMessage = error?.message || "Errore durante l'importazione";
         if (error?.response?.data?.message) {
@@ -496,6 +700,8 @@ export default function GenericImport<T extends Record<string, any>>({
     }
   };
 
+
+
   return (
     <ImportModal
       title={title || defaultTitle}
@@ -503,7 +709,7 @@ export default function GenericImport<T extends Record<string, any>>({
       onImport={handleImport}
       onClose={onClose}
       processFile={processFile}
-      uniqueKey="id" // Usiamo ID per supportare il merge
+      uniqueKey={String(uniqueField)} // Usa il campo univoco specificato
       existingData={existingEntities}
       previewColumns={previewColumns}
       validateRows={validateRows}
@@ -511,8 +717,8 @@ export default function GenericImport<T extends Record<string, any>>({
       formatsMessage="Formato supportato: CSV (separatore punto e virgola)"
       showBulkSelectButtons={true}
       extraControls={customWarningPanel}
-      // Nascondi la tabella di preview standard quando c'è un pannello personalizzato
-      hidePreviewTable={!!customWarningPanel}
+      // Non nascondere la tabella di preview per i controlli extra
+      hidePreviewTable={false}
       // Imposta l'opzione per usare un'unica colonna di checkbox
       useSingleCheckboxColumn={true}
       // Passa le aziende disponibili e la funzione di cambio azienda
@@ -520,11 +726,17 @@ export default function GenericImport<T extends Record<string, any>>({
       onCompanyChange={onCompanyChange}
       // Passa i dati iniziali
       initialPreviewData={previewData}
-      // Callback per quando cambiano le righe selezionate
+      // Callback per quando cambiano le righe selezionate per la sovrascrittura
       onOverwriteChange={onSelectedRowsChange}
+      // Gestione della selezione delle righe da importare
+      selectedRows={selectedRowsForImport}
+      onRowSelectionChange={handleRowSelectionChange}
+      // Passa i conflitti e la funzione di risoluzione
+      conflicts={conflicts}
+      onConflictResolutionChange={onConflictResolutionChange}
     />
   );
 } 
 
 // Assegna la funzione defaultProcessFile come metodo statico
-GenericImport.defaultProcessFile = defaultProcessFile; 
+GenericImport.defaultProcessFile = defaultProcessFile;

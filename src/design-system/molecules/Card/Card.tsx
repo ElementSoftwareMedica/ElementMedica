@@ -8,7 +8,7 @@ import { cn } from '../../utils';
 
 // Card variants and sizes
 export type CardVariant = 'default' | 'outlined' | 'elevated' | 'filled';
-export type CardSize = 'sm' | 'md' | 'lg';
+export type CardSize = 'sm' | 'md' | 'lg' | 'xl';
 
 export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
   /** Card variant */
@@ -20,7 +20,7 @@ export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
   /** Card footer content */
   footer?: React.ReactNode;
   /** Card title */
-  title?: string;
+  cardTitle?: string;
   /** Card subtitle */
   subtitle?: string;
   /** Card image */
@@ -31,6 +31,10 @@ export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
   actions?: React.ReactNode;
   /** Clickable card */
   clickable?: boolean;
+  /** Hoverable card */
+  hoverable?: boolean;
+  /** Disabled state */
+  disabled?: boolean;
   /** Loading state */
   loading?: boolean;
   /** Children content */
@@ -39,29 +43,18 @@ export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
 
 // Variant styles
 const variantStyles: Record<CardVariant, string> = {
-  default: `
-    bg-white border border-gray-200
-    hover:shadow-md
-  `,
-  outlined: `
-    bg-white border-2 border-gray-300
-    hover:border-gray-400
-  `,
-  elevated: `
-    bg-white shadow-lg border-0
-    hover:shadow-xl
-  `,
-  filled: `
-    bg-gray-50 border border-gray-200
-    hover:bg-gray-100
-  `,
+  default: 'bg-white border border-gray-200',
+  outlined: 'bg-white border-2 border-gray-300',
+  elevated: 'bg-white shadow-md border-0',
+  filled: 'bg-gray-50 border-0',
 };
 
 // Size styles
 const sizeStyles: Record<CardSize, string> = {
-  sm: 'p-4',
-  md: 'p-6',
-  lg: 'p-8',
+  sm: 'p-3',
+  md: 'p-4', 
+  lg: 'p-6',
+  xl: 'p-8',
 };
 
 // Base card styles
@@ -109,12 +102,14 @@ export const Card: React.FC<CardProps> = ({
   size = 'md',
   header,
   footer,
-  title,
+  cardTitle,
   subtitle,
   image,
   imageAlt,
   actions,
   clickable = false,
+  hoverable = false,
+  disabled = false,
   loading = false,
   className,
   children,
@@ -124,12 +119,16 @@ export const Card: React.FC<CardProps> = ({
   const cardClasses = cn(
     baseStyles,
     variantStyles[variant],
-    clickable && 'cursor-pointer hover:scale-[1.02]',
+    sizeStyles[size],
+    hoverable && 'hover:shadow-lg transition-shadow duration-200',
+    clickable && 'cursor-pointer hover:shadow-lg hover:scale-[1.02]',
+    disabled && 'opacity-50 cursor-not-allowed',
+    loading && 'animate-pulse',
     className
   );
 
   const contentClasses = cn(
-    sizeStyles[size]
+    // Content no longer needs size padding since it's applied to the main card
   );
 
   const renderImage = () => {
@@ -147,22 +146,18 @@ export const Card: React.FC<CardProps> = ({
   };
 
   const renderHeader = () => {
-    if (!header && !title && !subtitle) return null;
+    if (!header && !cardTitle && !subtitle) return null;
     
     return (
       <div className={headerStyles}>
         {header && header}
-        {title && <h3 className={titleStyles}>{title}</h3>}
+        {cardTitle && <h3 className={titleStyles}>{cardTitle}</h3>}
         {subtitle && <p className={subtitleStyles}>{subtitle}</p>}
       </div>
     );
   };
 
   const renderContent = () => {
-    if (loading) {
-      return <LoadingSkeleton />;
-    }
-    
     return children;
   };
 
@@ -186,10 +181,33 @@ export const Card: React.FC<CardProps> = ({
     );
   };
 
+  const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (disabled) {
+      e.preventDefault();
+      return;
+    }
+    if (onClick) {
+      onClick(e);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (disabled) {
+      return;
+    }
+    if ((e.key === 'Enter' || e.key === ' ') && onClick) {
+      e.preventDefault();
+      onClick(e as any); // Cast needed for event type compatibility
+    }
+  };
+
   return (
     <div
       className={cardClasses}
-      onClick={clickable ? onClick : undefined}
+      onClick={clickable || onClick ? handleClick : undefined}
+      onKeyDown={clickable || onClick ? handleKeyDown : undefined}
+      role={clickable ? 'button' : undefined}
+      tabIndex={clickable ? (disabled ? -1 : 0) : undefined}
       {...props}
     >
       {renderImage()}
@@ -206,5 +224,62 @@ export const Card: React.FC<CardProps> = ({
 };
 
 Card.displayName = 'Card';
+
+// Sub-components for flexible card composition
+export interface CardHeaderProps extends React.HTMLAttributes<HTMLDivElement> {
+  children?: React.ReactNode;
+}
+
+export const CardHeader: React.FC<CardHeaderProps> = ({ className, children, ...props }) => {
+  return (
+    <div className={cn(headerStyles, className)} {...props}>
+      {children}
+    </div>
+  );
+};
+
+CardHeader.displayName = 'CardHeader';
+
+export interface CardTitleProps extends React.HTMLAttributes<HTMLHeadingElement> {
+  children?: React.ReactNode;
+}
+
+export const CardTitle: React.FC<CardTitleProps> = ({ className, children, ...props }) => {
+  return (
+    <h3 className={cn(titleStyles, className)} {...props}>
+      {children}
+    </h3>
+  );
+};
+
+CardTitle.displayName = 'CardTitle';
+
+export interface CardContentProps extends React.HTMLAttributes<HTMLDivElement> {
+  children?: React.ReactNode;
+}
+
+export const CardContent: React.FC<CardContentProps> = ({ className, children, ...props }) => {
+  return (
+    <div className={cn('flex-1', className)} {...props}>
+      {children}
+    </div>
+  );
+};
+
+CardContent.displayName = 'CardContent';
+
+export interface CardDescriptionProps extends React.HTMLAttributes<HTMLParagraphElement> {
+  children?: React.ReactNode;
+}
+
+export const CardDescription: React.FC<CardDescriptionProps> = ({ className, children, ...props }) => {
+  return (
+    <p className={cn('text-sm text-gray-600', className)} {...props}>
+      {children}
+    </p>
+  );
+};
+
+CardDescription.displayName = 'CardDescription';
 
 export default Card;

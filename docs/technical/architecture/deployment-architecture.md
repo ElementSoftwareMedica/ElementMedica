@@ -547,7 +547,7 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 
 EXPOSE 4001
 
-CMD ["node", "api-server.js"]
+CMD ["node", "servers/api-server.js"]
 ```
 
 ## ⚙️ Process Management
@@ -566,7 +566,7 @@ module.exports = {
       exec_mode: 'cluster',
       env: {
         NODE_ENV: 'production',
-        PORT: 3001
+        PORT: 4001
       },
       error_file: './logs/main-error.log',
       out_file: './logs/main-out.log',
@@ -577,7 +577,7 @@ module.exports = {
     },
     {
       name: 'api-server',
-      script: './api-server.js',
+      script: './servers/api-server.js',
       cwd: './backend',
       instances: 4,
       exec_mode: 'cluster',
@@ -594,7 +594,7 @@ module.exports = {
     },
     {
       name: 'docs-server',
-      script: './documents-server.js',
+      script: './servers/documents-server.js',
       cwd: './backend',
       instances: 2,
       exec_mode: 'cluster',
@@ -610,7 +610,7 @@ module.exports = {
     },
     {
       name: 'proxy-server',
-      script: './proxy-server.js',
+      script: './servers/proxy-server.js',
       cwd: './backend',
       instances: 2,
       exec_mode: 'cluster',

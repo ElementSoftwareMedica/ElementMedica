@@ -1,136 +1,78 @@
 /**
  * User Preferences Hook
  * Week 14 Implementation - User Preferences Management
+ * 
+ * This hook is a wrapper around the PreferencesContext to provide
+ * a more specific interface for user preferences management.
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useCallback } from 'react';
+import { usePreferences } from '../context/PreferencesContext';
+import { UserPreferences } from '../types/preferences';
 import { toast } from 'react-hot-toast';
-import { useAuth } from '../context/AuthContext';
-import {
-  UserPreferences,
-  UseUserPreferencesReturn,
-  UserPreferencesFormData,
-  DEFAULT_USER_PREFERENCES,
-  PreferencesApiResponse
-} from '../types/preferences';
-import apiClient from '../services/apiClient';
+
+export interface UseUserPreferencesReturn {
+  preferences: UserPreferences | null;
+  loading: boolean;
+  error: string | null;
+  updatePreferences: (updates: Partial<UserPreferences>) => Promise<void>;
+  resetPreferences: () => Promise<void>;
+  exportPreferences: () => void;
+  importPreferences: (file: File) => Promise<void>;
+  // Additional utility methods
+  getPreference: <K extends keyof UserPreferences>(key: K) => UserPreferences[K] | undefined;
+  updateSinglePreference: <K extends keyof UserPreferences>(key: K, value: UserPreferences[K]) => Promise<void>;
+  isLoaded: () => boolean;
+  refresh: () => Promise<void>;
+}
 
 /**
  * Hook for managing user preferences
+ * This is a wrapper around the PreferencesContext with additional utility methods
  */
 export const useUserPreferences = (): UseUserPreferencesReturn => {
-  const { user } = useAuth();
-  const [preferences, setPreferences] = useState<UserPreferences | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    preferences,
+    loading,
+    error,
+    updatePreferences: contextUpdatePreferences,
+    resetPreferences: contextResetPreferences,
+    getPreference,
+    updateSinglePreference,
+    isLoaded,
+    refresh
+  } = usePreferences();
 
   /**
-   * Fetch user preferences from API
-   */
-  const fetchPreferences = useCallback(async () => {
-    if (!user?.id) return;
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const response = await apiClient.get<PreferencesApiResponse<UserPreferences>>(
-        `/api/user/preferences`
-      );
-
-      if (response.data.success) {
-        setPreferences(response.data.data);
-      } else {
-        throw new Error(response.data.error || 'Failed to fetch preferences');
-      }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch preferences';
-      setError(errorMessage);
-      console.error('Error fetching preferences:', err);
-      
-      // Create default preferences if none exist
-      const defaultPrefs: UserPreferences = {
-        ...DEFAULT_USER_PREFERENCES,
-        id: `pref_${user.id}`,
-        userId: user.id,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-      setPreferences(defaultPrefs);
-    } finally {
-      setLoading(false);
-    }
-  }, [user?.id]);
-
-  /**
-   * Update user preferences
+   * Update user preferences with toast notifications
    */
   const updatePreferences = useCallback(async (updates: Partial<UserPreferences>) => {
-    if (!user?.id || !preferences) return;
-
-    setLoading(true);
-    setError(null);
-
     try {
-      const updatedPreferences = {
-        ...preferences,
-        ...updates,
-        updatedAt: new Date().toISOString()
-      };
-
-      const response = await apiClient.put<PreferencesApiResponse<UserPreferences>>(
-        `/api/user/preferences`,
-        updatedPreferences
-      );
-
-      if (response.data.success) {
-        setPreferences(response.data.data);
-        toast.success('Preferenze aggiornate con successo');
-      } else {
-        throw new Error(response.data.error || 'Failed to update preferences');
-      }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to update preferences';
-      setError(errorMessage);
-      console.error('Error updating preferences:', err);
+      await contextUpdatePreferences(updates);
+      toast.success('Preferenze aggiornate con successo');
+    } catch (error) {
+      console.error('Error updating preferences:', error);
       toast.error('Errore nell\'aggiornamento delle preferenze');
-    } finally {
-      setLoading(false);
+      throw error;
     }
-  }, [user?.id, preferences]);
+  }, [contextUpdatePreferences]);
 
   /**
-   * Reset preferences to defaults
+   * Reset preferences to default values with confirmation
    */
   const resetPreferences = useCallback(async () => {
-    if (!user?.id) return;
-
-    setLoading(true);
-    setError(null);
-
     try {
-      const response = await apiClient.post<PreferencesApiResponse<UserPreferences>>(
-        `/api/user/preferences/reset`
-      );
-
-      if (response.data.success) {
-        setPreferences(response.data.data);
-        toast.success('Preferenze ripristinate ai valori predefiniti');
-      } else {
-        throw new Error(response.data.error || 'Failed to reset preferences');
-      }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to reset preferences';
-      setError(errorMessage);
-      console.error('Error resetting preferences:', err);
+      await contextResetPreferences();
+      toast.success('Preferenze ripristinate ai valori predefiniti');
+    } catch (error) {
+      console.error('Error resetting preferences:', error);
       toast.error('Errore nel ripristino delle preferenze');
-    } finally {
-      setLoading(false);
+      throw error;
     }
-  }, [user?.id]);
+  }, [contextResetPreferences]);
 
   /**
-   * Export preferences to JSON file
+   * Export preferences as JSON file
    */
   const exportPreferences = useCallback(() => {
     if (!preferences) {
@@ -140,20 +82,18 @@ export const useUserPreferences = (): UseUserPreferencesReturn => {
 
     try {
       const dataStr = JSON.stringify(preferences, null, 2);
-      const dataBlob = new Blob([dataStr], { type: 'application/json' });
-      const url = URL.createObjectURL(dataBlob);
+      const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
       
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `user-preferences-${new Date().toISOString().split('T')[0]}.json`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      const exportFileDefaultName = `preferences_${new Date().toISOString().split('T')[0]}.json`;
       
-      URL.revokeObjectURL(url);
+      const linkElement = document.createElement('a');
+      linkElement.setAttribute('href', dataUri);
+      linkElement.setAttribute('download', exportFileDefaultName);
+      linkElement.click();
+      
       toast.success('Preferenze esportate con successo');
-    } catch (err) {
-      console.error('Error exporting preferences:', err);
+    } catch (error) {
+      console.error('Error exporting preferences:', error);
       toast.error('Errore nell\'esportazione delle preferenze');
     }
   }, [preferences]);
@@ -162,95 +102,50 @@ export const useUserPreferences = (): UseUserPreferencesReturn => {
    * Import preferences from JSON file
    */
   const importPreferences = useCallback(async (file: File) => {
-    if (!user?.id) return;
-
     try {
       const text = await file.text();
-      const importedPrefs = JSON.parse(text) as UserPreferences;
+      const importedPreferences = JSON.parse(text);
       
-      // Validate imported preferences
-      if (!importedPrefs.userId || !importedPrefs.theme) {
-        throw new Error('File di preferenze non valido');
+      // Validate the imported data structure
+      if (!importedPreferences || typeof importedPreferences !== 'object') {
+        throw new Error('Formato file non valido');
       }
 
-      // Update with imported preferences (keeping current user ID)
-      const updatedPrefs = {
-        ...importedPrefs,
-        id: preferences?.id || `pref_${user.id}`,
-        userId: user.id,
-        updatedAt: new Date().toISOString()
-      };
+      // Extract only the preference fields we want to update
+      const {
+        theme,
+        themeColor,
+        language,
+        timezone,
+        dateFormat,
+        timeFormat,
+        notifications,
+        accessibility,
+        privacy,
+        dashboard
+      } = importedPreferences;
 
-      await updatePreferences(updatedPrefs);
+      const updates: Partial<UserPreferences> = {};
+      
+      if (theme) updates.theme = theme;
+      if (themeColor) updates.themeColor = themeColor;
+      if (language) updates.language = language;
+      if (timezone) updates.timezone = timezone;
+      if (dateFormat) updates.dateFormat = dateFormat;
+      if (timeFormat) updates.timeFormat = timeFormat;
+      if (notifications) updates.notifications = notifications;
+      if (accessibility) updates.accessibility = accessibility;
+      if (privacy) updates.privacy = privacy;
+      if (dashboard) updates.dashboard = dashboard;
+
+      await contextUpdatePreferences(updates);
       toast.success('Preferenze importate con successo');
-    } catch (err) {
-      console.error('Error importing preferences:', err);
-      toast.error('Errore nell\'importazione delle preferenze');
+    } catch (error) {
+      console.error('Error importing preferences:', error);
+      toast.error('Errore nell\'importazione delle preferenze: ' + (error as Error).message);
+      throw error;
     }
-  }, [user?.id, preferences?.id, updatePreferences]);
-
-  /**
-   * Get preference value by key
-   */
-  const getPreference = useCallback(<K extends keyof UserPreferences>(
-    key: K
-  ): UserPreferences[K] | undefined => {
-    return preferences?.[key];
-  }, [preferences]);
-
-  /**
-   * Update single preference
-   */
-  const updateSinglePreference = useCallback(async <K extends keyof UserPreferences>(
-    key: K,
-    value: UserPreferences[K]
-  ) => {
-    await updatePreferences({ [key]: value } as Partial<UserPreferences>);
-  }, [updatePreferences]);
-
-  /**
-   * Check if preferences are loaded
-   */
-  const isLoaded = useCallback(() => {
-    return preferences !== null;
-  }, [preferences]);
-
-  /**
-   * Get theme-related preferences
-   */
-  const getThemePreferences = useCallback(() => {
-    if (!preferences) return null;
-    
-    return {
-      theme: preferences.theme,
-      themeColor: preferences.themeColor,
-      accessibility: preferences.accessibility
-    };
-  }, [preferences]);
-
-  /**
-   * Get notification preferences
-   */
-  const getNotificationPreferences = useCallback(() => {
-    return preferences?.notifications || null;
-  }, [preferences]);
-
-  /**
-   * Get dashboard preferences
-   */
-  const getDashboardPreferences = useCallback(() => {
-    return preferences?.dashboard || null;
-  }, [preferences]);
-
-  // Load preferences when user changes
-  useEffect(() => {
-    if (user?.id) {
-      fetchPreferences();
-    } else {
-      setPreferences(null);
-      setError(null);
-    }
-  }, [user?.id, fetchPreferences]);
+  }, [contextUpdatePreferences]);
 
   return {
     preferences,
@@ -260,14 +155,10 @@ export const useUserPreferences = (): UseUserPreferencesReturn => {
     resetPreferences,
     exportPreferences,
     importPreferences,
-    // Additional utility methods
     getPreference,
     updateSinglePreference,
     isLoaded,
-    getThemePreferences,
-    getNotificationPreferences,
-    getDashboardPreferences,
-    refresh: fetchPreferences
+    refresh
   };
 };
 

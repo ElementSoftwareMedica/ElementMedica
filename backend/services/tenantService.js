@@ -1,5 +1,4 @@
-import { PrismaClient } from '@prisma/client';
-const prisma = new PrismaClient();
+import prisma from '../config/prisma-optimization.js';
 
 class TenantService {
   /**
@@ -7,7 +6,7 @@ class TenantService {
    */
   async createTenant(tenantData) {
     try {
-      const { name, slug, domain, settings = {}, billing_plan = 'basic' } = tenantData;
+      const { name, slug, domain, settings = {}, billingPlan = 'basic' } = tenantData;
 
       // Verifica che lo slug sia unico
       const existingTenant = await prisma.company.findFirst({
@@ -26,13 +25,13 @@ class TenantService {
       // Crea il tenant
       const tenant = await prisma.company.create({
         data: {
-          ragione_sociale: name,
+          ragioneSociale: name,
           slug,
           domain,
           settings,
-          subscription_plan: billing_plan,
-          is_active: true,
-          eliminato: false
+          subscriptionPlan: billingPlan,
+          isActive: true,
+  
         }
       });
 
@@ -54,25 +53,22 @@ class TenantService {
    */
   async getTenantById(tenantId) {
     try {
-      return await prisma.company.findUnique({
-        where: {
-          id: tenantId,
-          eliminato: false
-        },
+      return await prisma.tenant.findUnique({
+        where: {id: tenantId},
         include: {
-          users: {
-            where: { eliminato: false },
+          persons: {
+            where: {deletedAt: null},
             select: {
               id: true,
               username: true,
               email: true,
               firstName: true,
               lastName: true,
-              isActive: true
+              status: true
             }
           },
-          roles: {
-            where: { eliminato: false }
+          personRoles: {
+            where: {isActive: true}
           }
         }
       });
@@ -87,12 +83,8 @@ class TenantService {
    */
   async getTenantBySlug(slug) {
     try {
-      return await prisma.company.findFirst({
-        where: {
-          slug,
-          is_active: true,
-          eliminato: false
-        }
+      return await prisma.tenant.findFirst({
+        where: {slug}
       });
     } catch (error) {
       console.error('[TENANT_SERVICE] Error getting tenant by slug:', error);
@@ -105,11 +97,10 @@ class TenantService {
    */
   async getTenantByDomain(domain) {
     try {
-      return await prisma.company.findFirst({
+      return await prisma.tenant.findFirst({
         where: {
           domain,
-          is_active: true,
-          eliminato: false
+          isActive: true
         }
       });
     } catch (error) {
@@ -123,11 +114,11 @@ class TenantService {
    */
   async updateTenant(tenantId, updateData) {
     try {
-      const { name, slug, domain, settings, billing_plan, is_active } = updateData;
+      const { name, slug, domain, settings, billingPlan, isActive } = updateData;
 
       // Verifica che slug e domain siano unici (se modificati)
       if (slug || domain) {
-        const existingTenant = await prisma.company.findFirst({
+        const existingTenant = await prisma.tenant.findFirst({
           where: {
             AND: [
               { id: { not: tenantId } },
@@ -147,14 +138,14 @@ class TenantService {
       }
 
       const updatePayload = {};
-      if (name) updatePayload.ragione_sociale = name;
+      if (name) updatePayload.name = name;
       if (slug) updatePayload.slug = slug;
       if (domain) updatePayload.domain = domain;
       if (settings) updatePayload.settings = settings;
-      if (billing_plan) updatePayload.subscription_plan = billing_plan;
-      if (typeof is_active === 'boolean') updatePayload.is_active = is_active;
+      if (billingPlan) updatePayload.billingPlan = billingPlan;
+      if (typeof isActive === 'boolean') updatePayload.isActive = isActive;
 
-      return await prisma.company.update({
+      return await prisma.tenant.update({
         where: { id: tenantId },
         data: updatePayload
       });
@@ -170,20 +161,20 @@ class TenantService {
   async deleteTenant(tenantId) {
     try {
       // Disattiva prima il tenant
-      await prisma.company.update({
+      await prisma.tenant.update({
         where: { id: tenantId },
         data: {
-          is_active: false,
-          eliminato: true
+          isActive: false,
+          deletedAt: new Date()
         }
       });
 
-      // Disattiva tutti gli utenti del tenant
-      await prisma.user.updateMany({
-        where: { companyId: tenantId },
+      // Disattiva tutte le persone del tenant
+      await prisma.person.updateMany({
+        where: { tenantId: tenantId },
         data: {
-          isActive: false,
-          eliminato: true
+          status: 'INACTIVE',
+          deletedAt: new Date()
         }
       });
 
@@ -199,36 +190,20 @@ class TenantService {
    */
   async getTenantStats(tenantId) {
     try {
-      const [userCount, employeeCount, courseCount, trainerCount] = await Promise.all([
-        prisma.user.count({
-          where: {
-            companyId: tenantId,
-            eliminato: false
-          }
-        }),
-        prisma.employee.count({
-          where: {
-            companyId: tenantId,
-            eliminato: false
-          }
+      const [personCount, courseCount, trainerCount] = await Promise.all([
+        prisma.person.count({
+          where: {tenantId: tenantId, deletedAt: null}
         }),
         prisma.course.count({
-          where: {
-            tenant_id: tenantId,
-            eliminato: false
-          }
+          where: {tenantId: tenantId}
         }),
-        prisma.trainer.count({
-          where: {
-            tenant_id: tenantId,
-            eliminato: false
-          }
+        prisma.personRole.count({
+          where: {tenantId: tenantId, roleType: 'TRAINER', isActive: true}
         })
       ]);
 
       return {
-        users: userCount,
-        employees: employeeCount,
+        persons: personCount,
         courses: courseCount,
         trainers: trainerCount
       };
@@ -245,31 +220,31 @@ class TenantService {
     try {
       const defaultConfigs = [
         {
-          tenant_id: tenantId,
+          tenantId: tenantId,
           config_key: 'theme',
           config_value: { theme: 'default' },
           config_type: 'ui'
         },
         {
-          tenant_id: tenantId,
+          tenantId: tenantId,
           config_key: 'locale',
           config_value: { locale: 'it-IT' },
           config_type: 'general'
         },
         {
-          tenant_id: tenantId,
+          tenantId: tenantId,
           config_key: 'timezone',
           config_value: { timezone: 'Europe/Rome' },
           config_type: 'general'
         },
         {
-          tenant_id: tenantId,
+          tenantId: tenantId,
           config_key: 'max_file_size',
           config_value: { size: 10485760 }, // 10MB
           config_type: 'general'
         },
         {
-          tenant_id: tenantId,
+          tenantId: tenantId,
           config_key: 'session_timeout',
           config_value: { timeout: 3600 }, // 1 hour
           config_type: 'security'
@@ -283,7 +258,7 @@ class TenantService {
         return acc;
       }, {});
 
-      await prisma.company.update({
+      await prisma.tenant.update({
         where: { id: tenantId },
         data: { settings }
       });
@@ -296,46 +271,39 @@ class TenantService {
   }
 
   /**
-   * Crea ruoli di default per un nuovo tenant
+   * Crea configurazioni di ruolo di default per un nuovo tenant
+   * Nota: I ruoli sono ora gestiti tramite PersonRole con RoleType enum
    */
   async createDefaultRoles(tenantId) {
     try {
-      const defaultRoles = [
+      // I ruoli sono ora definiti nell'enum RoleType: ADMIN, MANAGER, EMPLOYEE, TRAINER
+      // Non è più necessario creare record separati per i ruoli
+      // Questa funzione ora restituisce solo la configurazione dei ruoli disponibili
+      
+      const availableRoles = [
         {
-          name: 'company_admin',
+          roleType: 'ADMIN',
           description: 'Amministratore della company',
-          companyId: tenantId,
-          eliminato: false
+          companyId: tenantId
         },
         {
-          name: 'manager',
+          roleType: 'MANAGER',
           description: 'Manager aziendale',
-          companyId: tenantId,
-          eliminato: false
+          companyId: tenantId
         },
         {
-          name: 'trainer',
+          roleType: 'TRAINER',
           description: 'Formatore',
-          companyId: tenantId,
-          eliminato: false
+          companyId: tenantId
         },
         {
-          name: 'employee',
+          roleType: 'EMPLOYEE',
           description: 'Dipendente',
-          companyId: tenantId,
-          eliminato: false
+          companyId: tenantId
         }
       ];
 
-      const createdRoles = [];
-      for (const roleData of defaultRoles) {
-        const role = await prisma.role.create({
-          data: roleData
-        });
-        createdRoles.push(role);
-      }
-
-      return createdRoles;
+      return availableRoles;
     } catch (error) {
       console.error('[TENANT_SERVICE] Error creating default roles:', error);
       throw error;
@@ -355,19 +323,19 @@ class TenantService {
       const stats = await this.getTenantStats(tenantId);
       
       const limits = {
-        basic: { users: 10, companies: 1, courses: 50 },
-        professional: { users: 50, companies: 5, courses: 200 },
-        enterprise: { users: 500, companies: 50, courses: 1000 }
+        basic: { persons: 10, companies: 1, courses: 50 },
+        professional: { persons: 50, companies: 5, courses: 200 },
+        enterprise: { persons: 500, companies: 50, courses: 1000 }
       };
 
-      const planLimits = limits[tenant.subscription_plan] || limits.basic;
+      const planLimits = limits[tenant.billingPlan] || limits.basic;
       
       return {
-        plan: tenant.subscription_plan,
+        plan: tenant.billingPlan,
         limits: planLimits,
         usage: stats,
         withinLimits: {
-          users: stats.users <= planLimits.users,
+          persons: stats.persons <= planLimits.persons,
           courses: stats.courses <= planLimits.courses
         }
       };
@@ -384,40 +352,39 @@ class TenantService {
     try {
       const skip = (page - 1) * limit;
       const where = {
-        eliminato: false,
-        ...(filters.is_active !== undefined && { is_active: filters.is_active }),
-        ...(filters.billing_plan && { subscription_plan: filters.billing_plan }),
+
+        ...(filters.isActive !== undefined && { isActive: filters.isActive }),
+        ...(filters.billingPlan && { billingPlan: filters.billingPlan }),
         ...(filters.search && {
           OR: [
-            { ragione_sociale: { contains: filters.search, mode: 'insensitive' } },
+            { name: { contains: filters.search, mode: 'insensitive' } },
             { slug: { contains: filters.search, mode: 'insensitive' } }
           ]
         })
       };
 
       const [tenants, total] = await Promise.all([
-        prisma.company.findMany({
+        prisma.tenant.findMany({
           where,
           skip,
           take: limit,
-          orderBy: { created_at: 'desc' },
+          orderBy: { createdAt: 'desc' },
           select: {
             id: true,
-            ragione_sociale: true,
+            name: true,
             slug: true,
             domain: true,
-            subscription_plan: true,
-            is_active: true,
-            created_at: true,
+            billingPlan: true,
+            isActive: true,
+            createdAt: true,
             _count: {
               select: {
-                users: { where: { eliminato: false } },
-                employees: { where: { eliminato: false } }
+                personRoles: true
               }
             }
           }
         }),
-        prisma.company.count({ where })
+        prisma.tenant.count({ where })
       ]);
 
       return {

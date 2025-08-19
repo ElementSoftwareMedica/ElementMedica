@@ -8,9 +8,32 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:4001',
+        target: 'http://localhost:4003',
         changeOrigin: true,
-        secure: false
+        secure: false,
+        configure: (proxy, options) => {
+          proxy.on('proxyReq', (proxyReq, req) => {
+            console.log('🔍 [VITE PROXY] Proxying request:', {
+              method: req.method,
+              url: req.url,
+              originalUrl: (req as { originalUrl?: string }).originalUrl,
+              path: proxyReq.path,
+              target: options.target
+            });
+          });
+          proxy.on('proxyRes', (proxyRes, req) => {
+            console.log('🔍 [VITE PROXY] Response received:', {
+              status: proxyRes.statusCode,
+              url: req.url
+            });
+          });
+          proxy.on('error', (err, req) => {
+            console.log('❌ [VITE PROXY] Error:', {
+              error: err.message,
+              url: req.url
+            });
+          });
+        }
       }
     }
   },
@@ -34,6 +57,14 @@ export default defineConfig({
             '@radix-ui/react-select',
             '@radix-ui/react-label',
             '@radix-ui/react-slot'
+          ],
+          
+          // MUI chunks
+          mui: [
+            '@mui/material',
+            '@mui/icons-material',
+            '@emotion/react',
+            '@emotion/styled'
           ],
           
           // Heavy components chunks
@@ -88,7 +119,11 @@ export default defineConfig({
       'react',
       'react-dom',
       'react-router-dom',
-      '@tanstack/react-query'
+      '@tanstack/react-query',
+      '@emotion/react',
+      '@emotion/styled',
+      '@mui/material',
+      '@mui/icons-material'
     ]
   }
 })

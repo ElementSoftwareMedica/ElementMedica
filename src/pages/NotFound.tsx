@@ -7,8 +7,8 @@ const NotFound: React.FC = () => {
     <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center">
       <div className="text-center px-4">
         <div className="mb-8">
-          <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-blue-100 mb-4">
-            <span className="text-blue-600 text-5xl font-bold">404</span>
+          <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-primary-100 mb-4">
+          <span className="text-primary-600 text-5xl font-bold">404</span>
           </div>
           <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-2">Page Not Found</h1>
           <p className="text-gray-600 max-w-md mx-auto">
@@ -19,7 +19,7 @@ const NotFound: React.FC = () => {
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
           <Link 
             to="/" 
-            className="flex items-center px-4 py-2 border border-transparent rounded-full shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 w-full sm:w-auto justify-center"
+            className="flex items-center px-4 py-2 border border-transparent rounded-full shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 w-full sm:w-auto justify-center"
           >
             <Home className="h-4 w-4 mr-2" />
             Go to Dashboard

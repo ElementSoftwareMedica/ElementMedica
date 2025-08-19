@@ -1,8 +1,9 @@
 import { render, screen, fireEvent } from '@testing-library/react';
+import { vi, describe, it, beforeEach, expect } from 'vitest';
 import { ViewModeToggleButton } from './ViewModeToggleButton';
 
 describe('ViewModeToggleButton', () => {
-  const mockOnChange = jest.fn();
+  const mockOnChange = vi.fn();
 
   beforeEach(() => {
     mockOnChange.mockClear();
@@ -19,7 +20,7 @@ describe('ViewModeToggleButton', () => {
     const gridButton = screen.getByRole('button', { name: /card/i });
     const tableButton = screen.getByRole('button', { name: /table/i });
     
-    expect(gridButton).toHaveClass('text-blue-700');
+    expect(gridButton).toHaveClass('text-primary-700');
     expect(tableButton).toHaveClass('text-gray-500');
   });
 
@@ -35,7 +36,7 @@ describe('ViewModeToggleButton', () => {
     const tableButton = screen.getByRole('button', { name: /table/i });
     
     expect(gridButton).toHaveClass('text-gray-500');
-    expect(tableButton).toHaveClass('text-blue-700');
+    expect(tableButton).toHaveClass('text-primary-700');
   });
 
   it('calls onChange when grid button is clicked', () => {

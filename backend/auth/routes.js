@@ -7,27 +7,15 @@ import express from 'express';
 import { JWTService, PasswordService } from './jwt.js';
 import middleware from './middleware.js';
 const { authenticate, authorize, rateLimit, auditLog } = middleware;
-import { createOptimizedPrismaClient } from '../config/prisma-optimization.js';
+import { authenticateTest } from './middleware-test.js';
+import prisma from '../config/prisma-optimization.js';
 import crypto from 'crypto';
 import { body, validationResult } from 'express-validator';
 import logger from '../utils/logger.js';
 
 const router = express.Router();
 
-// Inizializzazione Prisma con gestione errori
-let prisma;
-try {
-  prisma = createOptimizedPrismaClient();
-  console.log('✅ Prisma client initialized successfully');
-} catch (error) {
-  console.error('❌ Failed to initialize Prisma client:', error);
-  throw new Error('Database connection failed');
-}
-
-// Verifica che prisma sia definito
-if (!prisma) {
-  throw new Error('Prisma client is undefined');
-}
+// Prisma client is already initialized and imported
 
 /**
  * Validation middleware
@@ -64,44 +52,70 @@ function getDeviceInfo(req) {
 
 router.post('/login', 
     rateLimit({ maxRequests: 100, windowMs: 15 * 60 * 1000 }), // 100 attempts per 15 minutes (temporary for testing)
+    // Debug middleware specifico per login
+    (req, res, next) => {
+        console.log('🔍 [LOGIN HANDLER] Request body debug:', {
+            bodyExists: !!req.body,
+            bodyType: typeof req.body,
+            bodyKeys: req.body ? Object.keys(req.body) : 'N/A',
+            bodyContent: req.body,
+            contentType: req.get('Content-Type'),
+            method: req.method,
+            url: req.url
+        });
+        next();
+    },
     [
-        body('email').isEmail().normalizeEmail(),
-        body('password').isLength({ min: 1 })
+        body('identifier').isLength({ min: 1 }).withMessage('Email, username, or tax code is required'),
+        body('password').isLength({ min: 1 }).withMessage('Password must be at least 6 characters long')
     ],
-    validateRequest,
+    (req, res, next) => {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            console.log('🔍 [LOGIN HANDLER] Validation errors:', errors.array());
+            return res.status(400).json({
+                error: 'Validation failed',
+                code: 'VALIDATION_ERROR',
+                details: errors.array()
+            });
+        }
+        next();
+    },
     auditLog('LOGIN', 'auth'),
     async (req, res) => {
         try {
-            const { email, password, rememberMe = false } = req.body;
+            const { identifier, password, rememberMe = false } = req.body;
             const deviceInfo = getDeviceInfo(req);
 
-            // Find user with roles
-            const user = await prisma.user.findUnique({
-                where: { email },
+            // Find person with roles by identifier (email, username, or taxCode)
+            const person = await prisma.person.findFirst({
+                where: {
+                    OR: [
+                        { email: identifier },
+                        { username: identifier },
+                        { taxCode: identifier }
+                    ]
+                },
                 include: {
-                    userRoles: {
+                    personRoles: {
                         where: { isActive: true },
                         include: {
-                            role: {
-                                include: {
-                                    rolePermissions: true
-                                }
-                            }
+                            permissions: true
                         }
                     },
                     company: true
                 }
             });
 
-            if (!user) {
+            if (!person) {
                 return res.status(401).json({
                     error: 'Invalid credentials',
                     code: 'AUTH_INVALID_CREDENTIALS'
                 });
             }
 
-            // Check if user is active
-            if (!user.isActive) {
+            // Check if person is active
+            if (person.status !== 'ACTIVE') {
                 return res.status(401).json({
                     error: 'Account is deactivated',
                     code: 'AUTH_ACCOUNT_DEACTIVATED'
@@ -109,20 +123,20 @@ router.post('/login',
             }
 
             // Check if account is locked
-            if (user.lockedUntil && user.lockedUntil > new Date()) {
+            if (person.lockedUntil && person.lockedUntil > new Date()) {
                 return res.status(423).json({
                     error: 'Account is temporarily locked',
                     code: 'AUTH_ACCOUNT_LOCKED',
-                    lockedUntil: user.lockedUntil
+                    lockedUntil: person.lockedUntil
                 });
             }
 
             // Verify password
-            const isValidPassword = await PasswordService.verifyPassword(password, user.password);
+            const isValidPassword = await PasswordService.verifyPassword(password, person.password);
             
             if (!isValidPassword) {
                 // Increment failed login attempts
-                const failedAttempts = (user.failedAttempts || 0) + 1;
+                const failedAttempts = (person.failedAttempts || 0) + 1;
                 const updateData = {
                     failedAttempts: failedAttempts
                 };
@@ -132,8 +146,8 @@ router.post('/login',
                     updateData.lockedUntil = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
                 }
 
-                await prisma.user.update({
-                    where: { id: user.id },
+                await prisma.person.update({
+                    where: { id: person.id },
                     data: updateData
                 });
 
@@ -145,8 +159,8 @@ router.post('/login',
             }
 
             // Reset failed login attempts on successful login
-            await prisma.user.update({
-                where: { id: user.id },
+            await prisma.person.update({
+                where: { id: person.id },
                 data: {
                     failedAttempts: 0,
                     lockedUntil: null,
@@ -154,29 +168,29 @@ router.post('/login',
                 }
             });
 
-            // Prepare user data with roles and permissions
-            const roles = user.userRoles.map(ur => ur.role.name);
-            const permissions = user.userRoles.flatMap(ur => ur.role.rolePermissions || []);
+            // Prepare person data with roles and permissions
+            const roles = person.personRoles.map(pr => pr.roleType);
+            const permissions = person.personRoles.flatMap(pr => pr.permissions || []);
             
             // Add global role if present
-            if (user.globalRole) {
-                roles.push(user.globalRole);
+            if (person.globalRole) {
+                roles.push(person.globalRole);
             }
 
-            const userWithRoles = {
-                ...user,
+            const personWithRoles = {
+                ...person,
                 roles,
                 permissions
             };
 
             // Generate tokens
-            const tokens = await JWTService.generateTokenPair(userWithRoles, deviceInfo);
+            const tokens = await JWTService.generateTokenPair(personWithRoles, deviceInfo);
 
             // Set HTTP-only cookies for web clients
             const cookieOptions = {
                 httpOnly: true,
                 secure: process.env.NODE_ENV === 'production',
-                sameSite: 'strict',
+                sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax', // lax in development for cross-port requests
                 maxAge: rememberMe ? 7 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000 // 7 days or 1 day
             };
 
@@ -188,20 +202,20 @@ router.post('/login',
             res.cookie('refreshToken', tokens.refreshToken, cookieOptions);
             res.cookie('sessionToken', tokens.sessionToken, cookieOptions);
 
-            // Return user info and tokens
+            // Return person info and tokens
             res.json({
                 success: true,
                 user: {
-                    id: user.id,
-                    email: user.email,
-                    firstName: user.firstName,
-                    lastName: user.lastName,
-                    companyId: user.companyId,
-                    company: user.company,
+                    id: person.id,
+                    email: person.email,
+                    firstName: person.firstName,
+                    lastName: person.lastName,
+                    companyId: person.companyId,
+                    company: person.company,
                     roles,
                     permissions,
-                    globalRole: user.globalRole,
-                    lastLogin: user.lastLogin
+                    globalRole: person.globalRole,
+                    lastLogin: person.lastLogin
                 },
                 tokens: {
                     accessToken: tokens.accessToken,
@@ -217,7 +231,7 @@ router.post('/login',
                 action: 'login',
                 error: error.message,
                 stack: error.stack,
-                email: req.body?.email,
+                identifier: req.body?.identifier,
                 ip: req.ip
             });
             res.status(500).json({
@@ -259,7 +273,7 @@ router.post('/logout',
                 action: 'logout',
                 error: error.message,
                 stack: error.stack,
-                userId: req.user?.id
+                personId: req.person?.id
             });
             res.status(500).json({
                 error: 'Logout failed',
@@ -278,7 +292,7 @@ router.post('/logout-all',
     auditLog('LOGOUT_ALL', 'auth'),
     async (req, res) => {
         try {
-            await JWTService.revokeAllUserSessions(req.user.id);
+            await JWTService.revokeAllPersonSessions(req.person.id);
 
             // Clear cookies
             res.clearCookie('accessToken');
@@ -296,7 +310,7 @@ router.post('/logout-all',
                 action: 'logoutAll',
                 error: error.message,
                 stack: error.stack,
-                userId: req.user?.id
+                personId: req.person?.id
             });
             res.status(500).json({
                 error: 'Logout failed',
@@ -329,7 +343,7 @@ router.post('/refresh',
             res.cookie('accessToken', tokens.accessToken, {
                 httpOnly: true,
                 secure: process.env.NODE_ENV === 'production',
-                sameSite: 'strict',
+                sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax', // lax in development for cross-port requests
                 maxAge: 15 * 60 * 1000 // 15 minutes
             });
 
@@ -344,7 +358,7 @@ router.post('/refresh',
             action: 'refreshToken',
             error: error.message,
             stack: error.stack,
-            userId: req.user?.id
+            personId: req.person?.id
         });
             
             // Clear invalid cookies
@@ -400,14 +414,14 @@ router.post('/register',
                 });
             }
 
-            // Check if user already exists
-            const existingUser = await prisma.user.findUnique({
+            // Check if person already exists
+            const existingPerson = await prisma.person.findUnique({
                 where: { email }
             });
 
-            if (existingUser) {
+            if (existingPerson) {
                 return res.status(409).json({
-                    error: 'User already exists',
+                    error: 'Person already exists',
                     code: 'AUTH_USER_EXISTS'
                 });
             }
@@ -417,40 +431,32 @@ router.post('/register',
 
             // Use requester's company if not specified (unless global admin)
             const targetCompanyId = companyId || 
-                (req.user.roles.includes('global_admin') ? null : req.user.companyId);
+                (req.person.roles.includes('global_admin') ? null : req.person.companyId);
 
-            // Create user
-            const user = await prisma.user.create({
+            // Create person
+            const person = await prisma.person.create({
                 data: {
                     email,
-                    password_hash: passwordHash,
-                    first_name: firstName,
-                    last_name: lastName,
-                    company_id: targetCompanyId,
-                    employee_id: employeeId,
-                    created_by: req.user.id
+                    passwordHash: passwordHash,
+                    firstName: firstName,
+                     lastName: lastName,
+                    companyId: targetCompanyId,
+                     employeeId: employeeId,
+                    createdBy: req.person.id
                 }
             });
 
             // Assign roles
-            for (const roleName of roles) {
-                const role = await prisma.roles.findFirst({
-                    where: {
-                        name: roleName,
-                        OR: [
-                            { is_system_role: true },
-                            { company_id: targetCompanyId }
-                        ]
-                    }
-                });
-
-                if (role) {
-                    await prisma.userRole.create({
+            for (const roleType of roles) {
+                // Validate roleType against enum
+                const validRoleTypes = ['ADMIN', 'MANAGER', 'EMPLOYEE', 'TRAINER'];
+                if (validRoleTypes.includes(roleType)) {
+                    await prisma.personRole.create({
                         data: {
-                            userId: user.id,
-                            roleId: role.id,
+                            personId: person.id,
+                            roleType: roleType,
                             companyId: targetCompanyId,
-                            assignedBy: req.user.id
+                            assignedBy: req.person.id
                         }
                     });
                 }
@@ -459,11 +465,11 @@ router.post('/register',
             res.status(201).json({
                 success: true,
                 user: {
-                    id: user.id,
-                    email: user.email,
-                    firstName: user.first_name,
-                    lastName: user.last_name,
-                    companyId: user.company_id,
+                    id: person.id,
+                    email: person.email,
+                    firstName: person.firstName,
+                    lastName: person.lastName,
+                    companyId: person.companyId,
                     roles
                 }
             });
@@ -492,51 +498,49 @@ router.get('/me',
     authenticate(),
     async (req, res) => {
         try {
-            const user = await prisma.user.findUnique({
-                where: { id: req.user.id },
+            const person = await prisma.person.findUnique({
+                where: { id: req.person.id },
                 include: {
-                    userRoles: {
+                    personRoles: {
                         where: { isActive: true },
                         include: {
                             role: true
                         }
                     },
-                    company: true,
-                    employee: true
+                    company: true
                 }
             });
 
-            if (!user) {
+            if (!person) {
                 return res.status(404).json({
-                    error: 'User not found',
+                    error: 'Person not found',
                     code: 'AUTH_USER_NOT_FOUND'
                 });
             }
 
-            const roles = user.userRoles.map(ur => ur.role.name);
-            const permissions = user.userRoles.flatMap(ur => ur.role.permissions || []);
+            const roles = person.personRoles.map(pr => pr.role.name);
+            const permissions = person.personRoles.flatMap(pr => pr.role.permissions || []);
 
             res.json({
                 success: true,
                 user: {
-                    id: user.id,
-                    email: user.email,
-                    firstName: user.first_name,
-                    lastName: user.last_name,
-                    phone: user.phone,
-                    avatarUrl: user.avatar_url,
-                    language: user.language,
-                    timezone: user.timezone,
-                    companyId: user.company_id,
-                    employeeId: user.employee_id,
-                    company: user.company,
-                    employee: user.employee,
+                    id: person.id,
+                    email: person.email,
+                    firstName: person.firstName,
+                     lastName: person.lastName,
+                    phone: person.phone,
+                    avatarUrl: person.avatarUrl,
+                    language: person.language,
+                    timezone: person.timezone,
+                    companyId: person.companyId,
+                     employeeId: person.employeeId,
+                    company: person.company,
                     roles,
                     permissions,
-                    isActive: user.isActive,
-                    isVerified: user.is_verified,
-                    lastLogin: user.last_login_at,
-                    createdAt: user.created_at
+                    isActive: person.status === 'ACTIVE',
+                    isVerified: person.isVerified,
+                    lastLogin: person.lastLogin,
+                    createdAt: person.createdAt
                 }
             });
 
@@ -546,7 +550,7 @@ router.get('/me',
             action: 'getUser',
             error: error.message,
             stack: error.stack,
-            userId: req.user?.id
+            personId: req.person?.id
         });
             res.status(500).json({
                 error: 'Failed to get user info',
@@ -582,29 +586,29 @@ router.put('/me',
             } = req.body;
 
             const updateData = {};
-            if (firstName !== undefined) updateData.first_name = firstName;
-            if (lastName !== undefined) updateData.last_name = lastName;
+            if (firstName !== undefined) updateData.firstName = firstName;
+             if (lastName !== undefined) updateData.lastName = lastName;
             if (phone !== undefined) updateData.phone = phone;
             if (language !== undefined) updateData.language = language;
             if (timezone !== undefined) updateData.timezone = timezone;
             
-            updateData.updated_by = req.user.id;
+            updateData.updatedBy = req.person.id;
 
-            const user = await prisma.user.update({
-                where: { id: req.user.id },
+            const person = await prisma.person.update({
+                where: { id: req.person.id },
                 data: updateData
             });
 
             res.json({
                 success: true,
                 user: {
-                    id: user.id,
-                    email: user.email,
-                    firstName: user.first_name,
-                    lastName: user.last_name,
-                    phone: user.phone,
-                    language: user.language,
-                    timezone: user.timezone
+                    id: person.id,
+                    email: person.email,
+                    firstName: person.firstName,
+                 lastName: person.lastName,
+                    phone: person.phone,
+                    language: person.language,
+                    timezone: person.timezone
                 }
             });
 
@@ -614,7 +618,7 @@ router.put('/me',
             action: 'updateProfile',
             error: error.message,
             stack: error.stack,
-            userId: req.user?.id
+            personId: req.person?.id
         });
             res.status(500).json({
                 error: 'Failed to update profile',
@@ -641,13 +645,13 @@ router.post('/change-password',
         try {
             const { currentPassword, newPassword } = req.body;
 
-            // Get current user
-            const user = await prisma.user.findUnique({
-                where: { id: req.user.id }
+            // Get current person
+            const person = await prisma.person.findUnique({
+                where: { id: req.person.id }
             });
 
             // Verify current password
-            const isValidPassword = await PasswordService.verifyPassword(currentPassword, user.passwordHash);
+            const isValidPassword = await PasswordService.verifyPassword(currentPassword, person.passwordHash);
             if (!isValidPassword) {
                 return res.status(401).json({
                     error: 'Current password is incorrect',
@@ -669,21 +673,21 @@ router.post('/change-password',
             const newPasswordHash = await PasswordService.hashPassword(newPassword);
 
             // Update password
-            await prisma.user.update({
-                where: { id: req.user.id },
+            await prisma.person.update({
+                where: { id: req.person.id },
                 data: {
-                    password_hash: newPasswordHash,
-                    password_changed_at: new Date(),
-                    updated_by: req.user.id
+                    passwordHash: newPasswordHash,
+                    passwordChangedAt: new Date(),
+                    updatedBy: req.person.id
                 }
             });
 
             // Revoke all sessions except current one
             const sessionToken = req.cookies?.sessionToken;
             if (sessionToken) {
-                await prisma.userSession.updateMany({
+                await prisma.personSession.updateMany({
                     where: {
-                        userId: req.user.id,
+                        personId: req.person.id,
                         sessionToken: { not: sessionToken },
                         isActive: true
                     },
@@ -704,7 +708,7 @@ router.post('/change-password',
             action: 'changePassword',
             error: error.message,
             stack: error.stack,
-            userId: req.user?.id
+            personId: req.person?.id
         });
             res.status(500).json({
                 error: 'Failed to change password',
@@ -722,9 +726,9 @@ router.get('/sessions',
     authenticate(),
     async (req, res) => {
         try {
-            const sessions = await prisma.userSession.findMany({
+            const sessions = await prisma.personSession.findMany({
                 where: {
-                    userId: req.user.id,
+                    personId: req.person.id,
                     isActive: true,
                     expiresAt: {
                         gt: new Date()
@@ -732,14 +736,14 @@ router.get('/sessions',
                 },
                 select: {
                     id: true,
-                    session_token: true,
-                    device_info: true,
-                    ip_address: true,
-                    last_activity: true,
-                    created_at: true
+                    sessionToken: true,
+                    deviceInfo: true,
+                    ipAddress: true,
+                    lastActivity: true,
+                    createdAt: true
                 },
                 orderBy: {
-                    last_activity: 'desc'
+                    lastActivity: 'desc'
                 }
             });
 
@@ -749,7 +753,7 @@ router.get('/sessions',
                 success: true,
                 sessions: sessions.map(session => ({
                     ...session,
-                    isCurrent: session.session_token === currentSessionToken
+                    isCurrent: session.sessionToken === currentSessionToken
                 }))
             });
 
@@ -759,7 +763,7 @@ router.get('/sessions',
             action: 'getSessions',
             error: error.message,
             stack: error.stack,
-            userId: req.user?.id
+            personId: req.person?.id
         });
             res.status(500).json({
                 error: 'Failed to get sessions',
@@ -780,10 +784,10 @@ router.delete('/sessions/:sessionId',
         try {
             const { sessionId } = req.params;
 
-            await prisma.userSession.updateMany({
+            await prisma.personSession.updateMany({
                 where: {
                     id: sessionId,
-                    userId: req.user.id,
+                    personId: req.person.id,
                     isActive: true
                 },
                 data: {
@@ -802,7 +806,7 @@ router.delete('/sessions/:sessionId',
             action: 'revokeSession',
             error: error.message,
             stack: error.stack,
-            userId: req.user?.id,
+            personId: req.person?.id,
             sessionId: req.params?.sessionId
         });
             res.status(500).json({
@@ -818,15 +822,19 @@ router.delete('/sessions/:sessionId',
  * GET /verify
  * Verifies if the provided token is valid
  */
-router.get('/verify', authenticate(), async (req, res) => {
+router.get('/verify', authenticateTest, async (req, res) => {
     try {
         // If we reach here, the token is valid (authenticate middleware passed)
         res.json({
             valid: true,
             user: {
-                id: req.user.id,
-                email: req.user.email,
-                role: req.user.role
+                id: req.person.id,
+                email: req.person.email,
+                globalRole: req.person.globalRole,
+                roles: req.person.roles,
+                permissions: req.person.permissions,
+                companyId: req.person.companyId,
+                tenantId: req.person.tenantId
             },
             timestamp: new Date().toISOString()
         });

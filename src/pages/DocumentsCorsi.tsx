@@ -4,7 +4,7 @@ import TabNavigation from '../components/shared/TabNavigation';
 import RegistriPresenze from './documents/RegistriPresenze';
 import LettereIncarico from './documents/LettereIncarico';
 import Attestati from './documents/Attestati';
-import GenerateAttestatiModal from '../components/GenerateAttestatiModal';
+import { GenerateAttestatiModal } from '../components/shared';
 import { ViewModeToggle } from '../design-system/molecules/ViewModeToggle';
 import { HeaderPanel } from '../design-system/organisms/HeaderPanel';
 

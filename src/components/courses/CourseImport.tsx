@@ -4,8 +4,12 @@ import { applyTitleCaseToFields } from '../../utils/textFormatters';
 import type { Course } from '../../types/courses';
 import { useToast } from '../../hooks/useToast';
 
+interface CourseImportData extends Partial<Course> {
+  _isExisting?: boolean;
+}
+
 interface CourseImportProps {
-  onImport: (courses: any[], overwriteIds?: string[]) => Promise<void>;
+  onImport: (courses: CourseImportData[], overwriteIds?: string[]) => Promise<void>;
   onClose: () => void;
   existingCourses?: Course[];
 }
@@ -43,7 +47,7 @@ const numericFields = [
 ];
 
 // Normalizza un valore numerico, gestendo vari formati di input
-const normalizeNumericValue = (value: any): string => {
+const normalizeNumericValue = (value: unknown): string => {
   if (value === null || value === undefined || value === '') return '';
   
   // Converti in stringa
@@ -61,16 +65,20 @@ const normalizeNumericValue = (value: any): string => {
 };
 
 // Validazione personalizzata per i corsi
-const validateCourse = (course: any): string[] => {
+const validateCourse = (course: CourseImportData): string[] => {
   const errors: string[] = [];
   
-  if (!course.title) {
-    errors.push('Nome del corso obbligatorio');
+  if (!course.title || (typeof course.title === 'string' && course.title.trim() === '')) {
+    errors.push('Il titolo del corso è obbligatorio');
+  }
+  
+  if (!course.code || (typeof course.code === 'string' && course.code.trim() === '')) {
+    errors.push('Il codice del corso è obbligatorio');
   }
   
   // Verifica per i campi numerici
   numericFields.forEach(field => {
-    if (course[field] && isNaN(Number(normalizeNumericValue(course[field])))) {
+    if (course[field as keyof CourseImportData] && isNaN(Number(normalizeNumericValue(course[field as keyof CourseImportData])))) {
       errors.push(`${field} deve essere un numero`);
     }
   });
@@ -90,7 +98,7 @@ const CourseImport: React.FC<CourseImportProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Funzione personalizzata per processare il file CSV
-  const customProcessFile = async (file: File): Promise<any[]> => {
+  const customProcessFile = async (file: File): Promise<CourseImportData[]> => {
     try {
       // Processa il file e ottieni i dati grezzi
       const processedData = await defaultProcessFile(file, csvHeaderMap);
@@ -121,7 +129,7 @@ const CourseImport: React.FC<CourseImportProps> = ({
       // Cerca corrispondenze con corsi esistenti tramite il codice (uniqueField)
       const dataWithIds = formattedData.map(course => {
         // Se il corso ha un codice, cerca corrispondenze
-        if (course.code) {
+        if (course.code && typeof course.code === 'string') {
           const normalizedCode = course.code.trim().toLowerCase();
           const existingByCode = existingCourses?.find(existing => 
             existing.code && existing.code.trim().toLowerCase() === normalizedCode
@@ -146,7 +154,7 @@ const CourseImport: React.FC<CourseImportProps> = ({
   };
 
   // Handler personalizzato per l'importazione
-  const handleImport = async (data: any[], overwriteIds?: string[]): Promise<void> => {
+  const handleImport = async (data: CourseImportData[], overwriteIds?: string[]): Promise<void> => {
     if (isProcessing) {
       return;
     }
@@ -167,7 +175,7 @@ const CourseImport: React.FC<CourseImportProps> = ({
       // Processa i dati per assicurarsi che i campi numerici siano numeri
       const processedData = data.map(course => {
         // Create completely new object to avoid reference issues
-        const cleanCourse: Record<string, any> = {};
+        const cleanCourse: Partial<Course> = {};
         
         // Copy all non-numeric fields as is
         Object.keys(course).forEach(key => {
@@ -175,43 +183,34 @@ const CourseImport: React.FC<CourseImportProps> = ({
               key !== 'price' && 
               key !== 'pricePerPerson' && 
               key !== 'maxPeople') {
-            cleanCourse[key] = course[key];
+            (cleanCourse as Record<string, unknown>)[key] = (course as Record<string, unknown>)[key];
           }
         });
         
-        // Handle numeric fields explicitly
-        // validityYears: MUST be a number for Prisma
-        if (course.validityYears !== undefined) {
-          const validityYearsStr = String(course.validityYears);
-          const cleanValidityYears = validityYearsStr.replace(/[^\d]/g, '');
-          cleanCourse.validityYears = cleanValidityYears ? parseInt(cleanValidityYears, 10) : null;
-        }
-        
-        // duration: String in the DB, but needs to be a valid number string
-        if (course.duration !== undefined) {
-          cleanCourse.duration = String(course.duration).replace(/[^\d]/g, '');
-        }
-        
-        // price: Should be a number
-        if (course.price !== undefined) {
-          const priceStr = String(course.price);
-          const cleanPrice = priceStr.replace(/[^\d.]/g, '');
-          cleanCourse.price = cleanPrice ? parseFloat(cleanPrice) : null;
-        }
-        
-        // pricePerPerson: Should be a number
-        if (course.pricePerPerson !== undefined) {
-          const pricePerPersonStr = String(course.pricePerPerson);
-          const cleanPricePerPerson = pricePerPersonStr.replace(/[^\d.]/g, '');
-          cleanCourse.pricePerPerson = cleanPricePerPerson ? parseFloat(cleanPricePerPerson) : null;
-        }
-        
-        // maxPeople: Should be a number
-        if (course.maxPeople !== undefined) {
-          const maxPeopleStr = String(course.maxPeople);
-          const cleanMaxPeople = maxPeopleStr.replace(/[^\d]/g, '');
-          cleanCourse.maxPeople = cleanMaxPeople ? parseInt(cleanMaxPeople, 10) : null;
-        }
+        // Handle numeric fields with proper null checking
+         if (course.validityYears !== undefined && course.validityYears !== null) {
+           const numValue = parseFloat(String(course.validityYears));
+           cleanCourse.validityYears = isNaN(numValue) ? undefined : numValue;
+         }
+         
+         if (course.duration !== undefined && course.duration !== null) {
+           cleanCourse.duration = String(course.duration).replace(/[^\d]/g, '');
+         }
+         
+         if (course.price !== undefined && course.price !== null) {
+           const numValue = parseFloat(String(course.price));
+           cleanCourse.price = isNaN(numValue) ? undefined : numValue;
+         }
+         
+         if (course.pricePerPerson !== undefined && course.pricePerPerson !== null) {
+           const numValue = parseFloat(String(course.pricePerPerson));
+           cleanCourse.pricePerPerson = isNaN(numValue) ? undefined : numValue;
+         }
+         
+         if (course.maxPeople !== undefined && course.maxPeople !== null) {
+           const numValue = parseFloat(String(course.maxPeople));
+           cleanCourse.maxPeople = isNaN(numValue) ? undefined : numValue;
+         }
         
         // renewalDuration should remain a string
         if (course.renewalDuration !== undefined) {

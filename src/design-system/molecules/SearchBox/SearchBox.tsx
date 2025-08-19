@@ -122,7 +122,7 @@ export const SearchBox = forwardRef<HTMLInputElement, SearchBoxProps>(
             // Base styles
             'w-full rounded-full border border-gray-300',
             'bg-white text-gray-900 placeholder-gray-500',
-            'focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500',
+            'focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500',
             'transition-all duration-200',
             'disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed',
             // Size styles

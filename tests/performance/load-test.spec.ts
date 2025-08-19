@@ -167,8 +167,7 @@ test.describe('Performance Tests', () => {
     
     page.on('response', async (response) => {
       if (response.url().includes('/api/')) {
-        const request = response.request();
-        const timing = response.timing();
+        const timing = response.request().timing();
         
         apiCalls.push({
           url: response.url(),

@@ -1,45 +1,77 @@
 // Company types
 export interface Company {
   id: string;
-  name: string;
+  ragioneSociale: string;
+  piva?: string;
+  codiceFiscale?: string;
+  mail?: string;
+  telefono?: string;
+  pec?: string;
+  sdi?: string;
+  cap?: string;
+  citta?: string;
+  provincia?: string;
+  codiceAteco?: string;
+  iban?: string;
+  personaRiferimento?: string;
+  sedeAzienda?: string;
+  nomeSede?: string; // Campo per il nome della sede specifica
+  note?: string;
+  deletedAt?: Date | null;
+  tenantId?: string;
+  slug?: string;
+  domain?: string;
+  settings?: Record<string, unknown>;
+  subscriptionPlan?: string;
+  isActive?: boolean;
+  status?: 'ACTIVE' | 'INACTIVE' | 'PENDING';
+  createdAt?: Date;
+  updatedAt?: Date;
+  
+  // Legacy fields for backward compatibility (deprecated)
+  name?: string;
   industry?: string;
-  status?: 'Active' | 'Inactive';
   location?: string;
-  employees_count?: number;
-  established_year?: number;
-  contact_person?: string;
+  employeesCount?: number;
+  establishedYear?: number;
+  contactPerson?: string;
   phone?: string;
   email?: string;
   address?: string;
   website?: string;
   description?: string;
-  codice_ateco?: string;
-  vat_number?: string;
-  fiscal_code?: string;
-  sdi?: string;
-  pec?: string;
-  iban?: string;
+  vatNumber?: string;
+  fiscalCode?: string;
   city?: string;
   province?: string;
-  postal_code?: string;
+  postalCode?: string;
   notes?: string;
 }
 
-// Employee types
-export interface Employee {
+// Person types (unified User/Employee)
+export interface PersonData {
   id: string;
   firstName: string;
   lastName: string;
-  title: string;
-  department: string;
-  companyId: string;
-  status: 'Active' | 'On Leave' | 'Inactive';
+  title?: string;
+  department?: string;
+  companyId?: string;
+  status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' | 'TERMINATED' | 'PENDING';
   email: string;
-  phone: string;
-  dateOfBirth: string;
-  address: string;
+  phone?: string;
+  dateOfBirth?: string;
+  residenceAddress?: string;
   employeeId?: string;
   startDate?: string;
+  roleType?: string;
+  tenantId?: string;
+}
+
+// Backward compatibility alias - Employee is now unified with PersonData
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export interface Employee extends PersonData {
+  // This interface is intentionally empty as Employee is now unified with PersonData
+  // Kept for backward compatibility with existing code
 }
 
 // Course types
@@ -49,7 +81,7 @@ export interface Course {
   category: string;
   description: string;
   duration: string;
-  status: 'Active' | 'Inactive';
+  status: 'ACTIVE' | 'INACTIVE';
   rating: number;
   enrolled: number;
 }
@@ -57,7 +89,8 @@ export interface Course {
 // Medical record types
 export interface MedicalRecord {
   id: string;
-  employeeId: string;
+  personId: string;
+  employeeId?: string; // Backward compatibility
   date: Date;
   type: string;
   status: 'Scheduled' | 'Completed' | 'Cancelled';
@@ -69,7 +102,8 @@ export interface MedicalRecord {
 // Training record types
 export interface TrainingRecord {
   id: string;
-  employeeId: string;
+  personId: string;
+  employeeId?: string; // Backward compatibility
   courseId: string;
   completionDate?: Date;
   expiryDate?: Date;
@@ -81,7 +115,8 @@ export interface TrainingRecord {
 // Assessment types
 export interface Assessment {
   id: string;
-  employeeId: string;
+  personId: string;
+  employeeId?: string; // Backward compatibility
   type: 'Annual' | 'Pre-employment' | 'Special';
   date: Date;
   status: 'Scheduled' | 'Completed' | 'Cancelled';
@@ -98,25 +133,50 @@ export interface AssessmentResult {
 }
 
 // Authentication types
-export interface User {
+export interface Person {
   id: string;
-  username: string;
+  username?: string;
   email: string;
   firstName: string;
   lastName: string;
-  role: string;
+  title?: string; // Profilo professionale
+  role: string; // Single role for frontend compatibility
+  roles: string[]; // Array of roles from backend
+  companyId?: string;
+  tenantId?: string;
+  company?: {
+    id: string;
+    name: string;
+    type?: string;
+  };
+  tenant?: {
+    id: string;
+    name: string;
+  };
+  isVerified?: boolean;
   permissions?: string[];
 }
 
+
+
 export interface AuthResponse {
-  user: User;
-  token: string;
+  success: boolean;
+  message?: string;
+  user: Person;
+  tokens: {
+    access_token: string;
+    refresh_token: string;
+    expires_in: number;
+    token_type: string;
+  };
   permissions?: Record<string, boolean>;
 }
 
 export interface AuthVerifyResponse {
-  user: User;
+  valid: boolean;
+  user: Person;
   permissions: Record<string, boolean>;
+  timestamp?: string;
 }
 
 export interface LoginRequest {
@@ -128,7 +188,31 @@ export interface LoginRequest {
 export interface ImportWithTemplateResponse {
   success: boolean;
   message: string;
-  data?: any;
+  data?: unknown;
+}
+
+// Activity Log types
+export interface ActivityLog {
+  id: string;
+  userId: string;
+  user?: {
+    username: string;
+    email: string;
+  };
+  resource: string;
+  resourceId?: string;
+  action: string;
+  details?: string;
+  ipAddress?: string;
+  timestamp: string;
+}
+
+export interface ActivityLogFilters {
+  userId?: string;
+  resource?: string;
+  action?: string;
+  startDate?: string;
+  endDate?: string;
 }
 
 export * from './courses';
@@ -143,6 +227,11 @@ export interface Database {
         Row: Company;
         Insert: Omit<Company, 'id'> & { id?: string };
         Update: Partial<Omit<Company, 'id'>>;
+      };
+      persons: {
+        Row: PersonData;
+        Insert: Omit<PersonData, 'id'> & { id?: string };
+        Update: Partial<Omit<PersonData, 'id'>>;
       };
       employees: {
         Row: Employee;

@@ -4,13 +4,13 @@
  */
 
 import jwt from 'jsonwebtoken';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../config/prisma-optimization.js';
 import { AdvancedJWTService } from '../auth/jwt-advanced.js';
 import logger from '../utils/logger.js';
 import rateLimit from 'express-rate-limit';
 import { RBACService } from './rbac.js';
 
-const prisma = new PrismaClient();
+// Prisma client importato dalla configurazione ottimizzata
 
 /**
  * Enhanced JWT Authentication Middleware
@@ -29,27 +29,28 @@ export async function authenticateAdvanced(req, res, next) {
         const token = authHeader.substring(7);
         
         // Verify and decode token
-        const decoded = await AdvancedJWTService.verifyToken(token, 'access');
-        
-        if (!decoded.valid) {
+        let decoded;
+        try {
+            decoded = await AdvancedJWTService.verifyAccessToken(token);
+        } catch (tokenError) {
             return res.status(401).json({
-                error: decoded.error || 'Invalid token',
+                error: 'Invalid token',
                 code: 'AUTH_TOKEN_INVALID'
             });
         }
         
-        const { userId, sessionId } = decoded.payload;
+        const { personId, sessionId } = decoded;
         
         // Check if session is still active
-        const session = await prisma.userSession.findUnique({
+        const session = await prisma.personSession.findUnique({
             where: { id: sessionId },
             include: {
-                user: {
+                person: {
                     include: {
-                        userRoles: {
+                        personRoles: {
                             where: { isActive: true },
                             include: {
-                                role: true
+                                permissions: true
                             }
                         }
                     }
@@ -64,17 +65,17 @@ export async function authenticateAdvanced(req, res, next) {
             });
         }
         
-        const user = session.user;
+        const person = session.person;
         
-        if (!user || !user.isActive) {
+        if (!person || person.status !== 'ACTIVE') {
             return res.status(401).json({
-                error: 'User account inactive',
-                code: 'AUTH_USER_INACTIVE'
+                error: 'Person account inactive',
+                code: 'AUTH_PERSON_INACTIVE'
             });
         }
         
         // Update session activity
-        await prisma.userSession.update({
+        await prisma.personSession.update({
             where: { id: sessionId },
             data: {
                 lastActivityAt: new Date(),
@@ -83,29 +84,36 @@ export async function authenticateAdvanced(req, res, next) {
             }
         });
         
-        // Get user permissions
-        const permissions = await RBACService.getUserPermissions(userId);
-        const roles = user.userRoles.map(ur => ur.role.name);
+        // Get person permissions
+        const permissions = await RBACService.getPersonPermissions(personId);
+        const roles = person.personRoles.map(pr => pr.roleType);
         
-        // Attach user info to request
-        req.user = {
-            id: user.id,
-            userId: user.id,
-            email: user.email,
-            firstName: user.firstName,
-            lastName: user.lastName,
-            companyId: user.companyId,
+        // Attach person info to request
+        // Aggiorna lastActivityAt della sessione per mantenere lo stato online
+        await prisma.personSession.update({
+            where: { id: sessionId },
+            data: { lastActivityAt: new Date() }
+        });
+
+        req.person = {
+            id: person.id,
+            personId: person.id,
+            email: person.email,
+            firstName: person.firstName,
+            lastName: person.lastName,
+            companyId: person.companyId,
+            tenantId: person.tenantId, // ✅ Aggiunto campo tenantId mancante
             roles: roles,
             permissions: permissions,
             sessionId: sessionId,
-            lastLogin: user.lastLogin
+            lastLogin: person.lastLogin
         };
         
         // Log successful authentication
-        logger.info('User authenticated successfully', {
+        logger.info('Person authenticated successfully', {
             component: 'auth-advanced',
             action: 'authenticate',
-            userId: user.id,
+            personId: person.id,
             sessionId: sessionId,
             ip: req.ip,
             userAgent: req.get('User-Agent'),
@@ -145,20 +153,25 @@ export async function optionalAuth(req, res, next) {
         }
         
         const token = authHeader.substring(7);
-        const decoded = await AdvancedJWTService.verifyToken(token, 'access');
+        let decoded;
+        try {
+            decoded = await AdvancedJWTService.verifyAccessToken(token);
+        } catch (tokenError) {
+            return next();
+        }
         
-        if (decoded.valid) {
-            const { userId, sessionId } = decoded.payload;
+        if (decoded) {
+            const { personId, sessionId } = decoded;
             
-            const session = await prisma.userSession.findUnique({
+            const session = await prisma.personSession.findUnique({
                 where: { id: sessionId },
                 include: {
-                    user: {
+                    person: {
                         include: {
-                            userRoles: {
+                            personRoles: {
                                 where: { isActive: true },
                                 include: {
-                                    role: true
+                                    permissions: true
                                 }
                             }
                         }
@@ -167,23 +180,30 @@ export async function optionalAuth(req, res, next) {
             });
             
             if (session && session.isActive && session.expiresAt >= new Date()) {
-                const user = session.user;
+                const person = session.person;
                 
-                if (user && user.isActive) {
-                    const permissions = await RBACService.getUserPermissions(userId);
-                    const roles = user.userRoles.map(ur => ur.role.name);
+                if (person && person.status === 'ACTIVE') {
+                    // Aggiorna lastActivityAt della sessione per mantenere lo stato online
+                    await prisma.personSession.update({
+                        where: { id: sessionId },
+                        data: { lastActivityAt: new Date() }
+                    });
+
+                    const permissions = await RBACService.getPersonPermissions(personId);
+                    const roles = person.personRoles.map(pr => pr.roleType);
                     
-                    req.user = {
-                        id: user.id,
-                        userId: user.id,
-                        email: user.email,
-                        firstName: user.firstName,
-                        lastName: user.lastName,
-                        companyId: user.companyId,
+                    req.person = {
+                        id: person.id,
+                        personId: person.id,
+                        email: person.email,
+                        firstName: person.firstName,
+                        lastName: person.lastName,
+                        companyId: person.companyId,
+                        tenantId: person.tenantId, // ✅ Aggiunto campo tenantId mancante
                         roles: roles,
                         permissions: permissions,
                         sessionId: sessionId,
-                        lastLogin: user.lastLogin
+                        lastLogin: person.lastLogin
                     };
                 }
             }
@@ -209,12 +229,12 @@ export async function optionalAuth(req, res, next) {
 export function sessionTimeout(timeoutMinutes = 30) {
     return async (req, res, next) => {
         try {
-            if (!req.user || !req.user.sessionId) {
+            if (!req.person || !req.person.sessionId) {
                 return next();
             }
             
-            const session = await prisma.userSession.findUnique({
-                where: { id: req.user.sessionId }
+            const session = await prisma.personSession.findUnique({
+                where: { id: req.person.sessionId }
             });
             
             if (!session) {
@@ -230,7 +250,7 @@ export function sessionTimeout(timeoutMinutes = 30) {
             
             if (now - lastActivity > timeoutMs) {
                 // Deactivate expired session
-                await prisma.userSession.update({
+                await prisma.personSession.update({
                     where: { id: session.id },
                     data: { isActive: false }
                 });
@@ -238,7 +258,7 @@ export function sessionTimeout(timeoutMinutes = 30) {
                 logger.info('Session timed out', {
                     component: 'auth-advanced',
                     action: 'sessionTimeout',
-                    userId: req.user.id,
+                    personId: req.person.id,
                     sessionId: session.id,
                     lastActivity: lastActivity,
                     timeoutMinutes
@@ -254,11 +274,11 @@ export function sessionTimeout(timeoutMinutes = 30) {
             
         } catch (error) {
             logger.error('Session timeout check failed', {
-                component: 'auth-advanced',
-                action: 'sessionTimeout',
-                error: error.message,
-                userId: req.user?.id
-            });
+            component: 'auth-advanced',
+            action: 'sessionTimeout',
+            error: error.message,
+            personId: req.person?.id
+        });
             
             next();
         }
@@ -270,7 +290,7 @@ export function sessionTimeout(timeoutMinutes = 30) {
  */
 export const authRateLimit = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 5, // 5 attempts per window
+    max: 50, // 50 attempts per window (increased for development)
     message: {
         error: 'Too many authentication attempts',
         code: 'AUTH_RATE_LIMIT_EXCEEDED',
@@ -314,7 +334,7 @@ export async function trackFailedLogin(req, res, next) {
  */
 async function trackLoginAttempt(email, ip, success) {
     try {
-        const user = await prisma.user.findUnique({
+        const user = await prisma.person.findUnique({
             where: { email }
         });
         
@@ -322,7 +342,7 @@ async function trackLoginAttempt(email, ip, success) {
         
         if (success) {
             // Reset failed attempts on successful login
-            await prisma.user.update({
+            await prisma.person.update({
                 where: { id: user.id },
                 data: {
                     failedLoginAttempts: 0,
@@ -334,7 +354,7 @@ async function trackLoginAttempt(email, ip, success) {
             logger.info('Successful login', {
                 component: 'auth-advanced',
                 action: 'trackLoginAttempt',
-                userId: user.id,
+                personId: user.id,
                 email: email,
                 ip: ip
             });
@@ -354,7 +374,7 @@ async function trackLoginAttempt(email, ip, success) {
                 logger.warn('Account locked due to failed login attempts', {
                     component: 'auth-advanced',
                     action: 'trackLoginAttempt',
-                    userId: user.id,
+                    personId: user.id,
                     email: email,
                     ip: ip,
                     failedAttempts: newFailedAttempts,
@@ -362,7 +382,7 @@ async function trackLoginAttempt(email, ip, success) {
                 });
             }
             
-            await prisma.user.update({
+            await prisma.person.update({
                 where: { id: user.id },
                 data: updateData
             });
@@ -370,7 +390,7 @@ async function trackLoginAttempt(email, ip, success) {
             logger.warn('Failed login attempt', {
                 component: 'auth-advanced',
                 action: 'trackLoginAttempt',
-                userId: user.id,
+                personId: user.id,
                 email: email,
                 ip: ip,
                 failedAttempts: newFailedAttempts
@@ -399,7 +419,7 @@ export async function checkAccountLock(req, res, next) {
             return next();
         }
         
-        const user = await prisma.user.findUnique({
+        const user = await prisma.person.findUnique({
             where: { email }
         });
         
@@ -413,7 +433,7 @@ export async function checkAccountLock(req, res, next) {
             logger.warn('Login attempt on locked account', {
                 component: 'auth-advanced',
                 action: 'checkAccountLock',
-                userId: user.id,
+                personId: user.id,
                 email: email,
                 ip: req.ip,
                 remainingLockTime: remainingTime
@@ -465,13 +485,13 @@ export function deviceFingerprint(req, res, next) {
 export function limitConcurrentSessions(maxSessions = 3) {
     return async (req, res, next) => {
         try {
-            if (!req.user) {
+            if (!req.person) {
                 return next();
             }
             
-            const activeSessions = await prisma.userSession.count({
+            const activeSessions = await prisma.personSession.count({
                 where: {
-                    userId: req.user.id,
+                    personId: req.person.id,
                     isActive: true,
                     expiresAt: {
                         gt: new Date()
@@ -481,9 +501,9 @@ export function limitConcurrentSessions(maxSessions = 3) {
             
             if (activeSessions > maxSessions) {
                 // Deactivate oldest sessions
-                const oldestSessions = await prisma.userSession.findMany({
+                const oldestSessions = await prisma.personSession.findMany({
                     where: {
-                        userId: req.user.id,
+                        personId: req.person.id,
                         isActive: true,
                         expiresAt: {
                             gt: new Date()
@@ -495,7 +515,7 @@ export function limitConcurrentSessions(maxSessions = 3) {
                     take: activeSessions - maxSessions
                 });
                 
-                await prisma.userSession.updateMany({
+                await prisma.personSession.updateMany({
                     where: {
                         id: {
                             in: oldestSessions.map(s => s.id)
@@ -509,7 +529,7 @@ export function limitConcurrentSessions(maxSessions = 3) {
                 logger.info('Deactivated old sessions due to concurrent limit', {
                     component: 'auth-advanced',
                     action: 'limitConcurrentSessions',
-                    userId: req.user.id,
+                    personId: req.person.id,
                     deactivatedSessions: oldestSessions.length,
                     maxSessions
                 });
@@ -522,7 +542,7 @@ export function limitConcurrentSessions(maxSessions = 3) {
                 component: 'auth-advanced',
                 action: 'limitConcurrentSessions',
                 error: error.message,
-                userId: req.user?.id
+                personId: req.person?.id
             });
             
             next();

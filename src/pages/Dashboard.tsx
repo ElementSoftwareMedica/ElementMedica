@@ -1,5 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { Users, Building2, GraduationCap, Calendar, TrendingUp, AlertTriangle } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { 
+  AlertTriangle,
+  Building2,
+  Calendar,
+  GraduationCap,
+  TrendingUp,
+  Users
+} from 'lucide-react';
 import { Doughnut, Bar } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -16,32 +23,71 @@ import StatCard from '../components/dashboard/StatCard';
 import ScheduleCalendar, { ScheduleEvent } from '../components/dashboard/ScheduleCalendar';
 import ScheduleEventModalLazy from '../components/schedules/ScheduleEventModal.lazy';
 import { useNavigate } from 'react-router-dom';
-import { API_BASE_URL } from '../config/api';
+import { apiGet} from '../services/api';
+import { getToken } from '../services/auth';
 import { Company, Employee, Course } from '../types';
+import { checkConsent as checkGdprConsent, logGdprAction, ConsentRequiredError } from '../utils/gdpr';
+import { recordApiCall, startTimer } from '../utils/metrics';
+import { useAuth } from '../context/AuthContext';
+import { useTenant } from '../context/TenantContext';
 
 // Interfaccia estesa per la dashboard che include campi aggiuntivi
 interface DashboardCompany extends Partial<Company> {
   id: string;
   name: string;
   employeeCount?: number;
-  ragione_sociale: string; // Campo obbligatorio per compatibilità con ScheduleEventModal
+  ragioneSociale: string; // Campo obbligatorio per compatibilità con ScheduleEventModal
   sector?: string;
 }
 
 interface DashboardTrainer {
   id: string;
-  first_name: string; // Campo obbligatorio per compatibilità con ScheduleEventModal
-  last_name: string; // Campo obbligatorio per compatibilità con ScheduleEventModal
-  firstName?: string; // Per compatibilità con i tipi definiti
-  lastName?: string; // Per compatibilità con i tipi definiti
+  firstName: string; // Campo obbligatorio per compatibilità con ScheduleEventModal
+  lastName: string; // Campo obbligatorio per compatibilità con ScheduleEventModal
 }
 
-// Interfaccia per i dati dummy
+// Interfacce per i dati
+interface DashboardEmployee {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  companyId?: string;
+  company?: DashboardCompany;
+}
+
+interface DashboardSchedule {
+  id: string;
+  courseId: string;
+  course?: Course;
+  startDate: string;
+  endDate: string;
+  location?: string;
+  trainerId?: string;
+  trainer?: DashboardTrainer;
+  maxParticipants?: number;
+  companies?: Array<{ company: DashboardCompany }>;
+  enrollments?: Array<{ employee: DashboardEmployee }>;
+  sessions?: Array<{
+    id: string;
+    date: string;
+    start: string;
+    end: string;
+    trainer?: DashboardTrainer;
+  }>;
+}
+
 interface DummyData {
-  companies: any[];
-  employees: any[];
-  courses: any[];
-  schedules?: any[];
+  companies: DashboardCompany[];
+  employees: DashboardEmployee[];
+  courses: Course[];
+  schedules?: DashboardSchedule[];
+}
+
+interface FetchOptions {
+  headers?: Record<string, string>;
+  method?: string;
+  body?: string;
 }
 
 // Register ChartJS components
@@ -74,147 +120,389 @@ const Dashboard: React.FC = () => {
   const [coursesList, setCoursesList] = useState<Course[]>([]);
   const [trainersList, setTrainersList] = useState<DashboardTrainer[]>([]);
   const [companiesList, setCompaniesList] = useState<DashboardCompany[]>([]);
-  const [employeesList, setEmployeesList] = useState<any[]>([]);
+  const [employeesList, setEmployeesList] = useState<DashboardEmployee[]>([]);
   const [calendarEvents, setCalendarEvents] = useState<ScheduleEvent[]>([]);
-  const [schedulesData, setSchedulesData] = useState<any[]>([]); // per rimappare quando cambia vista
+  const [schedulesData, setSchedulesData] = useState<DashboardSchedule[]>([]); // per rimappare quando cambia vista
   const [calendarView, setCalendarView] = useState('month');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [gdprConsent, setGdprConsent] = useState<boolean>(false);
+  const [dataSource, setDataSource] = useState<'api' | 'fallback'>('api');
+  const [counters, setCounters] = useState({ companies: 0, employees: 0 });
+  
   const navigate = useNavigate();
-
+  const { user, isAuthenticated, hasPermission } = useAuth();
+  
+  // Uso condizionale di useTenant per evitare errori durante l'inizializzazione
+  let tenant = null;
+  
+  try {
+    const tenantContext = useTenant();
+    tenant = tenantContext.tenant;
+  } catch (error) {
+    console.warn('TenantContext not yet initialized, using fallback values');
+  }
+  
+  const mountedRef = useRef(true);
+  const fetchingRef = useRef(false);
+  
+  // Cleanup on unmount
   useEffect(() => {
-    // Fetch real data instead of using dummyData
-    const fetchData = async () => {
-      setIsLoading(true);
-      setError(null);
-      
-      try {
-        // Utilizzo un timeout per evitare blocchi prolungati
-        const fetchWithTimeout = async (url: string, timeout = 5000) => {
-          const controller = new AbortController();
-          const id = setTimeout(() => controller.abort(), timeout);
-          
-          try {
-            const response = await fetch(url, { signal: controller.signal });
-            clearTimeout(id);
-            if (!response.ok) {
-              throw new Error(`HTTP error: ${response.status}`);
-            }
-            return response.json();
-          } catch (error) {
-            clearTimeout(id);
-            console.error(`Errore nel recupero da ${url}:`, error);
-            throw error;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  // GDPR Consent Check
+  const checkDashboardConsent = useCallback(async () => {
+    try {
+      const hasConsent = await checkGdprConsent('dashboard_data');
+    setGdprConsent(hasConsent);
+    
+    if (!hasConsent) {
+        await logGdprAction({
+          action: 'DASHBOARD_ACCESS_DENIED',
+          timestamp: new Date().toISOString(),
+          tenantId: tenant?.id,
+          metadata: {
+            reason: 'Missing consent for dashboard data access'
           }
+        });
+        
+        setError('Accesso ai dati del dashboard richiede il consenso GDPR');
+        setDataSource('fallback');
+        return false;
+      }
+      
+      return true;
+    } catch (error) {
+      console.warn('GDPR consent check failed, using fallback data:', error);
+      setGdprConsent(false);
+      setDataSource('fallback');
+      return false;
+    }
+  }, [tenant?.id]);
+
+  // Enhanced fetch function with timeout and retry
+  const fetchWithTimeout = useCallback(async (url: string, options: FetchOptions = {}, timeout = 5000, retries = 2): Promise<unknown> => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    
+    // Get authentication token
+    const token = getToken();
+    
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          'X-Tenant-ID': tenant?.id || '1',
+          ...options.headers
         };
         
-        // Prova a recuperare i dati con gestione degli errori per ogni chiamata
-        let coursesData = [], trainersData = [], companiesData = [], employeesData = [], schedulesData = [];
-        
-        try {
-          coursesData = await fetchWithTimeout(`${API_BASE_URL}/courses`);
-          console.log('Dati corsi recuperati:', coursesData.length);
-        } catch (error) {
-          console.warn('Impossibile recuperare i corsi, uso dati dummy', error);
-          coursesData = (dummyData as any).courses || [];
+        // Add authentication token if available
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
         }
         
-        try {
-          trainersData = await fetchWithTimeout(`${API_BASE_URL}/trainers`);
-          console.log('Dati formatori recuperati:', trainersData.length);
-        } catch (error) {
-          console.warn('Impossibile recuperare i formatori, uso dati dummy', error);
-          trainersData = (dummyData as any).employees?.map((e: any) => ({
-            id: e.id,
-            first_name: e.firstName || '', // Garantisco sempre una stringa
-            last_name: e.lastName || '',   // Garantisco sempre una stringa
-            firstName: e.firstName,
-            lastName: e.lastName
-          })) || [];
+        const response = await fetch(url, {
+          ...options,
+          signal: controller.signal,
+          headers
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         
-        try {
-          companiesData = await fetchWithTimeout(`${API_BASE_URL}/companies`);
-          console.log('Dati aziende recuperati:', companiesData.length);
-        } catch (error) {
-          console.warn('Impossibile recuperare le aziende, uso dati dummy', error);
-          companiesData = (dummyData as any).companies || [];
+        return await response.json();
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.warn(`Attempt ${attempt + 1} failed for ${url}:`, errorMessage);
+        
+        if (attempt === retries) {
+          throw error;
         }
         
-        try {
-          employeesData = await fetchWithTimeout(`${API_BASE_URL}/employees`);
-          console.log('Dati dipendenti recuperati:', employeesData.length);
-        } catch (error) {
-          console.warn('Impossibile recuperare i dipendenti, uso dati dummy', error);
-          employeesData = (dummyData as any).employees || [];
-        }
-        
-        // Add employeeCount and sector to each company
-        const companiesWithCounts = companiesData.map((company: any) => ({
-          ...company,
-          employeeCount: employeesData.filter((e: any) => e.companyId === company.id || e.company_id === company.id).length,
-          sector: company.industry || company.sector || company.type || '',
-          // Assicura compatibilità con API legacy
-          ragione_sociale: company.ragione_sociale || company.name || '' // Garantisco sempre una stringa
-        }));
-        
-        setCoursesList(coursesData);
-        setTrainersList(trainersData);
-        setCompaniesList(companiesWithCounts);
-        setEmployeesList(employeesData);
-        
-        // Fetch scheduled courses for calendar
-        try {
-          schedulesData = await fetchWithTimeout(`${API_BASE_URL}/schedules`);
-          console.log('Dati pianificazioni recuperati:', schedulesData.length);
-          setSchedulesData(schedulesData);
-        } catch (error) {
-          console.warn('Impossibile recuperare le pianificazioni, uso dati dummy', error);
-          setSchedulesData((dummyData as any).schedules || []);
-        }
-        
+        // Wait before retry (exponential backoff)
+        await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+      }
+    }
+  }, []);
+
+  // Simplified counters fetch using only the working endpoint
+  const fetchCounters = useCallback(async (): Promise<{ companies: number; employees: number }> => {
+    try {
+      console.log('🔄 Fetching counters from /api/counters...');
+      const data = await apiGet<{ companies: number; employees: number }>('/api/counters');
+      const result = {
+        companies: data.companies || 0,
+        employees: data.employees || 0
+      };
+      console.log('✅ Counters fetched successfully:', result);
+      return result;
+    } catch (error) {
+      console.warn('❌ Failed to fetch counters:', error);
+      // Return fallback data from dummy data
+      const dummyDataTyped = dummyData as unknown as DummyData;
+      return {
+        companies: (dummyDataTyped.companies || []).length,
+        employees: (dummyDataTyped.employees || []).length
+      };
+    }
+  }, []);
+
+  // Optimized data fetching with GDPR compliance
+  const fetchData = useCallback(async () => {
+    if (fetchingRef.current || !mountedRef.current) return;
+    
+    fetchingRef.current = true;
+    setIsLoading(true);
+    setError(null);
+    
+    const timer = startTimer();
+    
+    try {
+      // Check GDPR consent first
+      const hasConsent = await checkDashboardConsent();
+      
+      if (!hasConsent) {
+        // Use fallback data without API calls
+        await loadFallbackData();
+        return;
+      }
+      
+      // Check permissions - permetti accesso se ha dashboard:read, companies:read o è admin
+      const hasDashboardAccess = hasPermission && (
+        hasPermission('dashboard', 'read') || 
+        hasPermission('dashboard', 'view') || 
+        hasPermission('companies', 'read') ||
+        hasPermission('administration', 'view')
+      );
+      
+      if (!hasDashboardAccess) {
+        throw new Error('Permessi insufficienti per accedere al dashboard');
+      }
+      
+      console.log('🚀 Fetching dashboard data with GDPR compliance...');
+      
+      // Fetch counters using enhanced strategy
+      try {
+        const countersData = await fetchCounters();
+        setCounters(countersData);
+        console.log('✅ Counters loaded:', countersData);
       } catch (error) {
-        console.error('Errore generale nel caricamento dei dati:', error);
-        setError(error instanceof Error ? error.message : 'Errore di connessione al server');
-        // Usa i dati di fallback se disponibili
-        if (dummyData) {
-          console.log('Utilizzo dati dummy completi a causa di errori');
-          // Usa il cast per evitare errori di tipo con i dati dummy
-          const dummyDataTyped = dummyData as unknown as DummyData;
-          setCoursesList(dummyDataTyped.courses || []);
-          setTrainersList(dummyDataTyped.employees?.map(e => ({
-            id: e.id,
-            first_name: e.firstName || '', // Garantisco sempre una stringa
-            last_name: e.lastName || '',   // Garantisco sempre una stringa
-            firstName: e.firstName,
-            lastName: e.lastName
-          })) || []);
-          setCompaniesList(dummyDataTyped.companies?.map(c => ({
-            ...c,
-            ragione_sociale: c.name || ''  // Garantisco sempre una stringa
-          })) || []);
-          setEmployeesList(dummyDataTyped.employees || []);
-          setSchedulesData(dummyDataTyped.schedules || []);
+        console.warn('Failed to fetch counters with all strategies:', error);
+        // Fallback to dummy data counters
+        const dummyDataTyped = dummyData as unknown as DummyData;
+        setCounters({
+          companies: (dummyDataTyped.companies || []).length,
+          employees: (dummyDataTyped.employees || []).length
+        });
+      }
+      
+      // Fetch data using optimized API calls (removed non-existing dashboard endpoints)
+      const [coursesData, trainersData, schedulesData] = await Promise.allSettled([
+        apiGet('/courses').catch(err => {
+          console.warn('Failed to fetch courses:', err);
+          return [];
+        }),
+        apiGet('/trainers').catch(err => {
+          console.warn('Failed to fetch trainers:', err);
+          return [];
+        }),
+        apiGet('/api/v1/schedules').catch(err => {
+          console.warn('Failed to fetch schedules:', err);
+          return [];
+        })
+      ]);
+      
+      // Process results with safety checks
+      const courses = coursesData.status === 'fulfilled' ? (Array.isArray(coursesData.value) ? coursesData.value : []) : [];
+      const trainers = trainersData.status === 'fulfilled' ? (Array.isArray(trainersData.value) ? trainersData.value : []) : [];
+      const schedules = schedulesData.status === 'fulfilled' ? (Array.isArray(schedulesData.value) ? schedulesData.value : []) : [];
+      
+      // Use empty arrays for companies and employees since we get counts from /api/counters
+      const companies: DashboardCompany[] = [];
+      const employees: DashboardEmployee[] = [];
+      
+      // DEBUG: Log dettagliato dei risultati
+      console.log('🔍 [DEBUG] API Results Details:');
+      console.log('📊 Courses:', { status: coursesData.status, length: courses.length, data: courses });
+      console.log('👨‍🏫 Trainers:', { status: trainersData.status, length: trainers.length, data: trainers });
+      console.log('🏢 Companies:', { length: companies.length, data: companies, note: 'Using empty array - counts from /api/counters' });
+      console.log('👥 Employees:', { length: employees.length, data: employees, note: 'Using empty array - counts from /api/counters' });
+      console.log('📅 Schedules:', { status: schedulesData.status, length: schedules.length, data: schedules });
+      
+      // DEBUG: Log errori se presenti
+      if (coursesData.status === 'rejected') console.error('❌ Courses error:', coursesData.reason);
+      if (trainersData.status === 'rejected') console.error('❌ Trainers error:', trainersData.reason);
+      if (schedulesData.status === 'rejected') console.error('❌ Schedules error:', schedulesData.reason);
+      
+      // Transform trainers data for compatibility
+      const transformedTrainers = trainers.map((trainer: DashboardTrainer) => ({
+        id: trainer.id,
+        firstName: trainer.firstName || '',
+        lastName: trainer.lastName || ''
+      }));
+      
+      // Add employeeCount and ensure compatibility
+      const companiesWithCounts = companies.map((company: DashboardCompany) => ({
+        ...company,
+        employeeCount: employees.filter((e: DashboardEmployee) => 
+          e.companyId === company.id
+        ).length,
+        sector: company.sector || '',
+        ragioneSociale: company.ragioneSociale || company.name || ''
+      }));
+      
+      // Update state only if component is still mounted
+      if (mountedRef.current) {
+        setCoursesList(courses);
+        setTrainersList(transformedTrainers);
+        setCompaniesList(companiesWithCounts);
+        setEmployeesList(employees);
+        setSchedulesData(schedules);
+        setDataSource('api');
+        
+        // Counters are now handled exclusively by fetchCounters() using /api/counters
+        console.log('✅ Counters managed by /api/counters endpoint:', counters);
+        
+        console.log('✅ Dashboard data loaded successfully:', {
+          courses: courses.length,
+          trainers: transformedTrainers.length,
+          companies: companiesWithCounts.length,
+          employees: employees.length,
+          schedules: schedules.length
+        });
+      }
+      
+      // Log successful data fetch
+      await logGdprAction({
+        action: 'DASHBOARD_DATA_LOADED',
+        timestamp: new Date().toISOString(),
+        tenantId: tenant?.id,
+        metadata: {
+          duration: timer(),
+          dataSource: 'api',
+          recordCounts: {
+            courses: courses.length,
+            trainers: transformedTrainers.length,
+            companies: companiesWithCounts.length,
+            employees: employees.length,
+            schedules: schedules.length
+          }
         }
-      } finally {
+      });
+      
+    } catch (error) {
+      console.error('❌ Error loading dashboard data:', error);
+      
+      const errorMessage = error instanceof Error ? error.message : 'Errore di connessione al server';
+      
+      // Log error
+      await logGdprAction({
+        action: 'DASHBOARD_DATA_ERROR',
+        timestamp: new Date().toISOString(),
+        tenantId: tenant?.id,
+        error: errorMessage,
+        metadata: {
+          duration: timer(),
+          errorType: error instanceof Error ? error.constructor.name : 'UnknownError'
+        }
+      });
+      
+      if (mountedRef.current) {
+        setError(errorMessage);
+        // Load fallback data on error
+        await loadFallbackData();
+      }
+    } finally {
+      fetchingRef.current = false;
+      if (mountedRef.current) {
         setIsLoading(false);
       }
-    };
+    }
+  }, [tenant?.id, hasPermission, checkDashboardConsent]);
+  
+  // Load fallback data (dummy data)
+  const loadFallbackData = useCallback(async () => {
+    console.log('📦 Loading fallback data...');
     
-    fetchData();
-  }, []);
+    try {
+      const dummyDataTyped = dummyData as unknown as DummyData;
+      
+      const transformedTrainers = (dummyDataTyped.employees || []).map((e: DashboardEmployee) => ({
+        id: e.id,
+        firstName: e.firstName || '',
+        lastName: e.lastName || ''
+      }));
+      
+      const transformedCompanies = (dummyDataTyped.companies || []).map((c: DashboardCompany) => ({
+        ...c,
+        ragioneSociale: c.name || '',
+        employeeCount: (dummyDataTyped.employees || []).filter((e: DashboardEmployee) => 
+          e.companyId === c.id
+        ).length,
+        sector: c.sector || ''
+      }));
+      
+      if (mountedRef.current) {
+        setCoursesList(dummyDataTyped.courses || []);
+        setTrainersList(transformedTrainers);
+        setCompaniesList(transformedCompanies);
+        setEmployeesList(dummyDataTyped.employees || []);
+        setSchedulesData(dummyDataTyped.schedules || []);
+        setDataSource('fallback');
+        // Set fallback counters
+        setCounters({
+          companies: transformedCompanies.length,
+          employees: (dummyDataTyped.employees || []).length
+        });
+      }
+      
+      await logGdprAction({
+        action: 'DASHBOARD_FALLBACK_DATA_LOADED',
+        timestamp: new Date().toISOString(),
+        tenantId: tenant?.id,
+        metadata: {
+          reason: gdprConsent ? 'API error' : 'Missing GDPR consent'
+        }
+      });
+      
+    } catch (error) {
+      console.error('Failed to load fallback data:', error);
+    }
+  }, [tenant?.id, gdprConsent]);
+  
+  // Initial data load
+  useEffect(() => {
+    // Load data even without tenant for testing - tenant is only used for GDPR logging
+    if (mountedRef.current) {
+      console.log('🚀 Dashboard: Loading data (tenant:', tenant?.id || 'not available', ')');
+      fetchData();
+    }
+  }, [fetchData]);
+  
+  // Log when tenant becomes available
+  useEffect(() => {
+    if (tenant) {
+      console.log('✅ Dashboard: Tenant loaded:', tenant.id);
+    }
+  }, [tenant]);
 
   // Rimappa gli eventi ogni volta che cambia la vista o i dati
   useEffect(() => {
     if (!schedulesData.length) return;
     // Helper: group sessions by scheduleId+date for month view
-    function groupSessionsByDay(schedules: any[]) {
-      const grouped: any[] = [];
-      schedules.forEach((s: any) => {
+    function groupSessionsByDay(schedules: DashboardSchedule[]) {
+      const grouped: ScheduleEvent[] = [];
+      schedules.forEach((s: DashboardSchedule) => {
         if (Array.isArray(s.sessions) && s.sessions.length > 0) {
           // Raggruppa per giorno
-          const sessionsByDay: Record<string, any[]> = {};
-          s.sessions.forEach((sess: any) => {
+          const sessionsByDay: Record<string, DashboardSchedule['sessions'][0][]> = {};
+          s.sessions.forEach((sess) => {
             const day = sess.date.split('T')[0];
             if (!sessionsByDay[day]) sessionsByDay[day] = [];
             sessionsByDay[day].push(sess);
@@ -222,16 +510,16 @@ const Dashboard: React.FC = () => {
           Object.entries(sessionsByDay).forEach(([day, sessions]) => {
             // Tooltip con tutte le sessioni (HTML)
             const allSessions = s.sessions;
-            const sessioniTooltipHtml = allSessions.map((ss: any, i: number) => {
+            const sessioniTooltipHtml = allSessions.map((ss, i: number) => {
               const dateStr = new Date(ss.date).toLocaleDateString('it-IT');
               const orario = `${ss.start || '--:--'} - ${ss.end || '--:--'}`;
-              const trainer = ss.trainer ? ` (${ss.trainer.first_name} ${ss.trainer.last_name})` : '';
+              const trainer = ss.trainer ? ` (${ss.trainer.firstName} ${ss.trainer.lastName})` : '';
               return `<span style='color:#2563eb;font-weight:700'>Sessione ${i+1}: ${dateStr}, ${orario}${trainer}</span>`;
             }).join('<br>');
             // Aziende senza duplicati
-            const aziende = [...new Set((s.companies || []).map((c: any) => c.company?.ragione_sociale || c.company?.name))].join(', ');
+            const aziende = [...new Set((s.companies || []).map((c) => c.company?.ragioneSociale || c.company?.name))].join(', ');
             // Orari del giorno
-            const orari = sessions.map((sess: any, idx: number) => `Sessione ${idx + 1}: ${sess.start || '--:--'} - ${sess.end || '--:--'}${sess.trainer ? ' (' + sess.trainer.first_name + ' ' + sess.trainer.last_name + ')' : ''}`).join('\n');
+            const orari = sessions.map((sess: any, idx: number) => `Sessione ${idx + 1}: ${sess.start || '--:--'} - ${sess.end || '--:--'}${sess.trainer ? ' (' + sess.trainer.firstName + ' ' + sess.trainer.lastName + ')' : ''}`).join('\n');
             const sortedSessions = [...sessions].sort((a, b) => a.start.localeCompare(b.start));
             const start = combineDateAndTime(day, sortedSessions[0].start);
             const end = combineDateAndTime(day, sortedSessions[sessions.length-1].end);
@@ -256,17 +544,17 @@ const Dashboard: React.FC = () => {
             });
           });
         } else {
-          // fallback: usa start_date/end_date della schedule
-          const aziende = [...new Set((s.companies || []).map((c: any) => c.company?.ragione_sociale || c.company?.name))].join(', ');
+          // fallback: usa startDate/endDate della schedule
+          const aziende = [...new Set((s.companies || []).map((c: any) => c.company?.ragioneSociale || c.company?.name))].join(', ');
           grouped.push({
             id: s.id,
             scheduleId: s.id,
             title: s.course?.title || s.course?.name || 'Corso',
-            start: new Date(s.start_date),
-            end: new Date(s.end_date),
+            start: new Date(s.startDate),
+            end: new Date(s.endDate),
             resource: s,
             status: s.status,
-            tooltip: `Corso: ${s.course?.title || s.course?.name}\nAziende: ${aziende}\nLuogo: ${s.location || '-'}\nData: ${s.start_date ? new Date(s.start_date).toLocaleDateString('it-IT') : '-'}\nOrario: --:--\nStato: ${s.status}`,
+            tooltip: `Corso: ${s.course?.title || s.course?.name}\nAziende: ${aziende}\nLuogo: ${s.location || '-'}\nData: ${s.startDate ? new Date(s.startDate).toLocaleDateString('it-IT') : '-'}\nOrario: --:--\nStato: ${s.status}`,
             sessioniTooltipHtml: ''
           });
         }
@@ -291,11 +579,11 @@ const Dashboard: React.FC = () => {
             const sessioniTooltipHtml = allSessions.map((ss: any, i: number) => {
               const dateStr = new Date(ss.date).toLocaleDateString('it-IT');
               const orario = `${ss.start || '--:--'} - ${ss.end || '--:--'}`;
-              const trainer = ss.trainer ? ` (${ss.trainer.first_name} ${ss.trainer.last_name})` : '';
+              const trainer = ss.trainer ? ` (${ss.trainer.firstName} ${ss.trainer.lastName})` : '';
               const isCurrent = allSameDay || ss === sess;
               return `<span style='color:${isCurrent ? '#2563eb' : '#1e293b'};font-weight:${isCurrent ? 700 : 400}'>Sessione ${i+1}: ${dateStr}, ${orario}${trainer}</span>`;
             }).join('<br>');
-            const aziende = [...new Set((s.companies || []).map((c: any) => c.company?.ragione_sociale || c.company?.name))].join(', ');
+            const aziende = [...new Set((s.companies || []).map((c: any) => c.company?.ragioneSociale || c.company?.name))].join(', ');
             return {
               id: s.id + '-' + (sess.id || idx),
               scheduleId: s.id,
@@ -310,16 +598,16 @@ const Dashboard: React.FC = () => {
             };
           });
         } else {
-          const aziende = [...new Set((s.companies || []).map((c: any) => c.company?.ragione_sociale || c.company?.name))].join(', ');
+          const aziende = [...new Set((s.companies || []).map((c: any) => c.company?.ragioneSociale || c.company?.name))].join(', ');
           return [{
             id: s.id,
             scheduleId: s.id,
             title: s.course?.title || s.course?.name || 'Corso',
-            start: new Date(s.start_date),
-            end: new Date(s.end_date),
+            start: new Date(s.startDate),
+            end: new Date(s.endDate),
             resource: s,
             status: s.status,
-            tooltip: `Corso: ${s.course?.title || s.course?.name}\nAziende: ${aziende}\nLuogo: ${s.location || '-'}\nData: ${s.start_date ? new Date(s.start_date).toLocaleDateString('it-IT') : '-'}\nOrario: --:--\nStato: ${s.status}`,
+            tooltip: `Corso: ${s.course?.title || s.course?.name}\nAziende: ${aziende}\nLuogo: ${s.location || '-'}\nData: ${s.startDate ? new Date(s.startDate).toLocaleDateString('it-IT') : '-'}\nOrario: --:--\nStato: ${s.status}`,
             sessioniTooltipHtml: ''
           }];
         }
@@ -337,17 +625,65 @@ const Dashboard: React.FC = () => {
 
   const handleCreateSchedule = async (data: any) => {
     try {
-      const response = await fetch('/schedules', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
+      // Check GDPR consent for creating schedules
+      const hasConsent = await checkGdprConsent('schedule_create');
+      if (!hasConsent) {
+        throw new ConsentRequiredError('Creating schedules requires user consent');
+      }
+      
+      // Check permissions
+      if (!hasPermission || !hasPermission('schedules', 'create')) {
+        throw new Error('Permessi insufficienti per creare pianificazioni');
+      }
+      
+      await logGdprAction({
+        action: 'SCHEDULE_CREATE_ATTEMPT',
+        timestamp: new Date().toISOString(),
+        tenantId: tenant?.id,
+        metadata: {
+          courseId: data.courseId,
+          companiesCount: data.companies?.length || 0
+        }
       });
-      if (!response.ok) throw new Error('Failed to create schedule');
+      
+      const result = await apiPost('/schedules', data);
+      
+      await logGdprAction({
+        action: 'SCHEDULE_CREATE_SUCCESS',
+        timestamp: new Date().toISOString(),
+        tenantId: tenant?.id,
+        metadata: {
+          scheduleId: result.id,
+          courseId: data.courseId
+        }
+      });
+      
       setShowForm(false);
       setSelectedSlot(null);
-      // Refresh the calendar data here
+      
+      // Refresh calendar data
+      await fetchData();
+      
     } catch (error) {
-      // RIMOSSO: console.error('Error creating schedule:', error);
+      console.error('Error creating schedule:', error);
+      
+      await logGdprAction({
+        action: 'SCHEDULE_CREATE_ERROR',
+        timestamp: new Date().toISOString(),
+        tenantId: tenant?.id,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        metadata: {
+          errorType: error instanceof Error ? error.constructor.name : 'UnknownError'
+        }
+      });
+      
+      const errorMessage = error instanceof ConsentRequiredError 
+        ? 'Consenso GDPR richiesto per creare pianificazioni'
+        : error instanceof Error 
+          ? error.message 
+          : 'Errore nella creazione della pianificazione';
+      
+      setError(errorMessage);
     }
   };
 
@@ -400,14 +736,14 @@ const Dashboard: React.FC = () => {
       <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
         <StatCard 
           title="Totale Aziende" 
-          value={companiesList.length.toString()} 
+          value={counters.companies.toString()} 
           icon={<Building2 className="h-7 w-7 text-blue-500" />} 
           trend=""
           trendDirection="up"
         />
         <StatCard 
           title="Totale Dipendenti" 
-          value={employeesList.length.toString()} 
+          value={counters.employees.toString()} 
           icon={<Users className="h-7 w-7 text-green-500" />} 
           trend=""
           trendDirection="up"
@@ -618,5 +954,5 @@ const Dashboard: React.FC = () => {
     </div>
   );
 };
-
-export default Dashboard;
+  
+  export default Dashboard;

@@ -17,7 +17,7 @@ function useSelection<T extends string | number>(): UseSelectionResult<T> {
   const [selectedIds, setSelectedIds] = useState<T[]>([]);
 
   // Ensure we're working with an array to prevent "includes is not a function" errors
-  const isSelectedArray = useCallback((id: T, arr: any): boolean => {
+  const isSelectedArray = useCallback((id: T, arr: T[]): boolean => {
     return Array.isArray(arr) ? arr.includes(id) : false;
   }, []);
   

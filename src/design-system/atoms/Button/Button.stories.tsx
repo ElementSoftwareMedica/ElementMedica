@@ -6,7 +6,7 @@
 import React from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import { Button } from './Button';
-import { ChevronRightIcon, PlusIcon } from '@heroicons/react/24/outline';
+import { ChevronRightIconIcon } from '@heroicons/react/24/outline';
 
 const meta = {
   title: 'Design System/Atoms/Button',

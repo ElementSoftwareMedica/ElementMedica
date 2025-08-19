@@ -1,5 +1,3 @@
-import React from 'react';
-
 /**
  * Converte una stringa in Title Case (prima lettera di ogni parola maiuscola)
  * @param str - La stringa da convertire
@@ -30,12 +28,12 @@ export const normalizeString = (str: string | null | undefined): string => {
  * @param fields - Array di campi da formattare in Title Case
  * @returns Nuovo oggetto con i campi formattati
  */
-export const applyTitleCaseToFields = (obj: Record<string, any>, fields: string[]): Record<string, any> => {
+export const applyTitleCaseToFields = (obj: Record<string, unknown>, fields: string[]): Record<string, unknown> => {
   const result = { ...obj };
   
   fields.forEach(field => {
-    if (result[field]) {
-      result[field] = toTitleCase(result[field]);
+    if (result[field] && typeof result[field] === 'string') {
+      result[field] = toTitleCase(result[field] as string);
     }
   });
   

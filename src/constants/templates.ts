@@ -75,12 +75,23 @@ export const ENTITY_FIELDS = {
     { desc: 'SDI', placeholder: 'sdi' },
   ],
   'employees': [
-    { desc: 'Nome', placeholder: 'nome' },
     { desc: 'Cognome', placeholder: 'cognome' },
+    { desc: 'Nome', placeholder: 'nome' },
     { desc: 'Codice Fiscale', placeholder: 'codice_fiscale' },
-    { desc: 'Email', placeholder: 'email' },
-    { desc: 'Telefono', placeholder: 'telefono' },
     { desc: 'Azienda', placeholder: 'azienda' },
+    { desc: 'Profilo Professionale', placeholder: 'profilo_professionale' },
+    { desc: 'Telefono', placeholder: 'telefono' },
+    { desc: 'Email', placeholder: 'email' },
+    { desc: 'Data di nascita', placeholder: 'data_nascita' },
+    { desc: 'Indirizzo', placeholder: 'indirizzo' },
+    { desc: 'Città', placeholder: 'citta' },
+    { desc: 'Provincia', placeholder: 'provincia' },
+    { desc: 'CAP', placeholder: 'cap' },
+    { desc: 'Data assunzione', placeholder: 'data_assunzione' },
+    { desc: 'Username', placeholder: 'username' },
+    { desc: 'Note', placeholder: 'note' },
+    { desc: 'Stato', placeholder: 'stato' },
+    { desc: 'Data creazione', placeholder: 'data_creazione' },
     { desc: 'Ruolo', placeholder: 'ruolo' },
   ],
   'companies': [
@@ -129,4 +140,4 @@ export const ATTESTATO_PLACEHOLDERS = [
   { key: '{{data_2}}', label: 'Data fine corso' },
   { key: '{{data_generazione_template}}', label: 'Data generazione attestato' },
   { key: '{{numero_progressivo}}', label: 'Numero progressivo attestato' },
-]; 
+];

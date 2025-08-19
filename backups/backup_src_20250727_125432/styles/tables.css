@@ -1,0 +1,133 @@
+/* Stili comuni per le tabelle */
+
+/* Stile per i pulsanti di selezione */
+.selection-pills-container {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+  margin-bottom: 16px;
+}
+
+.action-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px;
+  border-radius: 9999px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.action-pill.primary {
+  background-color: #EBF5FF;
+  color: #2563EB;
+  border: 1px solid #DBEAFE;
+}
+
+.action-pill.secondary {
+  background-color: #F9FAFB;
+  color: #4B5563;
+  border: 1px solid #E5E7EB;
+}
+
+.action-pill.danger {
+  background-color: #FEE2E2;
+  color: #DC2626;
+  border: 1px solid #FECACA;
+}
+
+.action-pill:hover {
+  filter: brightness(0.95);
+}
+
+/* Ridimensionamento colonna checkbox */
+[data-col="select"] {
+  width: 24px !important;
+  min-width: 24px !important;
+  max-width: 24px !important;
+  padding: 0 !important;
+}
+
+.checkbox-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+th[data-col="select"] {
+  width: 24px !important;
+  min-width: 24px !important;
+  max-width: 24px !important;
+  padding: 0 !important;
+}
+
+/* Stili aggiuntivi per migliorare l'esperienza delle tabelle */
+.resizable-table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.resizable-table th,
+.resizable-table td {
+  padding: 0.75rem 1rem;
+  vertical-align: middle;
+}
+
+.resizable-table th {
+  font-weight: 600;
+  text-align: left;
+  color: #4B5563;
+  background-color: #F9FAFB;
+  border-bottom: 1px solid #E5E7EB;
+}
+
+.resizable-table td {
+  color: #111827;
+  border-bottom: 1px solid #E5E7EB;
+}
+
+.resizable-table tbody tr {
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.resizable-table tbody tr:hover {
+  background-color: #F9FAFB;
+}
+
+/* Modalità selezione attiva */
+.select-mode-active .resizable-table tbody tr {
+  background-color: transparent;
+  transition: background-color 0.2s;
+}
+
+.select-mode-active .resizable-table tbody tr:hover {
+  background-color: #F3F4F6;
+}
+
+.select-mode-active .resizable-table tbody tr.selected {
+  background-color: #EFF6FF;
+}
+
+/* Animazioni per modali e dropdown */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out;
+}
+
+/* Stile per il toggle tra vista griglia e tabella */
+.view-mode-toggle {
+  display: flex;
+  align-items: center;
+  background-color: #F3F4F6;
+  border-radius: 9999px;
+  padding: 0.25rem;
+  position: relative;
+  min-width: 180px;
+} 

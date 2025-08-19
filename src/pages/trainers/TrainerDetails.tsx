@@ -1,19 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { 
-  User, 
-  Phone, 
-  Mail, 
-  MapPin, 
-  Edit, 
   Award,
-  GraduationCap,
+  Building,
   Calendar,
   ChevronRight,
   CreditCard,
-  Building,
-  FileText
+  Edit,
+  FileText,
+  Mail,
+  MapPin,
+  Phone
 } from 'lucide-react';
+import { apiGet } from '../../services/api';
 
 const TAX_CODE_REGEX = /^[a-zA-Z]{6}[0-9]{2}[abcdehlmprstABCDEHLMPRST]{1}[0-9]{2}([a-zA-Z]{1}[0-9]{3})[a-zA-Z]{1}$/;
 
@@ -26,9 +25,7 @@ const TrainerDetails: React.FC = () => {
     async function fetchData() {
       setLoading(true);
       try {
-        const res = await fetch(`http://localhost:4000/trainers/${id}`);
-        if (!res.ok) throw new Error('Trainer not found');
-        const trainerData = await res.json();
+        const trainerData = await apiGet(`/trainers/${id}`);
         setTrainer(trainerData);
       } catch (err) {
         setTrainer(null);
@@ -78,14 +75,14 @@ const TrainerDetails: React.FC = () => {
           <div className="flex items-center">
             <div className="h-16 w-16 bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
               <span className="text-xl font-bold text-white">
-                {trainer.first_name.charAt(0)}{trainer.last_name.charAt(0)}
+                {trainer.firstName.charAt(0)}{trainer.lastName.charAt(0)}
               </span>
             </div>
             <div className="ml-4">
-              <h1 className="text-2xl font-bold text-gray-800">{trainer.first_name} {trainer.last_name}</h1>
+              <h1 className="text-2xl font-bold text-gray-800">{trainer.firstName} {trainer.lastName}</h1>
               <div className="flex items-center mt-1 gap-2 flex-wrap">
                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                  trainer.status === 'Active' 
+                  trainer.status === 'ACTIVE' 
                     ? 'bg-green-100 text-green-800' 
                     : 'bg-gray-100 text-gray-800'
                 }`}>
@@ -141,7 +138,7 @@ const TrainerDetails: React.FC = () => {
                 <div className="ml-3">
                   <span className="block text-sm font-medium text-gray-800">Indirizzo</span>
                   <span className="block text-sm text-gray-600">
-                    {trainer.residence_address}, {trainer.residence_city} ({trainer.province}) {trainer.postal_code}
+                    {trainer.residenceAddress}, {trainer.residenceCity} ({trainer.province}) {trainer.postalCode}
                   </span>
                 </div>
               </li>
@@ -170,7 +167,7 @@ const TrainerDetails: React.FC = () => {
                 <Calendar className="h-5 w-5 text-gray-400 mt-0.5" />
                 <div className="ml-3">
                   <span className="block text-sm font-medium text-gray-800">Data di Nascita</span>
-                  <span className="block text-sm text-gray-600">{trainer.birth_date ? new Date(trainer.birth_date).toLocaleDateString() : 'N/A'}</span>
+                  <span className="block text-sm text-gray-600">{trainer.birthDate ? new Date(trainer.birthDate).toLocaleDateString() : 'N/A'}</span>
                 </div>
               </li>
               <li className="flex items-start">
@@ -184,14 +181,14 @@ const TrainerDetails: React.FC = () => {
                 <Award className="h-5 w-5 text-gray-400 mt-0.5" />
                 <div className="ml-3">
                   <span className="block text-sm font-medium text-gray-800">Creato il</span>
-                  <span className="block text-sm text-gray-600">{trainer.created_at ? new Date(trainer.created_at).toLocaleString() : 'N/A'}</span>
+                  <span className="block text-sm text-gray-600">{trainer.createdAt ? new Date(trainer.createdAt).toLocaleString() : 'N/A'}</span>
                 </div>
               </li>
               <li className="flex items-start">
                 <GraduationCap className="h-5 w-5 text-gray-400 mt-0.5" />
                 <div className="ml-3">
                   <span className="block text-sm font-medium text-gray-800">Aggiornato il</span>
-                  <span className="block text-sm text-gray-600">{trainer.updated_at ? new Date(trainer.updated_at).toLocaleString() : 'N/A'}</span>
+                  <span className="block text-sm text-gray-600">{trainer.updatedAt ? new Date(trainer.updatedAt).toLocaleString() : 'N/A'}</span>
                 </div>
               </li>
             </ul>
@@ -269,4 +266,4 @@ const TrainerDetails: React.FC = () => {
   );
 };
 
-export default TrainerDetails; 
+export default TrainerDetails;

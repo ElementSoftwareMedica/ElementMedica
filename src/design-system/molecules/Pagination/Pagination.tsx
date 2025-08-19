@@ -1,5 +1,9 @@
 import React, { useState } from 'react';
-import { ChevronLeft, ChevronRight, MoreHorizontal } from 'lucide-react';
+import { 
+  ChevronLeft,
+  ChevronRight,
+  MoreHorizontal
+} from 'lucide-react';
 import { Button } from '../../atoms/Button';
 import { Select } from '../../atoms/Select';
 import { cn } from '../../utils';
@@ -137,6 +141,7 @@ export const Pagination: React.FC<PaginationProps> = ({
           onClick={() => onPageChange(currentPage - 1)}
           disabled={currentPage <= 1}
           className="h-8 w-8 p-0"
+          aria-label="Previous page"
         >
           <ChevronLeft className="h-4 w-4" />
         </Button>
@@ -158,7 +163,7 @@ export const Pagination: React.FC<PaginationProps> = ({
             return (
               <Button
                 key={pageNumber}
-                variant={isActive ? 'default' : 'outline'}
+                variant={isActive ? 'primary' : 'outline'}
                 size="sm"
                 onClick={() => onPageChange(pageNumber)}
                 className="h-8 w-8 p-0"
@@ -176,6 +181,7 @@ export const Pagination: React.FC<PaginationProps> = ({
           onClick={() => onPageChange(currentPage + 1)}
           disabled={currentPage >= totalPages}
           className="h-8 w-8 p-0"
+          aria-label="Next page"
         >
           <ChevronRight className="h-4 w-4" />
         </Button>
@@ -187,7 +193,7 @@ export const Pagination: React.FC<PaginationProps> = ({
           <span className="text-sm text-gray-600">Elementi per pagina:</span>
           <Select
             value={pageSize.toString()}
-            onValueChange={(value) => onPageSizeChange(parseInt(value))}
+            onChange={(e) => onPageSizeChange(parseInt(e.target.value))}
             className="w-20"
           >
             {pageSizeOptions.map((option) => (

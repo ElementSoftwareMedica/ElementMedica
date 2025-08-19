@@ -1,0 +1,783 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id                  String              @id @default(uuid())
+  created_at          DateTime            @default(now())
+  updated_at          DateTime            @updatedAt
+  codice_ateco        String?
+  iban                String?
+  pec                 String?
+  sdi                 String?
+  cap                 String?
+  citta               String?
+  codice_fiscale      String?
+  mail                String?
+  note                String?
+  persona_riferimento String?
+  piva                String?
+  provincia           String?
+  ragione_sociale     String
+  sede_azienda        String?
+  telefono            String?
+  deletedAt           DateTime?           @map("deleted_at")
+  tenantId            String?
+  slug                String?             @unique
+  domain              String?             @unique
+  settings            Json?               @default("{}")
+  subscription_plan   String              @default("basic")
+  is_active           Boolean             @default(true)
+  tenant              Tenant?             @relation(fields: [tenantId], references: [id])
+  schedules           CourseSchedule[]
+  fatturaAzienda      FatturaAzienda[]
+  preventivoAzienda   PreventivoAzienda[]
+  scheduleCompanies   ScheduleCompany[]
+  templateLinks       TemplateLink[]
+  enhancedRoles       EnhancedUserRole[]
+  personRoles         PersonRole[]
+  persons             Person[]
+}
+
+// REMOVED: model Employee - migrated to Person
+
+model Course {
+  id              String           @id @default(uuid())
+  title           String
+  category        String?
+  description     String?
+  duration        String?
+  status          String?
+  created_at      DateTime         @default(now())
+  updated_at      DateTime         @updatedAt
+  certifications  String?
+  code            String?          @unique
+  contents        String?
+  maxPeople       Int?
+  pricePerPerson  Float?
+  regulation      String?
+  renewalDuration String?
+  validityYears   Int?
+  tenantId        String?
+  deletedAt       DateTime?        @map("deleted_at")
+  tenant          Tenant?          @relation(fields: [tenantId], references: [id])
+  schedules       CourseSchedule[]
+}
+
+model CourseSchedule {
+  id               String             @id @default(uuid())
+  courseId         String
+  start_date       DateTime
+  end_date         DateTime
+  location         String?
+  max_participants Int?
+  status           String?
+  created_at       DateTime           @default(now())
+  updated_at       DateTime           @updatedAt
+  companyId        String?
+  notes            String?
+  trainerId        String?
+  delivery_mode    String?
+  attendance       Json?
+  hasAttestati     Boolean            @default(false)
+  deletedAt        DateTime?          @map("deleted_at")
+  attestati        Attestato[]
+  enrollments      CourseEnrollment[]
+  company          Company?           @relation(fields: [companyId], references: [id])
+  course           Course             @relation(fields: [courseId], references: [id])
+  trainer          Person?            @relation("ScheduleTrainer", fields: [trainerId], references: [id])
+  sessions         CourseSession[]
+  fatture          Fattura[]
+  lettereIncarico  LetteraIncarico[]
+  preventivi       Preventivo[]
+  registriPresenze RegistroPresenze[]
+  companies        ScheduleCompany[]
+  testDocuments    TestDocument[]
+}
+
+model CourseEnrollment {
+  id         String         @id @default(uuid())
+  scheduleId String
+  personId   String         @map("employee_id") // Mapped for DB compatibility
+  status     String?
+  created_at DateTime       @default(now())
+  updated_at DateTime       @updatedAt
+  deletedAt  DateTime?      @map("deleted_at")
+  person     Person         @relation("CourseEnrollment_Person", fields: [personId], references: [id])
+  schedule   CourseSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  @@unique([scheduleId, personId])
+  @@map("course_enrollments")
+}
+
+
+
+model CourseSession {
+  id               String             @id @default(uuid())
+  scheduleId       String
+  date             DateTime
+  start            String
+  end              String
+  trainerId        String?
+  coTrainerId      String?
+  deletedAt        DateTime?          @map("deleted_at")
+  co_trainer       Person?            @relation("SessionCoTrainer", fields: [coTrainerId], references: [id])
+  schedule         CourseSchedule     @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  trainer          Person?            @relation("SessionTrainer", fields: [trainerId], references: [id])
+  registroPresenze RegistroPresenze[]
+}
+
+model ScheduleCompany {
+  id         String         @id @default(uuid())
+  scheduleId String
+  companyId  String
+  deletedAt  DateTime?      @map("deleted_at")
+  company    Company        @relation(fields: [companyId], references: [id])
+  schedule   CourseSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+}
+
+model Attestato {
+  id                String         @id @default(uuid())
+  scheduledCourseId String         @map("scheduled_course_id")
+  personId          String         @map("partecipante_id") // Mapped for DB compatibility
+  fileName          String         @map("nome_file")
+  fileUrl           String         @map("url")
+  generatedAt       DateTime       @default(now()) @map("data_generazione")
+  numeroProgressivo Int            @map("numero_progressivo")
+  annoProgressivo   Int            @map("anno_progressivo")
+  deletedAt         DateTime?      @map("deleted_at")
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @updatedAt @map("updated_at")
+  person            Person         @relation("Attestato_Person", fields: [personId], references: [id])
+  scheduledCourse   CourseSchedule @relation(fields: [scheduledCourseId], references: [id], onDelete: Cascade)
+
+  @@map("attestati")
+}
+
+model TemplateLink {
+  id            String   @id @default(uuid())
+  name          String
+  url           String
+  type          String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  content       String?
+  footer        String?
+  header        String?
+  isDefault     Boolean  @default(false)
+  logoPosition  String?
+  fileFormat    String?
+  googleDocsUrl String?
+  logoImage     String?
+  companyId     String?
+  deletedAt     DateTime? @map("deleted_at")
+  company       Company? @relation(fields: [companyId], references: [id])
+}
+
+model LetteraIncarico {
+  id                String         @id @default(uuid())
+  scheduledCourseId String
+  trainerId         String
+  nomeFile          String
+  url               String
+  dataGenerazione   DateTime       @default(now())
+  numeroProgressivo Int
+  annoProgressivo   Int
+  deletedAt         DateTime?      @map("deleted_at")
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @updatedAt @map("updated_at")
+  scheduledCourse   CourseSchedule @relation(fields: [scheduledCourseId], references: [id], onDelete: Cascade)
+  trainer    Person  @relation("LetteraIncaricoTrainer", fields: [trainerId], references: [id])
+
+  @@unique([scheduledCourseId, trainerId])
+  @@map("lettere_incarico")
+}
+
+model RegistroPresenze {
+  id                String                         @id @default(uuid())
+  scheduledCourseId String
+  sessionId         String
+  nomeFile          String
+  url               String
+  dataGenerazione   DateTime                       @default(now())
+  numeroProgressivo Int
+  annoProgressivo   Int
+  formatoreId       String
+  deletedAt         DateTime?                      @map("deleted_at")
+  createdAt         DateTime                       @default(now()) @map("created_at")
+  updatedAt         DateTime                       @updatedAt @map("updated_at")
+  formatore         Person                         @relation("RegistroFormatore", fields: [formatoreId], references: [id])
+  scheduledCourse   CourseSchedule                 @relation(fields: [scheduledCourseId], references: [id], onDelete: Cascade)
+  session           CourseSession                  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  presenti          RegistroPresenzePartecipante[]
+
+  @@map("registri_presenze")
+}
+
+model RegistroPresenzePartecipante {
+  id                   String          @id @default(uuid())
+  registroPresenzeId   String          @map("registro_presenze_id")
+  personId             String          @map("partecipante_id") // Mapped for DB compatibility
+  presente             Boolean         @default(false)
+  ore                  Float?          @map("hours")
+  note                 String?
+  deletedAt            DateTime?       @map("deleted_at")
+  createdAt            DateTime        @default(now()) @map("created_at")
+  updatedAt            DateTime        @updatedAt @map("updated_at")
+  person               Person          @relation("RegistroPresenzePartecipante_Person", fields: [personId], references: [id])
+  registroPresenze     RegistroPresenze @relation(fields: [registroPresenzeId], references: [id], onDelete: Cascade)
+
+  @@unique([registroPresenzeId, personId])
+  @@map("registro_presenze_partecipanti")
+}
+
+model Preventivo {
+  id                String                   @id @default(uuid())
+  scheduledCourseId String
+  nomeFile          String
+  url               String
+  dataGenerazione   DateTime                 @default(now())
+  numeroProgressivo Int
+  annoProgressivo   Int
+  deletedAt         DateTime?                @map("deleted_at")
+  createdAt         DateTime                 @default(now()) @map("created_at")
+  updatedAt         DateTime                 @updatedAt @map("updated_at")
+  scheduledCourse   CourseSchedule           @relation(fields: [scheduledCourseId], references: [id], onDelete: Cascade)
+  aziende           PreventivoAzienda[]
+  partecipanti      PreventivoPartecipante[]
+
+  @@map("preventivi")
+}
+
+model PreventivoPartecipante {
+  id           String     @id @default(uuid())
+  preventivoId String     @map("preventivo_id")
+  personId     String     @map("partecipante_id") // Mapped for DB compatibility
+  deletedAt    DateTime?  @map("deleted_at")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+  person       Person     @relation("PreventivoPartecipante_Person", fields: [personId], references: [id])
+  preventivo   Preventivo @relation(fields: [preventivoId], references: [id], onDelete: Cascade)
+
+  @@unique([preventivoId, personId])
+  @@map("preventivo_partecipanti")
+}
+
+model PreventivoAzienda {
+  id           String     @id @default(uuid())
+  preventivoId String
+  aziendaId    String
+  deletedAt    DateTime?  @map("deleted_at")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+  azienda      Company    @relation(fields: [aziendaId], references: [id])
+  preventivo   Preventivo @relation(fields: [preventivoId], references: [id], onDelete: Cascade)
+
+  @@unique([preventivoId, aziendaId])
+  @@map("preventivo_aziende")
+}
+
+model Fattura {
+  id                String           @id @default(uuid())
+  scheduledCourseId String
+  nomeFile          String
+  url               String
+  dataGenerazione   DateTime         @default(now())
+  numeroProgressivo Int
+  annoProgressivo   Int
+  deletedAt         DateTime?        @map("deleted_at")
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
+  scheduledCourse   CourseSchedule   @relation(fields: [scheduledCourseId], references: [id], onDelete: Cascade)
+  aziende           FatturaAzienda[]
+
+  @@map("fatture")
+}
+
+model FatturaAzienda {
+  id        String    @id @default(uuid())
+  fatturaId String
+  aziendaId String
+  deletedAt DateTime? @map("deleted_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  azienda   Company   @relation(fields: [aziendaId], references: [id])
+  fattura   Fattura   @relation(fields: [fatturaId], references: [id], onDelete: Cascade)
+
+  @@unique([fatturaId, aziendaId])
+  @@map("fattura_aziende")
+}
+
+// REMOVED: model User - migrated to Person
+
+// REMOVED: model Role - replaced by PersonRole with RoleType enum
+
+model Permission {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  resource    String
+  action      String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime? @map("deleted_at")
+}
+
+model ActivityLog {
+  id        String   @id @default(uuid())
+  personId  String   @map("user_id") // Mapped for DB compatibility
+  action    String
+  details   String?
+  timestamp DateTime @default(now())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  person    Person   @relation("ActivityLog_Person", fields: [personId], references: [id])
+
+  @@map("activity_logs")
+}
+
+model TestDocument {
+  id                String             @id @default(uuid())
+  scheduledCourseId String
+  trainerId         String?
+  nomeFile          String
+  url               String
+  dataGenerazione   DateTime           @default(now())
+  numeroProgressivo Int
+  annoProgressivo   Int
+  stato             String             @default("generato")
+  tipologia         String             @default("test")
+  punteggio         Float?
+  durata            Int?
+  note              String?
+  dataTest          DateTime?
+  sogliaSuperamento Float?
+  deletedAt         DateTime?          @map("deleted_at")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+  scheduledCourse   CourseSchedule     @relation(fields: [scheduledCourseId], references: [id], onDelete: Cascade)
+  trainer           Person?            @relation("TestDocumentTrainer", fields: [trainerId], references: [id])
+  partecipanti      TestPartecipante[]
+
+  @@map("test_documents")
+}
+
+model TestPartecipante {
+  id           String       @id @default(uuid())
+  testId       String       @map("test_id")
+  personId     String       @map("partecipante_id") // Mapped for DB compatibility
+   punteggio    Float?
+   status       String       @default("da completare") @map("stato")
+   note         String?
+   dataConsegna DateTime?    @map("data_consegna")
+   tempoImpiegato Int?       @map("tempo_impiegato")
+  deletedAt    DateTime?    @map("deleted_at")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+  person       Person       @relation("TestPartecipante_Person", fields: [personId], references: [id])
+  test         TestDocument @relation(fields: [testId], references: [id], onDelete: Cascade)
+
+  @@unique([testId, personId])
+  @@map("test_partecipanti")
+}
+
+model RefreshToken {
+  id         String    @id @default(uuid())
+  personId   String
+  token      String    @unique
+  expiresAt  DateTime
+  deviceInfo Json?
+  createdAt  DateTime  @default(now())
+  revokedAt  DateTime?
+  deletedAt  DateTime? @map("deleted_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+  person     Person    @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+// REMOVED: model UserRole - replaced by PersonRole
+
+model GdprAuditLog {
+  id           String   @id @default(uuid())
+  personId     String?
+  action       String
+  resourceType String?
+  resourceId   String?
+  dataAccessed Json?
+  ipAddress    String?
+  userAgent    String?
+  companyId    String?
+  createdAt    DateTime @default(now())
+  deletedAt    DateTime?
+  person       Person?  @relation(fields: [personId], references: [id])
+}
+
+model ConsentRecord {
+  id             String    @id @default(uuid())
+  personId       String
+  consentType    String
+  consentGiven   Boolean
+  consentVersion String?
+  givenAt        DateTime  @default(now())
+  withdrawnAt    DateTime?
+  ipAddress      String?
+  userAgent      String?
+  deletedAt      DateTime?
+  person         Person    @relation(fields: [personId], references: [id], onDelete: Cascade)
+}
+
+model PersonSession {
+  id             String    @id @default(uuid())
+  personId       String
+  sessionToken   String    @unique
+  ipAddress      String?
+  userAgent      String?
+  isActive       Boolean   @default(true)
+  lastActivityAt DateTime  @default(now())
+  expiresAt      DateTime
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+  person         Person    @relation("PersonSessions", fields: [personId], references: [id], onDelete: Cascade)
+
+  @@map("person_sessions")
+}
+
+model Person {
+  id                 String           @id @default(uuid())
+  firstName          String           @db.VarChar(100)
+  lastName           String           @db.VarChar(100)
+  email              String           @unique @db.VarChar(255)
+  phone              String?          @db.VarChar(20)
+  birthDate          DateTime?        @db.Date
+  taxCode            String?          @unique @db.VarChar(16)
+  vatNumber          String?          @db.VarChar(11)
+  residenceAddress   String?          @db.VarChar(255)
+  residenceCity      String?          @db.VarChar(100)
+  postalCode         String?          @db.VarChar(10)
+  province           String?          @db.VarChar(2)
+  username           String?          @unique @db.VarChar(50)
+  password           String?          @db.VarChar(255)
+  status             PersonStatus     @default(ACTIVE)
+  title              String?          @db.VarChar(100)
+  hiredDate          DateTime?        @db.Date
+  hourlyRate         Decimal?         @db.Decimal(10, 2)
+  iban               String?          @db.VarChar(34)
+  registerCode       String?          @db.VarChar(50)
+  certifications     String[]
+  specialties        String[]
+  profileImage       String?          @db.VarChar(500)
+  notes              String?
+  lastLogin          DateTime?        @db.Timestamp(6)
+  failedAttempts     Int              @default(0) @db.SmallInt
+  lockedUntil        DateTime?        @db.Timestamp(6)
+  globalRole         String?          @db.VarChar(50)
+  tenantId           String?
+  companyId          String?
+  createdAt          DateTime         @default(now()) @db.Timestamp(6)
+  updatedAt          DateTime         @updatedAt @db.Timestamp(6)
+  deletedAt          DateTime?        @db.Timestamp(6)
+  gdprConsentDate    DateTime?        @db.Timestamp(6)
+  gdprConsentVersion String?          @db.VarChar(10)
+  dataRetentionUntil DateTime?        @db.Date
+  preferences        Json?            @default("{}")
+  assignedRoles      PersonRole[]     @relation("AssignedRoles")
+  personRoles        PersonRole[]
+  company            Company?         @relation(fields: [companyId], references: [id])
+  tenant             Tenant?          @relation(fields: [tenantId], references: [id])
+  grantedPermissions RolePermission[] @relation("GrantedPermissions")
+  gdprAuditLogs      GdprAuditLog[]
+  consentRecords     ConsentRecord[]
+  schedules           CourseSchedule[] @relation("ScheduleTrainer")
+  sessionsAsTrainer   CourseSession[]  @relation("SessionTrainer")
+  sessionsAsCoTrainer CourseSession[]  @relation("SessionCoTrainer")
+  registriPresenze    RegistroPresenze[] @relation("RegistroFormatore")
+  testDocuments       TestDocument[]   @relation("TestDocumentTrainer")
+  lettereIncarico     LetteraIncarico[] @relation("LetteraIncaricoTrainer")
+  refreshTokens       RefreshToken[]
+   courseEnrollments   CourseEnrollment[] @relation("CourseEnrollment_Person")
+   attestati           Attestato[] @relation("Attestato_Person")
+   registroPresenzePartecipanti RegistroPresenzePartecipante[] @relation("RegistroPresenzePartecipante_Person")
+   preventivoPartecipanti PreventivoPartecipante[] @relation("PreventivoPartecipante_Person")
+   testPartecipanti    TestPartecipante[] @relation("TestPartecipante_Person")
+   activityLogs        ActivityLog[] @relation("ActivityLog_Person")
+   enhancedUserRoles   EnhancedUserRole[] @relation("EnhancedUserRole_Person")
+  assignedEnhancedRoles EnhancedUserRole[] @relation("EnhancedUserRole_AssignedBy")
+  personSessions      PersonSession[] @relation("PersonSessions")
+  createdCustomRoles  CustomRole[] @relation("CustomRole_CreatedBy")
+
+  @@index([email])
+  @@index([username])
+  @@index([companyId])
+  @@index([tenantId])
+  @@index([deletedAt, status])
+  @@index([createdAt])
+  @@map("persons")
+}
+
+model PersonRole {
+  id                  String                @id @default(uuid())
+  personId            String
+  roleType            RoleType?
+  customRoleId        String?               @map("custom_role_id")
+  isActive            Boolean               @default(true)
+  isPrimary           Boolean               @default(false)
+  assignedAt          DateTime              @default(now()) @db.Timestamp(6)
+  assignedBy          String?
+  validFrom           DateTime              @default(now()) @db.Date
+  validUntil          DateTime?             @db.Date
+  companyId           String?
+  tenantId            String?
+  departmentId        String?
+  createdAt           DateTime              @default(now()) @db.Timestamp(6)
+  updatedAt           DateTime              @updatedAt @db.Timestamp(6)
+  assignedByPerson    Person?               @relation("AssignedRoles", fields: [assignedBy], references: [id])
+  company             Company?              @relation(fields: [companyId], references: [id])
+  person              Person                @relation(fields: [personId], references: [id], onDelete: Cascade)
+  tenant              Tenant?               @relation(fields: [tenantId], references: [id])
+  customRole          CustomRole?           @relation("PersonRole_CustomRole", fields: [customRoleId], references: [id])
+  permissions         RolePermission[]
+  advancedPermissions AdvancedPermission[]
+
+  @@unique([personId, roleType, customRoleId, companyId, tenantId])
+  @@index([personId, isActive])
+  @@index([roleType])
+  @@index([customRoleId])
+  @@index([companyId])
+  @@index([tenantId])
+  @@map("person_roles")
+}
+
+model RolePermission {
+  id              String           @id @default(uuid())
+  personRoleId    String
+  permission      PersonPermission
+  isGranted       Boolean          @default(true)
+  grantedAt       DateTime         @default(now()) @db.Timestamp(6)
+  grantedBy       String?
+  grantedByPerson Person?          @relation("GrantedPermissions", fields: [grantedBy], references: [id])
+  personRole      PersonRole       @relation(fields: [personRoleId], references: [id], onDelete: Cascade)
+
+  @@unique([personRoleId, permission])
+  @@map("role_permissions")
+}
+
+model AdvancedPermission {
+  id            String     @id @default(uuid())
+  personRoleId  String     @map("person_role_id")
+  resource      String
+  action        String
+  scope         String     @default("global")
+  allowedFields Json?      @map("allowed_fields")
+  conditions    Json?
+  createdAt     DateTime   @default(now()) @map("created_at")
+  updatedAt     DateTime   @updatedAt @map("updated_at")
+  deletedAt     DateTime?  @map("deleted_at")
+  personRole    PersonRole @relation(fields: [personRoleId], references: [id], onDelete: Cascade)
+
+  @@index([personRoleId])
+  @@index([resource, action])
+  @@map("advanced_permissions")
+}
+
+model Tenant {
+  id             String                @id @default(uuid())
+  name           String
+  slug           String                @unique
+  domain         String?               @unique
+  settings       Json                  @default("{}")
+  billingPlan    String                @default("basic") @map("billing_plan")
+  maxUsers       Int                   @default(50) @map("max_users")
+  maxCompanies   Int                   @default(10) @map("max_companies")
+  isActive       Boolean               @default(true) @map("is_active")
+  createdAt      DateTime              @default(now()) @map("created_at")
+  updatedAt      DateTime              @updatedAt @map("updated_at")
+  deletedAt      DateTime?             @map("deleted_at")
+  companies      Company[]
+  courses        Course[]
+  enhancedRoles  EnhancedUserRole[]
+  personRoles    PersonRole[]
+  persons        Person[]
+  configurations TenantConfiguration[]
+  usage          TenantUsage[]
+  customRoles    CustomRole[]
+
+  @@map("tenants")
+}
+
+model TenantConfiguration {
+  id          String   @id @default(uuid())
+  tenantId    String   @map("tenant_id")
+  configKey   String   @map("config_key")
+  configValue Json?    @map("config_value")
+  configType  String   @default("general") @map("config_type")
+  isEncrypted Boolean  @default(false) @map("is_encrypted")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, configKey])
+  @@map("tenant_configurations")
+}
+
+model EnhancedUserRole {
+  id             String    @id @default(uuid())
+  personId       String    @map("user_id") // Mapped for DB compatibility
+  tenantId       String    @map("tenant_id")
+  roleType       String    @map("role_type")
+  roleScope      String    @default("tenant") @map("role_scope")
+  permissions    Json?
+  companyId      String?   @map("company_id")
+  departmentId   String?   @map("department_id")
+  isActive       Boolean   @default(true) @map("is_active")
+  assignedBy     String?   @map("assigned_by")
+  assignedAt     DateTime  @default(now()) @map("assigned_at")
+  expiresAt      DateTime? @map("expires_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  deletedAt      DateTime? @map("deleted_at")
+  assignedByPerson Person? @relation("EnhancedUserRole_AssignedBy", fields: [assignedBy], references: [id])
+  company        Company?  @relation(fields: [companyId], references: [id])
+  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  person         Person    @relation("EnhancedUserRole_Person", fields: [personId], references: [id], onDelete: Cascade)
+
+  @@unique([personId, tenantId, roleType, companyId])
+  @@map("enhanced_user_roles")
+}
+
+model TenantUsage {
+  id            String   @id @default(uuid())
+  tenantId      String   @map("tenant_id")
+  usageType     String   @map("usage_type")
+  usageValue    Int      @default(0) @map("usage_value")
+  usageLimit    Int?     @map("usage_limit")
+  billingPeriod DateTime @map("billing_period")
+  metadata      Json     @default("{}")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at")
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, usageType, billingPeriod])
+  @@map("tenant_usage")
+}
+
+model CustomRole {
+  id            String                 @id @default(uuid())
+  name          String
+  description   String?
+  tenantId      String                 @map("tenant_id")
+  isActive      Boolean                @default(true) @map("is_active")
+  tenantAccess  String                 @default("SPECIFIC") @map("tenant_access") // ALL, SPECIFIC, NONE
+  createdBy     String?                @map("created_by")
+  createdAt     DateTime               @default(now()) @map("created_at")
+  updatedAt     DateTime               @updatedAt @map("updated_at")
+  deletedAt     DateTime?              @map("deleted_at")
+  tenant        Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdByPerson Person?              @relation("CustomRole_CreatedBy", fields: [createdBy], references: [id])
+  permissions   CustomRolePermission[]
+  personRoles   PersonRole[]           @relation("PersonRole_CustomRole")
+
+  @@unique([tenantId, name])
+  @@map("custom_roles")
+}
+
+model CustomRolePermission {
+  id           String           @id @default(uuid())
+  customRoleId String           @map("custom_role_id")
+  permission   PersonPermission
+  resource     String?          // Risorsa specifica (es. "companies", "courses")
+  scope        String           @default("global") // global, tenant, company, department
+  conditions   Json?            // Condizioni aggiuntive per il permesso
+  allowedFields Json?          @map("allowed_fields") // Campi specifici accessibili
+  createdAt    DateTime         @default(now()) @map("created_at")
+  updatedAt    DateTime         @updatedAt @map("updated_at")
+  deletedAt    DateTime?        @map("deleted_at")
+  customRole   CustomRole       @relation(fields: [customRoleId], references: [id], onDelete: Cascade)
+
+  @@unique([customRoleId, permission, resource, scope])
+  @@map("custom_role_permissions")
+}
+
+enum PersonStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  TERMINATED
+  PENDING
+
+  @@map("person_status")
+}
+
+enum RoleType {
+  EMPLOYEE
+  MANAGER
+  HR_MANAGER
+  DEPARTMENT_HEAD
+  TRAINER
+  SENIOR_TRAINER
+  TRAINER_COORDINATOR
+  EXTERNAL_TRAINER
+  SUPER_ADMIN
+  ADMIN
+  COMPANY_ADMIN
+  TENANT_ADMIN
+  VIEWER
+  OPERATOR
+  COORDINATOR
+  SUPERVISOR
+  GUEST
+  CONSULTANT
+  AUDITOR
+
+  @@map("role_types")
+}
+
+enum PersonPermission {
+  VIEW_COMPANIES
+  CREATE_COMPANIES
+  EDIT_COMPANIES
+  DELETE_COMPANIES
+  VIEW_EMPLOYEES
+  CREATE_EMPLOYEES
+  EDIT_EMPLOYEES
+  DELETE_EMPLOYEES
+  VIEW_TRAINERS
+  CREATE_TRAINERS
+  EDIT_TRAINERS
+  DELETE_TRAINERS
+  VIEW_USERS
+  CREATE_USERS
+  EDIT_USERS
+  DELETE_USERS
+  VIEW_COURSES
+  CREATE_COURSES
+  EDIT_COURSES
+  DELETE_COURSES
+  MANAGE_ENROLLMENTS
+  CREATE_DOCUMENTS
+  EDIT_DOCUMENTS
+  DELETE_DOCUMENTS
+  DOWNLOAD_DOCUMENTS
+  ADMIN_PANEL
+  SYSTEM_SETTINGS
+  USER_MANAGEMENT
+  ROLE_MANAGEMENT
+  TENANT_MANAGEMENT
+  VIEW_GDPR_DATA
+  EXPORT_GDPR_DATA
+  DELETE_GDPR_DATA
+  MANAGE_CONSENTS
+  VIEW_REPORTS
+  CREATE_REPORTS
+  EXPORT_REPORTS
+
+  @@map("person_permissions")
+}

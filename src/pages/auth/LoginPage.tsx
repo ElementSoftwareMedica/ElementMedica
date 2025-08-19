@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useAuthRedirect } from '../../hooks/useAuthRedirect';
 import { Eye, EyeOff, Lock, User } from 'lucide-react';
+import { PublicLayout } from '../../components/public/PublicLayout';
 
 const LoginPage: React.FC = () => {
   const [identifier, setIdentifier] = useState('');
@@ -11,11 +13,12 @@ const LoginPage: React.FC = () => {
   const [error, setError] = useState('');
   
   const { login, isAuthenticated } = useAuth();
+  const { handlePostLoginRedirect } = useAuthRedirect();
   const navigate = useNavigate();
 
-  // Se già autenticato, reindirizza alla homepage
+  // Se già autenticato, reindirizza alla dashboard
   if (isAuthenticated) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -25,18 +28,19 @@ const LoginPage: React.FC = () => {
 
     try {
       await login(identifier, password);
-      // Il redirect alla homepage avverrà automaticamente tramite il Navigate sopra
-      navigate('/', { replace: true });
-    } catch (err: any) {
-      setError(err.message || 'Errore durante il login');
+      // Il redirect viene gestito dall'hook useAuthRedirect
+      handlePostLoginRedirect();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Errore durante il login');
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
+    <PublicLayout>
+      <div className="min-h-[calc(100vh-200px)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-md w-full space-y-8">
         <div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
             Accedi al tuo account
@@ -62,10 +66,14 @@ const LoginPage: React.FC = () => {
                   type="text"
                   autoComplete="username"
                   required
-                  className="appearance-none relative block w-full pl-10 pr-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                  className="appearance-none relative block w-full pl-10 pr-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm"
                   placeholder="Email, username o codice fiscale"
                   value={identifier}
-                  onChange={(e) => setIdentifier(e.target.value)}
+                  onChange={(e) => {
+                    console.log('🔍 Input change - Raw value:', e.target.value);
+                    console.log('🔍 Input change - Value length:', e.target.value.length);
+                    setIdentifier(e.target.value);
+                  }}
                 />
               </div>
             </div>
@@ -84,7 +92,7 @@ const LoginPage: React.FC = () => {
                   type={showPassword ? 'text' : 'password'}
                   autoComplete="current-password"
                   required
-                  className="appearance-none relative block w-full pl-10 pr-10 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                  className="appearance-none relative block w-full pl-10 pr-10 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm"
                   placeholder="Inserisci la tua password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -114,7 +122,7 @@ const LoginPage: React.FC = () => {
             <button
               type="submit"
               disabled={isLoading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? (
                 <div className="flex items-center">
@@ -127,8 +135,9 @@ const LoginPage: React.FC = () => {
             </button>
           </div>
         </form>
+        </div>
       </div>
-    </div>
+    </PublicLayout>
   );
 };
 

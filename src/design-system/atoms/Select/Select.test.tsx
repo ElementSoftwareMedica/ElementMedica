@@ -4,6 +4,7 @@
 
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
+import { vi } from 'vitest';
 import { Select } from './Select';
 
 const mockOptions = [
@@ -59,7 +60,7 @@ describe('Select', () => {
   });
 
   it('handles onChange events', () => {
-    const handleChange = jest.fn();
+    const handleChange = vi.fn();
     render(<Select options={mockOptions} onChange={handleChange} />);
     
     const select = screen.getByRole('combobox');

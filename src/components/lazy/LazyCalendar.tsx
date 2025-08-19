@@ -11,7 +11,7 @@ import { LoadingFallback } from '../ui/LoadingFallback';
 const FullCalendar = React.lazy(() => import('@fullcalendar/react'));
 
 interface LazyCalendarProps {
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export const LazyCalendar: React.FC<LazyCalendarProps> = (props) => {

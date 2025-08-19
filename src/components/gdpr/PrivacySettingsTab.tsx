@@ -33,7 +33,6 @@ import {
   Paper
 } from '@mui/material';
 import {
-  Settings as SettingsIcon,
   Security as SecurityIcon,
   Info as InfoIcon,
   Save as SaveIcon,

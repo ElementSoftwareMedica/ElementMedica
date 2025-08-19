@@ -4,6 +4,8 @@ import { ChevronLeft } from 'lucide-react';
 import CompanyFormNew from '../../components/companies/CompanyFormNew';
 import { useCompanies } from '../../hooks/useCompanies';
 import { useToast } from '../../hooks/useToast';
+import { apiGet } from '../../services/api';
+import { getLoadingErrorMessage } from '../../utils/errorUtils';
 
 export default function CompanyEdit() {
   const { id } = useParams<{ id: string }>();
@@ -37,16 +39,7 @@ export default function CompanyEdit() {
       isFetchingRef.current = true;
       
       try {
-        const response = await fetch(`http://localhost:4000/companies/${id}`);
-        
-        if (!response.ok) {
-          if (response.status === 404) {
-            throw new Error('Company not found');
-          }
-          throw new Error(`Error ${response.status}: ${response.statusText}`);
-        }
-        
-        const data = await response.json();
+        const data = await apiGet(`/companies/${id}`);
         setCompany(data);
         companyDataFetchedRef.current = true; // Mark that we've successfully fetched company data
         setLoading(false);
@@ -60,15 +53,16 @@ export default function CompanyEdit() {
         if (error instanceof Error && error.message.includes('not found')) {
           // If it's a 404, show message and navigate away immediately
           showToast({
-            message: `Error: Company not found`,
+            message: 'Errore: Azienda non trovata',
             type: 'error'
           });
           setLoading(false);
           navigate('/companies');
         } else if (nextAttempt >= MAX_RETRY_ATTEMPTS) {
           // If we've reached max attempts, give up
+          const sanitizedError = getLoadingErrorMessage('companies', error);
           showToast({
-            message: `Error: ${error instanceof Error ? error.message : 'Failed to load company'}`,
+            message: `Errore: ${sanitizedError}`,
             type: 'error'
           });
           setLoading(false);

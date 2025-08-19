@@ -9,7 +9,7 @@ import { Input } from '../../atoms/Input';
 
 export type FormFieldType = 'text' | 'textarea' | 'number' | 'email' | 'password' | 'select' | 'checkbox' | 'radio' | 'date';
 export type FormFieldSize = 'sm' | 'md' | 'lg';
-export type FormFieldVariant = 'default' | 'filled' | 'outlined';
+export type FormFieldVariant = 'default' | 'filled' | 'outlined' | 'flushed';
 
 export interface FormFieldOption {
   value: string | number;
@@ -21,7 +21,7 @@ export interface FormFieldProps {
   /** Field name */
   name: string;
   /** Field label */
-  label: string;
+  label?: string;
   /** Field type */
   type?: FormFieldType;
   /** Field value */
@@ -44,8 +44,8 @@ export interface FormFieldProps {
   disabled?: boolean;
   /** Read-only state */
   readOnly?: boolean;
-  /** Options for select/radio */
-  options?: FormFieldOption[];
+  /** Options for select/radio - can be array of strings or objects */
+  options?: (string | FormFieldOption)[];
   /** Textarea rows */
   rows?: number;
   /** Min value for number inputs */
@@ -75,7 +75,17 @@ const sizeStyles: Record<FormFieldSize, string> = {
 const labelVariantStyles: Record<FormFieldVariant, string> = {
   default: 'text-gray-700 font-medium',
   filled: 'text-gray-600 font-medium',
-  outlined: 'text-gray-700 font-semibold'
+  outlined: 'text-gray-700 font-semibold',
+  flushed: 'text-gray-700 font-medium'
+};
+
+// Helper function to normalize options
+const normalizeOptions = (options: (string | FormFieldOption)[]): FormFieldOption[] => {
+  return options.map(option => 
+    typeof option === 'string' 
+      ? { value: option, label: option }
+      : option
+  );
 };
 
 /**
@@ -89,7 +99,7 @@ export const FormField = React.forwardRef<
     name,
     label,
     type = 'text',
-    value = '',
+    value,
     onChange,
     variant = 'default',
     size = 'md',
@@ -115,27 +125,35 @@ export const FormField = React.forwardRef<
   const fieldId = `field-${name}`;
   const errorId = error ? `${fieldId}-error` : undefined;
   const helpId = helpText ? `${fieldId}-help` : undefined;
+  
+  // Normalize options to ensure consistent format
+  const normalizedOptions = normalizeOptions(options);
 
   const baseInputClasses = cn(
     'w-full transition-colors duration-200',
     sizeStyles[size],
+    inputClassName
+  );
+
+  const textareaClasses = cn(
+    baseInputClasses,
     {
       'border-red-300 focus:border-red-500 focus:ring-red-500': error,
       'opacity-50 cursor-not-allowed': disabled,
       'bg-gray-50': readOnly
-    },
-    inputClassName
+    }
   );
 
   const renderInput = () => {
-    const commonProps = {
+    const isControlled = value !== undefined;
+    const baseProps = {
       id: fieldId,
       name,
       disabled,
       readOnly,
+      required,
       'aria-invalid': !!error,
       'aria-describedby': cn(errorId, helpId).trim() || undefined,
-      className: baseInputClasses,
       ...props
     };
 
@@ -143,29 +161,43 @@ export const FormField = React.forwardRef<
       case 'textarea':
         return (
           <textarea
-            {...commonProps}
+            {...baseProps}
             ref={ref as React.Ref<HTMLTextAreaElement>}
-            value={value as string}
-            onChange={onChange}
+            {...(isControlled ? { value: value as string } : {})}
+            {...(onChange ? { onChange } : {})}
             placeholder={placeholder}
             rows={rows}
+            className={cn(
+              'w-full px-3 py-2 border border-gray-300 rounded-md',
+              'focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20',
+              'transition-all duration-200 focus:outline-none',
+              'placeholder:text-gray-400 resize-vertical',
+              textareaClasses
+            )}
           />
         );
 
       case 'select':
         return (
           <select
-            {...commonProps}
+            {...baseProps}
             ref={ref as React.Ref<HTMLSelectElement>}
-            value={value as string}
-            onChange={onChange}
+            {...(isControlled ? { value: value as string } : {})}
+            {...(onChange ? { onChange } : {})}
+            className={cn(
+              'w-full px-3 py-2 border border-gray-300 rounded-md',
+              'focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20',
+              'transition-all duration-200 focus:outline-none',
+              'bg-white',
+              textareaClasses
+            )}
           >
             {placeholder && (
               <option value="" disabled>
                 {placeholder}
               </option>
             )}
-            {options.map((option) => (
+            {normalizedOptions.map((option) => (
               <option
                 key={option.value}
                 value={option.value}
@@ -180,11 +212,11 @@ export const FormField = React.forwardRef<
       case 'checkbox':
         return (
           <input
-            {...commonProps}
+            {...baseProps}
             ref={ref as React.Ref<HTMLInputElement>}
             type="checkbox"
-            checked={value as boolean}
-            onChange={onChange}
+            {...(isControlled ? { checked: value as boolean } : {})}
+            {...(onChange ? { onChange } : {})}
             className={cn(
               'h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded',
               inputClassName
@@ -195,14 +227,14 @@ export const FormField = React.forwardRef<
       case 'radio':
         return (
           <div className="space-y-2">
-            {options.map((option) => (
+            {normalizedOptions.map((option) => (
               <label key={option.value} className="flex items-center space-x-2">
                 <input
                   type="radio"
                   name={name}
                   value={option.value}
-                  checked={value === option.value}
-                  onChange={onChange}
+                  {...(isControlled ? { checked: value === option.value } : {})}
+                  {...(onChange ? { onChange } : {})}
                   disabled={disabled || option.disabled}
                   className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
                 />
@@ -217,18 +249,19 @@ export const FormField = React.forwardRef<
       default:
         return (
           <Input
-            {...commonProps}
+            {...baseProps}
             ref={ref as React.Ref<HTMLInputElement>}
             type={type}
-            value={value as string | number}
-            onChange={onChange}
+            {...(isControlled ? { value: value as string | number } : {})}
+            {...(onChange ? { onChange } : {})}
             placeholder={placeholder}
             min={min}
             max={max}
             step={step}
-            variant={variant === 'outlined' ? 'outlined' : 'default'}
+            variant={variant === 'outlined' ? 'outline' : variant === 'filled' ? 'filled' : variant === 'flushed' ? 'flushed' : 'default'}
             size={size}
-            error={!!error}
+            state={error ? 'error' : 'default'}
+            className={inputClassName}
           />
         );
     }
@@ -237,7 +270,7 @@ export const FormField = React.forwardRef<
   return (
     <div className={cn('space-y-1', className)}>
       {/* Label */}
-      {type !== 'checkbox' && (
+      {type !== 'checkbox' && label && (
         <label
           htmlFor={fieldId}
           className={cn(
@@ -257,7 +290,7 @@ export const FormField = React.forwardRef<
       )}
 
       {/* Checkbox with inline label */}
-      {type === 'checkbox' && (
+      {type === 'checkbox' && label && (
         <label
           htmlFor={fieldId}
           className={cn(
@@ -280,11 +313,14 @@ export const FormField = React.forwardRef<
         </label>
       )}
 
+      {/* Checkbox without label */}
+      {type === 'checkbox' && !label && renderInput()}
+
       {/* Input (non-checkbox) */}
       {type !== 'checkbox' && renderInput()}
 
       {/* Help text */}
-      {helpText && (
+      {helpText && !error && (
         <p
           id={helpId}
           className="text-sm text-gray-600"

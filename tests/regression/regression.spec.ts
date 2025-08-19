@@ -231,7 +231,7 @@ test.describe('Regression Tests', () => {
           for (let i = 0; i < 5; i++) {
             localStorage.setItem(`test_data_${i}`, largeData);
           }
-        } catch (e) {
+        } catch {
           // Storage quota exceeded - this is expected
         }
       });
@@ -291,7 +291,7 @@ test.describe('Regression Tests', () => {
       await page.evaluate(() => {
         // Mock API response with many documents
         window.fetch = async (url) => {
-          if (url.includes('/api/documents')) {
+          if (url.toString().includes('/api/documents')) {
             const documents = Array.from({ length: 1000 }, (_, i) => ({
               id: i + 1,
               title: `Document ${i + 1}`,

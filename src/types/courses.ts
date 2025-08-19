@@ -5,8 +5,8 @@ export interface Course {
   description?: string;
   duration?: string | number; // Può essere sia string che number
   status?: string;
-  created_at: string;
-  updated_at: string;
+  createdAt: string;
+  updatedAt: string;
   code?: string;
   validityYears?: number; // Int in the Prisma schema
   renewalDuration?: string;
@@ -16,18 +16,30 @@ export interface Course {
   regulation?: string;
   contents?: string;
   price?: number; // Float in the Prisma schema
+  // Nuovi campi per frontend pubblico
+  subcategory?: string;
+  riskLevel?: 'ALTO' | 'MEDIO' | 'BASSO' | 'A' | 'B' | 'C';
+  courseType?: 'PRIMO_CORSO' | 'AGGIORNAMENTO';
+  shortDescription?: string;
+  fullDescription?: string;
+  image1Url?: string;
+  image2Url?: string;
+  isPublic?: boolean;
+  seoTitle?: string;
+  seoDescription?: string;
+  slug?: string;
 }
 
 export interface CourseSchedule {
   id: string;
   courseId: string;
-  start_date: string;
-  end_date: string;
+  startDate: string;
+  endDate: string;
   location?: string;
-  max_participants?: number;
+  maxParticipants?: number;
   status?: string;
-  created_at: string;
-  updated_at: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface CourseEnrollment {
@@ -35,12 +47,12 @@ export interface CourseEnrollment {
   scheduleId: string;
   employeeId: string;
   status?: string;
-  created_at: string;
-  updated_at: string;
+  createdAt: string;
+  updatedAt: string;
   employee?: {
     id: string;
-    first_name: string;
-    last_name: string;
+    firstName: string;
+    lastName: string;
     email?: string;
     company?: {
       id: string;
@@ -53,4 +65,4 @@ export interface CourseFormProps {
   course?: Course;
   onSubmit: () => void;
   onCancel: () => void;
-} 
+}

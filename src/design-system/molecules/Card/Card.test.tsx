@@ -411,7 +411,7 @@ describe('Card', () => {
   describe('Performance', () => {
     it('does not re-render unnecessarily', () => {
       const renderSpy = vi.fn();
-      const TestCard = ({ children, ...props }) => {
+      const TestCard = ({ children, ...props }: { children: React.ReactNode; [key: string]: any }) => {
         renderSpy();
         return <Card {...props}>{children}</Card>;
       };
@@ -441,7 +441,7 @@ describe('Card', () => {
       const card = screen.getByTestId('card');
       expect(card).toHaveAttribute('id', 'custom-card');
       expect(card).toHaveAttribute('title', 'Card tooltip');
-      expect(card).toHaveStyle({ backgroundColor: 'red' });
+      expect(card).toHaveAttribute('style', 'background-color: red;');
     });
 
     it('supports data attributes', () => {

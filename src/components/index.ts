@@ -8,9 +8,7 @@
  */
 
 // Export layout components
-export { default as Layout } from './Layout';
-export { default as Header } from './Header';
-export { default as Sidebar } from './Sidebar';
+export { Layout, Header, Sidebar } from './layouts';
 
 // Export basic UI components from design-system
 // Note: These are re-exported for backward compatibility
@@ -34,7 +32,7 @@ export {
   AddEntityDropdown,
   BatchEditButton,
   ColumnSelector
-} from './shared/ui';
+} from './ui';
 
 // Note: Dialog has been migrated to design-system/molecules/Modal
 // Import Modal directly from design-system instead

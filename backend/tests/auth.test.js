@@ -1,8 +1,8 @@
-const { describe, it, expect, beforeEach, afterEach } = require('@jest/globals');
-const { PrismaClient } = require('@prisma/client');
-const bcryptjs = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const dotenv = require('dotenv');
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
+import bcryptjs from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import dotenv from 'dotenv';
+import { prisma, createTestCompany, createTestUser } from './setup.js';
 
 // Load test environment variables
 dotenv.config({ path: '.env.test' });
@@ -10,50 +10,54 @@ dotenv.config({ path: '.env.test' });
 // Set NODE_ENV to test
 process.env.NODE_ENV = 'test';
 
-const prisma = new PrismaClient();
-
 describe('Authentication Tests', () => {
   let testCompany;
   let testUser;
 
   beforeEach(async () => {
-    // Create test company first
-    testCompany = await prisma.company.create({
-      data: {
-        ragione_sociale: 'Test Company',
-        mail: 'test@company.com',
-        telefono: '1234567890',
-        sede_azienda: 'Test Address',
-        citta: 'Test City',
-        provincia: 'Test Province',
-        cap: '12345',
-        piva: '12345678901',
-        codice_fiscale: 'TSTCMP12345678',
-        is_active: true
-      }
+    // Create test company using helper function
+    testCompany = await createTestCompany({
+      ragioneSociale: 'Test Company',
+      mail: 'test@company.com',
+      telefono: '1234567890',
+      sedeAzienda: 'Test Address',
+      citta: 'Test City',
+      provincia: 'Test Province',
+      cap: '12345',
+      piva: '12345678901',
+      codiceFiscale: 'TSTCMP12345678',
+      isActive: true
     });
 
-    // Create test user
-    const hashedPassword = await bcryptjs.hash('Admin123!', 12);
-    testUser = await prisma.user.create({
-      data: {
-        username: 'admin',
-        email: 'admin@example.com',
-        password: hashedPassword,
-        firstName: 'Admin',
-        lastName: 'User',
-        isActive: true,
-        companyId: testCompany.id
-      }
+    // Create test user using helper function
+    testUser = await createTestUser(testCompany.id, {
+      firstName: 'Admin',
+      lastName: 'User',
+      email: 'testadmin@example.com',
+      username: 'testadmin'
     });
   });
 
   afterEach(async () => {
     // Clean up test data in correct order
     try {
-      await prisma.employee.deleteMany({ where: { email: 'admin@example.com' } });
-      await prisma.user.deleteMany({ where: { email: 'admin@example.com' } });
-      await prisma.company.deleteMany({ where: { ragione_sociale: 'Test Company' } });
+      if (testUser) {
+        // Delete role permissions first
+        await prisma.rolePermission.deleteMany({
+          where: {
+            personRole: {
+              personId: testUser.id
+            }
+          }
+        });
+        // Delete person roles
+        await prisma.personRole.deleteMany({ where: { personId: testUser.id } });
+        // Delete person
+        await prisma.person.deleteMany({ where: { email: 'testadmin@example.com' } });
+      }
+      if (testCompany) {
+        await prisma.company.deleteMany({ where: { id: testCompany.id } });
+      }
     } catch (error) {
       console.log('Cleanup error:', error.message);
     }
@@ -89,7 +93,7 @@ describe('Authentication Tests', () => {
 
   describe('JWT Token Operations', () => {
     it('should generate JWT token', () => {
-      const payload = { userId: 1, email: 'admin@example.com', role: 'admin' };
+      const payload = { personId: 1, email: 'admin@example.com', role: 'admin' };
       const secret = process.env.JWT_SECRET || 'test-secret';
       
       const token = jwt.sign(payload, secret, { expiresIn: '1h' });
@@ -99,13 +103,13 @@ describe('Authentication Tests', () => {
     });
 
     it('should verify valid JWT token', () => {
-      const payload = { userId: 1, email: 'admin@example.com', role: 'admin' };
+      const payload = { personId: 1, email: 'admin@example.com', role: 'admin' };
       const secret = process.env.JWT_SECRET || 'test-secret';
       
       const token = jwt.sign(payload, secret, { expiresIn: '1h' });
       const decoded = jwt.verify(token, secret);
       
-      expect(decoded.userId).toBe(payload.userId);
+      expect(decoded.personId).toBe(payload.personId);
       expect(decoded.email).toBe(payload.email);
       expect(decoded.role).toBe(payload.role);
     });
@@ -113,19 +117,19 @@ describe('Authentication Tests', () => {
 
   describe('Database Operations', () => {
     it('should create and retrieve user', async () => {
-      const user = await prisma.user.findUnique({
-        where: { id: testUser.id }
+      const user = await prisma.person.findUnique({
+        where: { id: testUser.id, deletedAt: null }
       });
       
       expect(user).toBeDefined();
-      expect(user.email).toBe('admin@example.com');
+      expect(user.email).toBe('testadmin@example.com');
       expect(user.firstName).toBe('Admin');
       expect(user.lastName).toBe('User');
     });
 
     it('should verify user password hash', async () => {
-      const user = await prisma.user.findUnique({
-        where: { id: testUser.id }
+      const user = await prisma.person.findUnique({
+        where: { id: testUser.id, deletedAt: null }
       });
       
       const isValid = await bcryptjs.compare('Admin123!', user.password);

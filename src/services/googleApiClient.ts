@@ -1,6 +1,4 @@
-import axios from 'axios';
-
-const API_BASE_URL = 'http://localhost:4001';
+import { apiGet} from './api';
 
 /**
  * Google Docs API endpoints
@@ -63,15 +61,15 @@ const googleApiClient = {
    */
   async getDefaultTemplate(type: string): Promise<GoogleTemplateResponse> {
     try {
-      const response = await axios.get<GoogleTemplateResponse>(
-        `${API_BASE_URL}${GOOGLE_API_ENDPOINTS.TEMPLATES}/${type}`
+      const response = await apiGet<GoogleTemplateResponse>(
+        `${GOOGLE_API_ENDPOINTS.TEMPLATES}/${type}`
       );
-      return response.data;
+      return response;
     } catch (error: any) {
       console.error('Error getting default template:', error);
       return {
         success: false,
-        error: error.response?.data?.error || 'Impossibile ottenere il template predefinito'
+        error: error.message || 'Impossibile ottenere il template predefinito'
       };
     }
   },
@@ -85,17 +83,17 @@ const googleApiClient = {
    */
   async generateDocument(type: string, data: Record<string, string>): Promise<GenerateDocumentResponse> {
     try {
-      const response = await axios.post<GenerateDocumentResponse>(
-        `${API_BASE_URL}${GOOGLE_API_ENDPOINTS.GENERATE}`,
+      const response = await apiPost<GenerateDocumentResponse>(
+        GOOGLE_API_ENDPOINTS.GENERATE,
         { type, data }
       );
-      return response.data;
+      return response;
     } catch (error: any) {
       console.error('Error generating document:', error);
       return {
         success: false,
-        error: error.response?.data?.error || 'Impossibile generare il documento',
-        details: error.response?.data?.details || error.message
+        error: error.message || 'Impossibile generare il documento',
+        details: error.details || error.message
       };
     }
   },
@@ -109,16 +107,16 @@ const googleApiClient = {
    */
   async generateAttestato(scheduledCourseId: string, employeeId: string): Promise<AttestatiResponse> {
     try {
-      const response = await axios.get<AttestatiResponse>(
-        `${API_BASE_URL}${GOOGLE_API_ENDPOINTS.ATTESTATI}/${scheduledCourseId}/${employeeId}`
+      const response = await apiGet<AttestatiResponse>(
+        `${GOOGLE_API_ENDPOINTS.ATTESTATI}/${scheduledCourseId}/${employeeId}`
       );
-      return response.data;
+      return response;
     } catch (error: any) {
       console.error('Error generating attestato:', error);
       return {
         success: false,
-        error: error.response?.data?.error || 'Impossibile generare l\'attestato',
-        details: error.response?.data?.details || error.message
+        error: error.message || 'Impossibile generare l\'attestato',
+        details: error.details || error.message
       };
     }
   },
@@ -158,4 +156,4 @@ const googleApiClient = {
   }
 };
 
-export default googleApiClient; 
+export default googleApiClient;

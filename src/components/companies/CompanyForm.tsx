@@ -1,43 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Company } from '../../types';
+import { apiPut, apiPost } from '../../services/api';
 
 interface CompanyFormProps {
-  company?: {
-    id: string;
-    ragione_sociale: string;
-    codice_ateco?: string;
-    piva?: string;
-    codice_fiscale?: string;
-    sdi?: string;
-    pec?: string;
-    iban?: string;
-    sede_azienda?: string;
-    citta?: string;
-    provincia?: string;
-    cap?: string;
-    persona_riferimento?: string;
-    mail?: string;
-    telefono?: string;
-    note?: string;
-  };
+  company?: Company;
   onSubmit: () => void;
   onClose: () => void;
 }
 
 export const CompanyForm: React.FC<CompanyFormProps> = ({ company, onSubmit, onClose }) => {
   const [formData, setFormData] = useState({
-    ragione_sociale: company?.ragione_sociale || '',
-    codice_ateco: company?.codice_ateco || '',
+    ragioneSociale: company?.ragioneSociale || '',
+    codiceAteco: company?.codiceAteco || '',
     piva: company?.piva || '',
-    codice_fiscale: company?.codice_fiscale || '',
+    codiceFiscale: company?.codiceFiscale || '',
     sdi: company?.sdi || '',
     pec: company?.pec || '',
     iban: company?.iban || '',
-    sede_azienda: company?.sede_azienda || '',
+    sedeAzienda: company?.sedeAzienda || '',
     citta: company?.citta || '',
     provincia: company?.provincia || '',
     cap: company?.cap || '',
-    persona_riferimento: company?.persona_riferimento || '',
+    personaRiferimento: company?.personaRiferimento || '',
     mail: company?.mail || '',
     telefono: company?.telefono || '',
     note: company?.note || '',
@@ -46,18 +31,18 @@ export const CompanyForm: React.FC<CompanyFormProps> = ({ company, onSubmit, onC
   useEffect(() => {
     if (company) {
       setFormData({
-        ragione_sociale: company.ragione_sociale || '',
-        codice_ateco: company.codice_ateco || '',
+        ragioneSociale: company.ragioneSociale || '',
+        codiceAteco: company.codiceAteco || '',
         piva: company.piva || '',
-        codice_fiscale: company.codice_fiscale || '',
+        codiceFiscale: company.codiceFiscale || '',
         sdi: company.sdi || '',
         pec: company.pec || '',
         iban: company.iban || '',
-        sede_azienda: company.sede_azienda || '',
+        sedeAzienda: company.sedeAzienda || '',
         citta: company.citta || '',
         provincia: company.provincia || '',
         cap: company.cap || '',
-        persona_riferimento: company.persona_riferimento || '',
+        personaRiferimento: company.personaRiferimento || '',
         mail: company.mail || '',
         telefono: company.telefono || '',
         note: company.note || '',
@@ -73,24 +58,10 @@ export const CompanyForm: React.FC<CompanyFormProps> = ({ company, onSubmit, onC
       const payload = {
         ...formData,
       };
-      let response;
       if (company) {
-        response = await fetch(`http://localhost:4000/companies/${company.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
+        await apiPut(`/companies/${company.id}`, payload);
       } else {
-        response = await fetch('http://localhost:4000/companies', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-      }
-      if (!response.ok) {
-        const errorText = await response.text();
-        alert('Error: ' + errorText);
-        return;
+        await apiPost('/companies', payload);
       }
       onSubmit();
       navigate('/companies');
@@ -115,8 +86,8 @@ export const CompanyForm: React.FC<CompanyFormProps> = ({ company, onSubmit, onC
           <label className="block text-sm font-medium text-gray-700">Ragione Sociale</label>
           <input
             type="text"
-            name="ragione_sociale"
-            value={formData.ragione_sociale}
+            name="ragioneSociale"
+            value={formData.ragioneSociale}
             onChange={handleChange}
             required
             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
@@ -126,8 +97,8 @@ export const CompanyForm: React.FC<CompanyFormProps> = ({ company, onSubmit, onC
           <label className="block text-sm font-medium text-gray-700">Codice ATECO</label>
           <input
             type="text"
-            name="codice_ateco"
-            value={formData.codice_ateco}
+            name="codiceAteco"
+            value={formData.codiceAteco}
             onChange={handleChange}
             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
           />
@@ -146,8 +117,8 @@ export const CompanyForm: React.FC<CompanyFormProps> = ({ company, onSubmit, onC
           <label className="block text-sm font-medium text-gray-700">Codice Fiscale</label>
           <input
             type="text"
-            name="codice_fiscale"
-            value={formData.codice_fiscale}
+            name="codiceFiscale"
+            value={formData.codiceFiscale}
             onChange={handleChange}
             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
           />
@@ -186,8 +157,8 @@ export const CompanyForm: React.FC<CompanyFormProps> = ({ company, onSubmit, onC
           <label className="block text-sm font-medium text-gray-700">Sede Azienda</label>
           <input
             type="text"
-            name="sede_azienda"
-            value={formData.sede_azienda}
+            name="sedeAzienda"
+            value={formData.sedeAzienda}
             onChange={handleChange}
             required
             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
@@ -227,8 +198,8 @@ export const CompanyForm: React.FC<CompanyFormProps> = ({ company, onSubmit, onC
           <label className="block text-sm font-medium text-gray-700">Persona di Riferimento</label>
           <input
             type="text"
-            name="persona_riferimento"
-            value={formData.persona_riferimento}
+            name="personaRiferimento"
+            value={formData.personaRiferimento}
             onChange={handleChange}
             required
             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
@@ -267,7 +238,14 @@ export const CompanyForm: React.FC<CompanyFormProps> = ({ company, onSubmit, onC
           />
         </div>
       </div>
-      <div className="flex justify-end">
+      <div className="flex justify-end space-x-3">
+        <button
+          type="button"
+          onClick={onClose}
+          className="inline-flex justify-center rounded-md border border-gray-300 bg-white py-2 px-4 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+        >
+          Annulla
+        </button>
         <button
           type="submit"
           className="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"

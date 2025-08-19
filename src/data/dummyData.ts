@@ -1,4 +1,4 @@
-import { Company, Employee, Course } from '../types';
+import { Company, PersonData, Course } from '../types';
 
 // Dummy data for companies
 const companies: Company[] = [
@@ -6,10 +6,10 @@ const companies: Company[] = [
     id: 'c1',
     name: 'Acme Corporation',
     industry: 'Manufacturing',
-    status: 'Active',
+    status: 'ACTIVE',
     location: 'Boston, MA',
-    employees: 150,
-    established: 2005,
+    employeesCount: 150,
+    establishedYear: 2005,
     contactPerson: 'John Smith',
     phone: '+1 (555) 123-4567',
     email: 'contact@acmecorp.com',
@@ -23,8 +23,8 @@ const companies: Company[] = [
     industry: 'Technology',
     status: 'Active',
     location: 'San Francisco, CA',
-    employees: 85,
-    established: 2012,
+    employeesCount: 85,
+    establishedYear: 2012,
     contactPerson: 'Jessica Wong',
     phone: '+1 (555) 234-5678',
     email: 'contact@techsolutions.com',
@@ -38,8 +38,8 @@ const companies: Company[] = [
     industry: 'Healthcare',
     status: 'Active',
     location: 'Chicago, IL',
-    employees: 210,
-    established: 1998,
+    employeesCount: 210,
+    establishedYear: 1998,
     contactPerson: 'Robert Johnson',
     phone: '+1 (555) 345-6789',
     email: 'info@healthplus.com',
@@ -53,8 +53,8 @@ const companies: Company[] = [
     industry: 'Construction',
     status: 'Active',
     location: 'Denver, CO',
-    employees: 75,
-    established: 2008,
+    employeesCount: 75,
+    establishedYear: 2008,
     contactPerson: 'Mike Rodriguez',
     phone: '+1 (555) 456-7890',
     email: 'info@buildright.com',
@@ -68,8 +68,8 @@ const companies: Company[] = [
     industry: 'Education',
     status: 'Active',
     location: 'Austin, TX',
-    employees: 120,
-    established: 2010,
+    employeesCount: 120,
+    establishedYear: 2010,
     contactPerson: 'Sarah Chen',
     phone: '+1 (555) 567-8901',
     email: 'info@eduforward.com',
@@ -83,8 +83,8 @@ const companies: Company[] = [
     industry: 'Logistics',
     status: 'Inactive',
     location: 'Seattle, WA',
-    employees: 65,
-    established: 2014,
+    employeesCount: 65,
+    establishedYear: 2014,
     contactPerson: 'David Patel',
     phone: '+1 (555) 678-9012',
     email: 'contact@logitrans.com',
@@ -94,8 +94,8 @@ const companies: Company[] = [
   }
 ];
 
-// Dummy data for employees
-const employees: Employee[] = [
+// Dummy data for persons (employees)
+const employees: PersonData[] = [
   {
     id: 'e1',
     firstName: 'Michael',
@@ -311,6 +311,7 @@ const courses: Course[] = [
     enrolled: 45,
   }
 ];
+
 
 export const dummyData = {
   companies,

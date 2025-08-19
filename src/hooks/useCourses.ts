@@ -7,7 +7,7 @@ export interface CourseInsert {
   category?: string;
   description?: string;
   duration?: string;
-  status?: 'Active' | 'Inactive';
+  status?: 'ACTIVE' | 'INACTIVE';
   validityYears?: number;
   code?: string;
   pricePerPerson?: number;
@@ -23,7 +23,7 @@ export interface CourseUpdate {
   category?: string;
   description?: string;
   duration?: string;
-  status?: 'Active' | 'Inactive';
+  status?: 'ACTIVE' | 'INACTIVE';
   validityYears?: number;
   code?: string;
   pricePerPerson?: number;
@@ -36,10 +36,10 @@ export interface CourseUpdate {
 
 export interface CourseScheduleInsert {
   courseId: string;
-  start_date: string;
-  end_date: string;
+  startDate: string;
+  endDate: string;
   location?: string;
-  max_participants?: number;
+  maxParticipants?: number;
   status?: string;
 }
 

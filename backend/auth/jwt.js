@@ -5,12 +5,11 @@
 
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
-import { PrismaClient } from '@prisma/client';
 import dotenv from 'dotenv';
 import crypto from 'crypto';
 import { logger } from '../utils/logger.js';
 
-const prisma = new PrismaClient();
+import prisma from '../config/prisma-optimization.js';
 
 // JWT Configuration
 const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
@@ -77,29 +76,33 @@ export class JWTService {
      */
     static async generateTokenPair(user, deviceInfo = {}) {
         const payload = {
-            userId: user.id,
+            personId: user.id,
             email: user.email,
-            companyId: user.company_id,
+            companyId: user.companyId,
             roles: user.roles || [],
             permissions: user.permissions || []
         };
 
         const accessToken = this.generateAccessToken(payload);
-        const refreshToken = this.generateRefreshToken({ userId: user.id });
+        const refreshToken = this.generateRefreshToken({ personId: user.id });
         const sessionToken = crypto.randomBytes(32).toString('hex');
 
-        // Store session in database
-        const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
+        // Save refresh token to database with tenantId
+        const refreshTokenExpiry = new Date();
+        refreshTokenExpiry.setDate(refreshTokenExpiry.getDate() + 7); // 7 days
 
-        await prisma.userSession.create({
+        await prisma.refreshToken.create({
             data: {
-                userId: user.id,
-                sessionToken: sessionToken,
-                deviceInfo: deviceInfo,
-                ipAddress: deviceInfo.ip,
-                userAgent: deviceInfo.userAgent,
-                expiresAt: expiresAt
+                personId: user.id,
+                token: refreshToken,
+                expiresAt: refreshTokenExpiry,
+                deviceInfo: {
+                    userAgent: deviceInfo.userAgent || 'Unknown',
+                    ipAddress: deviceInfo.ip || '127.0.0.1'
+                },
+                tenant: {
+                    connect: { id: user.companyId }
+                }
             }
         });
 
@@ -120,25 +123,22 @@ export class JWTService {
             // Verify refresh token
             const decoded = this.verifyRefreshToken(refreshToken);
             
-            // Check if session exists and is active
-            const session = await prisma.userSession.findFirst({
+            // Check if refresh token exists and is active
+            const refreshTokenRecord = await prisma.refreshToken.findFirst({
                 where: {
-                    sessionToken: refreshToken,
-                    isActive: true,
+                    token: refreshToken,
+                    revokedAt: null,
                     expiresAt: {
                         gt: new Date()
                     }
                 },
                 include: {
-                    user: {
+                    person: {
                         include: {
-                            userRoles: {
+                            personRoles: {
+                                where: { isActive: true },
                                 include: {
-                                    role: {
-                                        include: {
-                                            rolePermissions: true
-                                        }
-                                    }
+                                    permissions: true
                                 }
                             }
                         }
@@ -146,25 +146,21 @@ export class JWTService {
                 }
             });
 
-            if (!session) {
+            if (!refreshTokenRecord) {
                 throw new Error('Invalid or expired refresh token');
             }
 
-            // Update last activity
-            await prisma.userSession.update({
-                where: { id: session.id },
-                data: { lastActivity: new Date() }
-            });
+            // Note: RefreshToken doesn't need lastActivity updates
 
             // Generate new access token
-            const user = session.user;
-            const roles = user.userRoles.map(ur => ur.role.name);
-            const permissions = user.userRoles.flatMap(ur => ur.role.rolePermissions || []);
+            const user = refreshTokenRecord.person;
+            const roles = user.personRoles.map(pr => pr.roleType);
+            const permissions = user.personRoles.flatMap(pr => pr.permissions || []);
 
             const payload = {
-                userId: user.id,
+                personId: user.id,
                 email: user.email,
-                companyId: user.company_id,
+                companyId: user.companyId,
                 roles,
                 permissions
             };
@@ -185,14 +181,14 @@ export class JWTService {
     /**
      * Revoke session (logout)
      */
-    static async revokeSession(sessionToken) {
-        await prisma.userSession.updateMany({
+    static async revokeSession(refreshToken) {
+        await prisma.refreshToken.updateMany({
             where: {
-                sessionToken: sessionToken,
-                isActive: true
+                token: refreshToken,
+                revokedAt: null
             },
             data: {
-                isActive: false
+                revokedAt: new Date()
             }
         });
     }
@@ -200,14 +196,14 @@ export class JWTService {
     /**
      * Revoke all user sessions
      */
-    static async revokeAllUserSessions(userId) {
-        await prisma.userSession.updateMany({
+    static async revokeAllPersonSessions(personId) {
+        await prisma.refreshToken.updateMany({
             where: {
-                userId: userId,
-                isActive: true
+                personId: personId,
+                revokedAt: null
             },
             data: {
-                isActive: false
+                revokedAt: new Date()
             }
         });
     }
@@ -216,14 +212,14 @@ export class JWTService {
      * Clean expired sessions
      */
     static async cleanExpiredSessions() {
-        const result = await prisma.userSession.deleteMany({
+        const result = await prisma.refreshToken.deleteMany({
             where: {
                 expiresAt: {
                     lt: new Date()
                 }
             }
         });
-        logger.info(`Cleaned ${result.count} expired sessions`, { component: 'jwt-manager' });
+        logger.info(`Cleaned ${result.count} expired refresh tokens`, { component: 'jwt-manager' });
         return result.count;
     }
 }

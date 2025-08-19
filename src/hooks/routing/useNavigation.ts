@@ -15,7 +15,7 @@ export const useNavigation = () => {
   // Funzioni di navigazione memoizzate
   const navigationActions = useMemo(() => ({
     // Navigazione base
-    goTo: (path: string, options?: { replace?: boolean; state?: any }) => {
+    goTo: (path: string, options?: { replace?: boolean; state?: unknown }) => {
       navigate(path, options);
     },
     

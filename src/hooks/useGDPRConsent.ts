@@ -11,7 +11,8 @@ import {
   ConsentWithdrawalFormData,
   UseGDPRConsentReturn,
   ConsentsListResponse,
-  ConsentResponse
+  ConsentResponse,
+  ConsentType
 } from '../types/gdpr';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'react-hot-toast';
@@ -209,7 +210,6 @@ export const useGDPRConsent = (): UseGDPRConsentReturn => {
  */
 export const useSingleConsent = (consentType: string) => {
   const {
-    consents,
     loading,
     error,
     grantConsent,
@@ -224,12 +224,12 @@ export const useSingleConsent = (consentType: string) => {
   const toggle = useCallback(async (purpose: string, reason?: string) => {
     if (isActive) {
       await withdrawConsent({
-        consentType: consentType as any,
+        consentType: consentType as ConsentType,
         reason: reason || 'User requested withdrawal'
       });
     } else {
       await grantConsent({
-        consentType: consentType as any,
+        consentType: consentType as ConsentType,
         purpose
       });
     }

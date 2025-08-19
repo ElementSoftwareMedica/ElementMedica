@@ -3,47 +3,11 @@
  * Week 5: Database and Performance Optimization
  */
 
-import { PrismaClient } from '@prisma/client';
 import logger from '../utils/logger.js';
 
-// Database configuration with connection pooling
+// Database configuration - minimal setup for compatibility
 const databaseConfig = {
-  // Connection pooling configuration
-  datasources: {
-    db: {
-      url: process.env.DATABASE_URL
-    }
-  },
-  
-  // Query optimization settings
-  log: [
-    {
-      emit: 'event',
-      level: 'query',
-    },
-    {
-      emit: 'event', 
-      level: 'error',
-    },
-    {
-      emit: 'event',
-      level: 'info',
-    },
-    {
-      emit: 'event',
-      level: 'warn',
-    },
-  ],
-  
-  // Error formatting
-  errorFormat: 'pretty',
-  
-  // Transaction options
-  transactionOptions: {
-    maxWait: 5000, // 5 seconds
-    timeout: 10000, // 10 seconds
-    isolationLevel: 'ReadCommitted'
-  }
+  log: ['error', 'warn']
 };
 
 /**
@@ -54,7 +18,23 @@ class OptimizedPrismaClient {
   constructor() {
     this.client = new PrismaClient(databaseConfig);
     this.setupEventListeners();
-    this.setupMiddleware();
+    this.middlewareInitialized = false;
+    this.initializeMiddleware();
+  }
+
+  async initializeMiddleware() {
+    try {
+      await this.setupMiddleware();
+      this.middlewareInitialized = true;
+      logger.info('Database middleware initialized successfully', {
+        component: 'database'
+      });
+    } catch (error) {
+      logger.error('Failed to initialize database middleware', {
+        error: error.message,
+        component: 'database'
+      });
+    }
   }
 
   setupEventListeners() {
@@ -100,7 +80,7 @@ class OptimizedPrismaClient {
     });
   }
 
-  setupMiddleware() {
+  async setupMiddleware() {
     // Performance monitoring middleware
     this.client.$use(async (params, next) => {
       const start = Date.now();
@@ -119,50 +99,16 @@ class OptimizedPrismaClient {
       return result;
     });
 
-    // Soft delete middleware
-    this.client.$use(async (params, next) => {
-      // Determine the soft delete field based on model
-      const getSoftDeleteField = (modelName) => {
-        // Person model uses 'isDeleted', all others use 'eliminato'
-        return modelName === 'Person' ? 'isDeleted' : 'eliminato';
-      };
-      
-      const softDeleteField = getSoftDeleteField(params.model);
-      
-      // Handle soft delete for models with soft delete field
-      if (params.action === 'delete') {
-        // Change delete to update with soft delete = true
-        params.action = 'update';
-        params.args.data = { [softDeleteField]: true };
-      }
-      
-      if (params.action === 'deleteMany') {
-        // Change deleteMany to updateMany with soft delete = true
-        params.action = 'updateMany';
-        if (params.args.data) {
-          params.args.data[softDeleteField] = true;
-        } else {
-          params.args.data = { [softDeleteField]: true };
-        }
-      }
-
-      // Filter out soft deleted records for read operations
-      if (params.action === 'findUnique' || params.action === 'findFirst') {
-        params.args.where = { ...params.args.where, [softDeleteField]: false };
-      }
-      
-      if (params.action === 'findMany') {
-        if (params.args.where) {
-          if (params.args.where[softDeleteField] === undefined) {
-            params.args.where[softDeleteField] = false;
-          }
-        } else {
-          params.args.where = { [softDeleteField]: false };
-        }
-      }
-
-      return next(params);
-    });
+    // Advanced Soft delete middleware (Fase 5)
+    try {
+      const { createAdvancedSoftDeleteMiddleware } = await import('../middleware/soft-delete-advanced.js');
+      this.client.$use(createAdvancedSoftDeleteMiddleware());
+    } catch (error) {
+      logger.error('Failed to load soft-delete middleware', {
+        error: error.message,
+        component: 'database-middleware'
+      });
+    }
 
     // Type conversion middleware for numeric fields
     this.client.$use(async (params, next) => {

@@ -33,11 +33,11 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 // Variant styles
 const variantStyles: Record<ButtonVariant, string> = {
   primary: `
-    bg-blue-600 text-white border-blue-600
-    hover:bg-blue-700 hover:border-blue-700
-    focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
-    active:bg-blue-800
-    disabled:bg-blue-300 disabled:border-blue-300
+    bg-primary-600 text-white border-primary-600
+    hover:bg-primary-700 hover:border-primary-700
+    focus:ring-2 focus:ring-primary-500 focus:ring-offset-2
+    active:bg-primary-800
+    disabled:bg-primary-300 disabled:border-primary-300
   `,
   secondary: `
     bg-gray-100 text-gray-900 border-gray-300
@@ -110,6 +110,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     return (
       <button
         ref={ref}
+        type="button"
         disabled={isDisabled}
         className={cn(
           baseStyles,
@@ -148,7 +149,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         )}
         
         {children && (
-          <span className="truncate">{children}</span>
+          <span className={leftIcon || rightIcon ? "flex-1 min-w-0" : "truncate"}>{children}</span>
         )}
         
         {!loading && rightIcon && (

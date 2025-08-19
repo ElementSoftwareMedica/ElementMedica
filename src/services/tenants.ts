@@ -2,6 +2,15 @@ import { Company } from '../types';
 import apiClient from './api';
 
 // Types
+interface TenantCurrentResponse {
+  success: boolean;
+  data: {
+    tenant: Company;
+    statistics?: any;
+    billing?: any;
+  };
+}
+
 export interface TenantCreateDTO {
   name: string;
   slug: string;
@@ -28,8 +37,10 @@ export interface TenantUsage {
 // API Functions
 export const getCurrentTenant = async (): Promise<Company> => {
   try {
-    const response = await apiClient.get('/tenants/current');
-    return response.data;
+    const response = await apiClient.get<TenantCurrentResponse>('/tenants/current');
+    // L'endpoint restituisce { success: true, data: { tenant: {...} } }
+    // Estraiamo il tenant dalla struttura annidata
+    return response.data.data.tenant;
   } catch (error: any) {
     console.error('Error fetching current tenant:', error);
     throw new Error(error.response?.data?.message || 'Errore nel caricamento del tenant');

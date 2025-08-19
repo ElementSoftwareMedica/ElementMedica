@@ -1,6 +1,5 @@
-import { apiPost, apiGet } from './api';
+import { apiGet, apiPost } from './api';
 import { AuthResponse, AuthVerifyResponse, LoginRequest } from '../types';
-import { apiPost, apiGet } from './api';
 
 // Types for permissions
 export interface UserPermissions {
@@ -32,28 +31,71 @@ export const resetPassword = async (token: string, password: string): Promise<{ 
 };
 
 export const saveToken = (token: string): void => {
-  localStorage.setItem('auth_token', token);
+  localStorage.setItem('authToken', token);
 };
 
 export const getToken = (): string | null => {
-  return localStorage.getItem('auth_token');
+  return localStorage.getItem('authToken');
 };
 
 export const removeToken = (): void => {
-  localStorage.removeItem('auth_token');
+  localStorage.removeItem('authToken');
 };
 
 export const isAuthenticated = (): boolean => {
   return !!getToken();
 };
 
-export const getUserPermissions = async (userId: string): Promise<UserPermissions> => {
+export const getUserPermissions = async (personId: string): Promise<UserPermissions> => {
   try {
-    const response = await apiGet<UserPermissions>(`/api/v1/auth/permissions/${userId}`);
-    return response;
+    console.log('🔍 getUserPermissions: Calling API for personId:', personId);
+    console.log('🔍 getUserPermissions: Current token:', getToken() ? getToken()?.substring(0, 20) + '...' : 'NO TOKEN');
+    const response = await apiGet<{ success: boolean; data: { personId: string; role: string; permissions: Record<string, boolean> } }>(`/api/v1/auth/permissions/${personId}`);
+    
+    console.log('🔍 getUserPermissions: Raw API response:', response);
+    
+    // Convert backend response format to frontend expected format
+    const permissionsArray = Object.entries(response.data.permissions || {})
+      .filter(([key, value]) => value === true) // Only include permissions that are granted
+      .map(([key, value]) => {
+        // Handle both formats: 'resource.action' and 'resource:action'
+        const [resource, action] = key.includes('.') ? key.split('.') : key.split(':');
+        return {
+          resource: resource || 'unknown',
+          action: action || 'unknown',
+          scope: undefined
+        };
+      })
+      .filter(p => p.resource !== 'unknown' && p.action !== 'unknown');
+    
+    console.log('🔍 getUserPermissions: Converted permissions:', {
+      backendPermissions: response.data.permissions,
+      convertedPermissions: permissionsArray,
+      role: response.data.role
+    });
+    
+    return {
+      role: response.data.role,
+      permissions: permissionsArray
+    };
   } catch (error: any) {
-    console.error('Error fetching user permissions:', error);
-    throw new Error(error.response?.data?.message || 'Errore nel caricamento dei permessi utente');
+    console.error('❌ getUserPermissions: Error fetching user permissions:', {
+      error: error.message,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      personId,
+      hasToken: !!getToken(),
+      tokenPreview: getToken() ? getToken()?.substring(0, 20) + '...' : 'NO TOKEN',
+      fullError: error
+    });
+    
+    // Return default EMPLOYEE role if there's an error
+    console.warn('⚠️ getUserPermissions: Returning default EMPLOYEE role due to error');
+    return {
+      role: 'EMPLOYEE',
+      permissions: []
+    };
   }
 };
 

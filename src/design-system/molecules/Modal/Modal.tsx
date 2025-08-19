@@ -14,7 +14,9 @@ export type ModalVariant = 'default' | 'centered' | 'drawer';
 
 export interface ModalProps {
   /** Whether the modal is open */
-  isOpen: boolean;
+  isOpen?: boolean;
+  /** Whether the modal is open (alternative prop name for compatibility) */
+  open?: boolean;
   /** Function to call when modal should close */
   onClose: () => void;
   /** Modal title */
@@ -76,6 +78,7 @@ const variantStyles: Record<ModalVariant, string> = {
  */
 export const Modal: React.FC<ModalProps> = ({
   isOpen,
+  open,
   onClose,
   title,
   size = 'md',
@@ -100,9 +103,12 @@ export const Modal: React.FC<ModalProps> = ({
   const modalRef = useRef<HTMLDivElement>(null);
   const previousActiveElement = useRef<HTMLElement | null>(null);
 
+  // Determine if modal is open (support both props for compatibility)
+  const modalIsOpen = isOpen ?? open ?? false;
+
   // Handle escape key
   useEffect(() => {
-    if (!isOpen || !closeOnEscape) return;
+    if (!modalIsOpen || !closeOnEscape) return;
 
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -112,13 +118,13 @@ export const Modal: React.FC<ModalProps> = ({
 
     document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
-  }, [isOpen, closeOnEscape, onClose]);
+  }, [modalIsOpen, closeOnEscape, onClose]);
 
   // Handle body scroll
   useEffect(() => {
     if (!preventBodyScroll) return;
 
-    if (isOpen) {
+    if (modalIsOpen) {
       // Store current scroll position
       const scrollY = window.scrollY;
       document.body.style.position = 'fixed';
@@ -134,11 +140,11 @@ export const Modal: React.FC<ModalProps> = ({
         window.scrollTo(0, parseInt(scrollY || '0') * -1);
       };
     }
-  }, [isOpen, preventBodyScroll]);
+  }, [modalIsOpen, preventBodyScroll]);
 
   // Focus management
   useEffect(() => {
-    if (isOpen) {
+    if (modalIsOpen) {
       // Store previously focused element
       previousActiveElement.current = document.activeElement as HTMLElement;
       
@@ -152,7 +158,7 @@ export const Modal: React.FC<ModalProps> = ({
         previousActiveElement.current.focus();
       }
     }
-  }, [isOpen]);
+  }, [modalIsOpen]);
 
   // Handle overlay click
   const handleOverlayClick = (event: React.MouseEvent) => {
@@ -187,7 +193,7 @@ export const Modal: React.FC<ModalProps> = ({
     }
   };
 
-  if (!isOpen) return null;
+  if (!modalIsOpen) return null;
 
   const modalContent = (
     <div
@@ -255,10 +261,12 @@ export const Modal: React.FC<ModalProps> = ({
         {/* Body */}
         <div
           className={cn(
-            'p-6',
+            'p-6 overflow-y-auto',
             {
               'pt-6': !title && !showCloseButton,
-              'pb-6': !footer
+              'pb-6': !footer,
+              'max-h-[calc(80vh-200px)]': footer, // Limita l'altezza se c'è un footer
+              'max-h-[calc(80vh-120px)]': !footer
             },
             bodyClassName
           )}
@@ -276,7 +284,7 @@ export const Modal: React.FC<ModalProps> = ({
         {footer && (
           <div
             className={cn(
-              'flex items-center justify-end gap-3 p-6 border-t border-gray-200 bg-gray-50',
+              'flex items-center justify-end gap-3 p-6 border-t border-gray-200 bg-gray-50 sticky bottom-0',
               footerClassName
             )}
           >
@@ -293,25 +301,29 @@ export const Modal: React.FC<ModalProps> = ({
 
 // Convenience components for common modal patterns
 export const ConfirmModal: React.FC<{
-  isOpen: boolean;
-  onClose: () => void;
+  open: boolean;
+  onCancel: () => void;
   onConfirm: () => void;
   title: string;
   message: string;
-  confirmText?: string;
-  cancelText?: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
   variant?: 'danger' | 'warning' | 'info';
   loading?: boolean;
+  size?: ModalSize;
+  className?: string;
 }> = ({
-  isOpen,
-  onClose,
+  open,
+  onCancel,
   onConfirm,
   title,
   message,
-  confirmText = 'Confirm',
-  cancelText = 'Cancel',
+  confirmLabel = 'Confirm',
+  cancelLabel = 'Cancel',
   variant = 'info',
-  loading = false
+  loading = false,
+  size = 'sm',
+  className
 }) => {
   const variantStyles = {
     danger: 'destructive',
@@ -319,29 +331,43 @@ export const ConfirmModal: React.FC<{
     info: 'primary'
   } as const;
 
+  const variantClasses = {
+    danger: 'bg-red-600 hover:bg-red-700',
+    warning: 'bg-yellow-600 hover:bg-yellow-700',
+    info: 'bg-blue-600 hover:bg-blue-700'
+  } as const;
+
   return (
     <Modal
-      isOpen={isOpen}
-      onClose={onClose}
+      open={open}
+      onClose={onCancel}
       title={title}
-      size="sm"
+      size={size}
       variant="centered"
       loading={loading}
+      className={className}
+      closeOnEscape={true}
+      closeOnOverlayClick={true}
       footer={
         <>
           <Button
             variant="ghost"
-            onClick={onClose}
+            onClick={onCancel}
             disabled={loading}
           >
-            {cancelText}
+            {cancelLabel}
           </Button>
           <Button
             variant={variantStyles[variant]}
             onClick={onConfirm}
             loading={loading}
+            disabled={loading}
+            className={cn(
+              variantClasses[variant],
+              loading && 'opacity-75'
+            )}
           >
-            {confirmText}
+            {confirmLabel}
           </Button>
         </>
       }

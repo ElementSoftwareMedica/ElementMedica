@@ -10,7 +10,6 @@ import {
   Grid,
   Card,
   CardContent,
-  CardActions,
   Button,
   Switch,
   FormControlLabel,
@@ -31,7 +30,6 @@ import {
   IconButton
 } from '@mui/material';
 import {
-  Security as SecurityIcon,
   Info as InfoIcon,
   CheckCircle as CheckCircleIcon,
   Cancel as CancelIcon,
@@ -102,7 +100,7 @@ export const ConsentManagementTab: React.FC<ConsentManagementTabProps> = ({ hook
     return hasConsent(type) ? <CheckCircleIcon /> : <CancelIcon />;
   };
 
-  const formatConsentDate = (consent: any) => {
+  const formatConsentDate = (consent: { grantedAt?: Date; withdrawnAt?: Date } | null) => {
     if (!consent) return 'Never';
     return format(new Date(consent.grantedAt || consent.withdrawnAt), 'PPp');
   };

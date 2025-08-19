@@ -45,7 +45,7 @@ describe('FormField', () => {
 
     it('renders password input correctly', () => {
       render(<FormField name="password" type="password" />);
-      const input = screen.getByLabelText('', { selector: 'input' });
+      const input = screen.getByDisplayValue('') || screen.getByRole('textbox');
       expect(input).toHaveAttribute('type', 'password');
     });
 
@@ -88,7 +88,7 @@ describe('FormField', () => {
 
     it('renders date input correctly', () => {
       render(<FormField name="birthdate" type="date" />);
-      const input = screen.getByLabelText('', { selector: 'input' });
+      const input = screen.getByDisplayValue('') || screen.getByRole('textbox');
       expect(input).toHaveAttribute('type', 'date');
     });
   });
@@ -185,7 +185,7 @@ describe('FormField', () => {
       render(<FormField name="test" disabled />);
       const input = screen.getByRole('textbox');
       expect(input).toBeDisabled();
-      expect(input).toHaveClass('opacity-50', 'cursor-not-allowed');
+      expect(input).toHaveClass('disabled:opacity-50', 'disabled:cursor-not-allowed');
     });
 
     it('disables select correctly', () => {
@@ -205,7 +205,7 @@ describe('FormField', () => {
       render(<FormField name="test" readOnly />);
       const input = screen.getByRole('textbox');
       expect(input).toHaveAttribute('readonly');
-      expect(input).toHaveClass('bg-gray-50');
+      expect(input).toHaveClass('!bg-gray-50');
     });
   });
 
@@ -475,7 +475,10 @@ describe('FormField', () => {
       );
       
       const input = screen.getByRole('textbox');
-      expect(input).toHaveClass('bg-gray-50', 'text-lg', 'border-red-500', 'custom-input');
+      expect(input).toHaveClass('!bg-gray-50');
+      expect(input).toHaveClass('text-lg');
+      expect(input).toHaveClass('border-red-500');
+      expect(input).toHaveClass('custom-input');
       expect(input).toHaveAttribute('type', 'email');
       expect(input).toHaveAttribute('required');
       expect(input).toBeDisabled();

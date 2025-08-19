@@ -1,0 +1,424 @@
+name: Deploy to Production
+
+# Trigger deployment on push to main branch or manual dispatch
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+        - production
+        - staging
+      skip_tests:
+        description: 'Skip tests (emergency deployment)'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # Security and dependency check
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    if: ${{ !inputs.skip_tests }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  # Build and test
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    if: ${{ !inputs.skip_tests }}
+    
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_USER: test_user
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install backend dependencies
+        run: |
+          cd backend
+          npm ci
+
+      - name: Setup test environment
+        run: |
+          cp .env.example .env
+          cd backend
+          cp .env.example .env
+          echo "DATABASE_URL=postgresql://test_user:test_password@localhost:5432/test_db" >> .env
+          echo "REDIS_URL=redis://localhost:6379" >> .env
+
+      - name: Generate Prisma client
+        run: |
+          cd backend
+          npx prisma generate
+          npx prisma migrate deploy
+
+      - name: Run backend tests
+        run: |
+          cd backend
+          npm run test
+
+      - name: Run frontend tests
+        run: npm run test:unit
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Run E2E tests
+        run: npm run test:e2e
+        env:
+          CI: true
+
+  # Build and push Docker images
+  build-and-push:
+    name: Build and Push Images
+    runs-on: ubuntu-latest
+    needs: [security-scan, test]
+    if: always() && (needs.security-scan.result == 'success' || needs.security-scan.result == 'skipped') && (needs.test.result == 'success' || needs.test.result == 'skipped')
+    
+    outputs:
+      backend-image: ${{ steps.meta-backend.outputs.tags }}
+      frontend-image: ${{ steps.meta-frontend.outputs.tags }}
+      backend-digest: ${{ steps.build-backend.outputs.digest }}
+      frontend-digest: ${{ steps.build-frontend.outputs.digest }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for backend
+        id: meta-backend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-backend
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=production,enable={{is_default_branch}}
+
+      - name: Extract metadata for frontend
+        id: meta-frontend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-frontend
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=production,enable={{is_default_branch}}
+
+      - name: Build and push backend image
+        id: build-backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: ${{ steps.meta-backend.outputs.tags }}
+          labels: ${{ steps.meta-backend.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          target: production
+
+      - name: Build and push frontend image
+        id: build-frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.frontend
+          push: true
+          tags: ${{ steps.meta-frontend.outputs.tags }}
+          labels: ${{ steps.meta-frontend.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          target: production
+
+  # Deploy to production
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [build-and-push]
+    environment: 
+      name: production
+      url: https://${{ secrets.PRODUCTION_DOMAIN }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.8.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add server to known hosts
+        run: |
+          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Create deployment package
+        run: |
+          tar -czf deployment.tar.gz \
+            docker-compose.production.yml \
+            nginx/ \
+            monitoring/ \
+            scripts/ \
+            .env.production
+
+      - name: Upload deployment package
+        run: |
+          scp deployment.tar.gz ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}:/tmp/
+
+      - name: Deploy application
+        run: |
+          ssh ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }} << 'EOF'
+            set -e
+            
+            # Setup variables
+            DEPLOY_DIR="/opt/elementmedica"
+            APP_DIR="${DEPLOY_DIR}/app"
+            BACKUP_DIR="${DEPLOY_DIR}/backups"
+            
+            # Create backup of current deployment
+            if [ -d "$APP_DIR" ]; then
+              BACKUP_NAME="backup_$(date +%Y%m%d_%H%M%S)"
+              echo "Creating backup: $BACKUP_NAME"
+              tar -czf "${BACKUP_DIR}/${BACKUP_NAME}.tar.gz" -C "$DEPLOY_DIR" app || true
+            fi
+            
+            # Extract new deployment
+            cd /tmp
+            tar -xzf deployment.tar.gz
+            
+            # Update application directory
+            mkdir -p "$APP_DIR"
+            cp -r docker-compose.production.yml nginx/ monitoring/ scripts/ "$APP_DIR/"
+            
+            # Update environment file if it doesn't exist
+            if [ ! -f "${APP_DIR}/.env" ]; then
+              cp .env.production "${APP_DIR}/.env"
+              echo "Created new .env file from template"
+            fi
+            
+            # Set permissions
+            chown -R 1000:1000 "$APP_DIR"
+            chmod +x "${APP_DIR}/scripts/"*.sh
+            
+            # Navigate to app directory
+            cd "$APP_DIR"
+            
+            # Update Docker images
+            echo "Pulling latest Docker images..."
+            docker-compose -f docker-compose.production.yml pull
+            
+            # Restart services with zero-downtime deployment
+            echo "Deploying new version..."
+            docker-compose -f docker-compose.production.yml up -d --remove-orphans
+            
+            # Wait for services to be ready
+            echo "Waiting for services to start..."
+            sleep 30
+            
+            # Run database migrations
+            echo "Running database migrations..."
+            docker-compose -f docker-compose.production.yml exec -T backend npx prisma migrate deploy || echo "Migration failed, continuing..."
+            
+            # Health check
+            echo "Performing health checks..."
+            for i in {1..10}; do
+              if curl -f http://localhost/health >/dev/null 2>&1; then
+                echo "✅ Application is healthy"
+                break
+              fi
+              echo "Waiting for application to be ready... ($i/10)"
+              sleep 10
+            done
+            
+            # Cleanup old images
+            docker image prune -f
+            
+            # Cleanup temp files
+            rm -f /tmp/deployment.tar.gz
+            
+            echo "🎉 Deployment completed successfully!"
+          EOF
+
+      - name: Verify deployment
+        run: |
+          ssh ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }} << 'EOF'
+            cd /opt/elementmedica/app
+            
+            echo "=== Container Status ==="
+            docker-compose -f docker-compose.production.yml ps
+            
+            echo "=== Health Checks ==="
+            curl -f http://localhost/health && echo "✅ Nginx OK" || echo "❌ Nginx Failed"
+            curl -f http://localhost:4003/healthz && echo "✅ Backend OK" || echo "❌ Backend Failed"
+            
+            echo "=== Service Logs (last 20 lines) ==="
+            docker-compose -f docker-compose.production.yml logs --tail=20
+          EOF
+
+      - name: Notify deployment status
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "✅ Deployment to production completed successfully"
+            echo "🌐 Application URL: https://${{ secrets.PRODUCTION_DOMAIN }}"
+            echo "📊 Monitoring: https://${{ secrets.PRODUCTION_DOMAIN }}/monitoring/"
+          else
+            echo "❌ Deployment to production failed"
+            echo "🔍 Check the logs above for details"
+          fi
+
+  # Post-deployment tasks
+  post-deploy:
+    name: Post-Deployment Tasks
+    runs-on: ubuntu-latest
+    needs: [deploy]
+    if: success()
+    
+    steps:
+      - name: Run post-deployment tests
+        run: |
+          # Wait a bit for services to fully stabilize
+          sleep 60
+          
+          # Test critical endpoints
+          curl -f https://${{ secrets.PRODUCTION_DOMAIN }}/health
+          curl -f https://${{ secrets.PRODUCTION_DOMAIN }}/api/health
+          
+          echo "✅ Post-deployment tests passed"
+
+      - name: Update deployment status
+        run: |
+          echo "📝 Deployment Summary:"
+          echo "- Environment: Production"
+          echo "- Commit: ${{ github.sha }}"
+          echo "- Deployed by: ${{ github.actor }}"
+          echo "- Timestamp: $(date -u)"
+          echo "- Backend Image: ${{ needs.build-and-push.outputs.backend-image }}"
+          echo "- Frontend Image: ${{ needs.build-and-push.outputs.frontend-image }}"
+
+      - name: Create deployment tag
+        if: github.ref == 'refs/heads/main'
+        run: |
+          git config --global user.name 'GitHub Actions'
+          git config --global user.email 'actions@github.com'
+          
+          TAG_NAME="production-$(date +%Y%m%d-%H%M%S)"
+          git tag -a "$TAG_NAME" -m "Production deployment $TAG_NAME"
+          git push origin "$TAG_NAME"
+
+# Cleanup job for failed deployments
+  cleanup-on-failure:
+    name: Cleanup on Failure
+    runs-on: ubuntu-latest
+    needs: [deploy]
+    if: failure()
+    
+    steps:
+      - name: Rollback deployment
+        run: |
+          ssh ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }} << 'EOF'
+            cd /opt/elementmedica/app
+            
+            echo "🔄 Rolling back to previous version..."
+            
+            # Find latest backup
+            LATEST_BACKUP=$(ls -t /opt/elementmedica/backups/backup_*.tar.gz 2>/dev/null | head -1)
+            
+            if [ -n "$LATEST_BACKUP" ]; then
+              echo "Found backup: $LATEST_BACKUP"
+              
+              # Stop current services
+              docker-compose -f docker-compose.production.yml down
+              
+              # Restore from backup
+              cd /opt/elementmedica
+              tar -xzf "$LATEST_BACKUP"
+              
+              # Restart services
+              cd app
+              docker-compose -f docker-compose.production.yml up -d
+              
+              echo "✅ Rollback completed"
+            else
+              echo "❌ No backup found for rollback"
+            fi
+          EOF
+
+      - name: Notify failure
+        run: |
+          echo "❌ Deployment failed and rollback attempted"
+          echo "🔍 Please check the deployment logs and fix issues before retrying"

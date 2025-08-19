@@ -1,5 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { X, Users, Building, HardDrive, Activity, TrendingUp } from 'lucide-react';
+import { 
+  Activity,
+  Building,
+  HardDrive,
+  TrendingUp,
+  Users,
+  Xs
+} from 'lucide-react';
 import { getTenantUsage, TenantUsage } from '../../services/tenants';
 
 interface TenantUsageModalProps {

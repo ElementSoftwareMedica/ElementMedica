@@ -20,7 +20,6 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Paper,
   LinearProgress,
   Tooltip,
   IconButton,
@@ -66,8 +65,6 @@ export const AuditTrailTab: React.FC<AuditTrailTabProps> = ({ hook }) => {
     pagination,
     filters,
     refreshAuditTrail,
-    nextPage,
-    previousPage,
     goToPage,
     applyFilters,
     clearFilters,
@@ -90,7 +87,7 @@ export const AuditTrailTab: React.FC<AuditTrailTabProps> = ({ hook }) => {
     setTempFilters(filters);
   }, [filters]);
 
-  const handleFilterChange = (field: keyof AuditTrailFilters, value: any) => {
+  const handleFilterChange = (field: keyof AuditTrailFilters, value: unknown) => {
     setTempFilters(prev => ({ ...prev, [field]: value }));
   };
 
@@ -172,7 +169,7 @@ export const AuditTrailTab: React.FC<AuditTrailTabProps> = ({ hook }) => {
     setDetailDialog(true);
   };
 
-  const renderMetadata = (metadata: Record<string, any>) => {
+  const renderMetadata = (metadata: Record<string, unknown>) => {
     if (!metadata || Object.keys(metadata).length === 0) {
       return <Typography variant="body2" color="text.secondary">No additional data</Typography>;
     }

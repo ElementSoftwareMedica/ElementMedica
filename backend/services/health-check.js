@@ -7,7 +7,6 @@ import axios from 'axios';
 import { promisify } from 'util';
 import { logger } from '../utils/logger.js';
 import { getCircuitBreakerHealth } from '../middleware/circuit-breaker.js';
-import { PrismaClient } from '@prisma/client';
 import Redis from 'ioredis';
 import os from 'os';
 

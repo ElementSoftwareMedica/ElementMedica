@@ -1,4 +1,4 @@
-import React, { ReactNode } from 'react';
+import React, { ReactNode, useMemo } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { cn } from '../../utils';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
@@ -61,6 +61,9 @@ export const Dropdown: React.FC<DropdownProps> = ({
   pill = true,
   showArrow = true,
 }) => {
+  // Memoizza le azioni per evitare re-render inutili
+  const memoizedActions = useMemo(() => actions, [actions]);
+  
   // Varianti di stile per il bottone
   const variantStyles = {
     primary: 'bg-blue-600 text-white hover:bg-blue-700',
@@ -104,7 +107,7 @@ export const Dropdown: React.FC<DropdownProps> = ({
           sideOffset={5}
           className="z-50 min-w-[200px] overflow-hidden rounded-md border border-gray-200 bg-white p-1 shadow-md animate-in fade-in-80 data-[side=right]:slide-in-from-left-2 data-[side=left]:slide-in-from-right-2 data-[side=bottom]:slide-in-from-top-2 data-[side=top]:slide-in-from-bottom-2"
         >
-          {actions.map((action, index) => (
+          {memoizedActions.map((action, index) => (
             <DropdownMenu.Item
               key={index}
               disabled={action.disabled}

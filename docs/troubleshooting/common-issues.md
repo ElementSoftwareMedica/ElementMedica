@@ -1,12 +1,110 @@
 # Common Issues and Troubleshooting Guide
 
-**Versione:** 1.0  
+**Versione:** 3.0 Post-Ottimizzazione Server  
 **Data:** 27 Gennaio 2025  
-**Autore:** Team Development
+**Sistema:** Architettura Ottimizzata GDPR-Compliant (Progetti 16-17)
 
 ## 📋 Panoramica
 
-Questa guida fornisce soluzioni per i problemi più comuni che possono verificarsi nel Sistema di Gestione Documenti. È organizzata per categoria e livello di gravità per facilitare la risoluzione rapida dei problemi.
+Questa guida fornisce soluzioni per i problemi più comuni che possono verificarsi nel Sistema Unificato Person con architettura a tre server. È organizzata per categoria e livello di gravità per facilitare la risoluzione rapida dei problemi.
+
+## 🛠️ Problemi Risolti (Progetti 16-17)
+
+### ✅ RISOLTO: Errore Login 401 (Progetto 17)
+**Problema**: Login falliva con errore 401 Unauthorized
+**Causa**: Bug nel middleware di performance dell'API Server
+**Soluzione**: Ottimizzazione middleware e correzione timeout
+**Prevenzione**: Test health check obbligatori post-modifica
+
+### ✅ RISOLTO: Discrepanza Porte Server (Progetto 17)
+**Problema**: Proxy configurato su porta 3000 invece di 4003
+**Causa**: Configurazione inconsistente tra file
+**Soluzione**: Standardizzazione porte (API: 4001, Proxy: 4003)
+**Prevenzione**: Validazione porte in project_rules.md
+
+### ✅ RISOLTO: Body Parsing POST Requests (Sistema V38)
+**Problema**: Body delle richieste POST non veniva processato correttamente
+**Causa**: Body parser non applicati ai router versionati nell'API server
+**Soluzione**: Body parser applicati direttamente a v1Router e v2Router
+**Prevenzione**: Test login obbligatorio dopo modifiche routing
+
+### ✅ RISOLTO: Sistema Routing Avanzato Implementato
+**Problema**: Routing frammentato e non scalabile
+**Causa**: Configurazioni sparse e duplicazioni
+**Soluzione**: Sistema routing centralizzato con RouterMap unificata
+**Caratteristiche**:
+- Versioning API automatico (`/api/v1`, `/api/v2`)
+- Legacy redirects trasparenti (`/login` → `/api/v1/auth/login`)
+- Endpoint diagnostici (`/routes`, `/routes/health`, `/routes/stats`)
+- Rate limiting dinamico per tipo endpoint
+- CORS dinamico basato su pattern
+- Logging unificato con Request ID tracking
+
+### ✅ RISOLTO: CORS Duplicati (Progetto 16)
+**Problema**: 6+ handler OPTIONS duplicati causavano conflitti
+**Causa**: CORS configurato in multipli file
+**Soluzione**: CORS centralizzato in `proxy/middleware/cors.js`
+**Prevenzione**: Architettura modulare con middleware separati
+
+### ✅ RISOLTO: Rate Limiting Inconsistente (Progetto 16)
+**Problema**: Rate limiting non applicato uniformemente
+**Causa**: Configurazioni sparse e non modulari
+**Soluzione**: Rate limiting centralizzato con esenzioni configurabili
+**Prevenzione**: Modulo `rateLimiting.js` con test automatici
+
+## 🏗️ Architettura Sistema
+
+```
+Proxy Server (4003) → API Server (4001) → Database
+                   → Documents Server (4002)
+```
+
+**Server Components:**
+- **API Server (4001)**: Person CRUD, Auth, GDPR endpoints
+- **Documents Server (4002)**: PDF generation, file storage
+- **Proxy Server (4003)**: Load balancing, SSL, routing
+
+## ⚠️ REGOLE CRITICHE
+
+### 🚫 **SEVERAMENTE VIETATO SENZA AUTORIZZAZIONE ESPLICITA**
+```bash
+# ❌ DIVIETO ASSOLUTO - Mai eseguire senza autorizzazione del proprietario:
+pm2 restart [any-process]
+pm2 stop [any-process]
+pm2 delete [any-process]
+kill -9 [any-pid]
+pkill [any-process]
+sudo systemctl restart [any-service]
+sudo systemctl stop [any-service]
+sudo reboot
+sudo shutdown
+# ❌ Modificare configurazioni server senza autorizzazione
+# ❌ Interrompere PostgreSQL, Nginx, Redis
+```
+
+### ✅ **COMANDI PERMESSI PER DIAGNOSTICA**
+```bash
+# ✅ SEMPRE PERMESSI - Monitoring e diagnostica:
+pm2 status
+pm2 logs [process-name]
+pm2 monit
+curl http://localhost:4001/health
+curl http://localhost:4002/health
+curl http://localhost:4003/health
+ps aux | grep node
+netstat -tlnp | grep -E ':(4001|4002|4003)'
+top -n 1
+df -h
+free -m
+```
+
+### 🔑 **CREDENZIALI TEST OBBLIGATORIE**
+```bash
+# ✅ SEMPRE utilizzare queste credenziali per test:
+# Email: admin@example.com
+# Password: Admin123!
+# DIVIETO ASSOLUTO di modificare senza autorizzazione
+```
 
 ## 🚨 Problemi Critici
 
@@ -16,55 +114,61 @@ Questa guida fornisce soluzioni per i problemi più comuni che possono verificar
 - Impossibile accedere all'applicazione
 - Timeout di connessione
 - Errore 502/503/504
+- Health checks falliscono
 
 #### Diagnosi
 ```bash
-# Verifica status servizi
-sudo systemctl status document-system
-sudo systemctl status nginx
-sudo systemctl status postgresql
-sudo systemctl status redis
+# ✅ PERMESSO - Verifica status PM2
+pm2 status
+pm2 logs --lines 50
 
-# Verifica porte in ascolto
-sudo netstat -tlnp | grep -E ':(3000|3001|3002|5432|6379)'
+# ✅ PERMESSO - Health checks
+curl -f http://localhost:4001/health || echo "API Server DOWN"
+curl -f http://localhost:4002/health || echo "Documents Server DOWN"
+curl -f http://localhost:4003/health || echo "Proxy Server DOWN"
 
-# Verifica log errori
-tail -f /var/log/nginx/error.log
-tail -f /var/log/document-system/error.log
+# ✅ PERMESSO -# Verifica porte
+netstat -tlnp | grep -E ':(4001|4002|4003|5432)' ✅ PERMESSO - System status
+top -n 1 | head -20
+df -h
+free -m
 ```
 
 #### Soluzioni
 
-**1. Riavvio Servizi**
-```bash
-# Riavvio completo sistema
-sudo systemctl restart document-system
-sudo systemctl restart nginx
+**🚨 IMPORTANTE: Non riavviare server senza autorizzazione!**
 
-# Verifica status dopo riavvio
-sudo systemctl status document-system
+**1. Diagnostica Immediata**
+```bash
+# ✅ PERMESSO - Esegui diagnostic script
+./scripts/health-check.sh
+./scripts/full-diagnostic.sh
+
+# ✅ PERMESSO - Verifica logs
+pm2 logs api-server --lines 100
+pm2 logs documents-server --lines 100
+pm2 logs proxy-server --lines 100
 ```
 
-**2. Verifica Configurazione Nginx**
+**2. Escalation Procedure**
 ```bash
-# Test configurazione
-sudo nginx -t
+# Se server down, ESCALARE IMMEDIATAMENTE:
+echo "$(date): Server down - $(pm2 status)" >> /var/log/incidents.log
 
-# Se errori, controlla configurazione
-sudo nano /etc/nginx/sites-available/document-system
-
-# Ricarica configurazione
-sudo nginx -s reload
+# Contattare Tech Lead con:
+# - Output di pm2 status
+# - Health check results
+# - Error logs
 ```
 
-**3. Verifica Spazio Disco**
+**3. Temporary Workarounds (Solo se autorizzati)**
 ```bash
-# Controlla spazio disponibile
+# ✅ PERMESSO - Attivare maintenance mode
+./scripts/maintenance-mode.sh enable
+
+# ✅ PERMESSO - Verifica spazio disco
 df -h
-
-# Se disco pieno, pulisci log vecchi
-find /var/log -name "*.log" -mtime +7 -delete
-find /tmp -type f -mtime +1 -delete
+du -sh /var/log/* | sort -hr | head -10
 ```
 
 ### Database Non Disponibile
@@ -72,58 +176,195 @@ find /tmp -type f -mtime +1 -delete
 #### Sintomi
 - Errori di connessione database
 - Timeout query
-- Applicazione non risponde
+- API Server non risponde
+- Errori Prisma connection
 
 #### Diagnosi
 ```bash
-# Status PostgreSQL
-sudo systemctl status postgresql
+# ✅ PERMESSO - Test connessione database
+psql -h localhost -U postgres -d person_system -c "SELECT 1;"
 
-# Connessione database
-psql -h localhost -U document_user -d document_system -c "SELECT 1;"
+# ✅ PERMESSO - Verifica tabelle Person
+psql -d person_system -c "SELECT count(*) FROM \"Person\" WHERE \"deletedAt\" IS NULL;"
 
-# Log PostgreSQL
-tail -f /var/log/postgresql/postgresql-*.log
+# ✅ PERMESSO - Connessioni attive
+psql -d person_system -c "SELECT count(*) FROM pg_stat_activity WHERE datname='person_system';"
 
-# Connessioni attive
-psql -d document_system -c "SELECT count(*) FROM pg_stat_activity;"
+# ✅ PERMESSO - Verifica performance
+psql -d person_system -c "SELECT query, calls, total_exec_time FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 5;"
+
+# ✅ NUOVO - Test health check ottimizzato (Progetto 17)
+curl -f http://localhost:4003/healthz || echo "Proxy Server DOWN"
+curl -f http://localhost:4001/health || echo "API Server DOWN"
+
+# ✅ NUOVO - Test sistema routing avanzato
+curl -f http://localhost:4003/routes/health || echo "Routing System DOWN"
+curl -f http://localhost:4003/routes/stats || echo "Routing Stats UNAVAILABLE"
+```
+
+## 🔄 Problemi Sistema Routing Avanzato
+
+### Routing Non Funziona
+
+#### Sintomi
+- Route API non raggiungibili
+- Errori 404 su endpoint esistenti
+- Legacy redirects non funzionano
+- Header `x-api-version` mancanti
+
+#### Diagnosi
+```bash
+# ✅ PERMESSO - Verifica sistema routing
+curl -f http://localhost:4003/routes || echo "Diagnostic endpoint DOWN"
+
+# ✅ PERMESSO - Test versioning API
+curl -H "x-api-version: v1" http://localhost:4003/api/v1/health
+curl -H "x-api-version: v2" http://localhost:4003/api/v2/health
+
+# ✅ PERMESSO - Test legacy redirects
+curl -I http://localhost:4003/login
+curl -I http://localhost:4003/logout
+
+# ✅ PERMESSO - Verifica RouterMap
+curl http://localhost:4003/routes/config | jq '.routerMap'
+```
+
+#### Soluzioni
+```bash
+# ✅ PERMESSO - Verifica configurazione RouterMap
+curl http://localhost:4003/routes/config | jq '.services'
+
+# ✅ PERMESSO - Test specifico route
+curl -v http://localhost:4003/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"identifier":"admin@example.com","password":"Admin123!"}'
+
+# ✅ PERMESSO - Verifica middleware stack
+pm2 logs proxy-server | grep -E "(MIDDLEWARE|ROUTING|VERSION)"
+```
+
+### Body Parsing Issues
+
+#### Sintomi
+- Errori 400 Bad Request su POST
+- Body vuoto nell'API server
+- Login fallisce con credenziali corrette
+
+#### Diagnosi
+```bash
+# ✅ PERMESSO - Test body parsing
+curl -X POST http://localhost:4003/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"identifier":"admin@example.com","password":"Admin123!"}' \
+  -v
+
+# ✅ PERMESSO - Verifica logs body parsing
+pm2 logs proxy-server | grep -E "(BODY|PARSER|V38)"
+pm2 logs api-server | grep -E "(BODY|REQUEST|LOGIN)"
+```
+
+#### Soluzioni
+```bash
+# ✅ PERMESSO - Verifica Sistema V38 attivo
+pm2 logs api-server | grep "Body parser applied to versioned routers"
+
+# Se Sistema V38 non attivo, escalare immediatamente
+echo "$(date): Body parsing issue - Sistema V38 not active" >> /var/log/incidents.log
+```
+
+### Rate Limiting Issues
+
+#### Sintomi
+- Errori 429 Too Many Requests
+- Rate limiting non applicato
+- Esenzioni non funzionano
+
+#### Diagnosi
+```bash
+# ✅ PERMESSO - Verifica rate limiting
+curl -I http://localhost:4003/api/v1/auth/login
+curl -I http://localhost:4003/routes/health  # Dovrebbe essere esente
+
+# ✅ PERMESSO - Test rate limiting dinamico
+for i in {1..6}; do
+  curl -I http://localhost:4003/api/v1/auth/login
+  echo "Request $i"
+done
+```
+
+### CORS Issues
+
+#### Sintomi
+- Errori CORS nel browser
+- Preflight OPTIONS falliscono
+- Headers CORS mancanti
+
+#### Diagnosi
+```bash
+# ✅ PERMESSO - Test CORS
+curl -X OPTIONS http://localhost:4003/api/v1/auth/login \
+  -H "Origin: http://localhost:5173" \
+  -H "Access-Control-Request-Method: POST" \
+  -v
+
+# ✅ PERMESSO - Verifica configurazione CORS
+curl http://localhost:4003/routes/config | jq '.cors'
+```
+
+# ✅ NUOVO - Test health check ottimizzato (Progetto 17)
+curl -f http://localhost:4003/healthz || echo "Proxy Server DOWN"
+curl -f http://localhost:4001/health || echo "API Server DOWN"
 ```
 
 #### Soluzioni
 
-**1. Riavvio PostgreSQL**
+**🚨 IMPORTANTE: Non riavviare PostgreSQL senza autorizzazione!**
+
+**1. Diagnostica Database**
 ```bash
-sudo systemctl restart postgresql
-sudo systemctl status postgresql
+# ✅ PERMESSO - Verifica schema Person
+psql -d person_system -c "\dt"
+psql -d person_system -c "SELECT table_name FROM information_schema.tables WHERE table_schema='public';"
+
+# ✅ PERMESSO - Verifica integrità dati
+psql -d person_system -c "SELECT COUNT(*) as total_persons, COUNT(CASE WHEN \"deletedAt\" IS NULL THEN 1 END) as active_persons FROM \"Person\";"
+
+# ✅ PERMESSO - Verifica audit logs
+psql -d person_system -c "SELECT COUNT(*) FROM \"AuditLog\" WHERE \"timestamp\" > NOW() - INTERVAL '1 hour';"
 ```
 
-**2. Verifica Configurazione**
+**2. Escalation Database Issues**
 ```bash
-# Controlla postgresql.conf
-sudo nano /etc/postgresql/14/main/postgresql.conf
+# Se problemi persistono, ESCALARE con:
+echo "$(date): Database issues detected" >> /var/log/incidents.log
 
-# Verifica pg_hba.conf
-sudo nano /etc/postgresql/14/main/pg_hba.conf
-
-# Ricarica configurazione
-sudo systemctl reload postgresql
+# Raccogliere informazioni per Tech Lead:
+# - Output di pg_stat_activity
+# - Error logs da PM2
+# - Risultati health checks
 ```
 
-**3. Ottimizzazione Database**
+**3. Temporary Database Checks**
 ```sql
+-- ✅ PERMESSO - Solo query di lettura
 -- Connetti al database
-psql -d document_system
+psql -d person_system
 
--- Analizza performance
-SELECT query, calls, total_time, mean_time 
-FROM pg_stat_statements 
-ORDER BY total_time DESC LIMIT 10;
+-- Verifica performance query Person
+SELECT 
+  schemaname,
+  tablename,
+  attname,
+  n_distinct,
+  correlation
+FROM pg_stats 
+WHERE tablename = 'Person';
 
--- Vacuum e analyze
-VACUUM ANALYZE;
-
--- Reindex se necessario
-REINDEX DATABASE document_system;
+-- Verifica GDPR compliance
+SELECT 
+  COUNT(*) as total_consents,
+  COUNT(CASE WHEN "isGiven" = true THEN 1 END) as active_consents
+FROM "ConsentRecord";
 ```
 
 ### Memoria Insufficiente
@@ -185,6 +426,167 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 
 ## ⚠️ Problemi Comuni
 
+### Problemi Autenticazione
+
+#### Sintomi
+- Login fallisce con credenziali corrette
+- Token JWT invalidi
+- Errori PKCE
+- Session timeout prematuro
+
+#### Diagnosi
+```bash
+# ✅ PERMESSO - Test login con credenziali standard (AGGIORNATO Progetto 17)
+curl -X POST http://localhost:4003/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@example.com","password":"Admin123!"}'
+
+# ✅ PERMESSO - Verifica JWT configuration
+pm2 logs api-server | grep -i "jwt\|token\|auth"
+
+# ✅ PERMESSO - Verifica Person con ruoli
+psql -d person_system -c "SELECT p.email, pr.\"roleType\", pr.\"isActive\" FROM \"Person\" p JOIN \"PersonRole\" pr ON p.id = pr.\"personId\" WHERE p.email = 'admin@example.com';"
+
+# ✅ NUOVO - Test middleware performance (Progetto 17)
+curl -w "@curl-format.txt" -o /dev/null -s http://localhost:4003/api/auth/login
+```
+
+#### Soluzioni
+
+**1. Verifica Credenziali Test**
+```bash
+# ✅ SEMPRE usare queste credenziali per test:
+# Email: admin@example.com
+# Password: Admin123!
+
+# Verifica che esistano nel database
+psql -d person_system -c "SELECT id, email, \"firstName\", \"lastName\" FROM \"Person\" WHERE email = 'admin@example.com' AND \"deletedAt\" IS NULL;"
+```
+
+**2. Reset Password (Solo se autorizzato)**
+```bash
+# ⚠️ Solo con autorizzazione Tech Lead
+# Eseguire script di reset password
+./scripts/reset-test-user.sh
+```
+
+**3. Verifica GDPR Audit**
+```sql
+-- ✅ PERMESSO - Verifica audit logs autenticazione
+psql -d person_system -c "SELECT action, \"personId\", \"timestamp\", metadata FROM \"AuditLog\" WHERE action IN ('LOGIN', 'LOGOUT', 'UNAUTHORIZED_ACCESS') ORDER BY \"timestamp\" DESC LIMIT 10;"
+```
+
+### Problemi GDPR Compliance
+
+#### Sintomi
+- Export dati fallisce
+- Cancellazione GDPR non funziona
+- Audit logs mancanti
+- Consensi non registrati
+
+#### Diagnosi
+```bash
+# ✅ PERMESSO - Test GDPR endpoints
+curl -X GET http://localhost:4001/api/gdpr/export/[person-id] \
+  -H "Authorization: Bearer [token]"
+
+# ✅ PERMESSO - Verifica audit logs
+psql -d person_system -c "SELECT COUNT(*) as audit_count, action FROM \"AuditLog\" WHERE \"timestamp\" > NOW() - INTERVAL '24 hours' GROUP BY action;"
+
+# ✅ PERMESSO - Verifica consensi
+psql -d person_system -c "SELECT \"consentType\", COUNT(*) as total, COUNT(CASE WHEN \"isGiven\" = true THEN 1 END) as active FROM \"ConsentRecord\" GROUP BY \"consentType\";"
+```
+
+#### Soluzioni
+
+**1. Verifica Soft Delete**
+```sql
+-- ✅ PERMESSO - Verifica implementazione soft delete
+psql -d person_system -c "SELECT COUNT(*) as total, COUNT(CASE WHEN \"deletedAt\" IS NULL THEN 1 END) as active, COUNT(CASE WHEN \"deletedAt\" IS NOT NULL THEN 1 END) as deleted FROM \"Person\";"
+```
+
+**2. Test GDPR Export**
+```bash
+# ✅ PERMESSO - Test export per utente test
+curl -X GET "http://localhost:4001/api/gdpr/export/$(psql -d person_system -t -c "SELECT id FROM \"Person\" WHERE email = 'admin@example.com' LIMIT 1;")" \
+  -H "Authorization: Bearer [valid-jwt-token]"
+```
+
+**3. Escalation GDPR Issues**
+```bash
+# 🚨 CRITICO - Problemi GDPR richiedono escalation immediata
+echo "$(date): GDPR compliance issue detected" >> /var/log/gdpr-incidents.log
+# Contattare immediatamente Tech Lead e Compliance Officer
+```
+
+### Problemi Specifici Server
+
+#### API Server (Porto 4001) Issues
+
+**Sintomi:**
+- Errori 500 su endpoints Person
+- Database connection errors
+- JWT validation failures
+
+**Diagnosi:**
+```bash
+# ✅ PERMESSO - Health check API Server (AGGIORNATO Progetto 17)
+curl -v http://localhost:4001/health
+
+# ✅ PERMESSO - Test endpoints Person via Proxy
+curl http://localhost:4003/api/persons?limit=1
+
+# ✅ PERMESSO - Verifica logs API
+pm2 logs api-server --lines 50 | grep -E "ERROR|WARN|FATAL"
+
+# ✅ NUOVO - Test performance middleware (Progetto 17)
+curl -H "X-Performance-Test: true" http://localhost:4003/api/persons/health
+```
+
+#### Documents Server (Porto 4002) Issues
+
+**Sintomi:**
+- PDF generation fails
+- File upload errors
+- Template rendering issues
+
+**Diagnosi:**
+```bash
+# ✅ PERMESSO - Health check Documents Server
+curl -v http://localhost:4002/health
+
+# ✅ PERMESSO - Test PDF generation
+curl -X POST http://localhost:4002/api/documents/test-pdf
+
+# ✅ PERMESSO - Verifica spazio storage
+df -h /var/documents
+ls -la /var/documents/ | head -10
+```
+
+#### Proxy Server (Porto 4003) Issues
+
+**Sintomi:**
+- Routing errors
+- SSL certificate issues
+- Rate limiting problems
+
+**Diagnosi:**
+```bash
+# ✅ PERMESSO - Health check Proxy Server (AGGIORNATO Progetto 17)
+curl -v http://localhost:4003/healthz
+
+# ✅ PERMESSO - Test routing ottimizzato
+curl -v http://localhost:4003/api/persons/health
+curl -v http://localhost:4003/api/documents/health
+
+# ✅ PERMESSO - Verifica logs proxy
+pm2 logs proxy-server --lines 50 | grep -E "ERROR|WARN|FATAL"
+
+# ✅ NUOVO - Test CORS e Rate Limiting (Progetto 16)
+curl -H "Origin: http://localhost:3000" -H "Access-Control-Request-Method: POST" -X OPTIONS http://localhost:4003/api/auth/login
+curl -H "X-Rate-Limit-Test: true" http://localhost:4003/api/persons?limit=1
+```
+
 ### Upload Documenti Fallisce
 
 #### Sintomi
@@ -194,10 +596,10 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 
 #### Diagnosi
 ```bash
-# Verifica spazio disco
-df -h /var/uploads
+# ✅ PERMESSO - Verifica spazio disco
+df -h /var/documents
 
-# Verifica permessi cartella upload
+# ✅ PERMESSO - Verifica permessi cartella upload
 ls -la /var/uploads
 
 # Log upload
@@ -598,97 +1000,244 @@ find $BACKUP_DIR -name "*.gz" -mtime +7 -delete
 
 ### Script Diagnostica Automatica
 
+**📁 Riferimento**: Vedere [monitoring.md](../deployment/monitoring.md) per script completi
+
 ```bash
 #!/bin/bash
-# /usr/local/bin/system-check.sh
+# ✅ PERMESSO - Script diagnostica sistema Person
+# Basato su /scripts/health-check.sh
 
-echo "=== Document System Health Check ==="
+echo "=== Person System Health Check ==="
 echo "Date: $(date)"
+echo "Architecture: Three-Server GDPR-Compliant"
 echo
 
-# Verifica servizi
-echo "=== Services Status ==="
-for service in document-system nginx postgresql redis; do
-    if systemctl is-active --quiet $service; then
-        echo "✅ $service: Running"
+# Verifica PM2 processes
+echo "=== PM2 Status ==="
+pm2 status
+echo
+
+# Health checks tre server
+echo "=== Server Health Checks ==="
+for port in 4001 4002 4003; do
+    if curl -f http://localhost:$port/health >/dev/null 2>&1; then
+        echo "✅ Server $port: Healthy"
     else
-        echo "❌ $service: Stopped"
+        echo "❌ Server $port: Unhealthy"
     fi
 done
 echo
 
-# Verifica risorse
+# Verifica database Person
+echo "=== Person Database Status ==="
+if psql -d person_system -c "SELECT 1;" >/dev/null 2>&1; then
+    echo "✅ Database: Connected"
+    ACTIVE_PERSONS=$(psql -d person_system -t -c "SELECT count(*) FROM \"Person\" WHERE \"deletedAt\" IS NULL;" | xargs)
+    echo "Active Persons: $ACTIVE_PERSONS"
+    AUDIT_LOGS=$(psql -d person_system -t -c "SELECT count(*) FROM \"AuditLog\" WHERE \"timestamp\" > NOW() - INTERVAL '1 hour';" | xargs)
+    echo "Audit Logs (1h): $AUDIT_LOGS"
+else
+    echo "❌ Database: Connection failed"
+fi
+echo
+
+# Verifica GDPR compliance
+echo "=== GDPR Compliance Check ==="
+CONSENTS=$(psql -d person_system -t -c "SELECT COUNT(*) FROM \"ConsentRecord\" WHERE \"isGiven\" = true;" 2>/dev/null | xargs || echo "0")
+echo "Active Consents: $CONSENTS"
+echo
+
+# System resources
 echo "=== System Resources ==="
 echo "CPU Usage: $(top -bn1 | grep 'Cpu(s)' | awk '{print $2}' | cut -d'%' -f1)%"
 echo "Memory Usage: $(free | grep Mem | awk '{printf "%.1f%%", $3/$2 * 100.0}')"
 echo "Disk Usage: $(df -h / | awk 'NR==2{print $5}')"
 echo
 
-# Verifica database
-echo "=== Database Status ==="
-if psql -d document_system -c "SELECT 1;" >/dev/null 2>&1; then
-    echo "✅ Database: Connected"
-    echo "Active Connections: $(psql -d document_system -t -c "SELECT count(*) FROM pg_stat_activity;" | xargs)"
-else
-    echo "❌ Database: Connection failed"
-fi
-echo
-
-# Verifica cache
-echo "=== Cache Status ==="
-if redis-cli ping >/dev/null 2>&1; then
-    echo "✅ Redis: Connected"
-    echo "Memory Usage: $(redis-cli INFO memory | grep used_memory_human | cut -d: -f2 | tr -d '\r')"
-else
-    echo "❌ Redis: Connection failed"
-fi
-echo
-
-# Verifica log errori recenti
-echo "=== Recent Errors ==="
-ERROR_COUNT=$(grep -c "ERROR" /var/log/document-system/error.log 2>/dev/null || echo "0")
-echo "Errors in last 24h: $ERROR_COUNT"
-if [ $ERROR_COUNT -gt 0 ]; then
-    echo "Latest errors:"
-    tail -5 /var/log/document-system/error.log
-fi
-echo
-
 echo "=== Health Check Complete ==="
+echo "📖 For detailed monitoring: see docs/deployment/monitoring.md"
 ```
 
 ### Monitoraggio Continuo
 
+**📁 Riferimento**: Vedere [monitoring.md](../deployment/monitoring.md) per configurazione completa
+
 ```bash
 #!/bin/bash
-# /usr/local/bin/monitor-system.sh
+# ✅ PERMESSO - Monitoraggio sistema Person
+# ⚠️ NON riavvia automaticamente servizi
 
 while true; do
-    # CPU e Memoria
+    # System metrics
     CPU=$(top -bn1 | grep 'Cpu(s)' | awk '{print $2}' | cut -d'%' -f1)
     MEM=$(free | grep Mem | awk '{printf "%.1f", $3/$2 * 100.0}')
     
-    # Alert se CPU > 80% o Memoria > 90%
+    # Alert thresholds
     if (( $(echo "$CPU > 80" | bc -l) )); then
-        echo "$(date): HIGH CPU USAGE: ${CPU}%" >> /var/log/alerts.log
+        echo "$(date): HIGH CPU USAGE: ${CPU}%" >> /var/log/person-alerts.log
     fi
     
     if (( $(echo "$MEM > 90" | bc -l) )); then
-        echo "$(date): HIGH MEMORY USAGE: ${MEM}%" >> /var/log/alerts.log
+        echo "$(date): HIGH MEMORY USAGE: ${MEM}%" >> /var/log/person-alerts.log
     fi
     
-    # Verifica servizi critici
-    for service in document-system postgresql redis; do
-        if ! systemctl is-active --quiet $service; then
-            echo "$(date): SERVICE DOWN: $service" >> /var/log/alerts.log
-            # Tentativo riavvio automatico
-            systemctl restart $service
+    # ✅ PERMESSO - Verifica health endpoints (NO RESTART)
+    for port in 4001 4002 4003; do
+        if ! curl -f http://localhost:$port/health >/dev/null 2>&1; then
+            echo "$(date): SERVER DOWN: Port $port" >> /var/log/person-alerts.log
+            # 🚨 ESCALATE - Non riavviare automaticamente
         fi
     done
+    
+    # ✅ PERMESSO - Database connectivity check
+    if ! psql -d person_system -c "SELECT 1;" >/dev/null 2>&1; then
+        echo "$(date): DATABASE CONNECTION FAILED" >> /var/log/person-alerts.log
+        # 🚨 ESCALATE IMMEDIATELY
+    fi
+    
+    # GDPR audit check
+    RECENT_AUDITS=$(psql -d person_system -t -c "SELECT COUNT(*) FROM \"AuditLog\" WHERE \"timestamp\" > NOW() - INTERVAL '5 minutes';" 2>/dev/null | xargs || echo "0")
+    if [ "$RECENT_AUDITS" -eq 0 ]; then
+        echo "$(date): NO RECENT AUDIT LOGS - POTENTIAL GDPR ISSUE" >> /var/log/gdpr-alerts.log
+    fi
     
     sleep 60
 done
 ```
+
+## 📞 Escalation Procedures
+
+### 🚨 **Livelli di Escalation**
+
+#### **Livello 1 - Self-Service (5-15 minuti)**
+```bash
+# ✅ PERMESSO - Diagnostica iniziale
+./scripts/health-check.sh
+pm2 status
+pm2 logs --lines 50
+
+# Consultare documentazione:
+# - docs/troubleshooting/common-issues.md (questo file)
+# - docs/troubleshooting/faq.md
+# - docs/deployment/monitoring.md
+```
+
+#### **Livello 2 - Tech Lead (15-30 minuti)**
+**Quando escalare:**
+- Health checks falliscono
+- Database connectivity issues
+- GDPR compliance errors
+- Performance degradation
+
+**Informazioni da fornire:**
+```bash
+# Raccogliere queste informazioni:
+pm2 status > escalation-report.txt
+pm2 logs --lines 100 >> escalation-report.txt
+psql -d person_system -c "SELECT COUNT(*) FROM \"Person\" WHERE \"deletedAt\" IS NULL;" >> escalation-report.txt
+df -h >> escalation-report.txt
+free -m >> escalation-report.txt
+```
+
+#### **Livello 3 - Emergency (Immediato)**
+**Quando escalare immediatamente:**
+- Tutti i server down
+- Database corruption
+- GDPR data breach
+- Security incident
+
+**Azioni immediate:**
+```bash
+# 1. Attivare maintenance mode
+./scripts/maintenance-mode.sh enable
+
+# 2. Documentare incident
+echo "$(date): EMERGENCY - [description]" >> /var/log/emergency-incidents.log
+
+# 3. Eseguire emergency diagnostic
+./scripts/emergency-response.sh
+
+# 4. Notificare team
+./scripts/alert-team.sh "EMERGENCY: [brief description]"
+```
+
+## 📚 Riferimenti Documentazione
+
+### 🔗 **Link Rapidi**
+
+- **[Deployment Guide](../deployment/deployment-guide.md)** - Guida deployment completa
+- **[Server Management](../deployment/server-management.md)** - Gestione server e PM2
+- **[Monitoring](../deployment/monitoring.md)** - Monitoraggio e health checks
+- **[Backup/Restore](../deployment/backup-restore.md)** - Procedure backup
+- **[Disaster Recovery](../deployment/disaster-recovery.md)** - Procedure emergenza
+- **[Project Rules](../project_rules.md)** - Regole critiche sistema
+
+### 📋 **Checklist Rapide**
+
+#### ✅ **Quick Health Check**
+```bash
+# 1. PM2 Status
+pm2 status
+
+# 2. Health Endpoints
+curl http://localhost:4001/health
+curl http://localhost:4002/health  
+curl http://localhost:4003/health
+
+# 3. Database
+psql -d person_system -c "SELECT 1;"
+
+# 4. Test User
+psql -d person_system -c "SELECT email FROM \"Person\" WHERE email = 'admin@example.com' AND \"deletedAt\" IS NULL;"
+```
+
+#### 🚨 **Emergency Checklist**
+```bash
+# 1. Assess situation
+./scripts/health-check.sh
+
+# 2. Enable maintenance mode
+./scripts/maintenance-mode.sh enable
+
+# 3. Document incident
+echo "$(date): [incident description]" >> /var/log/incidents.log
+
+# 4. Gather diagnostics
+./scripts/full-diagnostic.sh > emergency-report.txt
+
+# 5. Escalate with report
+# Contact Tech Lead with emergency-report.txt
+```
+
+#### 🔒 **GDPR Incident Checklist**
+```bash
+# 1. Immediate assessment
+psql -d person_system -c "SELECT COUNT(*) FROM \"AuditLog\" WHERE action = 'DATA_BREACH';"
+
+# 2. Document potential breach
+echo "$(date): Potential GDPR incident" >> /var/log/gdpr-incidents.log
+
+# 3. Preserve evidence
+./scripts/backup-audit-logs.sh
+
+# 4. IMMEDIATE escalation
+# Contact Tech Lead AND Compliance Officer
+
+# 5. Prepare breach report
+./scripts/gdpr-incident-report.sh
+```
+
+---
+
+**⚠️ IMPORTANTE**: 
+- **Mai riavviare server senza autorizzazione**
+- **Sempre usare credenziali test: admin@example.com / Admin123!**
+- **Escalare problemi GDPR immediatamente**
+- **Documentare tutti gli incident**
+
+**📞 Per emergenze**: Seguire procedure di escalation definite in [server-management.md](../deployment/server-management.md)
+
+**📝 Aggiornamenti**: Consultare sempre la versione più recente della documentazione prima di procedere.
 
 ## 📞 Escalation e Supporto
 

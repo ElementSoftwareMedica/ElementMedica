@@ -1,5 +1,10 @@
 import React, { ReactNode } from 'react';
-import { Plus, Upload, Download, FileText } from 'lucide-react';
+import { 
+  Download,
+  FileText,
+  Plus,
+  Upload
+} from 'lucide-react';
 import EntityListLayout from '../layouts/EntityListLayout';
 import {
   SearchBar,
@@ -74,7 +79,6 @@ const PageScaffold: React.FC<PageScaffoldProps> = ({
   searchValue,
   onSearchChange,
   entityName,
-  entityGender = 'm',
   onCreateNew,
   onImport,
   onDownloadTemplate,
@@ -91,8 +95,7 @@ const PageScaffold: React.FC<PageScaffoldProps> = ({
   filtersActive,
   children
 }) => {
-  // Determina l'articolo corretto in base al genere
-  const entityArticle = entityGender === 'f' ? 'Nuova' : 'Nuovo';
+  // entityArticle removed - not used
   
   // Opzioni per il dropdown Aggiungi
   const addOptions = [

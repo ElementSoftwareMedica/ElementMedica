@@ -1,7 +1,5 @@
-import axios from 'axios';
+import { apiGet, apiDelete } from './api';
 import { API_ENDPOINTS } from '../config/api';
-
-const API_BASE_URL = '/api'; // Prefix for backend API requests
 
 interface Template {
   id: string;
@@ -33,8 +31,7 @@ const attestatiService = {
    */
   async getAllAttestati() {
     try {
-      const response = await axios.get(`${API_BASE_URL}${API_ENDPOINTS.ATTESTATI}`);
-      return response.data;
+      return await apiGet(`/api${API_ENDPOINTS.ATTESTATI}`);
     } catch (error) {
       console.error('Error fetching attestati:', error);
       throw error;
@@ -46,10 +43,9 @@ const attestatiService = {
    */
   async checkExistingAttestato(scheduledCourseId: string, employeeId: string): Promise<CheckExistingAttesatoResult> {
     try {
-      const response = await axios.get<CheckExistingAttesatoResult>(
-        `${API_BASE_URL}/attestati/check-existing?scheduledCourseId=${scheduledCourseId}&employeeId=${employeeId}`
+      return await apiGet<CheckExistingAttesatoResult>(
+        `/api/attestati/check-existing?scheduledCourseId=${scheduledCourseId}&employeeId=${employeeId}`
       );
-      return response.data;
     } catch (error) {
       console.error('Error checking for existing attestato:', error);
       return { exists: false };
@@ -77,8 +73,8 @@ const attestatiService = {
       
       if (!templateUrl && !templateId) {
         // Fetch available templates
-        const templatesRes = await axios.get<Template[]>(`${API_BASE_URL}/template-links`);
-        const attestatoTemplate = templatesRes.data.find((tpl) => tpl.type === 'attestato' && tpl.isDefault);
+        const templates = await apiGet<Template[]>('/api/template-links');
+        const attestatoTemplate = templates.find((tpl) => tpl.type === 'attestato' && tpl.isDefault);
         
         if (!attestatoTemplate) {
           throw new Error('Nessun template attestato configurato nelle impostazioni.');
@@ -114,43 +110,26 @@ const attestatiService = {
       // Make API request
       console.log("Sending attestati generation request:", requestData);
       
-      // Try with multiple possible endpoints
-      let lastError = null;
-      const endpoints = [
-        `${API_BASE_URL}/attestati/genera`, // Standard path with API_BASE_URL prefix
-        `/api/attestati/genera`, // Absolute path with /api prefix
-        `/attestati/genera`, // Absolute path without /api prefix
-        `http://localhost:4003/api/attestati/genera`, // Direct backend port 4003
-        `http://127.0.0.1:4003/api/attestati/genera` // Direct backend port 4003 (alternative localhost)
-      ];
+      // Make API request using centralized service
+      console.log("Sending attestati generation request:", requestData);
       
-      for (const endpoint of endpoints) {
-        try {
-          console.log(`Trying to generate attestati with endpoint: ${endpoint}`);
-          const response = await axios.post<GenerateAttestatiResponse>(
-            endpoint, 
-            requestData,
-            { timeout: 15000 } // Longer timeout as attestati generation can take time
-          );
-          
-          console.log("Server responded with:", {
-            endpoint,
-            success: response.data.success,
-            message: response.data.message,
-            attestatiCount: response.data.attestati?.length || 0
-          });
-          
-          return response.data;
-        } catch (error: any) {
-          console.warn(`Error with endpoint ${endpoint}:`, error.message);
-          lastError = error;
-          // Continue to next endpoint
-        }
+      try {
+        const response = await apiPost<GenerateAttestatiResponse>(
+          '/api/attestati/genera',
+          requestData
+        );
+        
+        console.log("Server responded with:", {
+          success: response.success,
+          message: response.message,
+          attestatiCount: response.attestati?.length || 0
+        });
+        
+        return response;
+      } catch (error: any) {
+        console.error('Error generating attestati:', error);
+        throw error;
       }
-      
-      // If all endpoints failed, throw the last error
-      console.error('All attestati generation endpoints failed');
-      throw lastError;
     } catch (error) {
       console.error('Error generating attestati:', error);
       throw error;
@@ -165,72 +144,15 @@ const attestatiService = {
       throw new Error('ID attestato non valido');
     }
     
-    // Array di possibili endpoint da provare - more focused on valid endpoints
-    const endpoints = [
-      `${API_BASE_URL}${API_ENDPOINTS.ATTESTATI}/${id}`,
-      `${API_ENDPOINTS.ATTESTATI}/${id}`,
-      `/attestati/${id}`,
-      `/api/attestati/${id}`,
-      `http://localhost:4000/attestati/${id}`,
-      `http://localhost:4001/attestati/${id}`,
-      `http://localhost:4003/attestati/${id}`,
-      `http://127.0.0.1:4000/attestati/${id}`,
-      `http://127.0.0.1:4001/attestati/${id}`,
-      `http://127.0.0.1:4003/attestati/${id}`
-    ];
-    
-    let lastError = null;
-    let errors = [];
-    
-    // Try both fetch and axios for better compatibility
-    const methods = [
-      // Method 1: fetch
-      async (endpoint: string) => {
-        const response = await fetch(endpoint, { 
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' }
-        });
-        
-        if (!response.ok) {
-          throw new Error(`HTTP error ${response.status}: ${response.statusText}`);
-        }
-        
-        return response.json().catch(() => ({}));
-      },
-      // Method 2: axios
-      async (endpoint: string) => {
-        const response = await axios.delete(endpoint, { timeout: 5000 });
-        return response.data;
-      },
-      // Method 3: axios POST with _method=DELETE
-      async (endpoint: string) => {
-        const response = await axios.post(endpoint, { _method: 'DELETE' }, { timeout: 5000 });
-        return response.data;
-      }
-    ];
-    
-    console.log(`Attempting to delete attestato ${id} with ${endpoints.length} endpoints and ${methods.length} methods`);
-    
-    // Try every combination of endpoint and method until one works
-    for (const endpoint of endpoints) {
-      for (const method of methods) {
-        try {
-          console.log(`Trying to delete attestato with endpoint: ${endpoint} and method: ${method.name || 'anonymous'}`);
-          const result = await method(endpoint);
-          console.log(`Successfully deleted attestato with endpoint: ${endpoint}`);
-          return result;
-        } catch (error: any) {
-          lastError = error;
-          errors.push({ endpoint, error: error.message || error });
-          console.warn(`Error with endpoint ${endpoint}:`, error.message || error);
-          // Continue to next method/endpoint
-        }
-      }
+    try {
+      console.log(`Attempting to delete attestato ${id}`);
+      const result = await apiDelete(`/api/attestati/${id}`);
+      console.log(`Successfully deleted attestato ${id}`);
+      return result;
+    } catch (error: any) {
+      console.error('Error deleting attestato:', error);
+      throw new Error(`Errore durante l'eliminazione dell'attestato: ${error.message || error}`);
     }
-    
-    // If all endpoints failed, throw an error
-    console.error('Error deleting attestato:', lastError);
-    throw new Error(`Errore durante l'eliminazione dell'attestato. Tentati ${endpoints.length * methods.length} metodi.`);
   },
   
   /**
@@ -244,22 +166,10 @@ const attestatiService = {
     try {
       console.log(`Deleting ${ids.length} attestati`);
       
-      // Define possible endpoints
+      // Define possible endpoints - using Vite proxy
       const endpoints = [
         `/api/attestati/delete-multiple`,
-        `/attestati/delete-multiple`,
-        `http://localhost:4000/api/attestati/delete-multiple`,
-        `http://localhost:4000/attestati/delete-multiple`,
-        `http://localhost:4001/api/attestati/delete-multiple`,
-        `http://localhost:4001/attestati/delete-multiple`,
-        `http://localhost:4003/api/attestati/delete-multiple`,
-        `http://localhost:4003/attestati/delete-multiple`,
-        `http://127.0.0.1:4000/api/attestati/delete-multiple`,
-        `http://127.0.0.1:4000/attestati/delete-multiple`,
-        `http://127.0.0.1:4001/api/attestati/delete-multiple`,
-        `http://127.0.0.1:4001/attestati/delete-multiple`,
-        `http://127.0.0.1:4003/api/attestati/delete-multiple`,
-        `http://127.0.0.1:4003/attestati/delete-multiple`
+        `/attestati/delete-multiple`
       ];
       
       // Define different formats for the request payload that servers might expect
@@ -276,17 +186,10 @@ const attestatiService = {
         for (const payload of payloadFormats) {
           try {
             console.log(`Trying to delete multiple attestati with endpoint: ${endpoint} and payload:`, payload);
-            const response = await axios.post(endpoint, payload, { 
-              timeout: 8000,
-              headers: {
-                'Content-Type': 'application/json'
-              }
-            });
+            const response = await apiPost(endpoint, payload);
             
-            if (response.status >= 200 && response.status < 300) {
-              console.log(`Successfully deleted attestati with endpoint: ${endpoint}`);
-              return response.data;
-            }
+            console.log(`Successfully deleted attestati with endpoint: ${endpoint}`);
+            return response;
           } catch (error: any) {
             lastError = error;
             console.warn(`Error with endpoint ${endpoint}:`, error.message || error);
@@ -320,4 +223,4 @@ const attestatiService = {
   }
 };
 
-export default attestatiService; 
+export default attestatiService;

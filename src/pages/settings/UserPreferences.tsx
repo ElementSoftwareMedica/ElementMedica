@@ -4,20 +4,30 @@
  */
 
 import React, { useState } from 'react';
-import { User, Palette, Bell, Layout, Shield, Download, Upload, RotateCcw } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
-import { Button } from '../../components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
+import { 
+  Bell,
+  Download,
+  Layout,
+  Palette,
+  RotateCcw,
+  Settings,
+  Shield,
+  Upload,
+  User
+} from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '../../design-system/molecules/Card';
+import { Button } from '../../design-system/atoms/Button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../design-system/molecules/Tabs';
+import { Badge } from '../../design-system/atoms/Badge';
+import { Label } from '../../design-system/atoms/Label';
 import { Alert, AlertDescription } from '../../components/ui/alert';
-import { Badge } from '../../components/ui/badge';
 import { Switch } from '../../components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
-import { Label } from '../../components/ui/label';
 import { Separator } from '../../components/ui/separator';
 import { toast } from 'react-hot-toast';
 import { useUserPreferences } from '../../hooks/useUserPreferences';
+import { ThemeSelector } from '../../components/settings/ThemeSelector';
 import { useTheme } from '../../hooks/useTheme';
-import ThemeSelector from '../../components/settings/ThemeSelector';
 import { LanguageCode } from '../../types/preferences';
 
 const LANGUAGE_OPTIONS = [

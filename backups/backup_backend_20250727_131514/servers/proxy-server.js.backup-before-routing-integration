@@ -1,0 +1,242 @@
+/**
+ * Proxy Server Refactorizzato
+ * Versione ottimizzata con architettura modulare
+ */
+
+import express from 'express';
+import { PrismaClient } from '@prisma/client';
+import { logger } from '../utils/logger.js';
+
+// Import configurazioni
+import { getConfig, printConfig } from '../proxy/config/index.js';
+
+// Import middleware
+import { setupSecurity } from '../proxy/middleware/security.js';
+import { setupRateLimiting } from '../proxy/middleware/rateLimiting.js';
+import { setupLogging } from '../proxy/middleware/logging.js';
+import { setupBodyParsing } from '../proxy/middleware/bodyParser.js';
+import { setupCorsHandlers, createCorsMiddleware } from '../proxy/config/cors.js';
+
+// Import handlers
+import { healthHandler, healthzHandler, readinessHandler } from '../proxy/handlers/healthCheck.js';
+import { setupGracefulShutdown, registerForShutdown } from '../proxy/handlers/gracefulShutdown.js';
+
+// Import routes
+import { setupLocalRoutes } from '../proxy/routes/localRoutes.js';
+import { setupProxyRoutes } from '../proxy/routes/proxyRoutes.js';
+
+// Import legacy modules (mantenuti per compatibilità)
+import { initializeAuth, shutdownAuth } from '../auth/index.js';
+import middleware from '../auth/middleware.js';
+import { globalErrorHandler, notFoundHandler } from '../middleware/errorHandler.js';
+import loadBalancer from '../utils/loadBalancer.js';
+
+// Inizializzazione
+const app = express();
+let config;
+let prisma;
+let server;
+
+// Gestione degli errori di avvio
+process.on('uncaughtException', (error) => {
+  console.error('❌ Uncaught Exception:', error);
+  logger.error('Uncaught Exception', { 
+    service: 'proxy-server', 
+    error: error.message, 
+    stack: error.stack 
+  });
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Unhandled Promise Rejection', { 
+    service: 'proxy-server', 
+    reason, 
+    promise 
+  });
+  process.exit(1);
+});
+
+/**
+ * Inizializzazione del server
+ */
+async function initializeServer() {
+  try {
+    // Carica configurazione
+    config = getConfig();
+    printConfig();
+    
+    // Inizializza Prisma
+    prisma = new PrismaClient();
+    await prisma.$connect();
+    console.log('✅ Prisma client initialized successfully');
+    
+    // Log avvio
+    logger.info('Starting Proxy Server', {
+      service: 'proxy-server',
+      version: process.env.npm_package_version || '1.0.0',
+      environment: config.server.environment,
+      port: config.server.port,
+      nodeVersion: process.version
+    });
+    
+    // Inizializza sistema di autenticazione (legacy)
+    await initializeAuth();
+    logger.info('Authentication system initialized', { 
+      service: 'proxy-server', 
+      port: config.server.port 
+    });
+    
+    // Setup middleware di sicurezza
+    setupSecurity(app);
+    console.log('✅ Security middleware configured');
+    
+    // Setup logging middleware
+    setupLogging(app);
+    console.log('✅ Logging middleware configured');
+    
+    // Setup CORS handlers (deve essere prima del rate limiting)
+    setupCorsHandlers(app);
+    console.log('✅ CORS handlers configured');
+    
+    // Setup CORS middleware globale per gestire tutte le richieste
+    app.use(createCorsMiddleware());
+    console.log('✅ Global CORS middleware configured');
+    
+    // Setup rate limiting
+    setupRateLimiting(app);
+    console.log('✅ Rate limiting configured');
+    
+    // Setup body parsing (non globale per evitare interferenze con proxy)
+    setupBodyParsing(app);
+    console.log('✅ Body parsing configured');
+    
+    // Registra load balancer (legacy)
+    loadBalancer.registerServer('api-primary', {
+      url: config.services.api.url,
+      weight: 1,
+      type: 'api'
+    });
+    
+    loadBalancer.registerServer('documents-primary', {
+      url: config.services.documents.url,
+      weight: 1,
+      type: 'documents'
+    });
+    
+    // TEMPORANEAMENTE DISABILITATO: Health checks causano problemi perché i server target non hanno endpoint /health
+    // loadBalancer.startHealthChecks();
+    console.log('✅ Load balancer configured (health checks disabled)');
+    
+
+    
+    // Debug middleware globale per tracciare tutte le richieste (ABILITATO per debug)
+     app.use((req, res, next) => {
+       console.log('🌐 [GLOBAL DEBUG] Request received:', {
+         method: req.method,
+         path: req.path,
+         originalUrl: req.originalUrl,
+         headers: {
+           'content-type': req.get('Content-Type'),
+           'user-agent': req.get('User-Agent')
+         }
+       });
+       next();
+     });
+     
+     // Setup route proxy (devono essere prima delle route locali per evitare conflitti)
+     console.log('🔧 [PROXY SERVER] Setting up proxy routes...');
+     setupProxyRoutes(app);
+     console.log('✅ [PROXY SERVER] Proxy routes setup completed');
+    
+    // Setup route locali (devono essere dopo le route proxy)
+    setupLocalRoutes(app, prisma, middleware);
+    console.log('✅ Local routes configured');
+    
+    // Setup error handlers (devono essere ultimi)
+    app.use(notFoundHandler);
+    app.use(globalErrorHandler);
+    console.log('✅ Error handlers configured');
+    
+    // Avvia server
+    server = app.listen(config.server.port, config.server.host, () => {
+      console.log(`\n🚀 Proxy Server started successfully!`);
+      console.log(`   - Environment: ${config.server.environment}`);
+      console.log(`   - Server: http://${config.server.host}:${config.server.port}`);
+      console.log(`   - API Target: ${config.services.api.url}`);
+      console.log(`   - Documents Target: ${config.services.documents.url}`);
+      console.log(`   - Frontend: ${config.services.frontend.url}`);
+      console.log(`   - Health Check: http://${config.server.host}:${config.server.port}/health`);
+      console.log(`   - Ready Check: http://${config.server.host}:${config.server.port}/ready`);
+      console.log('');
+      
+      logger.info('Proxy Server started', {
+        service: 'proxy-server',
+        host: config.server.host,
+        port: config.server.port,
+        environment: config.server.environment,
+        targets: {
+          api: config.services.api.url,
+          documents: config.services.documents.url,
+          frontend: config.services.frontend.url
+        }
+      });
+    });
+    
+    // Configura timeout del server
+    server.timeout = config.server.requestTimeout;
+    server.keepAliveTimeout = config.server.keepAliveTimeout;
+    server.headersTimeout = config.server.headersTimeout;
+    
+    // Registra server e Prisma per graceful shutdown
+    registerForShutdown(server, prisma);
+    
+    // Setup graceful shutdown
+    setupGracefulShutdown({
+      onShutdown: async () => {
+        console.log('🔄 Shutting down authentication system...');
+        await shutdownAuth();
+        
+        console.log('🔄 Stopping load balancer...');
+        loadBalancer.stopHealthChecks();
+      }
+    });
+    
+    console.log('✅ Graceful shutdown configured');
+    
+  } catch (error) {
+    console.error('❌ Failed to initialize server:', error);
+    logger.error('Server initialization failed', {
+      service: 'proxy-server',
+      error: error.message,
+      stack: error.stack
+    });
+    
+    // Cleanup in caso di errore
+    if (prisma) {
+      try {
+        await prisma.$disconnect();
+      } catch (disconnectError) {
+        console.error('❌ Failed to disconnect Prisma:', disconnectError);
+      }
+    }
+    
+    if (server) {
+      server.close();
+    }
+    
+    process.exit(1);
+  }
+}
+
+/**
+ * Avvio del server
+ */
+initializeServer().catch((error) => {
+  console.error('❌ Critical error during server startup:', error);
+  process.exit(1);
+});
+
+// Export per testing
+export { app, initializeServer };
+export default app;

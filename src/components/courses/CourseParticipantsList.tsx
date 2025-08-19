@@ -1,8 +1,12 @@
 import React, { useState } from 'react';
-import { Search, Plus, X } from 'lucide-react';
-import type { Database } from '../../types';
+import { 
+  Search,
+  X
+} from 'lucide-react';
+import type { Database, PersonData } from '../../types';
 
-type Employee = Database['public']['Tables']['employees']['Row'];
+// Alias per compatibilità
+type Employee = PersonData;
 type Company = Database['public']['Tables']['companies']['Row'];
 
 interface CourseParticipantsListProps {
@@ -74,10 +78,10 @@ export default function CourseParticipantsList({
             {/*   > */}
             {/*     <div> */}
             {/*       <div className="text-sm font-medium text-gray-900"> */}
-            {/*         {employee.first_name} {employee.last_name} */}
+            {/*         {employee.firstName} {employee.lastName} */}
             {/*       </div> */}
             {/*       <div className="text-sm text-gray-500"> */}
-            {/*         {employee.title} • {companies.find(c => c.id === employee.company_id)?.name} */}
+            {/*         {employee.title} • {companies.find(c => c.id === employee.companyId)?.name} */}
             {/*       </div> */}
             {/*     </div> */}
             {/*     <Plus className="h-5 w-5 text-gray-400" /> */}

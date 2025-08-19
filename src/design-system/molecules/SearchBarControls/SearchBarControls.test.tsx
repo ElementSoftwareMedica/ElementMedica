@@ -1,15 +1,16 @@
 import { render, screen } from '@testing-library/react';
+import { vi, describe, it, beforeEach, expect } from 'vitest';
 import { SearchBarControls } from './SearchBarControls';
 
 describe('SearchBarControls', () => {
   const defaultProps = {
     placeholder: 'Cerca...',
-    searchValue: '',
-    onSearch: jest.fn(),
+    value: '',
+    onSearch: vi.fn(),
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('renders correctly with basic props', () => {
@@ -19,56 +20,32 @@ describe('SearchBarControls', () => {
   });
 
   it('applies default width and height classes', () => {
-    render(<SearchBarControls {...defaultProps} />);
+    const { container } = render(<SearchBarControls {...defaultProps} />);
     
-    const container = screen.getByRole('textbox').closest('div');
-    expect(container).toHaveClass('w-64', 'h-10');
+    const searchBarContainer = container.firstChild as HTMLElement;
+    expect(searchBarContainer).toHaveClass('w-64', 'h-10');
   });
 
   it('applies custom className while preserving defaults', () => {
-    render(
-      <SearchBarControls
-        {...defaultProps}
-        className="custom-class"
-      />
-    );
+    const { container } = render(<SearchBarControls {...defaultProps} className="custom-class" />);
     
-    const container = screen.getByRole('textbox').closest('div');
-    expect(container).toHaveClass('w-64', 'h-10', 'custom-class');
+    const searchBarContainer = container.firstChild as HTMLElement;
+    expect(searchBarContainer).toHaveClass('w-64', 'h-10', 'custom-class');
   });
 
   it('passes through all SearchBar props', () => {
-    const mockOnSearch = jest.fn();
-    const mockOnFilterChange = jest.fn();
-    const mockOnSortChange = jest.fn();
-    
-    const filterOptions = [
-      {
-        key: 'status',
-        label: 'Stato',
-        options: [
-          { value: 'active', label: 'Attivo' },
-          { value: 'inactive', label: 'Inattivo' },
-        ],
-      },
-    ];
-    
-    const sortOptions = [
-      { value: 'name', label: 'Nome' },
-      { value: 'date', label: 'Data' },
-    ];
+    const mockOnSearch = vi.fn();
+    const mockOnChange = vi.fn();
     
     render(
       <SearchBarControls
         placeholder="Test placeholder"
-        searchValue="test value"
+        value="test value"
         onSearch={mockOnSearch}
-        filterOptions={filterOptions}
-        onFilterChange={mockOnFilterChange}
-        sortOptions={sortOptions}
-        onSortChange={mockOnSortChange}
-        activeFilters={{ status: 'active' }}
-        activeSort={{ field: 'name', direction: 'asc' }}
+        onChange={mockOnChange}
+        disabled={false}
+        showButton={true}
+        showClearButton={true}
       />
     );
     
@@ -90,8 +67,8 @@ describe('SearchBarControls', () => {
     render(
       <SearchBarControls
         placeholder=""
-        searchValue=""
-        onSearch={jest.fn()}
+        value=""
+        onSearch={vi.fn()}
       />
     );
     

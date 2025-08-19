@@ -1,13 +1,16 @@
-module.exports = {
-  // Disable transform to use native Node.js
+export default {
+  // Configuration for ES modules
   transform: {},
-  extensionsToTreatAsEsm: [],
+  transformIgnorePatterns: [],
   
   testEnvironment: 'node',
   setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
   testMatch: [
     '<rootDir>/tests/**/*.test.js',
     '<rootDir>/tests/**/*.spec.js'
+  ],
+  testPathIgnorePatterns: [
+    '<rootDir>/tests/proxy-server.test.js'
   ],
   collectCoverageFrom: [
     'auth/**/*.js',

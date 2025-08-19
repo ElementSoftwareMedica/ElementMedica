@@ -1,229 +1,291 @@
-# Admin Manual
+# Admin Manual - Sistema Unificato Person
 
-**Versione:** 1.0  
-**Data:** 27 Gennaio 2025  
-**Autore:** Team Development
+**Versione:** 2.0 Post-Refactoring  
+**Data:** 25 Gennaio 2025  
+**Sistema:** GDPR-Compliant Person Management System
 
 ## 📋 Panoramica
 
-Benvenuto nel Manuale Amministratore del Sistema di Gestione Documenti. Questa guida ti fornirà tutte le informazioni necessarie per amministrare efficacemente il sistema, gestire utenti, configurare impostazioni e monitorare le performance.
+Benvenuto nel Manuale Amministratore del Sistema Unificato Person. Questa guida ti fornirà tutte le informazioni necessarie per amministrare efficacemente il sistema GDPR-compliant, gestire persone, ruoli, permessi e monitorare la conformità.
 
 ## 🔐 Accesso Amministrativo
 
+## 🔐 Accesso Amministrativo
+
+### 🌐 Sistema di Routing Avanzato
+
+Il sistema utilizza un **routing avanzato centralizzato** con versioning API automatico:
+
+#### Endpoint Principali
+- **Frontend:** `http://localhost:4003` (Proxy Server)
+- **API v1:** `http://localhost:4003/api/v1/*` (Legacy compatibility)
+- **API v2:** `http://localhost:4003/api/v2/*` (Nuove funzionalità)
+- **Diagnostica:** `http://localhost:4003/routes` (Solo admin)
+
+#### Legacy Redirects Automatici
+Il sistema gestisce automaticamente i redirect legacy:
+- `http://localhost:4003/login` → `http://localhost:4003/api/v1/auth/login`
+- `http://localhost:4003/logout` → `http://localhost:4003/api/v1/auth/logout`
+- `http://localhost:4003/dashboard` → `http://localhost:4003/api/v1/dashboard`
+
+#### Endpoint Diagnostici (Solo Admin)
+```bash
+# Stato sistema routing
+GET http://localhost:4003/routes/health
+
+# Statistiche routing
+GET http://localhost:4003/routes/stats
+
+# Configurazione completa
+GET http://localhost:4003/routes/config
+
+# Lista tutte le route
+GET http://localhost:4003/routes
+```
+
+#### Versioning API Automatico
+Il sistema aggiunge automaticamente l'header `x-api-version` a tutte le richieste:
+- Richieste a `/api/v1/*` → Header `x-api-version: v1`
+- Richieste a `/api/v2/*` → Header `x-api-version: v2`
+
+### 🔑 Credenziali Test Standard (OBBLIGATORIE)
+
+**Per accesso amministrativo completo:**
+- **Email:** `admin@example.com`
+- **Password:** `Admin123!`
+- **Ruolo:** ADMIN (accesso completo al sistema)
+- **Permessi:** Gestione completa di Person, Company, Course, Documents
+
+⚠️ **REGOLE CRITICHE**:
+- Queste credenziali sono per testing/sviluppo ESCLUSIVAMENTE
+- **DIVIETO ASSOLUTO**: NON modificare senza autorizzazione esplicita del proprietario
+- **ATTENZIONE MASSIMA**: Testare sempre le modifiche al sistema di autenticazione con queste credenziali
+
 ### Login Amministratore
 
-1. **Accesso al Pannello Admin**
-   - URL: `https://yourdomain.com/admin`
-   - Utilizza credenziali con ruolo `SUPER_ADMIN` o `ADMIN`
-   - Autenticazione a due fattori obbligatoria per admin
+1. **Accesso al Sistema**
+   - URL: `http://localhost:4003` (ambiente di sviluppo)
+   - Utilizza credenziali standard sopra indicate
+   - Sistema JWT con refresh token automatico
 
 2. **Dashboard Amministrativa**
    ```
    ┌─────────────────────────────────────────────────────────────┐
-   │ 🛡️ Pannello Amministrazione                    [👤] [🚪]    │
+   │ 🛡️ Sistema Person GDPR                     [👤] [🚪]        │
    ├─────────────────────────────────────────────────────────────┤
-   │ 👥 Utenti │ 🏢 Tenant │ ⚙️ Sistema │ 📊 Analytics │ 🔒 Sicurezza│
+   │ 👥 Persone │ 🏢 Aziende │ 📚 Corsi │ 📊 Analytics │ 🔒 GDPR │
    ├─────────────────────────────────────────────────────────────┤
    │                                                             │
    │  📊 Panoramica Sistema                                      │
    │  ┌─────────────────┐  ┌─────────────────┐                 │
-   │  │ Utenti Attivi   │  │ Spazio Utilizzato│                 │
-   │  │ 👥 1,247        │  │ 💾 156 GB / 500 GB│                │
-   │  │ 📈 +12 oggi     │  │ 📊 31% utilizzato │                 │
+   │  │ Persone Attive  │  │ Audit Logs      │                 │
+   │  │ 👥 1,247        │  │ 📋 15,678 eventi│                 │
+   │  │ 📈 +12 oggi     │  │ 🔒 GDPR compliant│                 │
    │  └─────────────────┘  └─────────────────┘                 │
    │                                                             │
    │  ┌─────────────────┐  ┌─────────────────┐                 │
-   │  │ Documenti Totali│  │ Tenant Attivi   │                 │
-   │  │ 📄 45,678       │  │ 🏢 23           │                 │
-   │  │ 📈 +156 oggi    │  │ ✅ Tutti attivi  │                 │
+   │  │ Corsi Attivi    │  │ Consensi GDPR   │                 │
+   │  │ 📚 45 corsi     │  │ ✅ 98% conformi  │                 │
+   │  │ 🎓 156 iscritti │  │ ⚠️ 2% da rinnovare│                │
    │  └─────────────────┘  └─────────────────┘                 │
    └─────────────────────────────────────────────────────────────┘
    ```
 
-### Ruoli Amministrativi
-
-#### SUPER_ADMIN
-- **Gestione completa del sistema**
-- Creazione/eliminazione tenant
-- Configurazione sistema globale
-- Accesso a tutti i dati
-- Gestione backup e ripristino
+### Ruoli Sistema Person
 
 #### ADMIN
-- **Gestione tenant specifico**
-- Gestione utenti del tenant
-- Configurazione tenant
-- Visualizzazione analytics del tenant
+- **Gestione completa del sistema**
+- Accesso a tutte le entità (Person, Company, Course)
+- Configurazione permessi e ruoli
+- Accesso completo ai dati GDPR
+- Gestione audit logs e conformità
 
-#### TENANT_ADMIN
-- **Amministrazione limitata**
-- Gestione utenti del proprio tenant
-- Configurazione base del tenant
-- Visualizzazione report limitati
+#### MANAGER
+- **Gestione operativa**
+- Gestione persone e corsi
+- Visualizzazione aziende
+- Accesso limitato ai dati GDPR
+- Report e analytics
 
-## 👥 Gestione Utenti
+#### TRAINER
+- **Gestione formazione**
+- Gestione corsi assegnati
+- Visualizzazione partecipanti
+- Creazione materiali formativi
 
-### Creazione Utenti
+#### EMPLOYEE
+- **Accesso base**
+- Visualizzazione propri dati
+- Partecipazione ai corsi
+- Gestione consensi GDPR personali
 
-#### Creazione Singola
-1. Vai in "👥 Gestione Utenti" → "➕ Nuovo Utente"
-2. Compila il form:
+## 👥 Gestione Persone (GDPR-Compliant)
+
+### Creazione Persone
+
+#### Creazione Singola Persona
+1. Vai in "👥 Gestione Persone" → "➕ Nuova Persona"
+2. Compila il form GDPR-compliant:
    ```
    ┌─────────────────────────────────────────────────────────────┐
-   │ ➕ Nuovo Utente                                             │
+   │ ➕ Nuova Persona (GDPR-Compliant)                          │
    ├─────────────────────────────────────────────────────────────┤
    │ Nome: [________________]  Cognome: [________________]       │
    │ Email: [_________________________________________]          │
-   │ Tenant: [Seleziona Tenant ▼]                              │
-   │ Ruolo: [USER ▼] [ADMIN] [TENANT_ADMIN]                    │
+   │ Telefono: [_________________]                              │
+   │ Ruolo: [EMPLOYEE ▼] [MANAGER] [TRAINER] [ADMIN]           │
    │                                                             │
-   │ 🔒 Impostazioni Password                                    │
-   │ ☐ Genera password temporanea                               │
-   │ ☐ Forza cambio password al primo accesso                   │
-   │ ☐ Invia credenziali via email                              │
+   │ 🔒 Consensi GDPR (Obbligatori)                            │
+   │ ☑️ Consenso trattamento dati essenziali                   │
+   │ ☐ Consenso marketing                                       │
+   │ ☐ Consenso profilazione                                    │
+   │ ☐ Consenso terze parti                                     │
    │                                                             │
-   │ 📊 Limiti Utente                                           │
-   │ Spazio massimo: [1 GB ▼]                                   │
-   │ Max documenti: [1000___]                                   │
-   │ Max condivisioni: [50___]                                  │
+   │ 📅 Data Retention: [7 anni ▼]                             │
+   │ 🏢 Azienda: [Seleziona Azienda ▼]                         │
+   │ 📝 Note: [_________________________]                       │
    │                                                             │
-   │ [Annulla] [Crea Utente]                                    │
+   │ [Annulla] [Crea Persona]                                   │
    └─────────────────────────────────────────────────────────────┘
    ```
 
-#### Importazione Massiva
-1. Vai in "👥 Gestione Utenti" → "📤 Importa Utenti"
-2. Scarica il template CSV
-3. Compila il file con i dati utenti:
+#### Importazione CSV GDPR-Compliant
+1. Vai in "👥 Gestione Persone" → "📤 Importa da CSV"
+2. Scarica il template CSV GDPR
+3. Compila il file con i dati persone:
    ```csv
-   nome,cognome,email,tenant_id,ruolo,spazio_max_gb,max_documenti
-   Mario,Rossi,mario.rossi@company.com,1,USER,2,1500
-   Anna,Bianchi,anna.bianchi@company.com,1,ADMIN,5,5000
+   nome,cognome,email,telefono,ruolo,azienda_id,consenso_essenziale,data_retention_anni
+   Mario,Rossi,mario.rossi@company.com,+39123456789,EMPLOYEE,1,true,7
+   Anna,Bianchi,anna.bianchi@company.com,+39987654321,MANAGER,1,true,7
    ```
 4. Carica il file CSV
-5. Verifica l'anteprima
-6. Conferma l'importazione
+5. Verifica anteprima con controlli GDPR
+6. Conferma importazione con audit log automatico
 
-### Gestione Utenti Esistenti
+### Gestione Persone Esistenti
 
-#### Lista Utenti
+#### Lista Persone (GDPREntityTemplate)
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ 👥 Gestione Utenti                    [🔍] [📤] [➕]        │
+│ 👥 Gestione Persone                   [🔍] [📤] [➕]        │
 ├─────────────────────────────────────────────────────────────┤
-│ Nome              │Email              │Tenant │Ruolo │Stato │
+│ [📊 Tabella] [🔲 Griglia]  [➕ Aggiungi ▼] [📥 Importa CSV] │
+│ [🔍 Filtra] [📋 Colonne] [✏️ Modifica Batch]               │
 ├─────────────────────────────────────────────────────────────┤
-│ 👤 Mario Rossi    │mario@company.com  │Acme   │USER  │🟢    │
-│ 👤 Anna Bianchi   │anna@company.com   │Acme   │ADMIN │🟢    │
-│ 👤 Luca Verdi     │luca@company.com   │Beta   │USER  │🔴    │
-│ 👤 Sara Neri      │sara@company.com   │Acme   │USER  │🟡    │
+│ ☐ │Nome           │Email              │Ruolo    │Stato    │
+│ ☐ │Mario Rossi    │mario@company.com  │EMPLOYEE │🟢 Attivo│
+│ ☐ │Anna Bianchi   │anna@company.com   │MANAGER  │🟢 Attivo│
+│ ☐ │Luca Verdi     │luca@company.com   │TRAINER  │🔴 Sospeso│
+│ ☐ │Sara Neri      │sara@company.com   │EMPLOYEE │🟡 Consensi│
 └─────────────────────────────────────────────────────────────┘
 
 Legenda Stati:
-🟢 Attivo    🔴 Disabilitato    🟡 Sospeso    ⏸️ In attesa attivazione
+🟢 Attivo    🔴 Sospeso    🟡 Consensi da rinnovare    ⏸️ In attesa attivazione
 ```
 
 #### Azioni Utente
 
-**Modifica Utente:**
-1. Clicca sull'utente dalla lista
-2. Modifica informazioni:
-   - Dati personali
+**Modifica Persona (GDPR-Compliant):**
+1. Clicca sulla persona dalla lista
+2. Modifica informazioni con tracciamento:
+   - Dati anagrafici (audit automatico)
    - Ruolo e permessi
-   - Limiti di utilizzo
-   - Stato account
-3. Salva le modifiche
+   - Consensi GDPR
+   - Data retention
+3. Salva con log automatico
 
-**Reset Password:**
-1. Seleziona utente
-2. Clicca "🔑 Reset Password"
-3. Scegli modalità:
-   - Genera password temporanea
-   - Invia link reset via email
-   - Imposta password specifica
+**Gestione Consensi GDPR:**
+1. Seleziona persona
+2. Clicca "🔒 Gestisci Consensi"
+3. Aggiorna consensi:
+   - Consenso essenziale (obbligatorio)
+   - Consenso marketing
+   - Consenso profilazione
+   - Consenso terze parti
+4. Registrazione automatica audit trail
 
-**Sospensione/Riattivazione:**
-1. Seleziona utente
-2. Clicca "⏸️ Sospendi" o "▶️ Riattiva"
-3. Aggiungi motivo (opzionale)
-4. Conferma l'azione
+**Sospensione/Riattivazione (Soft Delete):**
+1. Seleziona persona
+2. Clicca "⏸️ Sospendi" (soft delete) o "▶️ Riattiva"
+3. Aggiungi motivo GDPR
+4. Conferma con tracciamento
 
-**Eliminazione Utente:**
-1. Seleziona utente
-2. Clicca "🗑️ Elimina"
-3. **⚠️ ATTENZIONE:** Scegli cosa fare con i documenti:
-   - Trasferisci a altro utente
-   - Elimina tutti i documenti
-   - Mantieni documenti come orfani
-4. Conferma digitando "ELIMINA"
+**Eliminazione Persona (Right to be Forgotten):**
+1. Seleziona persona
+2. Clicca "🗑️ Elimina (GDPR)"
+3. **⚠️ ATTENZIONE GDPR:** Verifica:
+   - Data retention scaduta
+   - Consensi revocati
+   - Obblighi legali rispettati
+4. Conferma digitando "ELIMINA GDPR"
 
-### Gestione Gruppi
+### Gestione Corsi (GDPR-Compliant)
 
-#### Creazione Gruppi
-1. Vai in "👥 Gestione Utenti" → "👥 Gruppi"
-2. Clicca "➕ Nuovo Gruppo"
-3. Configura gruppo:
+#### Creazione Corsi
+1. Vai in "📚 Gestione Corsi" → "➕ Nuovo Corso"
+2. Clicca "➕ Nuovo Corso"
+3. Configura corso GDPR:
    ```
    ┌─────────────────────────────────────────────────────────────┐
-   │ ➕ Nuovo Gruppo                                             │
+   │ ➕ Nuovo Corso (GDPR-Compliant)                            │
    ├─────────────────────────────────────────────────────────────┤
-   │ Nome Gruppo: [_________________________]                    │
+   │ Nome Corso: [_________________________]                     │
    │ Descrizione: [_________________________]                    │
-   │ Tenant: [Seleziona Tenant ▼]                              │
+   │ Categoria: [Formazione Obbligatoria ▼]                    │
+   │ Durata: [8___] ore                                         │
    │                                                             │
-   │ 🔒 Permessi Gruppo                                         │
-   │ ☐ Può creare cartelle                                      │
-   │ ☐ Può condividere documenti                                │
-   │ ☐ Può eliminare documenti                                  │
-   │ ☐ Può gestire metadati                                     │
+   │ 🔒 Consensi GDPR Corso                                     │
+   │ ☑️ Consenso partecipazione                                 │
+   │ ☐ Consenso registrazione                                   │
+   │ ☐ Consenso certificazione                                  │
+   │ ☐ Consenso valutazione                                     │
    │                                                             │
-   │ 👥 Membri Gruppo                                           │
-   │ [Aggiungi Utenti...]                                       │
+   │ 👥 Partecipanti                                            │
+   │ [Aggiungi Persone...]                                      │
    │                                                             │
-   │ [Annulla] [Crea Gruppo]                                    │
+   │ 📅 Data Retention: [5 anni ▼]                             │
+   │                                                             │
+   │ [Annulla] [Crea Corso]                                     │
    └─────────────────────────────────────────────────────────────┘
    ```
 
-#### Gestione Membri
-1. Seleziona gruppo dalla lista
-2. Vai alla tab "👥 Membri"
-3. Aggiungi/rimuovi utenti:
-   - Trascina utenti dalla lista
-   - Usa il campo di ricerca
-   - Importa da file CSV
+#### Gestione Partecipanti
+1. Seleziona corso dalla lista
+2. Vai alla tab "👥 Partecipanti"
+3. Gestisci iscrizioni:
+   - Cerca persone disponibili
+   - Verifica consensi GDPR
+   - Traccia partecipazione con audit log
 
-## 🏢 Gestione Tenant
+## 🏢 Gestione Aziende (GDPR-Compliant)
 
-### Creazione Tenant
+### Creazione Aziende
 
-#### Nuovo Tenant
-1. Vai in "🏢 Gestione Tenant" → "➕ Nuovo Tenant"
-2. Configura tenant:
+#### Nuova Azienda
+1. Vai in "🏢 Gestione Aziende" → "➕ Nuova Azienda"
+2. Configura azienda GDPR:
    ```
    ┌─────────────────────────────────────────────────────────────┐
-   │ ➕ Nuovo Tenant                                             │
+   │ ➕ Nuova Azienda (GDPR-Compliant)                          │
    ├─────────────────────────────────────────────────────────────┤
    │ Nome Azienda: [_________________________]                   │
-   │ Dominio: [_________________________].yourdomain.com        │
-   │ Email Admin: [_________________________]                    │
+   │ Codice Fiscale: [_________________________]                 │
+   │ Partita IVA: [_________________________]                    │
+   │ Indirizzo: [_________________________]                      │
+   │ Email: [_________________________]                          │
+   │ Telefono: [_________________________]                       │
    │                                                             │
-   │ 📊 Limiti Tenant                                           │
-   │ Max Utenti: [100___]                                       │
-   │ Spazio Totale: [50 GB ▼]                                   │
-   │ Max Documenti: [10000___]                                  │
-   │ Bandwidth Mensile: [100 GB ▼]                              │
+   │ 🔒 Consensi GDPR Azienda                                   │
+   │ ☑️ Consenso trattamento dati aziendali                    │
+   │ ☐ Consenso marketing B2B                                   │
+   │ ☐ Consenso profilazione commerciale                        │
+   │ ☐ Consenso condivisione con terze parti                    │
    │                                                             │
-   │ 🎨 Personalizzazione                                       │
-   │ Logo: [Carica Logo...]                                     │
-   │ Colori Tema: [#1f2937] [#3b82f6]                          │
-   │ Dominio Personalizzato: [docs.company.com]                 │
+   │ 📅 Data Retention: [10 anni ▼]                            │
+   │ 🏷️ Settore: [Tecnologia ▼]                                │
+   │ 👥 Numero Dipendenti: [50___]                              │
    │                                                             │
-   │ 🔒 Impostazioni Sicurezza                                  │
-   │ ☐ Abilita 2FA obbligatorio                                 │
-   │ ☐ Restrizioni IP                                           │
-   │ ☐ SSO (Single Sign-On)                                     │
-   │                                                             │
-   │ [Annulla] [Crea Tenant]                                    │
+   │ [Annulla] [Crea Azienda]                                   │
    └─────────────────────────────────────────────────────────────┘
    ```
 
@@ -324,9 +386,9 @@ Legenda Stati:
    ├─────────────────────────────────────────────────────────────┤
    │ 🌐 Impostazioni Rete                                       │
    │ URL Base: [https://yourdomain.com______]                   │
-   │ Porta API: [3001___]                                       │
-   │ Porta Docs: [3002___]                                      │
-   │ Porta Proxy: [3000___]                                     │
+   │ Porta API: [4001___]                                       │
+│ Porta Docs: [4002___]                                      │
+│ Porta Proxy: [4003___]                                     │
    │                                                             │
    │ 💾 Database                                                │
    │ Host: [localhost___________]                                │

@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import axios from 'axios';
-import { ChevronLeft, Save, FileText, Download, Layout, Image, Eye, FileEdit } from 'lucide-react';
+import { apiGet, apiPost, apiPut } from '../../services/api';
+import { ChevronLeft, Save, Download, Layout, Image, Eye, FileEdit } from 'lucide-react';
 import { Button } from '../../design-system/atoms/Button';
 import { PlaceholderDemo, GoogleTemplateProvider, GoogleDocsPreview } from '../../components/shared/template';
-import PageHeader from '../../components/shared/layouts/PageHeader';
+import PageHeader from '../../components/layouts/PageHeader';
 
 // Template interface
 interface Template {
@@ -79,8 +79,7 @@ const TemplateEditor: React.FC = () => {
       if (id) {
         try {
           console.log('Fetching template with ID:', id);
-          const response = await axios.get(`/template-links/${id}`);
-          const templateData = response.data as Template;
+          const templateData = await apiGet<Template>(`/template-links/${id}`);
           
           if (!templateData) {
             throw new Error(`Template with ID ${id} not found`);
@@ -104,11 +103,11 @@ const TemplateEditor: React.FC = () => {
             setContent(templateData.content);
           } else if (templateData.url && !templateData.url.includes('placeholder')) {
             try {
-              const contentResponse = await axios.get(`${templateData.url}`);
-              if (contentResponse.data) {
-                setContent(typeof contentResponse.data === 'string' 
-                  ? contentResponse.data 
-                  : JSON.stringify(contentResponse.data));
+              const contentData = await apiGet<string>(`${templateData.url}`);
+              if (contentData) {
+                setContent(typeof contentData === 'string' 
+                  ? contentData 
+                  : JSON.stringify(contentData));
               }
             } catch (err) {
               console.error('Could not load template content:', err);
@@ -183,23 +182,23 @@ const TemplateEditor: React.FC = () => {
       
       // Save template (create or update)
       if (id) {
-        await axios.put(`/template-links/${id}`, templateData);
+        await apiPut(`/template-links/${id}`, templateData);
         console.log(`Template with ID ${id} updated`);
       } else {
-        const response = await axios.post('/template-links', templateData);
-        console.log('New template created:', response.data);
+        const newTemplate = await apiPost<Template>('/template-links', templateData);
+        console.log('New template created:', newTemplate);
         
         // If this template is set as default, update other templates of the same type
         if (isDefault) {
-          const allTemplates = await axios.get('/template-links');
-          const templatesOfSameType = (allTemplates.data as Template[]).filter(
-            (t: Template) => t.type === templateType && t.id !== ((response.data as Template).id || id)
+          const allTemplates = await apiGet<Template[]>('/template-links');
+          const templatesOfSameType = allTemplates.filter(
+            (t: Template) => t.type === templateType && t.id !== (newTemplate.id || id)
           );
           
           // Update other templates to not be default
           for (const template of templatesOfSameType) {
             if (template.isDefault) {
-              await axios.put(`/template-links/${template.id}`, {
+              await apiPut(`/template-links/${template.id}`, {
                 ...template,
                 isDefault: false
               });

@@ -1,0 +1,52 @@
+/**
+ * Sistema presenze e registrazioni
+ * Modulo: attendance
+ * Generato automaticamente dalla Fase 8
+ */
+
+// === ENUM DEFINITIONS ===
+
+
+// === MODEL DEFINITIONS ===
+model RegistroPresenze {
+  id                String                         @id @default(uuid())
+  scheduledCourseId String
+  sessionId         String
+  nomeFile          String
+  url               String
+  dataGenerazione   DateTime                       @default(now())
+  numeroProgressivo Int
+  annoProgressivo   Int
+  formatoreId       String
+  deletedAt         DateTime?
+  createdAt         DateTime                       @default(now())
+  updatedAt         DateTime                       @updatedAt
+  formatore         Person                         @relation("RegistroFormatore", fields: [formatoreId], references: [id], onDelete: Cascade)
+  scheduledCourse   CourseSchedule                 @relation(fields: [scheduledCourseId], references: [id], onDelete: Cascade)
+  session           CourseSession                  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  presenti          RegistroPresenzePartecipante[]
+
+  @@index([formatoreId])
+  @@index([scheduledCourseId])
+  @@index([sessionId])
+  @@map("registri_presenze")
+}
+
+model RegistroPresenzePartecipante {
+  id                 String           @id @default(uuid())
+  registroPresenzeId String
+  personId           String           @map("partecipante_id") // Mapped for DB compatibility
+  presente           Boolean          @default(false)
+  ore                Float?           @map("hours")
+  note               String?
+  deletedAt          DateTime?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  person             Person           @relation("RegistroPresenzePartecipante_Person", fields: [personId], references: [id], onDelete: Cascade)
+  registroPresenze   RegistroPresenze @relation(fields: [registroPresenzeId], references: [id], onDelete: Cascade)
+
+  @@unique([registroPresenzeId, personId])
+  @@index([personId])
+  @@index([registroPresenzeId])
+  @@map("registro_presenze_partecipanti")
+}

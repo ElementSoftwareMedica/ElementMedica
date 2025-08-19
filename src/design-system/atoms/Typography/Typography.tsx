@@ -48,12 +48,12 @@ const variantElementMap: Record<TypographyVariant, keyof JSX.IntrinsicElements> 
   h4: 'h4',
   h5: 'h5',
   h6: 'h6',
-  subtitle1: 'h6',
-  subtitle2: 'h6',
+  subtitle1: 'p',
+  subtitle2: 'p',
   body1: 'p',
   body2: 'p',
-  caption: 'span',
-  overline: 'span'
+  caption: 'p',
+  overline: 'p'
 };
 
 // Variant styles mapping
@@ -64,8 +64,8 @@ const variantStyles: Record<TypographyVariant, string> = {
   h4: 'text-xl font-semibold leading-tight',
   h5: 'text-lg font-medium leading-tight',
   h6: 'text-base font-medium leading-tight',
-  subtitle1: 'text-lg font-normal leading-normal',
-  subtitle2: 'text-base font-normal leading-normal',
+  subtitle1: 'text-lg font-medium leading-normal',
+  subtitle2: 'text-base font-medium leading-normal',
   body1: 'text-base font-normal leading-relaxed',
   body2: 'text-sm font-normal leading-relaxed',
   caption: 'text-xs font-normal leading-normal',

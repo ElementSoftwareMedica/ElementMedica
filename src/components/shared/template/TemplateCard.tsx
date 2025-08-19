@@ -1,5 +1,9 @@
-import React, { useRef } from 'react';
-import { Star, Edit, FileText, Presentation, ExternalLink, MoreVertical, Trash2 } from 'lucide-react';
+import React from 'react';
+import { 
+  ExternalLink,
+  MoreVertical,
+  Star
+} from 'lucide-react';
 import { TemplateActionDropdown } from './TemplateActionDropdown';
 import { Template } from '../../../types/template';
 
@@ -12,7 +16,6 @@ interface TemplateCardProps {
   openDropdownId: string | null;
   toggleDropdown: (id: string) => void;
   dropdownRefs: React.MutableRefObject<{[key: string]: React.RefObject<HTMLButtonElement>}>;
-  fetchTemplates: () => Promise<void>;
 }
 
 export const TemplateCard: React.FC<TemplateCardProps> = ({
@@ -24,7 +27,6 @@ export const TemplateCard: React.FC<TemplateCardProps> = ({
   openDropdownId,
   toggleDropdown,
   dropdownRefs,
-  fetchTemplates,
 }) => {
   return (
     <div className={`border rounded-xl p-3 ${isDefault ? 'bg-yellow-50 border-yellow-200' : 'hover:shadow-sm transition-shadow'}`}>
@@ -51,7 +53,7 @@ export const TemplateCard: React.FC<TemplateCardProps> = ({
                   dropdownRefs.current[template.id] = React.createRef<HTMLButtonElement>();
                 }
                 if (el) {
-                  // @ts-ignore
+                  // @ts-expect-error - Dynamic ref assignment to mutable ref object
                   dropdownRefs.current[template.id].current = el;
                 }
               }}
@@ -69,7 +71,6 @@ export const TemplateCard: React.FC<TemplateCardProps> = ({
               onEditProperties={(template: Template) => onEdit(template)}
               onSetAsDefault={onSetAsDefault}
               onRemove={onRemove}
-              reloadTemplates={fetchTemplates}
               buttonRef={dropdownRefs.current[template.id]}
             />
           </div>

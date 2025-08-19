@@ -59,7 +59,7 @@ export interface AuditLogEntry {
   dataType: string;
   purpose: string;
   legalBasis: LegalBasis;
-  details?: Record<string, any>;
+  details?: Record<string, unknown>;
   ipAddress: string;
   userAgent: string;
   timestamp: Date;
@@ -95,8 +95,8 @@ export interface ExportedData {
   };
   consents: GDPRConsent[];
   auditTrail: AuditLogEntry[];
-  profile?: Record<string, any>;
-  preferences?: Record<string, any>;
+  profile?: Record<string, unknown>;
+  preferences?: Record<string, unknown>;
   exportMetadata: {
     exportDate: Date;
     requestId: string;
@@ -176,7 +176,7 @@ export interface ComplianceReport {
 }
 
 // API Response Types
-export interface GDPRApiResponse<T = any> {
+export interface GDPRApiResponse<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;
@@ -265,6 +265,20 @@ export interface UseGDPRConsentReturn {
   grantConsent: (data: ConsentFormData) => Promise<void>;
   withdrawConsent: (data: ConsentWithdrawalFormData) => Promise<void>;
   refreshConsents: () => Promise<void>;
+  getConsentStatus: (consentType: string) => {
+    granted: boolean;
+    date?: Date;
+    withdrawnAt?: Date;
+    withdrawalReason?: string;
+  };
+  hasActiveConsent: (consentType: string) => boolean;
+  getActiveConsents: () => GDPRConsent[];
+  getConsentStats: () => {
+    total: number;
+    active: number;
+    withdrawn: number;
+    percentage: number;
+  };
 }
 
 export interface UseAuditTrailReturn {

@@ -1,6 +1,5 @@
-import axios from 'axios';
-
-const API_BASE_URL = 'http://localhost:4001';
+import { apiGet} from './api';
+import { API_BASE_URL } from '../config/api';
 
 interface GoogleDocsTemplate {
   id: string;
@@ -42,8 +41,8 @@ const googleDocsService = {
    */
   async getDefaultTemplate(type: string): Promise<GoogleDocsTemplate | null> {
     try {
-      const response = await axios.get<GoogleDocsTemplateResponse>(`${API_BASE_URL}/api/google-docs/templates/${type}`);
-      return response.data?.template || null;
+      const response = await apiGet<GoogleDocsTemplateResponse>(`/api/google-docs/templates/${type}`);
+      return response?.template || null;
     } catch (error) {
       console.error('Error getting default Google Docs template:', error);
       return null;
@@ -57,15 +56,15 @@ const googleDocsService = {
    */
   async generateDocument(params: GenerateDocumentParams): Promise<GenerateDocumentResult> {
     try {
-      const response = await axios.post<GenerateDocumentResult>(`${API_BASE_URL}/api/google-docs/generate`, params);
-      return response.data;
+      const response = await apiPost<GenerateDocumentResult>(`/api/google-docs/generate`, params);
+      return response;
     } catch (error: any) {
       console.error('Error generating document from Google Docs template:', error);
       return {
         success: false,
         message: 'Error generating document',
-        error: error.response?.data?.error || error.message,
-        details: error.response?.data?.details
+        error: error.message || error,
+        details: error.details || 'Check server logs for more information'
       };
     }
   },
@@ -78,26 +77,25 @@ const googleDocsService = {
    */
   async generateAttestato(scheduledCourseId: string, employeeId: string): Promise<GenerateDocumentResult> {
     try {
-      const response = await axios.get<GenerateDocumentResult>(
-        `${API_BASE_URL}/api/google-docs/attestati/${scheduledCourseId}/${employeeId}`
+      const response = await apiGet<GenerateDocumentResult>(
+        `/api/google-docs/attestati/${scheduledCourseId}/${employeeId}`
       );
-      return response.data;
+      return response;
     } catch (error: any) {
       console.error('Error generating attestato from Google Docs template:', error);
       
       // Extract more detailed error information if available
-      const errorDetails = error.response?.data?.details;
-      const errorMessage = error.response?.data?.error || error.message;
+      const errorMessage = error.message || error;
       
       return {
         success: false,
         message: 'Error generating attestato',
         error: errorMessage,
-        details: errorDetails || error.response?.data || 'Check server logs for more information',
+        details: error.details || 'Check server logs for more information',
         userMessage: 'Impossibile generare l\'attestato. Verifica che le credenziali Google API siano configurate correttamente.'
       };
     }
   }
 };
 
-export default googleDocsService; 
+export default googleDocsService;

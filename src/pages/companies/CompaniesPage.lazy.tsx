@@ -7,7 +7,7 @@ import { LoadingFallback } from '../../components/ui/LoadingFallback';
  * Week 11 Implementation - Lazy Loading Optimization
  */
 
-const CompaniesPage = React.lazy(() => import('./CompaniesPage').then(module => ({ default: module.CompaniesPage })));
+const CompaniesPage = React.lazy(() => import('./CompaniesPage'));
 
 export const CompaniesPageLazy: React.FC = () => {
   return (

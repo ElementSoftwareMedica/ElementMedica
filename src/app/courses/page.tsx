@@ -26,7 +26,7 @@ export default function CoursesPage() {
     try {
       const data = await getCourses();
       setCourses(data);
-    } catch (error) {
+    } catch {
       toast.error('Failed to load courses');
     }
   };
@@ -37,7 +37,7 @@ export default function CoursesPage() {
         await deleteCourse(id);
         toast.success('Course deleted successfully');
         loadCourses();
-      } catch (error) {
+      } catch {
         toast.error('Failed to delete course');
       }
     }

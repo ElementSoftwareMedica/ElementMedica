@@ -27,7 +27,7 @@ export const ViewModeToggleButton: React.FC<ViewModeToggleButtonProps> = ({
         onClick={() => onChange('grid')}
         className={cn(
           "relative z-10 px-3 py-2 rounded-full flex items-center font-medium transition",
-          viewMode === 'grid' ? 'text-blue-700' : 'text-gray-500'
+          viewMode === 'grid' ? 'text-primary-700' : 'text-gray-500'
         )}
         type="button"
       >
@@ -38,7 +38,7 @@ export const ViewModeToggleButton: React.FC<ViewModeToggleButtonProps> = ({
         onClick={() => onChange('table')}
         className={cn(
           "relative z-10 px-3 py-2 rounded-full flex items-center font-medium transition ml-1",
-          viewMode === 'table' ? 'text-blue-700' : 'text-gray-500'
+          viewMode === 'table' ? 'text-primary-700' : 'text-gray-500'
         )}
         type="button"
       >

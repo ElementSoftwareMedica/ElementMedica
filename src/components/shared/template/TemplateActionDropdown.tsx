@@ -1,5 +1,12 @@
 import React, { useEffect, useRef } from 'react';
-import { Edit, Settings, Star, FileOutput, FileText, Trash2, ExternalLink } from 'lucide-react';
+import { 
+  Edit,
+  FileOutput,
+  FileText,
+  Settings,
+  Star,
+  Trash2
+} from 'lucide-react';
 import { Template } from '../../../types/template';
 
 interface TemplateActionDropdownProps {
@@ -12,7 +19,6 @@ interface TemplateActionDropdownProps {
   onRemove: (id: string) => void;
   onExportPdf?: (template: Template) => void;
   onExportDocx?: (template: Template) => void;
-  reloadTemplates: () => void;
   buttonRef: React.RefObject<HTMLButtonElement>;
 }
 
@@ -26,7 +32,6 @@ export const TemplateActionDropdown: React.FC<TemplateActionDropdownProps> = ({
   onRemove,
   onExportPdf,
   onExportDocx,
-  reloadTemplates,
   buttonRef
 }) => {
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -134,4 +139,4 @@ export const TemplateActionDropdown: React.FC<TemplateActionDropdownProps> = ({
       </div>
     </div>
   );
-}; 
+};

@@ -1,12 +1,8 @@
 import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from './Tabs';
 
 describe('Tabs', () => {
-  const defaultProps = {
-    value: 'tab1',
-    onValueChange: vi.fn(),
-  };
 
   const TabsExample = ({ value = 'tab1', onValueChange = vi.fn(), ...props }) => (
     <Tabs value={value} onValueChange={onValueChange} {...props}>

@@ -104,7 +104,10 @@ export const SearchBar: React.FC<SearchBarProps> = ({
   };
 
   return (
-    <div className={cn('relative flex items-center', sizeClasses[size], className)}>
+    <div 
+      className={cn('relative flex items-center', sizeClasses[size], className)}
+      data-testid="search-bar-container"
+    >
       <div className="relative flex-1">
         <Input
           type="text"
@@ -133,6 +136,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
             onClick={handleClear}
             disabled={disabled}
             className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 disabled:opacity-50"
+            data-testid="search-bar-clear-button"
           >
             <Icon name="x" size="sm" />
           </button>
@@ -147,6 +151,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
           disabled={disabled || !searchValue.trim()}
           size={size}
           className="rounded-l-none border-l-0"
+          data-testid="search-bar-search-button"
         >
           <Icon name="search" size={size === 'sm' ? 'sm' : 'md'} />
         </Button>

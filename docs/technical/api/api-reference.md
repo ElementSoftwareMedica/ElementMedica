@@ -1,12 +1,20 @@
 # API Reference
 
-**Versione:** 1.0  
-**Data:** 27 Gennaio 2025  
-**Autore:** Team Development
+**Versione:** 2.0  
+**Data:** 29 Dicembre 2024  
+**Base URL:** `http://localhost:4003/api`  
+**Stato:** Post-Refactoring Sistema Unificato Person
 
 ## 📋 Panoramica
 
-Questa documentazione descrive tutte le API REST disponibili nel sistema, organizzate per server e funzionalità.
+L'API del sistema è progettata seguendo i principi REST e fornisce accesso completo a tutte le funzionalità del sistema. Tutte le richieste devono essere autenticate tramite JWT token.
+
+**Aggiornamenti Post-Refactoring:**
+- ✅ Endpoint Person unificati (sostituiti User/Employee)
+- ✅ Sistema PersonRole con RoleType enum
+- ✅ PersonSession per gestione sessioni
+- ✅ GDPR compliance completa con audit trail
+- ✅ Soft delete standardizzato con deletedAt
 
 ## 🏗️ Architettura API
 
@@ -57,13 +65,17 @@ graph TD
 
 ```typescript
 interface JWTPayload {
-  userId: string;
+  sub: string; // person_id
   email: string;
-  role: 'ADMIN' | 'USER' | 'VIEWER';
+  personId: string;
+  roles: string[]; // ['ADMIN', 'MANAGER', 'USER']
+  sessionId: string;
   tenantId: string;
   permissions: string[];
   iat: number;
   exp: number;
+  aud: string; // 'training-system'
+  iss: string; // 'training-api'
 }
 ```
 
@@ -95,14 +107,18 @@ X-Tenant-ID: <tenant_id>
 ### Authentication Endpoints
 
 #### POST /auth/login
-Autenticazione utente con email e password.
+Autenticazione Person con credenziali unificate (Post-Refactoring).
 
 **Request:**
 ```json
 {
-  "email": "user@example.com",
+  "email": "person@example.com",
   "password": "password123",
-  "tenantId": "tenant-uuid"
+  "tenantId": "tenant-uuid",
+  "deviceInfo": {
+    "userAgent": "Mozilla/5.0...",
+    "ipAddress": "192.168.1.1"
+  }
 }
 ```
 
@@ -111,12 +127,12 @@ Autenticazione utente con email e password.
 {
   "success": true,
   "data": {
-    "user": {
-      "id": "user-uuid",
-      "email": "user@example.com",
-      "firstName": "John",
-      "lastName": "Doe",
-      "role": "USER",
+    "person": {
+      "id": "person-uuid",
+      "email": "person@example.com",
+      "firstName": "Mario",
+      "lastName": "Rossi",
+      "roles": ["ADMIN", "MANAGER"],
       "tenantId": "tenant-uuid",
       "preferences": {
         "theme": "light",
@@ -127,6 +143,10 @@ Autenticazione utente con email e password.
       "accessToken": "jwt-access-token",
       "refreshToken": "jwt-refresh-token",
       "expiresIn": 3600
+    },
+    "session": {
+      "id": "session-uuid",
+      "expiresAt": "2024-12-30T10:00:00Z"
     }
   }
 }
@@ -171,33 +191,41 @@ Logout dell'utente.
 }
 ```
 
-### User Management
+### Person Management (Sistema Unificato)
 
-#### GET /users
-Ottieni lista utenti (con paginazione).
+#### GET /persons
+Ottieni lista Person unificate con paginazione e GDPR compliance.
 
 **Query Parameters:**
 - `page` (number): Numero pagina (default: 1)
 - `limit` (number): Elementi per pagina (default: 10, max: 100)
 - `search` (string): Ricerca per nome o email
-- `role` (string): Filtra per ruolo
+- `roleType` (string): Filtra per RoleType (ADMIN, MANAGER, EMPLOYEE, TRAINER)
 - `status` (string): Filtra per stato (active, inactive)
+- `includeDeleted` (boolean): Include soft deleted (solo ADMIN)
 
 **Response:**
 ```json
 {
   "success": true,
   "data": {
-    "users": [
+    "persons": [
       {
-        "id": "user-uuid",
-        "email": "user@example.com",
-        "firstName": "John",
-        "lastName": "Doe",
-        "role": "USER",
+        "id": "person-uuid",
+        "email": "person@example.com",
+        "firstName": "Mario",
+        "lastName": "Rossi",
+        "roles": [
+          {
+            "roleType": "ADMIN",
+            "assignedAt": "2025-01-27T10:00:00Z",
+            "permissions": ["READ_ALL", "WRITE_ALL"]
+          }
+        ],
         "status": "active",
         "createdAt": "2025-01-27T10:00:00Z",
-        "lastLoginAt": "2025-01-27T09:00:00Z"
+        "lastLoginAt": "2025-01-27T09:00:00Z",
+        "deletedAt": null
       }
     ],
     "pagination": {
@@ -437,10 +465,14 @@ Aggiorna impostazioni di sistema.
 }
 ```
 
-### GDPR & Privacy
+### GDPR & Privacy (Sistema Unificato)
 
-#### GET /gdpr/data-export/:userId
-Esporta dati utente per GDPR.
+#### GET /gdpr/data-export/:personId
+Esporta dati Person completi per GDPR.
+
+**Headers:**
+- `Authorization: Bearer <jwt_token>`
+- `X-GDPR-Request-Reason: data_portability`
 
 **Response:**
 ```json
@@ -450,24 +482,55 @@ Esporta dati utente per GDPR.
     "exportId": "export-uuid",
     "status": "processing",
     "requestedAt": "2025-01-27T10:00:00Z",
-    "estimatedCompletion": "2025-01-27T10:30:00Z"
+    "estimatedCompletion": "2025-01-27T10:30:00Z",
+    "personalData": {
+      "id": "person-uuid",
+      "email": "person@example.com",
+      "firstName": "Mario",
+      "lastName": "Rossi",
+      "createdAt": "2024-01-01T00:00:00Z",
+      "updatedAt": "2024-12-29T10:00:00Z"
+    },
+    "roles": [
+      {
+        "roleType": "ADMIN",
+        "assignedAt": "2024-01-01T00:00:00Z",
+        "permissions": ["READ_ALL", "WRITE_ALL"]
+      }
+    ],
+    "sessions": [
+      {
+        "id": "session-uuid",
+        "createdAt": "2024-12-29T09:00:00Z",
+        "deviceInfo": "Mozilla/5.0...",
+        "ipAddress": "192.168.1.1"
+      }
+    ],
+    "auditTrail": [
+      {
+        "action": "LOGIN",
+        "timestamp": "2024-12-29T09:00:00Z",
+        "details": "Successful login"
+      }
+    ]
   }
 }
 ```
 
-#### POST /gdpr/data-deletion/:userId
-Richiedi cancellazione dati utente.
+#### POST /gdpr/data-deletion/:personId
+Richiedi cancellazione dati Person.
 
 **Request:**
 ```json
 {
-  "reason": "User requested account deletion",
-  "confirmEmail": "user@example.com"
+  "reason": "Person requested account deletion",
+  "confirmEmail": "person@example.com",
+  "gdprCompliant": true
 }
 ```
 
-#### GET /gdpr/consent/:userId
-Ottieni stato consensi GDPR.
+#### GET /gdpr/consent/:personId
+Ottieni stato consensi GDPR per Person.
 
 **Response:**
 ```json
@@ -482,6 +545,11 @@ Ottieni stato consensi GDPR.
       "marketing": {
         "granted": false,
         "revokedAt": "2025-01-15T00:00:00Z"
+      },
+      "dataProcessing": {
+        "granted": true,
+        "grantedAt": "2025-01-01T00:00:00Z",
+        "required": true
       }
     }
   }
@@ -795,7 +863,7 @@ Ricerca documenti avanzata.
 }
 ```
 
-## 🏠 Main Server (Port 3001)
+## 🏠 Main Server (Port 4001)
 
 ### Health Check
 
@@ -999,8 +1067,35 @@ Test echo per debugging.
 }
 ```
 
+## 🔄 Riepilogo Modifiche Post-Refactoring
+
+### Endpoint Deprecati (NON utilizzare)
+- ❌ `/api/users/*` → Sostituito con `/api/persons/*`
+- ❌ `/api/employees/*` → Unificato in `/api/persons/*`
+- ❌ `/api/auth/user-login` → Sostituito con `/api/auth/login`
+
+### Nuovi Endpoint Unificati
+- ✅ `/api/persons/*` - Gestione Person unificate
+- ✅ `/api/persons/:id/roles` - Gestione PersonRole
+- ✅ `/api/persons/:id/sessions` - Gestione PersonSession
+- ✅ `/api/gdpr/export/:personId` - Export GDPR completo
+- ✅ `/api/gdpr/audit/:personId` - Audit trail GDPR
+
+### Modifiche Payload JWT
+- ✅ `personId` invece di `userId`
+- ✅ `roles` array invece di `role` singolo
+- ✅ `sessionId` per tracking sessioni
+- ✅ Claims `aud` e `iss` per sicurezza
+
+### Soft Delete Standardizzato
+- ✅ Tutti gli endpoint rispettano `deletedAt`
+- ✅ Query parameter `includeDeleted` per ADMIN
+- ✅ GDPR compliance automatica
+
 ---
 
 **Precedente:** [Deployment Architecture](../architecture/deployment-architecture.md)  
 **Prossimo:** [Database Schema](../database/schema.md)  
 **Correlato:** [System Overview](../architecture/system-overview.md)
+
+**Nota:** Questa documentazione riflette il sistema post-refactoring. Per segnalazioni o domande, contattare il team di sviluppo.

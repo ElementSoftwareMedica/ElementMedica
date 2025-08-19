@@ -4,16 +4,10 @@
  */
 
 import React, { useState } from 'react';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '../components/ui/card';
-import { Button } from '../components/ui/button';
-import { Badge } from '../components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+import { Card, CardContent, CardHeader, CardTitle } from '../design-system/molecules/Card';
+import { Button } from '../design-system/atoms/Button';
+import { Badge } from '../design-system/atoms/Badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../design-system/molecules/Tabs';
 import {
   Table,
   TableBody,
@@ -21,28 +15,19 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '../components/ui/table';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '../components/ui/dialog';
-import { Textarea } from '../components/ui/textarea';
+} from '../design-system/molecules/Table';
+import { Modal } from '../design-system/molecules/Modal';
 import { Alert, AlertDescription } from '../components/ui/alert';
-import {
-  Shield,
-  Users,
-  FileText,
+import { 
   AlertTriangle,
   CheckCircle,
-  XCircle,
   Clock,
-  RefreshCw,
   Eye,
-  MessageSquare
+  FileText,
+  MessageSquare,
+  RefreshCw,
+  Shield,
+  XCircle
 } from 'lucide-react';
 import { useGDPRAdmin } from '../hooks/useGDPRAdmin';
 import { ComplianceReport } from '../components/gdpr/ComplianceReport';
@@ -361,27 +346,25 @@ export const AdminGDPR: React.FC = () => {
         </TabsContent>
       </Tabs>
 
-      {/* Process Request Dialog */}
-      <Dialog open={processDialog.open} onOpenChange={(open) => {
-        if (!open) {
+      {/* Process Request Modal */}
+      <Modal
+        isOpen={processDialog.open}
+        onClose={() => {
           setProcessDialog({ open: false, request: null, action: null });
           setProcessingNotes('');
-        }
-      }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {processDialog.action === 'approve' ? 'Approve' : 'Reject'} Deletion Request
-            </DialogTitle>
-            <DialogDescription>
-              {processDialog.action === 'approve'
-                ? 'This will permanently delete all user data. This action cannot be undone.'
-                : 'Provide a reason for rejecting this deletion request.'}
-            </DialogDescription>
-          </DialogHeader>
+        }}
+        title={`${processDialog.action === 'approve' ? 'Approve' : 'Reject'} Deletion Request`}
+        size="md"
+      >
+        <div className="space-y-4">
+          <div className="text-sm text-gray-600">
+            {processDialog.action === 'approve'
+              ? 'This will permanently delete all user data. This action cannot be undone.'
+              : 'Provide a reason for rejecting this deletion request.'}
+          </div>
           
           {processDialog.request && (
-            <div className="space-y-4">
+            <>
               <div className="p-4 bg-gray-50 rounded-lg">
                 <h4 className="font-medium mb-2">Request Details</h4>
                 <div className="space-y-1 text-sm">
@@ -396,43 +379,44 @@ export const AdminGDPR: React.FC = () => {
                   <MessageSquare className="h-4 w-4" />
                   {processDialog.action === 'approve' ? 'Processing Notes (Optional)' : 'Rejection Reason (Required)'}
                 </label>
-                <Textarea
+                <textarea
                   value={processingNotes}
                   onChange={(e) => setProcessingNotes(e.target.value)}
                   placeholder={processDialog.action === 'approve'
                     ? 'Add any notes about the processing...'
                     : 'Explain why this request is being rejected...'}
                   rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
-            </div>
+            </>
           )}
-          
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setProcessDialog({ open: false, request: null, action: null })}
-              disabled={processing}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleProcessRequest}
-              disabled={processing || (processDialog.action === 'reject' && !processingNotes.trim())}
-              variant={processDialog.action === 'approve' ? 'default' : 'destructive'}
-            >
-              {processing ? (
-                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-              ) : processDialog.action === 'approve' ? (
-                <CheckCircle className="h-4 w-4 mr-2" />
-              ) : (
-                <XCircle className="h-4 w-4 mr-2" />
-              )}
-              {processDialog.action === 'approve' ? 'Approve & Delete' : 'Reject Request'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        </div>
+        
+        <div className="flex justify-end gap-2 mt-6">
+          <Button
+            variant="outline"
+            onClick={() => setProcessDialog({ open: false, request: null, action: null })}
+            disabled={processing}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleProcessRequest}
+            disabled={processing || (processDialog.action === 'reject' && !processingNotes.trim())}
+            variant={processDialog.action === 'approve' ? 'default' : 'destructive'}
+          >
+            {processing ? (
+              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+            ) : processDialog.action === 'approve' ? (
+              <CheckCircle className="h-4 w-4 mr-2" />
+            ) : (
+              <XCircle className="h-4 w-4 mr-2" />
+            )}
+            {processDialog.action === 'approve' ? 'Approve & Delete' : 'Reject Request'}
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 };

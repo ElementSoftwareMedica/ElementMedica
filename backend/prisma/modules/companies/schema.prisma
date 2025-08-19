@@ -1,0 +1,46 @@
+/**
+ * Gestione aziende e organizzazioni
+ * Modulo: companies
+ * Generato automaticamente dalla Fase 8
+ */
+
+// === ENUM DEFINITIONS ===
+
+
+// === MODEL DEFINITIONS ===
+model Company {
+  id                 String              @id @default(uuid())
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt @default(now())
+  codiceAteco        String?
+  iban               String?
+  pec                String?
+  sdi                String?
+  cap                String?
+  citta              String?
+  codice_fiscale     String?
+  mail               String?
+  note               String?
+  personaRiferimento String?
+  piva               String?
+  provincia          String?
+  ragioneSociale     String              @map("ragione_sociale")
+  sedeAzienda        String?
+  telefono           String?
+  deletedAt          DateTime?
+  tenantId           String?
+  slug               String?             @unique
+  domain             String?             @unique
+  settings           Json?               @default("{}
+
+model ScheduleCompany {
+  id         String         @id @default(uuid())
+  scheduleId String
+  companyId  String
+  deletedAt  DateTime?
+  company    Company        @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  schedule   CourseSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([scheduleId])
+}

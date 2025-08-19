@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import { apiGet, apiDelete } from '../services/api';
 import { Template } from '../types/template';
 
 interface UseTemplatesReturn {
@@ -24,8 +24,8 @@ export const useTemplates = (): UseTemplatesReturn => {
     try {
       setLoading(true);
       setError(null);
-      const res = await axios.get<Template[]>('/template-links');
-      setTemplates(res.data || []);
+      const data = await apiGet<Template[]>('/template-links');
+      setTemplates(data || []);
     } catch (err) {
       setError('Errore nel recupero dei template');
       console.error('Error fetching templates:', err);
@@ -38,7 +38,7 @@ export const useTemplates = (): UseTemplatesReturn => {
     try {
       setLoading(true);
       setError(null);
-      await axios.put(`/template-links/${id}`, { isDefault: true, type });
+      await apiPut(`/template-links/${id}`, { isDefault: true, type });
       setSuccess('Template impostato come predefinito');
       
       // Resetta il messaggio di successo dopo 3 secondi
@@ -59,7 +59,7 @@ export const useTemplates = (): UseTemplatesReturn => {
       try {
         setLoading(true);
         setError(null);
-        await axios.delete(`/template-links/${id}`);
+        await apiDelete(`/template-links/${id}`);
         setSuccess('Template eliminato con successo');
         
         // Resetta il messaggio di successo dopo 3 secondi
@@ -80,7 +80,7 @@ export const useTemplates = (): UseTemplatesReturn => {
     try {
       setLoading(true);
       setError(null);
-      await axios.post('/template-links', templateData);
+      await apiPost('/template-links', templateData);
       setSuccess('Nuovo template creato con successo');
       
       // Resetta il messaggio di successo dopo 3 secondi
@@ -100,7 +100,7 @@ export const useTemplates = (): UseTemplatesReturn => {
     try {
       setLoading(true);
       setError(null);
-      await axios.put(`/template-links/${id}`, templateData);
+      await apiPut(`/template-links/${id}`, templateData);
       setSuccess('Template aggiornato con successo');
       
       // Resetta il messaggio di successo dopo 3 secondi

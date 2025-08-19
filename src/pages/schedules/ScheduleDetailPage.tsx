@@ -1,7 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import ScheduleEventModalLazy from '../../components/schedules/ScheduleEventModal.lazy';
-import { Folder, ClipboardList, Award, FileText } from 'lucide-react';
+import { 
+  Award,
+  ClipboardList,
+  Edit,
+  FileText,
+  Folder
+} from 'lucide-react';
+import { apiGet } from '../../services/api';
 
 const sidebarButtons = [
   { label: 'Lettere di Incarico', icon: <Folder className="w-5 h-5 text-blue-500" /> },
@@ -25,15 +32,12 @@ const ScheduleDetailPage: React.FC = () => {
     async function fetchAll() {
       setLoading(true);
       try {
-        const [schedRes, trRes, compRes, empRes, crsRes] = await Promise.all([
-          fetch(`http://localhost:4000/schedules/${id}`),
-          fetch(`http://localhost:4000/trainers`),
-          fetch(`http://localhost:4000/companies`),
-          fetch(`http://localhost:4000/employees`),
-          fetch(`http://localhost:4000/courses`),
-        ]);
         const [schedData, trData, compData, empData, crsData] = await Promise.all([
-          schedRes.json(), trRes.json(), compRes.json(), empRes.json(), crsRes.json(),
+          apiGet(`/schedules/${id}`),
+          apiGet('/trainers'),
+          apiGet('/companies'),
+          apiGet('/persons'),
+          apiGet('/courses'),
         ]);
         setSchedule(schedData);
         setTrainers(trData);
@@ -61,7 +65,7 @@ const ScheduleDetailPage: React.FC = () => {
     'online': 'Online',
     'hybrid': 'Ibrido',
   };
-  const modalitaErogazione = modalitaMap[schedule.delivery_mode] || schedule.delivery_mode;
+  const modalitaErogazione = modalitaMap[schedule.deliveryMode] || schedule.deliveryMode;
 
   // Raggruppa partecipanti per azienda senza duplicati
   const aziendePartecipanti: Record<string, { nome: string, partecipanti: { id: string, nome: string }[] }> = {};
@@ -71,13 +75,13 @@ const ScheduleDetailPage: React.FC = () => {
     if (!aziendePartecipanti[aziendaId]) {
       const companyObj = schedule.companies.find((c: any) => c.company.id === aziendaId)?.company;
       aziendePartecipanti[aziendaId] = {
-        nome: companyObj?.ragione_sociale || companyObj?.name || 'Azienda sconosciuta',
+        nome: companyObj?.ragioneSociale || companyObj?.name || 'Azienda sconosciuta',
         partecipanti: []
       };
     }
     aziendePartecipanti[aziendaId].partecipanti.push({
       id: enr.employee.id,
-      nome: `${enr.employee.first_name} ${enr.employee.last_name}`
+      nome: `${enr.employee.firstName} ${enr.employee.lastName}`
     });
   });
 
@@ -99,34 +103,34 @@ const ScheduleDetailPage: React.FC = () => {
         <ScheduleEventModalLazy
           trainings={courses.map(c => ({ id: c.id, title: c.title || c.name, duration: c.duration, certifications: c.certifications }))}
           trainers={trainers}
-          companies={companies.map(c => ({ id: c.id, ragione_sociale: c.ragione_sociale, name: c.name }))}
+          companies={companies.map(c => ({ id: c.id, ragioneSociale: c.ragioneSociale, name: c.name }))}
           employees={employees}
           existingEvent={{
             ...schedule,
-            training_id: schedule.course.id,
-            trainer_id: schedule.sessions?.[0]?.trainer?.id || '',
-            co_trainer_id: schedule.sessions?.[0]?.co_trainer?.id || '',
+            trainingId: schedule.course.id,
+            trainerId: schedule.sessions?.[0]?.trainer?.id || '',
+            coTrainerId: schedule.sessions?.[0]?.co_trainer?.id || '',
             dates: schedule.sessions?.map((sess: any) => ({
               date: sess.date.split('T')[0],
               start: sess.start,
               end: sess.end,
-              trainer_id: sess.trainer?.id || '',
-              co_trainer_id: sess.co_trainer?.id || '',
+              trainerId: sess.trainer?.id || '',
+              coTrainerId: sess.co_trainer?.id || '',
             })) || [],
             location: schedule.location,
-            max_participants: schedule.max_participants,
+            maxParticipants: schedule.maxParticipants,
             notes: schedule.notes,
-            delivery_mode: schedule.delivery_mode,
-            company_ids: schedule.companies?.map((sc: any) => sc.company.id) || [],
-            employee_ids: schedule.enrollments?.map((e: any) => e.employee.id) || [],
+            deliveryMode: schedule.deliveryMode,
+            companyIds: schedule.companies?.map((sc: any) => sc.company.id) || [],
+            employeeIds: schedule.enrollments?.map((e: any) => e.employee.id) || [],
           }}
           initialDate={schedule.sessions?.[0]?.date.split('T')[0]}
           initialTime={{ start: schedule.sessions?.[0]?.start, end: schedule.sessions?.[0]?.end }}
           onClose={() => setShowEdit(false)}
           onSuccess={async () => {
             setShowEdit(false);
-            const res = await fetch(`http://localhost:4000/schedules/${id}`);
-            setSchedule(await res.json());
+            const schedData = await apiGet(`/schedules/${id}`);
+            setSchedule(schedData);
           }}
         />
       )}
@@ -216,8 +220,8 @@ const ScheduleDetailPage: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-4">
                   {schedule.sessions.map((sess: any, idx: number) => {
                     // Get present employee IDs for this session
-                    const presentIds = schedule.attendance && schedule.attendance[idx] && Array.isArray(schedule.attendance[idx].employee_ids)
-                      ? schedule.attendance[idx].employee_ids
+                    const presentIds = schedule.attendance && schedule.attendance[idx] && Array.isArray(schedule.attendance[idx].employeeIds)
+                      ? schedule.attendance[idx].employeeIds
                       : [];
                     // Get employee objects for present IDs
                     const presentEmployees = schedule.enrollments
@@ -240,15 +244,15 @@ const ScheduleDetailPage: React.FC = () => {
                           )}
                         </div>
                   <p><span className="font-semibold">Orario:</span> {sess.start} - {sess.end}</p>
-                  <p><span className="font-semibold">Docente:</span> {sess.trainer ? `${sess.trainer.first_name} ${sess.trainer.last_name}` : '-'}</p>
-                  {sess.co_trainer && <p><span className="font-semibold">Co-Docente:</span> {sess.co_trainer.first_name} {sess.co_trainer.last_name}</p>}
+                  <p><span className="font-semibold">Docente:</span> {sess.trainer ? `${sess.trainer.firstName} ${sess.trainer.lastName}` : '-'}</p>
+                  {sess.co_trainer && <p><span className="font-semibold">Co-Docente:</span> {sess.co_trainer.firstName} {sess.co_trainer.lastName}</p>}
                         {/* List of present employees for this session */}
                         {presentEmployees.length > 0 && (
                           <div className="mt-2">
                             <span className="font-semibold text-xs text-gray-500">Presenti:</span>
                             <ul className="list-disc pl-5 text-sm text-gray-800">
                               {presentEmployees.map((enr: any) => (
-                                <li key={enr.employee.id}>{enr.employee.first_name} {enr.employee.last_name}</li>
+                                <li key={enr.employee.id}>{enr.employee.firstName} {enr.employee.lastName}</li>
                               ))}
                             </ul>
                           </div>

@@ -1,0 +1,110 @@
+# Dipendenze
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# File di build e cache
+dist/
+build/
+.cache/
+*.tsbuildinfo
+
+# File di ambiente e configurazione locale
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# File di sistema
+.DS_Store
+Thumbs.db
+
+# IDE e editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Logs (gestiti come volume)
+logs/
+*.log
+
+# Test e coverage
+coverage/
+.nyc_output/
+jest-coverage/
+
+# Backup e file temporanei
+backups/
+migration-backups/
+tmp/
+*.tmp
+*.bak
+*.backup
+
+# File di test e debug
+*_response*.json
+api_response.json
+dashboard_response.json
+employees_*.json
+login_response.json
+response.json
+verify_response.json
+cookies.txt
+temp_*.txt
+temp_*.cjs
+temp_*.mjs
+test_*.cjs
+test_*.js
+
+# Script di setup e fix temporanei
+add-*.js
+check_*.js
+check_*.mjs
+check_*.cjs
+check_*.sql
+create-*.js
+fix-*.js
+force-*.js
+verify-*.js
+
+# File di configurazione sviluppo
+.eslintrc*
+.prettierrc*
+.babelrc*
+jest.config.*
+
+# Test files
+tests/
+__tests__/
+*.test.*
+*.spec.*
+
+# Uploads (gestiti come volume)
+uploads/
+
+# Generated files
+generated/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Prisma migrations (incluse nel build)
+# prisma/migrations/ - commentato perché necessarie
+
+# Scripts di utilità
+scripts/
+start-servers.sh

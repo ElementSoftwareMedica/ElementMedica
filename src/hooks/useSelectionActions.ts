@@ -9,7 +9,7 @@ import {
 
 interface UseSelectionActionsOptions {
   selectedIds: string[];
-  items: any[];
+  items: Record<string, unknown>[];
   onSelectAll: () => void;
   onDeselectAll: () => void;
   onDeleteSelected: () => void;

@@ -9,7 +9,7 @@ interface AppState {
 }
 
 // Type for the context value
-interface AppStateContextType {
+export interface AppStateContextType {
   state: AppState;
   setLanguage: (lang: string) => void;
   toggleTheme: () => void;

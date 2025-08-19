@@ -1,5 +1,9 @@
 import React from 'react';
-import { Calendar, Clock, User, FileText } from 'lucide-react';
+import { 
+  Calendar,
+  Clock,
+  FileText
+} from 'lucide-react';
 
 interface AssessmentCardProps {
   type: string;

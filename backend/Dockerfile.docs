@@ -1,0 +1,49 @@
+# Dockerfile per Documents Server
+FROM node:18-alpine AS base
+
+# Installa dipendenze per moduli nativi e strumenti di sistema
+RUN apk add --no-cache python3 make g++ curl openssl
+
+WORKDIR /app
+
+# Copia file di configurazione
+COPY package*.json ./
+COPY babel.config.js ./
+COPY jest.config.js ./
+COPY .eslintrc.json ./
+COPY .prettierrc ./
+
+# Stage di sviluppo
+FROM base AS development
+RUN npm ci
+COPY . .
+EXPOSE 4002
+CMD ["npm", "run", "dev:docs"]
+
+# Stage di produzione
+FROM base AS production
+
+# Installa solo dipendenze di produzione
+RUN npm ci --only=production && npm cache clean --force
+
+# Copia codice applicazione
+COPY . .
+
+# Crea utente non-root
+RUN addgroup -g 1001 -S nodejs
+RUN adduser -S nodejs -u 1001 -G nodejs
+
+# Crea directory per logs e uploads
+RUN mkdir -p /app/logs /app/uploads
+RUN chown -R nodejs:nodejs /app
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD curl -f http://localhost:4002/health || exit 1
+
+EXPOSE 4002
+
+# Usa utente non-root
+USER nodejs
+
+CMD ["node", "documents-server.js"]

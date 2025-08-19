@@ -107,13 +107,13 @@ const sizeClasses: Record<IconSize, string> = {
 
 // Color mappings
 const colorClasses: Record<IconColor, string> = {
-  primary: 'text-blue-600',
+  primary: 'text-primary-600',
   secondary: 'text-gray-600',
   muted: 'text-gray-400',
   error: 'text-red-600',
   warning: 'text-yellow-600',
   success: 'text-green-600',
-  info: 'text-blue-500',
+  info: 'text-primary-500',
   inherit: 'text-inherit'
 };
 

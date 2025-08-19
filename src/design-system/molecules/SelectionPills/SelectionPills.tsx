@@ -40,7 +40,7 @@ export const SelectionPills: React.FC<SelectionPillsProps> = ({
   const getVariantStyle = (variant: SelectionPillAction['variant']) => {
     switch (variant) {
       case 'primary':
-        return 'bg-blue-100 text-blue-800 border-blue-200';
+        return 'bg-primary-100 text-primary-800 border-primary-200';
       case 'secondary':
         return 'bg-gray-100 text-gray-800 border-gray-200';
       case 'danger':
@@ -58,7 +58,7 @@ export const SelectionPills: React.FC<SelectionPillsProps> = ({
     <div className={cn('flex flex-wrap items-center gap-2', className)}>
       {/* Pill per il conteggio selezione */}
       {count > 0 && (
-        <div className="flex items-center gap-1 px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-full text-sm font-medium">
+        <div className="flex items-center gap-1 px-3 py-1 bg-primary-50 text-primary-700 border border-primary-200 rounded-full text-sm font-medium">
           <Check className="w-4 h-4" />
           <span>
             {count} {entityName} selezionat{count === 1 ? 'o' : 'i'}
@@ -66,7 +66,7 @@ export const SelectionPills: React.FC<SelectionPillsProps> = ({
           {(onClear || onClearSelection) && (
             <button
               onClick={onClear || onClearSelection}
-              className="ml-1 p-0.5 hover:bg-blue-100 rounded-full transition-colors"
+              className="ml-1 p-0.5 hover:bg-primary-100 rounded-full transition-colors"
               aria-label="Cancella selezione"
             >
               <X className="w-3 h-3" />

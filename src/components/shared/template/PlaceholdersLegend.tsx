@@ -1,6 +1,4 @@
 import React, { useState } from 'react';
-import { Star } from 'lucide-react';
-
 // Definire i tipi di entità
 type EntityType = 'scheduled-courses' | 'courses' | 'trainers' | 'employees' | 'companies';
 

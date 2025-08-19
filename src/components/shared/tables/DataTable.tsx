@@ -1,8 +1,11 @@
-import React, { useState, useCallback } from 'react';
+import React from 'react';
 // import { useTranslation } from 'react-i18next';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { 
+  ChevronLeft,
+  ChevronRight
+} from 'lucide-react';
 import SortableColumn, { SortDirection } from './SortableColumn';
-import Pagination from '../ui/Pagination';
+// import Pagination from '../ui/Pagination'; // Componente non disponibile
 import { Button } from '../../../design-system/atoms/Button';
 import useSorting from '../../../hooks/useSorting';
 import usePagination from '../../../hooks/usePagination';
@@ -50,7 +53,8 @@ interface DataTableProps<T = any> {
     show?: boolean;
     onExport?: (format: 'csv' | 'excel') => void;
   };
-  renderActions?: (row: T) => React.ReactNode;
+
+renderActions?: (row: T) => React.ReactNode;
 }
 
 const DataTable = <T extends object>({
@@ -268,16 +272,55 @@ const DataTable = <T extends object>({
       
       {/* Paginazione */}
       {pagination && totalPages > 0 && (
-        <Pagination
-          currentPage={currentPage}
-          totalPages={totalPages}
-          onPageChange={handlePageChange}
-          pageSize={pageSize}
-          onPageSizeChange={handlePageSizeChange}
-          pageSizeOptions={pageSizeOptions}
-          totalItems={totalItems}
-        />
+        <div className="flex items-center justify-between px-4 py-3 bg-white border-t border-gray-200">
+          <div className="flex items-center text-sm text-gray-700">
+            <span>
+              Mostrando {((currentPage - 1) * pageSize) + 1} - {Math.min(currentPage * pageSize, totalItems)} di {totalItems} risultati
+            </span>
+          </div>
+          
+          <div className="flex items-center space-x-2">
+            {/* Page size selector */}
+            <select
+              value={pageSize}
+              onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+              className="px-2 py-1 border border-gray-300 rounded text-sm"
+            >
+              {pageSizeOptions.map(size => (
+                <option key={size} value={size}>{size} per pagina</option>
+              ))}
+            </select>
+            
+            {/* Previous button */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage <= 1}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            
+            {/* Page numbers */}
+            <span className="text-sm text-gray-700">
+              Pagina {currentPage} di {totalPages}
+            </span>
+            
+            {/* Next button */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage >= totalPages}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
       )}
     </div>
   );
 };
+
+export type { DataTableColumn };
+export default DataTable;

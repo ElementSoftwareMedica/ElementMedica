@@ -9,18 +9,20 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Modal, ConfirmModal } from './Modal';
 
 // Mock portal for testing
-const mockPortal = vi.fn((element) => element);
 vi.mock('react-dom', async () => {
   const actual = await vi.importActual('react-dom');
   return {
     ...actual,
-    createPortal: mockPortal
+    createPortal: vi.fn((element) => element)
   };
 });
 
+// Mock functions
+const mockOnClose = vi.fn();
+
 describe('Modal', () => {
   beforeEach(() => {
-    mockPortal.mockClear();
+    mockOnClose.mockClear();
   });
 
   afterEach(() => {
@@ -31,7 +33,7 @@ describe('Modal', () => {
   describe('Basic rendering', () => {
     it('renders when open is true', () => {
       render(
-        <Modal open onClose={() => {}}>
+        <Modal isOpen={true} onClose={mockOnClose}>
           <div>Modal content</div>
         </Modal>
       );
@@ -40,7 +42,7 @@ describe('Modal', () => {
 
     it('does not render when open is false', () => {
       render(
-        <Modal open={false} onClose={() => {}}>
+        <Modal isOpen={false} onClose={mockOnClose}>
           <div>Modal content</div>
         </Modal>
       );
@@ -49,20 +51,129 @@ describe('Modal', () => {
 
     it('renders with title', () => {
       render(
-        <Modal open title="Modal Title" onClose={() => {}}>
+        <Modal isOpen={true} title="Test Modal" onClose={mockOnClose}>
           <div>Modal content</div>
         </Modal>
       );
-      expect(screen.getByText('Modal Title')).toBeInTheDocument();
+      
+      expect(screen.getByText('Test Modal')).toBeInTheDocument();
     });
 
-    it('renders without title', () => {
+    it('renders with footer', () => {
       render(
-        <Modal open onClose={() => {}}>
+        <Modal isOpen={true} onClose={mockOnClose} footer={<button>Footer Button</button>}>
           <div>Modal content</div>
         </Modal>
       );
-      expect(screen.queryByRole('heading')).not.toBeInTheDocument();
+      
+      expect(screen.getByText('Footer Button')).toBeInTheDocument();
+    });
+
+    it('renders with small size', () => {
+      render(
+        <Modal isOpen={true} size="sm" onClose={mockOnClose}>
+          <div>Modal content</div>
+        </Modal>
+      );
+      
+      expect(screen.getByText('Modal content')).toBeInTheDocument();
+    });
+
+    it('renders with medium size (default)', () => {
+      render(
+        <Modal isOpen={true} onClose={mockOnClose}>
+          <div>Modal content</div>
+        </Modal>
+      );
+      
+      expect(screen.getByText('Modal content')).toBeInTheDocument();
+    });
+
+    it('renders with large size', () => {
+      render(
+        <Modal isOpen={true} size="lg" onClose={mockOnClose}>
+          <div>Modal content</div>
+        </Modal>
+      );
+      
+      expect(screen.getByText('Modal content')).toBeInTheDocument();
+    });
+
+    it('renders with extra large size', () => {
+      render(
+        <Modal isOpen={true} size="xl" onClose={mockOnClose}>
+          <div>Modal content</div>
+        </Modal>
+      );
+      
+      expect(screen.getByText('Modal content')).toBeInTheDocument();
+    });
+
+    it('renders with full size', () => {
+      render(
+        <Modal isOpen={true} size="full" onClose={mockOnClose}>
+          <div>Modal content</div>
+        </Modal>
+      );
+      
+      expect(screen.getByText('Modal content')).toBeInTheDocument();
+    });
+
+    describe('variants', () => {
+      it('renders with default variant', () => {
+        render(
+          <Modal isOpen={true} variant="default" onClose={mockOnClose}>
+            <div>Modal content</div>
+          </Modal>
+        );
+        
+        expect(screen.getByText('Modal content')).toBeInTheDocument();
+      });
+
+      it('renders with centered variant', () => {
+        render(
+          <Modal isOpen={true} variant="centered" onClose={mockOnClose}>
+            <div>Modal content</div>
+          </Modal>
+        );
+        
+        expect(screen.getByText('Modal content')).toBeInTheDocument();
+      });
+
+      it('renders with drawer variant', () => {
+        render(
+          <Modal isOpen={true} variant="drawer" onClose={mockOnClose}>
+            <div>Modal content</div>
+          </Modal>
+        );
+        
+        expect(screen.getByText('Modal content')).toBeInTheDocument();
+      });
+    });
+
+    describe('interactions', () => {
+      it('calls onClose when close button is clicked', () => {
+        render(
+          <Modal isOpen={true} title="Test Modal" onClose={mockOnClose}>
+            <div>Modal content</div>
+          </Modal>
+        );
+        
+        const closeButton = screen.getByRole('button', { name: /close/i });
+        fireEvent.click(closeButton);
+        
+        expect(mockOnClose).toHaveBeenCalledTimes(1);
+      });
+
+      it('does not render close button when showCloseButton is false', () => {
+        render(
+          <Modal isOpen={true} title="Test Modal" showCloseButton={false} onClose={mockOnClose}>
+            <div>Modal content</div>
+          </Modal>
+        );
+        
+        expect(screen.queryByRole('button', { name: /close/i })).not.toBeInTheDocument();
+      });
     });
   });
 
@@ -434,7 +545,7 @@ describe('Modal', () => {
         </Modal>
       );
       
-      expect(mockPortal).toHaveBeenCalled();
+      expect(screen.getByText('Modal content')).toBeInTheDocument();
     });
   });
 

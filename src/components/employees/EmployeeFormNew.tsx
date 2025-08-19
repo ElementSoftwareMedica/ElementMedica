@@ -1,36 +1,42 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Mail, Phone, MapPin, Building, Calendar, Briefcase, FileText } from 'lucide-react';
+import { 
+  Briefcase,
+  Building,
+  Calendar,
+  FileText,
+  Mail,
+  MapPin,
+  Phone,
+  User
+} from 'lucide-react';
 import { useToast } from '../../hooks/useToast';
 import EntityFormLayout from '../shared/form/EntityFormLayout';
 import EntityFormField from '../shared/form/EntityFormField';
-import EntityFormGrid, { EntityFormSection, EntityFormFullWidthField } from '../shared/form/EntityFormGrid';
+import EntityFormGrid, { EntityFormSection } from '../shared/form/EntityFormGrid';
+import { apiUpload, apiPost, apiPut } from '../../services/api';
+import { Company } from '../../types';
+import { isValidCodiceFiscale } from '../../lib/utils';
 
-interface Company {
-  id: string;
-  ragione_sociale: string;
-}
-
-interface EmployeeFormNewProps {
-  /** Dati del dipendente in caso di modifica */
-  employee?: {
+interface PersonFormNewProps {
+  /** Dati della persona in caso di modifica */
+  person?: {
     id: string;
-    first_name: string;
-    last_name: string;
-    codice_fiscale: string;
-    birth_date?: string;
-    residence_address?: string;
-    residence_city?: string;
+    firstName: string;
+    lastName: string;
+    codiceFiscale: string;
+    birthDate?: string;
+    residenceAddress?: string;
+    residenceCity?: string;
     province?: string;
-    postal_code?: string;
-    company_id?: string;
+    postalCode?: string;
+    companyId?: string;
     title?: string;
     email?: string;
     phone?: string;
     notes?: string;
     status?: string;
-    hired_date?: string;
-    photo_url?: string;
-    companyId?: string;
+    hiredDate?: string;
+    photoUrl?: string;
   };
   /** Lista delle aziende disponibili */
   companies: Company[];
@@ -39,8 +45,6 @@ interface EmployeeFormNewProps {
   /** Callback chiamata alla chiusura del form */
   onClose: () => void;
 }
-
-const TAX_CODE_REGEX = /^[a-zA-Z]{6}[0-9]{2}[abcdehlmprstABCDEHLMPRST]{1}[0-9]{2}([a-zA-Z]{1}[0-9]{3})[a-zA-Z]{1}$/;
 
 /**
  * Estrae la data di nascita dal codice fiscale
@@ -69,32 +73,32 @@ const formatDateForPrisma = (dateString?: string): string | undefined => {
 };
 
 /**
- * Form moderno ed elegante per la creazione e modifica di un dipendente
+ * Form moderno ed elegante per la creazione e modifica di una persona
  */
-const EmployeeFormNew: React.FC<EmployeeFormNewProps> = ({
-  employee,
+const EmployeeFormNew: React.FC<PersonFormNewProps> = ({
+  person,
   companies,
   onSuccess,
   onClose,
 }) => {
   // Stato per i dati del form
   const [formData, setFormData] = useState({
-    first_name: '',
-    last_name: '',
-    codice_fiscale: '',
-    birth_date: '',
-    residence_address: '',
-    residence_city: '',
+    firstName: '',
+    lastName: '',
+    codiceFiscale: '',
+    birthDate: '',
+    residenceAddress: '',
+    residenceCity: '',
     province: '',
-    postal_code: '',
-    company_id: '',
+    postalCode: '',
+    companyId: '',
     title: '',
     email: '',
     phone: '',
     notes: '',
-    status: 'Active',
-    hired_date: '',
-    photo_url: '',
+    status: 'ACTIVE',
+    hiredDate: '',
+    photoUrl: '',
   });
   
   // Stato per gli errori
@@ -112,56 +116,54 @@ const EmployeeFormNew: React.FC<EmployeeFormNewProps> = ({
   // Using a ref to track if we've already initialized the form
   const initializedRef = useRef(false);
   
-  // Inizializza i dati del form se stiamo modificando un dipendente esistente
+  // Inizializza i dati del form se stiamo modificando una persona esistente
   useEffect(() => {
-    // Only initialize data if we have employee data AND we haven't initialized yet
-    if (employee && !initializedRef.current) {
-      console.log("Setting employee data:", employee);
+    // Only initialize data if we have person data AND we haven't initialized yet
+    if (person && !initializedRef.current) {
       setFormData({
-        first_name: employee.first_name || '',
-        last_name: employee.last_name || '',
-        codice_fiscale: employee.codice_fiscale || '',
-        birth_date: employee.birth_date ? employee.birth_date.substring(0, 10) : '', // Ensure date format is YYYY-MM-DD
-        residence_address: employee.residence_address || '',
-        residence_city: employee.residence_city || '',
-        province: employee.province || '',
-        postal_code: employee.postal_code || '',
-        company_id: employee.company_id || employee.companyId || '',
-        title: employee.title || '',
-        email: employee.email || '',
-        phone: employee.phone || '',
-        notes: employee.notes || '',
-        status: employee.status || 'Active',
-        hired_date: employee.hired_date ? employee.hired_date.substring(0, 10) : '', // Ensure date format is YYYY-MM-DD
-        photo_url: employee.photo_url || '',
+        firstName: person.firstName || '',
+        lastName: person.lastName || '',
+        codiceFiscale: person.codiceFiscale || '',
+        birthDate: person.birthDate ? person.birthDate.substring(0, 10) : '', // Ensure date format is YYYY-MM-DD
+        residenceAddress: person.residenceAddress || '',
+        residenceCity: person.residenceCity || '',
+        province: person.province || '',
+        postalCode: person.postalCode || '',
+        companyId: person.companyId || '',
+        title: person.title || '',
+        email: person.email || '',
+        phone: person.phone || '',
+        notes: person.notes || '',
+        status: person.status || 'Active',
+        hiredDate: person.hiredDate ? person.hiredDate.substring(0, 10) : '', // Ensure date format is YYYY-MM-DD
+        photoUrl: person.photoUrl || '',
       });
       initializedRef.current = true;
     }
-  }, [employee]);
+  }, [person]);
   
   // Estrai la data di nascita dal codice fiscale quando questo cambia
   useEffect(() => {
-    if (formData.codice_fiscale && formData.codice_fiscale.length >= 11) {
-      const extracted = extractBirthDateFromCF(formData.codice_fiscale);
+    if (formData.codiceFiscale && formData.codiceFiscale.length >= 11) {
+      const extracted = extractBirthDateFromCF(formData.codiceFiscale);
       if (extracted) {
-        setFormData(prev => ({ ...prev, birth_date: extracted }));
+        setFormData(prev => ({ ...prev, birthDate: extracted }));
         
         // Rimuovi eventuali errori sulla data di nascita
-        if (errors.birth_date) {
+        if (errors.birthDate) {
           setErrors(prev => {
             const newErrors = { ...prev };
-            delete newErrors.birth_date;
+            delete newErrors.birthDate;
             return newErrors;
           });
         }
       }
     }
-  }, [formData.codice_fiscale, errors.birth_date]);
+  }, [formData.codiceFiscale, errors.birthDate]);
   
   // Gestisce il cambio dei valori nei campi
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    console.log(`Field changed: ${name} = ${value}`); // Add logging for debugging
     setFormData(prev => ({
       ...prev,
       [name]: value
@@ -183,22 +185,13 @@ const EmployeeFormNew: React.FC<EmployeeFormNewProps> = ({
     if (!file) return;
     
     try {
-      const formData = new FormData();
-      formData.append('photo', file);
+      const uploadFormData = new FormData();
+      uploadFormData.append('photo', file);
       
-      const response = await fetch('http://localhost:4000/upload', {
-        method: 'POST',
-        body: formData,
-      });
-      
-      if (!response.ok) {
-        throw new Error('Errore durante il caricamento dell\'immagine');
-      }
-      
-      const data = await response.json();
+      const data = await apiUpload('/api/upload', uploadFormData) as { url: string };
       
       if (data.url) {
-        setFormData(prev => ({ ...prev, photo_url: data.url }));
+        setFormData(prev => ({ ...prev, photoUrl: data.url }));
       }
     } catch (error) {
       showToast({ 
@@ -213,22 +206,22 @@ const EmployeeFormNew: React.FC<EmployeeFormNewProps> = ({
     const newErrors: Record<string, string> = {};
     
     // Validazione campi obbligatori
-    if (!formData.first_name.trim()) {
-      newErrors.first_name = 'Il Nome è obbligatorio';
+    if (!formData.firstName.trim()) {
+      newErrors.firstName = 'Il Nome è obbligatorio';
     }
     
-    if (!formData.last_name.trim()) {
-      newErrors.last_name = 'Il Cognome è obbligatorio';
+    if (!formData.lastName.trim()) {
+      newErrors.lastName = 'Il Cognome è obbligatorio';
     }
     
-    if (!formData.codice_fiscale.trim()) {
-      newErrors.codice_fiscale = 'Il Codice Fiscale è obbligatorio';
-    } else if (!TAX_CODE_REGEX.test(formData.codice_fiscale)) {
-      newErrors.codice_fiscale = 'Formato Codice Fiscale non valido';
+    if (!formData.codiceFiscale.trim()) {
+      newErrors.codiceFiscale = 'Il Codice Fiscale è obbligatorio';
+    } else if (!isValidCodiceFiscale(formData.codiceFiscale)) {
+      newErrors.codiceFiscale = 'Formato Codice Fiscale non valido';
     }
     
-    if (!formData.company_id) {
-      newErrors.company_id = 'L\'Azienda è obbligatoria';
+    if (!formData.companyId) {
+      newErrors.companyId = 'L\'Azienda è obbligatoria';
     }
     
     // Validazione email
@@ -250,47 +243,33 @@ const EmployeeFormNew: React.FC<EmployeeFormNewProps> = ({
     }
     
     setIsSaving(true);
-    console.log("Form data being submitted:", formData);
     
     try {
       // Prepara i dati da inviare
       const payload = {
         ...formData,
-        birth_date: formatDateForPrisma(formData.birth_date),
-        hired_date: formatDateForPrisma(formData.hired_date),
+        birthDate: formatDateForPrisma(formData.birthDate),
+        hiredDate: formatDateForPrisma(formData.hiredDate),
       };
       
-      console.log("Payload being sent to API:", payload);
+      // Determina il metodo in base a se stiamo creando o modificando
       
-      // Determina l'URL e il metodo in base a se stiamo creando o modificando
-      const url = employee 
-        ? `http://localhost:4000/employees/${employee.id}` 
-        : 'http://localhost:4000/employees';
-      const method = employee ? 'PUT' : 'POST';
-      
-      // Invia la richiesta
-      const response = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      
-      // Gestisci la risposta
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || 'Errore durante il salvataggio');
+      // Invia la richiesta usando il servizio API centralizzato
+      if (person) {
+        await apiPut(`/api/v1/persons/${person.id}`, payload);
+      } else {
+        await apiPost('/api/v1/persons', payload);
       }
       
       // Mostra notifica di successo
       showToast({ 
-        message: employee ? 'Dipendente aggiornato con successo' : 'Dipendente creato con successo', 
+        message: person ? 'Persona aggiornata con successo' : 'Persona creata con successo', 
         type: 'success' 
       });
       
       // Chiama il callback di successo
       onSuccess();
     } catch (error) {
-      console.error('Error saving employee:', error);
       setGeneralError(error instanceof Error ? error.message : 'Errore durante il salvataggio');
       
       // Mostra notifica di errore
@@ -305,84 +284,84 @@ const EmployeeFormNew: React.FC<EmployeeFormNewProps> = ({
   
   // Gestisce la rimozione della foto
   const handleRemovePhoto = () => {
-    setFormData(prev => ({ ...prev, photo_url: '' }));
+    setFormData(prev => ({ ...prev, photoUrl: '' }));
   };
   
   return (
     <EntityFormLayout
-      title={employee ? 'Modifica Dipendente' : 'Nuovo Dipendente'}
-      subtitle={employee ? `Modifica i dati di ${formData.first_name} ${formData.last_name}` : 'Inserisci i dati del nuovo dipendente'}
+      title={person ? 'Modifica Persona' : 'Nuova Persona'}
+      subtitle={person ? `Modifica i dati di ${formData.firstName} ${formData.lastName}` : 'Inserisci i dati della nuova persona'}
       onSubmit={handleSubmit}
       onClose={onClose}
       isSaving={isSaving}
       error={generalError}
-      submitLabel={employee ? 'Aggiorna' : 'Crea'}
+      submitLabel={person ? 'Aggiorna' : 'Crea'}
     >
       <div className="flex flex-col md:flex-row gap-6">
         <div className="w-full md:w-3/4">
-          <EntityFormSection title="Dati Anagrafici" description="Informazioni personali del dipendente">
+          <EntityFormSection title="Dati Anagrafici" description="Informazioni personali della persona">
         <EntityFormGrid columns={2}>
           <EntityFormField
-            name="first_name"
+            name="firstName"
             label="Nome"
-            value={formData.first_name}
+            value={formData.firstName}
             onChange={handleChange}
             required
             leftIcon={<User size={18} />}
-            error={errors.first_name}
+            error={errors.firstName}
           />
           
           <EntityFormField
-            name="last_name"
+            name="lastName"
             label="Cognome"
-            value={formData.last_name}
+            value={formData.lastName}
             onChange={handleChange}
             required
             leftIcon={<User size={18} />}
-            error={errors.last_name}
+            error={errors.lastName}
           />
           
           <EntityFormField
-            name="codice_fiscale"
+            name="codiceFiscale"
             label="Codice Fiscale"
-            value={formData.codice_fiscale}
+            value={formData.codiceFiscale}
             onChange={handleChange}
             required
                 leftIcon={<FileText size={18} />}
-            error={errors.codice_fiscale}
+            error={errors.codiceFiscale}
           />
           
           <EntityFormField
-            name="birth_date"
+            name="birthDate"
             label="Data di Nascita"
             type="date"
-            value={formData.birth_date}
+            value={formData.birthDate}
             onChange={handleChange}
             leftIcon={<Calendar size={18} />}
-            error={errors.birth_date}
+            error={errors.birthDate}
                 helpText="Estratta automaticamente dal codice fiscale"
           />
         </EntityFormGrid>
       </EntityFormSection>
       
-      <EntityFormSection title="Residenza" description="Indirizzo di residenza del dipendente">
+      <EntityFormSection title="Residenza" description="Indirizzo di residenza della persona">
         <EntityFormGrid columns={2}>
           <EntityFormField
-            name="residence_address"
+            name="residenceAddress"
             label="Indirizzo"
-            value={formData.residence_address}
+            value={formData.residenceAddress}
             onChange={handleChange}
             leftIcon={<MapPin size={18} />}
-            error={errors.residence_address}
+            error={errors.residenceAddress}
           />
           
           <EntityFormField
-            name="residence_city"
+            name="residenceCity"
             label="Città"
-            value={formData.residence_city}
+            value={formData.residenceCity}
             onChange={handleChange}
             leftIcon={<MapPin size={18} />}
-            error={errors.residence_city}
+            error={errors.residenceCity}
           />
           
           <EntityFormField
@@ -395,30 +374,30 @@ const EmployeeFormNew: React.FC<EmployeeFormNewProps> = ({
           />
           
           <EntityFormField
-            name="postal_code"
+            name="postalCode"
             label="CAP"
-            value={formData.postal_code}
+            value={formData.postalCode}
             onChange={handleChange}
             leftIcon={<MapPin size={18} />}
-            error={errors.postal_code}
+            error={errors.postalCode}
           />
         </EntityFormGrid>
       </EntityFormSection>
       
-          <EntityFormSection title="Lavoro" description="Informazioni lavorative del dipendente">
+          <EntityFormSection title="Lavoro" description="Informazioni lavorative della persona">
         <EntityFormGrid columns={2}>
           <EntityFormField
-            name="company_id"
+            name="companyId"
             label="Azienda"
             type="select"
-            value={formData.company_id}
+            value={formData.companyId}
             onChange={handleChange}
             required
                 leftIcon={<Building size={18} />}
-            error={errors.company_id}
+            error={errors.companyId}
             options={companies.map(company => ({
               value: company.id,
-              label: company.ragione_sociale
+              label: company.ragioneSociale
             }))}
           />
           
@@ -432,13 +411,13 @@ const EmployeeFormNew: React.FC<EmployeeFormNewProps> = ({
           />
           
           <EntityFormField
-            name="hired_date"
+            name="hiredDate"
             label="Data Assunzione"
             type="date"
-            value={formData.hired_date}
+            value={formData.hiredDate}
             onChange={handleChange}
             leftIcon={<Calendar size={18} />}
-            error={errors.hired_date}
+            error={errors.hiredDate}
           />
           
           <EntityFormField
@@ -450,16 +429,16 @@ const EmployeeFormNew: React.FC<EmployeeFormNewProps> = ({
                 leftIcon={<User size={18} />}
                 error={errors.status}
             options={[
-              { value: 'Active', label: 'Attivo' },
-              { value: 'Inactive', label: 'Inattivo' },
-                  { value: 'OnLeave', label: 'In Aspettativa' },
-                  { value: 'Terminated', label: 'Cessato' }
+              { value: 'ACTIVE', label: 'Attivo' },
+              { value: 'INACTIVE', label: 'Inattivo' },
+                  { value: 'SUSPENDED', label: 'In Aspettativa' },
+                  { value: 'TERMINATED', label: 'Cessato' }
             ]}
           />
         </EntityFormGrid>
       </EntityFormSection>
       
-          <EntityFormSection title="Contatti" description="Informazioni di contatto del dipendente">
+          <EntityFormSection title="Contatti" description="Informazioni di contatto della persona">
         <EntityFormGrid columns={2}>
           <EntityFormField
             name="email"
@@ -499,13 +478,13 @@ const EmployeeFormNew: React.FC<EmployeeFormNewProps> = ({
           </div>
         
         <div className="w-full md:w-1/4">
-          <EntityFormSection title="Foto" description="Foto del dipendente">
+          <EntityFormSection title="Foto" description="Foto della persona">
             <div className="flex flex-col items-center space-y-4">
-        {formData.photo_url ? (
+        {formData.photoUrl ? (
           <div className="relative">
             <img 
-              src={formData.photo_url} 
-                    alt={`${formData.first_name} ${formData.last_name}`} 
+              src={formData.photoUrl} 
+                    alt={`${formData.firstName} ${formData.lastName}`} 
                     className="w-48 h-48 object-cover rounded-lg border border-gray-300"
             />
             <button
@@ -542,4 +521,4 @@ const EmployeeFormNew: React.FC<EmployeeFormNewProps> = ({
   );
 };
 
-export default EmployeeFormNew; 
+export default EmployeeFormNew;

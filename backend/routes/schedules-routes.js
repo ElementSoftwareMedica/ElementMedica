@@ -12,11 +12,11 @@ const { authenticate: authenticateToken, authorize: requirePermission, requireSa
 // Validation middleware for schedule creation/update
 const validateSchedule = [
   body('courseId').notEmpty().withMessage('Course ID is required'),
-  body('start_date').isISO8601().withMessage('Valid start date is required'),
-  body('end_date').isISO8601().withMessage('Valid end date is required'),
+  body('startDate').isISO8601().withMessage('Valid start date is required'),
+  body('endDate').isISO8601().withMessage('Valid end date is required'),
   body('location').optional().isString(),
-  body('max_participants').optional().isInt({ min: 1 }).withMessage('Max participants must be a positive integer'),
-  body('delivery_mode').optional().isString(),
+  body('maxParticipants').optional().isInt({ min: 1 }).withMessage('Max participants must be a positive integer'),
+  body('deliveryMode').optional().isString(),
   (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -33,22 +33,23 @@ const validateSchedule = [
 router.get('/', authenticateToken(), requirePermission('read:schedules'), async (req, res) => {
   try {
     const schedules = await prisma.courseSchedule.findMany({
+      where: {},
       include: {
         course: true,
         sessions: {
           include: {
             trainer: true,
-            co_trainer: true,
+            coTrainer: true,
           },
         },
         companies: {
           include: { company: true },
         },
         enrollments: {
-          include: { employee: true },
+          include: { person: true },
         },
       },
-      orderBy: { start_date: 'asc' },
+      orderBy: { startDate: 'asc' },
     });
     
     res.json(schedules);
@@ -58,7 +59,7 @@ router.get('/', authenticateToken(), requirePermission('read:schedules'), async 
       action: 'getSchedules',
       error: error.message,
       stack: error.stack,
-      userId: req.user?.id
+      personId: req.person?.id
     });
     res.status(500).json({ 
       error: 'Internal server error',
@@ -81,11 +82,11 @@ router.get('/:id', authenticateToken(), requirePermission('read:schedules'), asy
         sessions: {
           include: {
             trainer: true,
-            co_trainer: true,
+            coTrainer: true,
           },
         },
         companies: { include: { company: true } },
-        enrollments: { include: { employee: true } },
+        enrollments: { include: { person: true } },
       },
     });
     
@@ -103,7 +104,7 @@ router.get('/:id', authenticateToken(), requirePermission('read:schedules'), asy
       action: 'getSchedule',
       error: error.message,
       stack: error.stack,
-      userId: req.user?.id,
+      personId: req.person?.id,
       scheduleId: req.params?.id
     });
     res.status(500).json({ 
@@ -132,7 +133,7 @@ router.get('/with-attestati', authenticateToken(), requirePermission('read:sched
           }
         }
       },
-      orderBy: { end_date: 'desc' }
+      orderBy: { endDate: 'desc' }
     });
     
     res.json(schedules);
@@ -142,7 +143,7 @@ router.get('/with-attestati', authenticateToken(), requirePermission('read:sched
       action: 'getSchedulesWithAttestati',
       error: error.message,
       stack: error.stack,
-      userId: req.user?.id
+      personId: req.person?.id
     });
     res.status(500).json({ 
       error: 'Internal server error',
@@ -155,35 +156,35 @@ router.get('/with-attestati', authenticateToken(), requirePermission('read:sched
 router.post('/', authenticateToken(), requirePermission('create:schedules'), validateSchedule, async (req, res) => {
   const {
     courseId,
-    start_date,
-    end_date,
+    startDate,
+    endDate,
     location,
-    max_participants,
+    maxParticipants,
     notes,
-    delivery_mode,
-    dates, // [{ date, start, end, trainer_id, co_trainer_id }]
-    company_ids, // [companyId, ...]
-    employee_ids, // [employeeId, ...]
+    deliveryMode,
+    dates, // [{ date, start, end, trainerId, coTrainerId }]
+    companyIds, // [companyId, ...]
+    personIds, // [personId, ...]
   } = req.body;
 
   try {
     // Validate main company ID
-    const mainCompanyId = Array.isArray(company_ids) && company_ids.length > 0 ? company_ids[0] : null;
+    const mainCompanyId = Array.isArray(companyIds) && companyIds.length > 0 ? companyIds[0] : null;
     if (!mainCompanyId) {
       return res.status(400).json({ 
         error: 'Validation error',
-        message: 'At least one company_id is required'
+        message: 'At least one companyId is required'
       });
     }
 
     // Build schedule data
     const scheduleData = {
-      start_date: new Date(start_date),
-      end_date: new Date(end_date),
+      startDate: new Date(startDate),
+      endDate: new Date(endDate),
       location,
-      max_participants,
+      maxParticipants,
       notes,
-      delivery_mode,
+      deliveryMode,
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -207,16 +208,16 @@ router.post('/', authenticateToken(), requirePermission('create:schedules'), val
             date: new Date(session.date),
             start: session.start,
             end: session.end,
-            trainerId: session.trainer_id || null,
-            coTrainerId: session.co_trainer_id || null,
+            trainerId: session.trainerId || null,
+            coTrainerId: session.coTrainerId || null,
           },
         });
       }
     }
 
     // 3. Create schedule-company links
-    if (Array.isArray(company_ids)) {
-      for (const companyId of company_ids) {
+    if (Array.isArray(companyIds)) {
+      for (const companyId of companyIds) {
         await prisma.scheduleCompany.create({
           data: {
             scheduleId: schedule.id,
@@ -227,14 +228,14 @@ router.post('/', authenticateToken(), requirePermission('create:schedules'), val
     }
 
     // 4. Create enrollments if provided
-    if (Array.isArray(employee_ids)) {
-      const uniqueEmployeeIds = [...new Set(employee_ids.map(id => (id || '').trim()))];
+    if (Array.isArray(personIds)) {
+      const uniquePersonIds = [...new Set(personIds.map(id => (id || '').trim()))];
 
-      await Promise.all(uniqueEmployeeIds.map(employeeId =>
+      await Promise.all(uniquePersonIds.map(personId =>
         prisma.courseEnrollment.create({
           data: { 
             scheduleId: schedule.id, 
-            employeeId,
+            personId,
             createdAt: new Date()
           }
         })
@@ -253,7 +254,7 @@ router.post('/', authenticateToken(), requirePermission('create:schedules'), val
           },
         },
         companies: { include: { company: true } },
-        enrollments: { include: { employee: true } },
+        enrollments: { include: { person: true } },
       },
     });
 
@@ -264,7 +265,7 @@ router.post('/', authenticateToken(), requirePermission('create:schedules'), val
       action: 'createSchedule',
       error: error.message,
       stack: error.stack,
-      userId: req.user?.id,
+      personId: req.person?.id,
       scheduleData: req.body
     });
     
@@ -286,15 +287,15 @@ router.post('/', authenticateToken(), requirePermission('create:schedules'), val
 router.put('/:id', authenticateToken(), requirePermission('update:schedules'), async (req, res) => {
   const {
     courseId,
-    start_date,
-    end_date,
+    startDate,
+    endDate,
     location,
-    max_participants,
+    maxParticipants,
     notes,
-    delivery_mode,
+    deliveryMode,
     dates, // optional array of sessions
-    company_ids, // optional array of company IDs
-    employee_ids, // optional array of employee IDs
+    companyIds, // optional array of company IDs
+    personIds, // optional array of person IDs
     attendance, // optional attendance JSON
     status,     // optional status update
   } = req.body;
@@ -319,14 +320,14 @@ router.put('/:id', authenticateToken(), requirePermission('update:schedules'), a
     // 1. Update the main schedule fields (only provided)
     const updateData = { updatedAt: new Date() };
     if (courseId !== undefined)       updateData.courseId        = courseId;
-    if (start_date !== undefined)     updateData.start_date     = new Date(start_date);
-    if (end_date !== undefined)       updateData.end_date       = new Date(end_date);
-    if (location !== undefined)       updateData.location       = location;
-    if (max_participants !== undefined) updateData.max_participants = max_participants;
-    if (notes !== undefined)          updateData.notes          = notes;
-    if (delivery_mode !== undefined)  updateData.delivery_mode  = delivery_mode;
-    if (status !== undefined)         updateData.status         = status;
-    if (attendance !== undefined)     updateData.attendance     = attendance;
+    if (startDate !== undefined)      updateData.startDate       = new Date(startDate);
+    if (endDate !== undefined)        updateData.endDate         = new Date(endDate);
+    if (location !== undefined)       updateData.location        = location;
+    if (maxParticipants !== undefined) updateData.maxParticipants = maxParticipants;
+    if (notes !== undefined)          updateData.notes           = notes;
+    if (deliveryMode !== undefined)   updateData.deliveryMode    = deliveryMode;
+    if (status !== undefined)         updateData.status          = status;
+    if (attendance !== undefined)     updateData.attendance      = attendance;
 
     const schedule = await prisma.courseSchedule.update({
       where: { id },
@@ -345,19 +346,19 @@ router.put('/:id', authenticateToken(), requirePermission('update:schedules'), a
             date: new Date(session.date),
             start: session.start,
             end: session.end,
-            trainerId: session.trainer_id || null,
-            coTrainerId: session.co_trainer_id || null,
+            trainerId: session.trainerId || null,
+            coTrainerId: session.coTrainerId || null,
           },
         });
       }
     }
 
     // 3. Update company associations if provided
-    if (Array.isArray(company_ids)) {
+    if (Array.isArray(companyIds)) {
       // Delete existing associations
       await prisma.scheduleCompany.deleteMany({ where: { scheduleId: schedule.id } });
       // Create new associations
-      for (const companyId of company_ids) {
+      for (const companyId of companyIds) {
         await prisma.scheduleCompany.create({
           data: {
             scheduleId: schedule.id,
@@ -368,25 +369,25 @@ router.put('/:id', authenticateToken(), requirePermission('update:schedules'), a
     }
 
     // 4. Update enrollments if provided
-    if (Array.isArray(employee_ids)) {
-      const uniqueEmployeeIds = [...new Set(employee_ids.map(id => (id || '').trim()))];
+    if (Array.isArray(personIds)) {
+      const uniquePersonIds = [...new Set(personIds.map(id => (id || '').trim()))];
 
       // Delete enrollments not in the new list
       await prisma.courseEnrollment.deleteMany({
         where: {
           scheduleId: schedule.id,
-          employeeId: { notIn: uniqueEmployeeIds }
+          personId: { notIn: uniquePersonIds }
         }
       });
 
-      // Upsert enrollments for each employee
-      await Promise.all(uniqueEmployeeIds.map(employeeId =>
+      // Upsert enrollments for each person
+      await Promise.all(uniquePersonIds.map(personId =>
         prisma.courseEnrollment.upsert({
-          where: { scheduleId_employeeId: { scheduleId: schedule.id, employeeId } },
+          where: { scheduleId_personId: { scheduleId: schedule.id, personId } },
           update: { updatedAt: new Date() },
           create: { 
             scheduleId: schedule.id, 
-            employeeId,
+            personId,
             createdAt: new Date()
           }
         })
@@ -405,7 +406,7 @@ router.put('/:id', authenticateToken(), requirePermission('update:schedules'), a
           },
         },
         companies: { include: { company: true } },
-        enrollments: { include: { employee: true } },
+        enrollments: { include: { person: true } },
       },
     });
 
@@ -416,7 +417,7 @@ router.put('/:id', authenticateToken(), requirePermission('update:schedules'), a
       action: 'updateSchedule',
       error: error.message,
       stack: error.stack,
-      userId: req.user?.id,
+      personId: req.person?.id,
       scheduleId: req.params?.id
     });
     
@@ -465,11 +466,11 @@ router.delete('/:id', authenticateToken(), requirePermission('delete:schedules')
       });
     }
     
-    // Perform soft delete by updating deletedAt field
+    // Perform soft delete by updating eliminato field
     await prisma.courseSchedule.update({
       where: { id },
       data: {
-        deletedAt: new Date(),
+        eliminato: true,
         updatedAt: new Date()
       }
     });
@@ -481,7 +482,7 @@ router.delete('/:id', authenticateToken(), requirePermission('delete:schedules')
       action: 'deleteSchedule',
       error: error.message,
       stack: error.stack,
-      userId: req.user?.id,
+      personId: req.person?.id,
       scheduleId: req.params?.id
     });
     res.status(500).json({ 
