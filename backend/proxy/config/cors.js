@@ -7,7 +7,25 @@
  * Configurazione CORS di base
  */
 export const corsConfig = {
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: function(origin, callback) {
+    // Lista degli origins permessi
+    const allowedOrigins = [
+      'http://localhost:5173',
+      'https://elementformazione.com',
+      process.env.FRONTEND_URL
+    ].filter(Boolean); // Rimuove valori undefined/null
+    
+    // Permetti richieste senza origin (es. mobile apps, Postman)
+    if (!origin) return callback(null, true);
+    
+    // Verifica se l'origin è nella lista permessa
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      console.warn(`🚨 CORS: Origin non permesso: ${origin}`);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: [
@@ -42,8 +60,19 @@ export function createOptionsHandler(path) {
       console.log(`🚨 [CORS OPTIONS] ${path}:`, req.originalUrl);
     }
     
+    // Determina l'origin permesso
+    const requestOrigin = req.headers.origin;
+    let allowedOrigin = requestOrigin;
+    
+    // Verifica se l'origin è permesso usando la funzione CORS
+    corsConfig.origin(requestOrigin, (err, allowed) => {
+      if (err || !allowed) {
+        allowedOrigin = 'http://localhost:5173'; // Fallback
+      }
+    });
+    
     // Imposta headers CORS
-    res.header('Access-Control-Allow-Origin', corsConfig.origin);
+    res.header('Access-Control-Allow-Origin', allowedOrigin);
     res.header('Access-Control-Allow-Methods', corsConfig.methods.join(','));
     res.header('Access-Control-Allow-Headers', corsConfig.allowedHeaders.join(','));
     res.header('Access-Control-Allow-Credentials', 'true');
@@ -61,8 +90,23 @@ export function createCorsMiddleware(options = {}) {
   const config = configureCorsOptions(options);
   
   return (req, res, next) => {
+    // Determina l'origin permesso
+    const requestOrigin = req.headers.origin;
+    let allowedOrigin = requestOrigin;
+    
+    // Se config.origin è una funzione, usala per verificare
+    if (typeof config.origin === 'function') {
+      config.origin(requestOrigin, (err, allowed) => {
+        if (err || !allowed) {
+          allowedOrigin = 'http://localhost:5173'; // Fallback
+        }
+      });
+    } else {
+      allowedOrigin = config.origin;
+    }
+    
     // Imposta headers CORS per tutte le richieste
-    res.header('Access-Control-Allow-Origin', config.origin);
+    res.header('Access-Control-Allow-Origin', allowedOrigin);
     res.header('Access-Control-Allow-Credentials', 'true');
     
     // Gestisci richieste OPTIONS
