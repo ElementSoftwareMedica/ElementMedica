@@ -1,0 +1,85 @@
+name: Deploy to Hetzner Production
+
+on:
+  push:
+    branches:
+      - deployment/hetzner-final-clean
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: |
+          frontend/package-lock.json
+          backend/package-lock.json
+          
+    - name: Install frontend dependencies
+      run: |
+        cd frontend
+        npm ci
+        
+    - name: Install backend dependencies
+      run: |
+        cd backend
+        npm ci
+        
+    - name: Build frontend
+      run: |
+        cd frontend
+        npm run build
+        
+    - name: Run tests
+      run: |
+        cd backend
+        npm test
+        
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.8.0
+      with:
+        ssh-private-key: ${{ secrets.HETZNER_SSH_KEY }}
+        
+    - name: Add server to known hosts
+      run: |
+        ssh-keyscan -H 128.140.15.15 >> ~/.ssh/known_hosts
+        
+    - name: Deploy to Hetzner
+      run: |
+        # Sync frontend build
+        rsync -avz --delete frontend/dist/ root@128.140.15.15:/var/www/elementformazione/frontend/
+        
+        # Sync backend
+        rsync -avz --delete --exclude node_modules --exclude .env backend/ root@128.140.15.15:/var/www/elementformazione/backend/
+        
+        # Sync scripts
+        rsync -avz scripts/ root@128.140.15.15:/var/www/elementformazione/scripts/
+        
+        # Deploy on server
+        ssh root@128.140.15.15 'cd /var/www/elementformazione && ./scripts/hetzner-setup.sh update'
+        
+    - name: Health check
+      run: |
+        sleep 30
+        curl -f https://elementformazione.com/health || exit 1
+        curl -f https://elementformazione.com/api/health || exit 1
+        curl -I https://www.elementformazione.com | grep -q "301\|302" || exit 1
+        
+    - name: Notify deployment status
+      if: always()
+      run: |
+        if [ "${{ job.status }}" == "success" ]; then
+          echo "✅ Deployment successful to https://elementformazione.com"
+        else
+          echo "❌ Deployment failed"
+          exit 1
+        fi
