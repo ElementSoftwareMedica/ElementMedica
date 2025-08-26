@@ -1,0 +1,56 @@
+/**
+ * Sistema audit e GDPR
+ * Modulo: audit
+ * Generato automaticamente dalla Fase 8
+ */
+
+// === ENUM DEFINITIONS ===
+
+
+// === MODEL DEFINITIONS ===
+model ActivityLog {
+  id        String   @id @default(uuid())
+  personId  String   @map("user_id") // Mapped for DB compatibility
+  action    String
+  details   String?
+  timestamp DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  person    Person   @relation("ActivityLog_Person", fields: [personId], references: [id], onDelete: Cascade)
+
+  @@index([personId])
+  @@map("activity_logs")
+}
+
+model GdprAuditLog {
+  id           String    @id @default(uuid())
+  personId     String?
+  action       String
+  resourceType String?
+  resourceId   String?
+  dataAccessed Json?
+  ipAddress    String?
+  userAgent    String?
+  companyId    String?
+  createdAt    DateTime  @default(now())
+  deletedAt    DateTime?
+  person       Person?   @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  @@index([personId])
+}
+
+model ConsentRecord {
+  id             String    @id @default(uuid())
+  personId       String
+  consentType    String
+  consentGiven   Boolean
+  consentVersion String?
+  givenAt        DateTime  @default(now())
+  withdrawnAt    DateTime?
+  ipAddress      String?
+  userAgent      String?
+  deletedAt      DateTime?
+  person         Person    @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  @@index([personId])
+}

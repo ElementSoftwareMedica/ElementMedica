@@ -1,0 +1,33 @@
+{
+  "name": "proxy-server-tests",
+  "version": "1.0.0",
+  "description": "Test end-to-end per il proxy server ottimizzato",
+  "type": "module",
+  "scripts": {
+    "test": "mocha --timeout 10000 --recursive *.test.js",
+    "test:watch": "mocha --timeout 10000 --recursive *.test.js --watch",
+    "test:coverage": "nyc mocha --timeout 10000 --recursive *.test.js",
+    "test:proxy": "mocha --timeout 10000 proxy-server.test.js",
+    "lint": "eslint *.js",
+    "lint:fix": "eslint *.js --fix"
+  },
+  "dependencies": {
+    "supertest": "^6.3.3",
+    "chai": "^4.3.10",
+    "mocha": "^10.2.0"
+  },
+  "devDependencies": {
+    "nyc": "^15.1.0",
+    "eslint": "^8.55.0",
+    "@eslint/js": "^9.0.0"
+  },
+  "keywords": [
+    "proxy",
+    "server",
+    "test",
+    "e2e",
+    "supertest"
+  ],
+  "author": "Proxy Server Team",
+  "license": "MIT"
+}

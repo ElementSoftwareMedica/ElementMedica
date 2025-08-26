@@ -1,0 +1,167 @@
+/**
+ * Gestione utenti e ruoli
+ * Modulo: users
+ * Generato automaticamente dalla Fase 8
+ */
+
+// === ENUM DEFINITIONS ===
+enum PersonStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  TERMINATED
+  PENDING
+
+  @@map("person_status")
+}
+
+enum RoleType {
+  EMPLOYEE
+  MANAGER
+  HR_MANAGER
+  DEPARTMENT_HEAD
+  TRAINER
+  SENIOR_TRAINER
+  TRAINER_COORDINATOR
+  EXTERNAL_TRAINER
+  SUPER_ADMIN
+  ADMIN
+  COMPANY_ADMIN
+  TENANT_ADMIN
+  VIEWER
+  OPERATOR
+  COORDINATOR
+  SUPERVISOR
+  GUEST
+  CONSULTANT
+  AUDITOR
+
+  @@map("role_types")
+}
+
+// === MODEL DEFINITIONS ===
+model Person {
+  id                           String                         @id @default(uuid())
+  firstName                    String                         @db.VarChar(100)
+  lastName                     String                         @db.VarChar(100)
+  email                        String                         @unique @db.VarChar(255)
+  phone                        String?                        @db.VarChar(20)
+  birthDate                    DateTime?                      @db.Date
+  taxCode                      String?                        @unique @db.VarChar(16)
+  vatNumber                    String?                        @db.VarChar(11)
+  residenceAddress             String?                        @db.VarChar(255)
+  residenceCity                String?                        @db.VarChar(100)
+  postalCode                   String?                        @db.VarChar(10)
+  province                     String?                        @db.VarChar(2)
+  username                     String?                        @unique @db.VarChar(50)
+  password                     String?                        @db.VarChar(255)
+  status                       PersonStatus                   @default(ACTIVE)
+  title                        String?                        @db.VarChar(100)
+  hiredDate                    DateTime?                      @db.Date
+  hourlyRate                   Decimal?                       @db.Decimal(10, 2)
+  iban                         String?                        @db.VarChar(34)
+  registerCode                 String?                        @db.VarChar(50)
+  certifications               String[]
+  specialties                  String[]
+  profileImage                 String?                        @db.VarChar(500)
+  notes                        String?
+  lastLogin                    DateTime?                      @db.Timestamp(6)
+  failedAttempts               Int                            @default(0) @db.SmallInt
+  lockedUntil                  DateTime?                      @db.Timestamp(6)
+  globalRole                   String?                        @db.VarChar(50)
+  tenantId                     String?
+  companyId                    String?
+  createdAt                    DateTime                       @default(now()) @db.Timestamp(6)
+  updatedAt                    DateTime                       @updatedAt @db.Timestamp(6)
+  deletedAt                    DateTime?                      @db.Timestamp(6)
+  gdprConsentDate              DateTime?                      @db.Timestamp(6)
+  gdprConsentVersion           String?                        @db.VarChar(10)
+  dataRetentionUntil           DateTime?                      @db.Date
+  preferences                  Json?                          @default("{}
+
+model PersonRole {
+  id                  String               @id @default(uuid())
+  personId            String
+  roleType            RoleType?
+  customRoleId        String?
+  isActive            Boolean              @default(true)
+  isPrimary           Boolean              @default(false)
+  assignedAt          DateTime             @default(now()) @db.Timestamp(6)
+  assignedBy          String?
+  validFrom           DateTime             @default(now()) @db.Date
+  validUntil          DateTime?            @db.Date
+  companyId           String?
+  tenantId            String?
+  departmentId        String?
+  // Campi per la gerarchia dei ruoli
+  parentRoleId        String?
+  level               Int                  @default(0)
+  path                String?              // Percorso gerarchico (es: "1.2.3")
+  createdAt           DateTime             @default(now()) @db.Timestamp(6)
+  updatedAt           DateTime             @updatedAt @db.Timestamp(6)
+  deletedAt           DateTime?
+  assignedByPerson    Person?              @relation("AssignedRoles", fields: [assignedBy], references: [id], onDelete: Cascade)
+  company             Company?             @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  person              Person               @relation(fields: [personId], references: [id], onDelete: Cascade)
+  tenant              Tenant?              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  customRole          CustomRole?          @relation("PersonRole_CustomRole", fields: [customRoleId], references: [id], onDelete: Cascade)
+  // Relazioni per la gerarchia
+  parentRole          PersonRole?          @relation("RoleHierarchy", fields: [parentRoleId], references: [id], onDelete: Cascade)
+  childRoles          PersonRole[]         @relation("RoleHierarchy")
+  permissions         RolePermission[]
+  advancedPermissions AdvancedPermission[]
+
+  @@unique([personId, roleType, customRoleId, companyId, tenantId])
+  @@index([personId, isActive])
+  @@index([roleType])
+  @@index([customRoleId])
+  @@index([companyId])
+  @@index([tenantId])
+  @@index([assignedBy])
+  @@index([personId])
+  @@index([parentRoleId])  // Nuovo indice per la gerarchia
+  @@index([level])         // Indice per query per livello
+  @@index([path])          // Indice per query sul percorso gerarchico
+  @@index([tenantId, parentRoleId])  // Indice composto per gerarchia per tenant
+  @@map("person_roles")
+}
+
+model PersonSession {
+  id             String    @id @default(uuid())
+  personId       String
+  sessionToken   String    @unique
+  ipAddress      String?
+  userAgent      String?
+  isActive       Boolean   @default(true)
+  lastActivityAt DateTime  @default(now())
+  expiresAt      DateTime
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+  person         Person    @relation("PersonSessions", fields: [personId], references: [id], onDelete: Cascade)
+
+  @@index([personId])
+  @@map("person_sessions")
+}
+
+model CustomRole {
+  id              String                 @id @default(uuid())
+  name            String
+  description     String?
+  tenantId        String
+  isActive        Boolean                @default(true)
+  tenantAccess    String                 @default("SPECIFIC") // ALL, SPECIFIC, NONE
+  createdBy       String?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  deletedAt       DateTime?
+  tenant          Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdByPerson Person?                @relation("CustomRole_CreatedBy", fields: [createdBy], references: [id], onDelete: Cascade)
+  permissions     CustomRolePermission[]
+  personRoles     PersonRole[]           @relation("PersonRole_CustomRole")
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@index([createdBy])
+  @@map("custom_roles")
+}

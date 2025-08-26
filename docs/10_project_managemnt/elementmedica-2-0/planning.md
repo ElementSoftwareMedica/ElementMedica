@@ -1,20 +1,9 @@
-# Element Medica 2.0 — Piano operativo di sincronizzazione e deploy
+# ElementMedica 2.0 – Deployment & Workflow Planning
 
-Ultimo aggiornamento: [auto] inizializzazione planning e allineamento stato attuale
-
-## 1) Stato attuale
-- Repository locale: presente il progetto con frontend buildato (cartella `dist/`) e backend minimale (`backend/src/server.js`).
-- Configurazioni env:
-  - `.env.local` completo per sviluppo locale.
-  - `.env.production` presente con variabili di produzione e placeholder per segreti (da NON versionare).
-- Nginx: presente solo `nginx/frontend.conf` minimale (HTTP, nessun TLS, nessun proxy API, nessuna gestione ACME).
-- Docker/Compose: assenti file `docker-compose.production.yml` e Dockerfile coerenti per backend/frontend.
-- Script: assenti script di provisioning e deploy per Hetzner.
-- Logs e tracce mostrano che in passato esistevano servizi più articolati (API/Proxy/Docs) ma nel workspace corrente non sono presenti i relativi sorgenti (rotte, middleware, avvii server). Questo è un potenziale BLOCCANTE per un deploy 1:1 dell’intera piattaforma.
-
-Rischi e blocchi:
-- BLOCCANTE: Mancano i sorgenti completi dei servizi backend (API 4001, DOCUMENTS 4002, PROXY 4003) citati dalle configurazioni/log. Senza questi, il deploy completo (login, RBAC, tenant, ecc.) non è possibile. Si può comunque procedere con infrastruttura (Nginx + TLS + static frontend) e pipeline di deploy, in attesa dei servizi backend.
-- Accesso Hetzner: necessario abilitare accesso SSH via chiave per evitare inserimento interattivo della password e automatizzare il deploy (richiede un singolo accesso con password per installare la chiave, oppure l’inserimento manuale della chiave pubblica nello `~/.ssh/authorized_keys` del server).
+## 1) Contesto e vincoli
+- Funzionalità locali intatte, nessuna modifica alle superfici sensibili (routing, api-server, proxy-server, RBAC, tenant, login/permessi/ruoli/gerarchie).
+- GDPR: nessun secret in repository, variabili d’ambiente fuori controllo versione.
+- Eliminazione e re-installazione ex-novo su Hetzner e GitHub gestite via script di provisioning e deploy (no modifiche manuali in produzione).
 
 ## 2) Obiettivi
 - Garantire funzionamento locale invariato.
@@ -51,11 +40,22 @@ Rischi e blocchi:
 - [DONE] Creato `nginx/production.conf` con HTTP→HTTPS, ACME webroot e fallback SPA.
 - [DONE] Creato `docker-compose.production.yml` (nginx + certbot-renew) e mount dist.
 - [DONE] Creati script `scripts/provision-hetzner.sh` e `scripts/remote-deploy-hetzner.sh` per provisioning e deploy.
-- [PENDING] Verifica DNS A-record per domini → necessario prima dell’emissione certificati.
-- [BLOCKER] Reperire/integrare codice servizi backend (API/Proxy/Docs) prima del deploy funzionale completo (login, RBAC, tenant, ecc.).
+- [DONE] Provisioning Hetzner completato: Docker/Compose installati, UFW abilitato su 22/80/443, directories runtime create.
+- [DONE] Pulizia vecchi container/reti in conflitto (porte 80/443 libere).
+- [DONE] Deploy Nginx HTTP-only (frontend.conf): health OK su IP pubblico.
+- [DONE] Emissione certificati Let's Encrypt via webroot per `elementformazione.com` e `www.elementformazione.com` (non-interattivo).
+- [DONE] Switch a config `production.conf` con HTTPS attivo: health OK su HTTPS, redirect 301 da HTTP.
+- [DONE] Integrazione backend (API/Proxy/Docs) nel compose e deploy riuscito: /api/health OK su HTTP e HTTPS.
+- [DONE] Verifica esterna: `curl` su https://elementformazione.com/api/health e https://www.elementformazione.com/api/health restituisce `{"status":"healthy"}`.
+- [DONE] Deploy remoto eseguito oggi: rsync progetto, upload .env, build api/documents/proxy, health interni, issue/renew cert, switch HTTPS, health HTTP/HTTPS OK.
+- [INFO] In locale: API (4001), Docs (4002), Proxy (4003) OK su /health.
 
 ## 7) Prossimi passi immediati
-- Eseguire provisioning server Hetzner con `scripts/provision-hetzner.sh 128.140.15.15`.
-- Sincronizzare e avviare Nginx HTTP con `scripts/remote-deploy-hetzner.sh 128.140.15.15`.
-- Emettere certificati TLS quando DNS è attivo.
-- Integrare backend quando i sorgenti saranno disponibili o indicati.
+- CORS/Origin: mantenere allineamento tra localhost (sviluppo), domini produzione e IP pubblico (già incluso). Verifica end-to-end con autenticazione.
+- Automazione rinnovo certificati: confermare servizio `certbot-renew` attivo e log di rinnovo; valutare reload Nginx post-rinnovo (se necessario).
+- GitHub: inizializzazione repository ex-novo e push quando confermata piena funzionalità in produzione (no push prima di verifica completa).
+- Frontend build: assicurare pipeline locale (Vite build) coerente con ./dist e integrata nello script di deploy.
+- Monitoraggio/Logging: verificare mount volumi logs/ ed eventuale retention.
+
+Note operative:
+- I file `.trae/rules/project_rules.md` e `.trae/TRAE_SYSTEM_GUIDE.md` non risultano presenti nel repository locale; applico comunque i principi GDPR e modifiche minime/reversibili.

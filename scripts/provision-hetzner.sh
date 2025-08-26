@@ -7,12 +7,12 @@ set -euo pipefail
 
 HOST=${1:-}
 SSH_USER=${2:-root}
-if [ -z "$HOST" ]; then
+if [ -z "${HOST}" ]; then
   echo "Usage: $0 <HOST> [SSH_USER]" >&2
   exit 1
 fi
 
-ssh -o StrictHostKeyChecking=no "$SSH_USER@$HOST" bash -s <<'REMOTE_EOF'
+ssh -o StrictHostKeyChecking=no "${SSH_USER}@${HOST}" bash -s <<'REMOTE_EOF'
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
@@ -23,9 +23,9 @@ apt-get upgrade -y
 # Install dependencies
 apt-get install -y ca-certificates curl gnupg ufw
 
-# Docker engine
+# Docker engine repo setup
 install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor --batch --yes -o /etc/apt/keyrings/docker.gpg
 chmod a+r /etc/apt/keyrings/docker.gpg
 
 . /etc/os-release
@@ -47,14 +47,15 @@ mkdir -p /opt/elementmedica/logs/nginx
 mkdir -p /opt/elementmedica/ssl
 mkdir -p /opt/elementmedica/letsencrypt-webroot
 
-# Firewall: allow HTTP/HTTPS; deny others by default
+# Firewall: allow SSH/HTTP/HTTPS; deny others by default
 ufw allow 22/tcp || true
 ufw allow 80/tcp || true
 ufw allow 443/tcp || true
+
 ufw --force enable || true
 
 # Show docker version
 docker --version || true
 REMOTE_EOF
 
-echo "Provisioning completed on $HOST"
+echo "Provisioning completed on ${HOST}"

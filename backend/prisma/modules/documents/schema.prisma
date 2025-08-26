@@ -1,0 +1,72 @@
+/**
+ * Gestione documenti e attestati
+ * Modulo: documents
+ * Generato automaticamente dalla Fase 8
+ */
+
+// === ENUM DEFINITIONS ===
+
+
+// === MODEL DEFINITIONS ===
+model Attestato {
+  id                String         @id @default(uuid())
+  scheduledCourseId String
+  personId          String         @map("partecipante_id") // Mapped for DB compatibility
+  fileName          String         @map("nome_file")
+  fileUrl           String         @map("url")
+  generatedAt       DateTime       @default(now()) @map("data_generazione")
+  numeroProgressivo Int
+  annoProgressivo   Int
+  deletedAt         DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  person            Person         @relation("Attestato_Person", fields: [personId], references: [id], onDelete: Cascade)
+  scheduledCourse   CourseSchedule @relation(fields: [scheduledCourseId], references: [id], onDelete: Cascade)
+
+  @@index([personId])
+  @@index([scheduledCourseId])
+  @@map("attestati")
+}
+
+model LetteraIncarico {
+  id                String         @id @default(uuid())
+  scheduledCourseId String
+  trainerId         String
+  nomeFile          String
+  url               String
+  dataGenerazione   DateTime       @default(now())
+  numeroProgressivo Int
+  annoProgressivo   Int
+  deletedAt         DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  scheduledCourse   CourseSchedule @relation(fields: [scheduledCourseId], references: [id], onDelete: Cascade)
+  trainer           Person         @relation("LetteraIncaricoTrainer", fields: [trainerId], references: [id], onDelete: Cascade)
+
+  @@unique([scheduledCourseId, trainerId])
+  @@index([scheduledCourseId])
+  @@index([trainerId])
+  @@map("lettere_incarico")
+}
+
+model TemplateLink {
+  id            String    @id @default(uuid())
+  name          String
+  url           String
+  type          String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  content       String?
+  footer        String?
+  header        String?
+  isDefault     Boolean   @default(false)
+  logoPosition  String?
+  fileFormat    String?
+  googleDocsUrl String?
+  logoImage     String?
+  companyId     String?
+  deletedAt     DateTime?
+  company       Company?  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@index([companyId])
+}

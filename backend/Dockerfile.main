@@ -1,0 +1,51 @@
+# Dockerfile per Main Server
+FROM node:20-alpine AS base
+
+# Installa dipendenze per moduli nativi e strumenti di sistema
+RUN apk add --no-cache python3 make g++ curl openssl
+
+WORKDIR /app
+
+# Copia file di configurazione
+COPY package*.json ./
+COPY prisma ./prisma/
+COPY babel.config.js ./
+
+# Stage di sviluppo
+FROM base AS development
+RUN npm install
+RUN npx prisma generate
+COPY . .
+EXPOSE 3001
+CMD ["npm", "run", "dev:main"]
+
+# Stage di produzione
+FROM base AS production
+
+# Installa solo dipendenze di produzione
+RUN npm install --omit=dev && npm cache clean --force
+
+# Genera Prisma client
+RUN npx prisma generate
+
+# Copia codice applicazione
+COPY . .
+
+# Crea utente non-root
+RUN addgroup -g 1001 -S nodejs
+RUN adduser -S nodejs -u 1001 -G nodejs
+
+# Crea directory per logs
+RUN mkdir -p /app/logs
+RUN chown -R nodejs:nodejs /app
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD curl -f http://localhost:3001/health || exit 1
+
+EXPOSE 3001
+
+# Usa utente non-root
+USER nodejs
+
+CMD ["node", "src/server.js"]

@@ -1,0 +1,105 @@
+/**
+ * Sistema corsi e formazione
+ * Modulo: courses
+ * Generato automaticamente dalla Fase 8
+ */
+
+// === ENUM DEFINITIONS ===
+
+
+// === MODEL DEFINITIONS ===
+model Course {
+  id              String           @id @default(uuid())
+  title           String
+  category        String?
+  description     String?
+  duration        String?
+  status          String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt @default(now())
+  certifications  String?
+  code            String?          @unique
+  contents        String?
+  maxPeople       Int?
+  pricePerPerson  Float?
+  regulation      String?
+  renewalDuration String?
+  validityYears   Int?
+  tenantId        String?
+  deletedAt       DateTime?
+  tenant          Tenant?          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  schedules       CourseSchedule[]
+
+  @@index([tenantId])
+}
+
+model CourseSchedule {
+  id               String             @id @default(uuid())
+  courseId         String
+  startDate        DateTime
+  endDate          DateTime
+  location         String?
+  maxParticipants  Int?
+  status           String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  companyId        String?
+  notes            String?
+  trainerId        String?
+  deliveryMode     String?
+  attendance       Json?
+  hasAttestati     Boolean            @default(false)
+  deletedAt        DateTime?
+  attestati        Attestato[]
+  enrollments      CourseEnrollment[]
+  company          Company?           @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  course           Course             @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  trainer          Person?            @relation("ScheduleTrainer", fields: [trainerId], references: [id], onDelete: Cascade)
+  sessions         CourseSession[]
+  fatture          Fattura[]
+  lettereIncarico  LetteraIncarico[]
+  preventivi       Preventivo[]
+  registriPresenze RegistroPresenze[]
+  companies        ScheduleCompany[]
+  testDocuments    TestDocument[]
+
+  @@index([companyId])
+  @@index([courseId])
+  @@index([trainerId])
+}
+
+model CourseEnrollment {
+  id         String         @id @default(uuid())
+  scheduleId String
+  personId   String         @map("employee_id") // Mapped for DB compatibility
+  status     String?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  deletedAt  DateTime?
+  person     Person         @relation("CourseEnrollment_Person", fields: [personId], references: [id], onDelete: Cascade)
+  schedule   CourseSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  @@unique([scheduleId, personId])
+  @@index([personId])
+  @@index([scheduleId])
+  @@map("course_enrollments")
+}
+
+model CourseSession {
+  id               String             @id @default(uuid())
+  scheduleId       String
+  date             DateTime
+  start            String
+  end              String
+  trainerId        String?
+  coTrainerId      String?
+  deletedAt        DateTime?
+  co_trainer       Person?            @relation("SessionCoTrainer", fields: [coTrainerId], references: [id], onDelete: Cascade)
+  schedule         CourseSchedule     @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  trainer          Person?            @relation("SessionTrainer", fields: [trainerId], references: [id], onDelete: Cascade)
+  registroPresenze RegistroPresenze[]
+
+  @@index([coTrainerId])
+  @@index([scheduleId])
+  @@index([trainerId])
+}
