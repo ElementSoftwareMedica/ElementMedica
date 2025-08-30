@@ -1,3 +1,8 @@
+import dotenv from 'dotenv';
+import { PrismaClient } from '@prisma/client';
+
+dotenv.config({ path: process.env.NODE_ENV === 'production' ? '.env.production' : '.env' });
+
 const prisma = new PrismaClient();
 
 // Permessi di default per il ruolo ADMIN (dal modulo RoleTypes)

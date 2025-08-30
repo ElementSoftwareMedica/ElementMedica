@@ -76,11 +76,19 @@ async function initializeServer() {
     });
     
     // Inizializza sistema di autenticazione (legacy)
-    await initializeAuth();
-    logger.info('Authentication system initialized', { 
-      service: 'proxy-server', 
-      port: config.server.port 
-    });
+    const isAuthEnabled = process.env.ENABLE_AUTH !== 'false';
+    if (isAuthEnabled) {
+      await initializeAuth();
+      logger.info('Authentication system initialized', { 
+        service: 'proxy-server', 
+        port: config.server.port 
+      });
+    } else {
+      logger.warn('Authentication disabled via ENABLE_AUTH=false, skipping initialization', {
+        service: 'proxy-server',
+        port: config.server.port
+      });
+    }
     
     // 🚀 NUOVO: Inizializza Sistema Routing Avanzato
     console.log('🚀 Initializing Advanced Routing System...');

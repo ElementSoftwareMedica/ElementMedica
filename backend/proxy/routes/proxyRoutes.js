@@ -255,7 +255,7 @@ export function setupApiProxyRoutes(app) {
     createAuthLogger('companies'),
     createApiProxy(apiTarget, {
       pathRewrite: {
-        '^/api/companies': '/api/companies'
+        '^/api/companies': '/api/v1/companies'
       },
       enableLogging: true
     })
@@ -321,7 +321,7 @@ export function setupApiProxyRoutes(app) {
     createAuthLogger('users'),
     createApiProxy(apiTarget, {
       pathRewrite: {
-        '^/api/users': '/api/users'
+        '^/api/users': '/api/v1/users'
       },
       enableLogging: true
     })
@@ -332,7 +332,7 @@ export function setupApiProxyRoutes(app) {
     createAuthLogger('persons'),
     createApiProxy(apiTarget, {
       pathRewrite: {
-        '^/': '/api/persons/'
+        '^/api/persons': '/api/v1/persons'
       },
       enableLogging: true
     })
@@ -795,7 +795,7 @@ export function setupTenantRolesProxyRoutes(app) {
     authLogger,
     createApiProxy(apiTarget, {
       pathRewrite: {
-        '^/api/tenants': '/api/tenants' // Mantiene il path corretto
+        '^/api/tenants': '/api/v1/tenants' // Reindirizza verso le route versionate v1 dell'API
       },
       enableLogging: true
     })
@@ -813,7 +813,7 @@ export function setupTenantRolesProxyRoutes(app) {
     authLogger,
     createApiProxy(apiTarget, {
       pathRewrite: {
-        '^/api/roles': '/api/roles' // Mantiene il path corretto
+        '^/api/roles': '/api/v1/roles' // Reindirizza verso le route versionate v1 dell'API
       },
       enableLogging: true
     })

@@ -126,7 +126,38 @@ const tenantMiddleware = async (req, res, next) => {
 
     // If still no tenant found, handle error cases
     if (!tenant) {
-      
+      // Fallback GENERICO e SICURO: se è stato passato esplicitamente un tenantId via header/query,
+      // prova a risolverlo anche in produzione (validateUserTenant verificherà comunque l'appartenenza)
+      const explicitTenantId = req.headers['x-tenant-id'] || req.headers['X-Tenant-ID'] || req.query.tenantId;
+      if (explicitTenantId) {
+        try {
+          const fallbackTenant = await prisma.tenant.findFirst({
+            where: {
+              OR: [
+                { id: explicitTenantId },
+                { slug: explicitTenantId }
+              ],
+              isActive: true,
+              deletedAt: null
+            }
+          });
+          if (fallbackTenant) {
+            req.tenant = fallbackTenant;
+            req.tenantId = fallbackTenant.id;
+            logger.info('[DEBUG] tenantMiddleware - FALLBACK header/query tenant applied', {
+              from: 'header/query',
+              value: explicitTenantId,
+              tenantId: fallbackTenant.id,
+              tenantSlug: fallbackTenant.slug,
+              host: req.get('host') || req.get('x-forwarded-host'),
+              path: req.path
+            });
+            return next();
+          }
+        } catch (e) {
+          logger.error('[DEBUG] tenantMiddleware - FALLBACK lookup error', { error: e?.message });
+        }
+      }
       // For development, allow access to some endpoints without strict tenant requirement
       if (process.env.NODE_ENV === 'development' && (req.path === '/api/roles' || req.path === '/api/roles/public' || req.path === '/api/roles/test-simple' || req.path.startsWith('/api/users') || req.path.startsWith('/api/settings') || req.path.startsWith('/api/tenants') || req.path === '/api/counters' || req.path.startsWith('/api/dashboard') || req.path.startsWith('/api/v1/persons') || req.path.startsWith('/api/persons') || req.path === '/api/v1/submissions')) {
         // Use the first available tenant for development

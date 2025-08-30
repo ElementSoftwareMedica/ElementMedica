@@ -1,0 +1,156 @@
+# Grafana Datasource Provisioning Configuration
+# Automatically configures data sources for the Document Management System
+
+apiVersion: 1
+
+datasources:
+  # Primary Prometheus instance
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+    jsonData:
+      timeInterval: "5s"
+      queryTimeout: "60s"
+      httpMethod: "POST"
+      manageAlerts: true
+      alertmanagerUid: "alertmanager"
+    secureJsonData: {}
+    version: 1
+
+  # Alertmanager for alert management
+  - name: Alertmanager
+    type: alertmanager
+    access: proxy
+    url: http://alertmanager:9093
+    uid: "alertmanager"
+    editable: true
+    jsonData:
+      implementation: "prometheus"
+      handleGrafanaManagedAlerts: false
+    version: 1
+
+  # Loki for log aggregation (if available)
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    editable: true
+    jsonData:
+      maxLines: 1000
+      timeout: "60s"
+      derivedFields:
+        - datasourceUid: "jaeger"
+          matcherRegex: "traceID=(\\w+)"
+          name: "TraceID"
+          url: "$${__value.raw}"
+    version: 1
+
+  # Jaeger for distributed tracing (if available)
+  - name: Jaeger
+    type: jaeger
+    access: proxy
+    url: http://jaeger:16686
+    uid: "jaeger"
+    editable: true
+    jsonData:
+      tracesToLogs:
+        datasourceUid: "loki"
+        tags: ["job", "instance", "pod", "namespace"]
+        mappedTags: [{key: "service.name", value: "service"}]
+        mapTagNamesEnabled: false
+        spanStartTimeShift: "1h"
+        spanEndTimeShift: "1h"
+        filterByTraceID: false
+        filterBySpanID: false
+      nodeGraph:
+        enabled: true
+    version: 1
+
+  # PostgreSQL for direct database queries
+  - name: PostgreSQL
+    type: postgres
+    access: proxy
+    url: postgres:5432
+    database: document_management_prod
+    user: grafana_readonly
+    editable: true
+    jsonData:
+      sslmode: "require"
+      maxOpenConns: 5
+      maxIdleConns: 2
+      connMaxLifetime: 14400
+      postgresVersion: 1300
+      timescaledb: false
+    secureJsonData:
+      password: "grafana_readonly_password"
+    version: 1
+
+  # Redis for cache metrics
+  - name: Redis
+    type: redis-datasource
+    access: proxy
+    url: redis://redis:6379
+    editable: true
+    jsonData:
+      client: "standalone"
+      poolSize: 5
+      timeout: 10
+      pingInterval: 0
+      pipelineWindow: 0
+    secureJsonData:
+      password: "CHANGE_THIS_REDIS_PASSWORD"
+    version: 1
+
+  # TestData for testing and development
+  - name: TestData
+    type: testdata
+    access: proxy
+    editable: true
+    version: 1
+
+  # CloudWatch (if using AWS)
+  # - name: CloudWatch
+  #   type: cloudwatch
+  #   access: proxy
+  #   editable: true
+  #   jsonData:
+  #     authType: "keys"
+  #     defaultRegion: "us-east-1"
+  #   secureJsonData:
+  #     accessKey: "your-access-key"
+  #     secretKey: "your-secret-key"
+  #   version: 1
+
+  # Elasticsearch for log analysis (if available)
+  # - name: Elasticsearch
+  #   type: elasticsearch
+  #   access: proxy
+  #   url: http://elasticsearch:9200
+  #   database: "logstash-*"
+  #   editable: true
+  #   jsonData:
+  #     interval: "Daily"
+  #     timeField: "@timestamp"
+  #     esVersion: "7.10.0"
+  #     maxConcurrentShardRequests: 5
+  #     logMessageField: "message"
+  #     logLevelField: "level"
+  #   version: 1
+
+  # InfluxDB (if using for time series data)
+  # - name: InfluxDB
+  #   type: influxdb
+  #   access: proxy
+  #   url: http://influxdb:8086
+  #   database: "document_management"
+  #   user: "grafana"
+  #   editable: true
+  #   jsonData:
+  #     httpMode: "GET"
+  #     keepCookies: []
+  #   secureJsonData:
+  #     password: "grafana_password"
+  #   version: 1

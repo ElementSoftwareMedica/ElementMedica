@@ -1,0 +1,125 @@
+name: Deploy to Hetzner (Production)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      issue_certs:
+        description: 'Issue/Renew TLS certificates (requires DNS already pointing to server)'
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: ${{ secrets.HETZNER_SSH_HOST != '' && secrets.HETZNER_SSH_KEY != '' }}
+    runs-on: ubuntu-latest
+    env:
+      SSH_HOST: ${{ secrets.HETZNER_SSH_HOST }}
+      SSH_USER: ${{ secrets.HETZNER_SSH_USER }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.x'
+          cache: 'npm'
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build frontend (dist)
+        run: npm run build
+
+      - name: Setup SSH for Hetzner
+        shell: bash
+        env:
+          HETZNER_SSH_KEY: ${{ secrets.HETZNER_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          echo "$HETZNER_SSH_KEY" > ~/.ssh/hetzner_key
+          chmod 600 ~/.ssh/hetzner_key
+          eval "$(ssh-agent -s)"
+          ssh-add ~/.ssh/hetzner_key
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts
+
+      - name: Prepare backend/.env.production from secrets
+        shell: bash
+        env:
+          FRONTEND_URL: ${{ secrets.FRONTEND_URL }}
+          CORS_ALLOWED_ORIGINS: ${{ secrets.CORS_ALLOWED_ORIGINS }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          REDIS_ENABLED: ${{ secrets.REDIS_ENABLED }}
+        run: |
+          set -euo pipefail
+          mkdir -p backend
+          # Default Redis disabilitato se non specificato
+          export REDIS_ENABLED="${REDIS_ENABLED:-false}"
+          cat > backend/.env.production <<EOF
+          NODE_ENV=production
+          API_HOST=0.0.0.0
+          API_PORT=4001
+          DOCUMENTS_HOST=0.0.0.0
+          DOCUMENTS_PORT=4002
+          PROXY_HOST=0.0.0.0
+          PROXY_PORT=4003
+          FRONTEND_URL=${FRONTEND_URL}
+          CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS}
+          JWT_SECRET=${JWT_SECRET}
+          JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
+          DATABASE_URL=${DATABASE_URL}
+          DIRECT_URL=${DIRECT_URL}
+          REDIS_ENABLED=${REDIS_ENABLED}
+          # Aggiungi qui ulteriori variabili richieste dal backend se necessario
+          EOF
+          # Maschera i segreti nel log
+          echo "backend/.env.production creato"
+
+      - name: Run remote deploy script (no certs)
+        if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.issue_certs == false) }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x scripts/remote-deploy-hetzner.sh
+          AUTO_PUSH_ENV=1 ./scripts/remote-deploy-hetzner.sh "$SSH_HOST" "${SSH_USER:-root}"
+
+      - name: Run remote deploy script (issue/renew certs)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.issue_certs == true }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x scripts/remote-deploy-hetzner.sh
+          AUTO_PUSH_ENV=1 ISSUE_CERTS=1 ./scripts/remote-deploy-hetzner.sh "$SSH_HOST" "${SSH_USER:-root}" --issue-certs
+
+      - name: Post-deploy health checks (HTTP)
+        shell: bash
+        env:
+          PUBLIC_DOMAIN: ${{ secrets.PUBLIC_DOMAIN || 'www.elementformazione.com' }}
+        run: |
+          set -euo pipefail
+          echo "Checking http://$PUBLIC_DOMAIN/health ..."
+          curl -fsS "http://$PUBLIC_DOMAIN/health" >/dev/null
+          echo "Checking http://$PUBLIC_DOMAIN/api/health ..."
+          curl -fsS "http://$PUBLIC_DOMAIN/api/health" >/dev/null
+          echo "HTTP health checks passed"
+
+      - name: Post-deploy health checks (HTTPS, ignore cert)
+        shell: bash
+        env:
+          PUBLIC_DOMAIN: ${{ secrets.PUBLIC_DOMAIN || 'www.elementformazione.com' }}
+        run: |
+          set -euo pipefail
+          echo "Checking https://$PUBLIC_DOMAIN/health ..."
+          curl -kfsS "https://$PUBLIC_DOMAIN/health" >/dev/null || echo "WARN: HTTPS /health not available yet"
+          echo "Checking https://$PUBLIC_DOMAIN/api/health ..."
+          curl -kfsS "https://$PUBLIC_DOMAIN/api/health" >/dev/null || echo "WARN: HTTPS /api/health not available yet"

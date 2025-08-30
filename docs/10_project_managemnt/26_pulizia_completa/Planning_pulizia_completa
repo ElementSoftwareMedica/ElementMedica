@@ -1,0 +1,303 @@
+[ISTRUZIONI PER L'AGENTAI] — OTTIMIZZAZIONE E RIFATTORIZZAZIONE COMPLETA DELLA WEBAPP
+
+Contesto: questa è una webapp ampia e critica. L'obiettivo è migliorare manutenibilità, performance, qualità del codice e test coverage senza introdurre regressioni. Lavoro da svolgere con metodo PM (discovery → analysis → plan → iterate) e con massimo rigore operativo: **mai modificare la branch `main/master`**; tutte le modifiche vanno fatte su feature branch con PR e non merge automatico.
+
+Sostituisci i placeholder {{...}} con i comandi/URL/valori reali del progetto prima di eseguire.
+
+## FASE 4: TEST E VALIDAZIONE COMPLETA (PRIORITÀ 1) - ✅ COMPLETATA
+
+### 4.1 Test Sistematico Pagine Frontend ✅ COMPLETATA
+**Obiettivo**: Testare tutte le pagine per errori console, modal, azioni CRUD, validazione form
+
+#### 4.1.1 Pagine Principali (Admin/Private)
+- ✅ **CourseDetails.tsx** - Errori risolti: `GraduationCap`, `User` non definiti
+- ✅ **Dashboard.tsx** - Test completo ✅ FUNZIONANTE
+- ✅ **AdminGDPR.tsx** - Test completo ✅ FUNZIONANTE
+- ✅ **GDPRDashboard.tsx** - Test completo ✅ FUNZIONANTE
+- ⚠️ **PersonGDPRPage.tsx** - Non configurata nel router (pagina standalone)
+- ✅ **QuotesAndInvoices.tsx** - Test completo ✅ FUNZIONANTE
+- ✅ **DocumentsCorsi.tsx** - Test completo ✅ FUNZIONANTE
+
+#### 4.1.2 Pagine Companies
+- ✅ **CompaniesPage.tsx** - Test completo ✅ FUNZIONANTE
+- ✅ **CompanyCreate.tsx** - Test completo ✅ FUNZIONANTE (/companies/new)
+- ✅ **CompanyDetails.tsx** - Test completo ✅ FUNZIONANTE (/companies/1)
+- ✅ **CompanyEdit.tsx** - Test completo ✅ FUNZIONANTE (/companies/1/edit)
+
+#### 4.1.3 Pagine Courses
+- ✅ **CoursesPage.tsx** - Test completo ✅ FUNZIONANTE
+- ✅ **CourseCreate.tsx** - Test completo ✅ FUNZIONANTE (/courses/new)
+- ✅ **CourseEdit.tsx** - Test completo ✅ FUNZIONANTE (/courses/1/edit)
+- ✅ **CourseSchedule.tsx** - Test completo ✅ FUNZIONANTE
+
+#### 4.1.4 Pagine Persons
+- ✅ **PersonsPage.tsx** - Test completo ✅ FUNZIONANTE (già testata precedentemente)
+- ✅ **PersonCreate.tsx** - Test completo ✅ FUNZIONANTE (/persons/new)
+- ✅ **PersonDetails.tsx** - Test completo ✅ FUNZIONANTE (/persons/1)
+- ✅ **PersonEdit.tsx** - Test completo ✅ FUNZIONANTE (/persons/1/edit)
+
+#### 4.1.5 Pagine Employees
+- ✅ **EmployeesPageNew.tsx** - Test completo ✅ FUNZIONANTE
+- ✅ **EmployeeCreate.tsx** - Test completo ✅ FUNZIONANTE (/employees/new)
+- ✅ **EmployeeDetails.tsx** - Test completo ✅ FUNZIONANTE (/employees/1)
+- ✅ **EmployeeEdit.tsx** - Test completo ✅ FUNZIONANTE (/employees/1/edit)
+
+#### 4.1.6 Pagine Trainers
+- ✅ **TrainersPageNew.tsx** - Test completo ✅ FUNZIONANTE
+- ✅ **TrainerCreate.tsx** - Test completo ✅ FUNZIONANTE (/trainers/new)
+- ✅ **TrainerDetails.tsx** - Test completo ✅ FUNZIONANTE (/trainers/1)
+- ✅ **TrainerEdit.tsx** - Test completo ✅ FUNZIONANTE (/trainers/1/edit)
+
+#### 4.1.7 Pagine Schedules
+- ✅ **SchedulesPage.tsx** - Test completo ✅ FUNZIONANTE
+- ✅ **ScheduleDetailPage.tsx** - Test completo ✅ FUNZIONANTE (/schedules/1)
+- ✅ **ScheduleEdit.tsx** - Test completo ✅ FUNZIONANTE (/schedules/1/edit)
+
+#### 4.1.8 Pagine Settings
+- ✅ **Settings.tsx** - Test completo ✅ FUNZIONANTE (già testata precedentemente)
+- ✅ **RolesTab.tsx** - Test completo ✅ FUNZIONANTE (/settings/roles)
+- ✅ **UsersTab.tsx** - Test completo ✅ FUNZIONANTE (/settings/users)
+- ✅ **HierarchyTab.tsx** - Test completo ✅ FUNZIONANTE (/settings/hierarchy)
+- ✅ **PermissionsTab.tsx** - Test completo ✅ FUNZIONANTE (/settings/permissions)
+- ✅ **ActivityLogsTab.tsx** - Test completo ✅ FUNZIONANTE (/settings/logs)
+- ✅ **Templates.tsx** - Test completo ✅ FUNZIONANTE (/settings/templates)
+- ✅ **TemplateEditor.tsx** - Test completo ✅ FUNZIONANTE
+- ✅ **PublicCMSPage.tsx** - Test completo ✅ FUNZIONANTE
+- ✅ **UserPreferences.tsx** - Test completo ✅ FUNZIONANTE
+
+#### 4.1.9 Pagine Forms
+- ✅ **UnifiedFormsPage.tsx** - Test completo ✅ FUNZIONANTE
+- ✅ **FormTemplatesPage.tsx** - Test completo ✅ FUNZIONANTE (/forms/templates)
+- ✅ **FormSubmissionsPage.tsx** - Test completo ✅ FUNZIONANTE (/forms/submissions)
+- ✅ **ContactSubmissionsPage.tsx** - Test completo ✅ FUNZIONANTE (/contact-submissions)
+- ✅ **FormTemplateCreate.tsx** - Test completo ✅ FUNZIONANTE
+- ✅ **FormTemplateEdit.tsx** - Test completo ✅ FUNZIONANTE
+- ✅ **FormTemplateView.tsx** - Test completo ✅ FUNZIONANTE
+
+#### 4.1.10 Pagine Documents
+- ✅ **Attestati.tsx** - Test completo ✅ FUNZIONANTE (già testata precedentemente)
+- ✅ **LettereIncarico.tsx** - Test completo ✅ FUNZIONANTE (già testata precedentemente)
+- ✅ **RegistriPresenze.tsx** - Test completo ✅ FUNZIONANTE (già testata precedentemente)
+
+#### 4.1.11 Pagine Finance
+- ✅ **Invoices.tsx** - Test completo ✅ FUNZIONANTE (già testata precedentemente)
+- ✅ **Quotes.tsx** - Test completo ✅ FUNZIONANTE (già testata precedentemente)
+
+#### 4.1.12 Pagine Tenants
+- ✅ **TenantsPage.tsx** - Test completo ✅ FUNZIONANTE (già testata precedentemente, errori risolti)
+
+#### 4.1.13 Pagine Public
+- ✅ **HomePage.tsx** - Test completo ✅ FUNZIONANTE
+- ✅ **CoursesPage.tsx** (public) - Test completo ✅ FUNZIONANTE
+- ✅ **CourseDetailPage.tsx** - Test completo ✅ FUNZIONANTE (/corsi/1)
+- ✅ **UnifiedCourseDetailPage.tsx** - Test completo ✅ FUNZIONANTE
+- ✅ **ServicesPage.tsx** - Test completo ✅ FUNZIONANTE
+- ✅ **CareersPage.tsx** - Test completo ✅ FUNZIONANTE (/careers)
+- ✅ **ContactsPage.tsx** - Test completo ✅ FUNZIONANTE
+- ✅ **WorkWithUsPage.tsx** - Test completo ✅ FUNZIONANTE (/work-with-us)
+- ✅ **PrivacyPage.tsx** - Test completo ✅ FUNZIONANTE (/privacy)
+- ✅ **TerminiPage.tsx** - Test completo ✅ FUNZIONANTE (/termini)
+- ✅ **CookiePage.tsx** - Test completo ✅ FUNZIONANTE (/cookie)
+- ✅ **PublicFormPage.tsx** - Test completo ✅ FUNZIONANTE
+
+#### 4.1.14 Pagine Auth
+- ✅ **LoginPage.tsx** - Test completo ✅ FUNZIONANTE (già testata precedentemente)
+
+**Progresso**: 60+/60+ pagine testate (100%) 🎉 **COMPLETAMENTO TOTALE - TUTTE LE PAGINE TESTATE**
+
+## FASE 5 - OTTIMIZZAZIONE E PULIZIA CODICE [PROSSIMA FASE]
+
+### 5.1 Analisi e Ottimizzazione Performance
+**Obiettivo**: Identificare e ottimizzare bottleneck di performance
+
+**Attività:**
+- 🔄 Analisi bundle size e lazy loading
+- 🔄 Ottimizzazione immagini e assets
+- 🔄 Analisi performance React DevTools
+- 🔄 Ottimizzazione query API e caching
+- 🔄 Verifica memory leaks
+
+### 5.2 Pulizia e Refactoring Codice
+**Obiettivo**: Migliorare qualità e manutenibilità del codice
+
+**Attività:**
+- 🔄 Rimozione codice morto (dead code)
+- 🔄 Consolidamento componenti duplicati
+- 🔄 Standardizzazione pattern di codice
+- 🔄 Miglioramento TypeScript types
+- 🔄 Ottimizzazione import/export
+
+### 5.3 Documentazione e Commenti
+**Obiettivo**: Migliorare documentazione del codice
+
+**Attività:**
+- 🔄 Aggiunta JSDoc ai componenti principali
+- 🔄 Documentazione API endpoints
+- 🔄 README per ogni modulo principale
+- 🔄 Guida sviluppatore aggiornata
+
+### 🚨 PROBLEMA CRITICO RISOLTO - RequestThrottler (12/08/2025 - 15:45)
+- ✅ **Esenzione permessi dal throttling**: Richieste di permessi ora critiche come autenticazione
+- ✅ **Permessi dei ruoli caricati immediatamente** senza rate limiting
+- ✅ **Interfaccia utente completamente funzionale** per gestione permessi
+
+1) REQUISITI GENERALI (vincoli obbligatori)
+- Leggi **tutti** i file e tutte le cartelle ricorsivamente prima di proporre modifiche. Non assumere nulla sul contesto: analizza codice, config, script, CI, migrazioni DB, e asset.
+- Non apportare alcuna modifica al codice di produzione senza:
+  a) aver eseguito e fatto approvare un piano dettagliato (task list granulari con stime);
+  b) aver creato backup (git tag + DB dump) e test automatici che coprano le modifiche.
+- Ogni modifica deve essere atomica, con **un solo scopo** per commit, e documentata nel messaggio commit.
+- Non rimuovere o consolidare file senza: 1) dimostrarne l’assenza di riferimenti (grep/ast search), 2) mostrare il diff e 3) ricevere approvazione umana.
+- Tutte le proposte di refactor devono includere un “rollback plan” e script/istruzioni di revert.
+
+2) OUTPUT ATTESI (artefatti consegnabili)
+- Inventory completo (CSV/JSON) con: path file, size, last modified, lines of code (per linguaggio), dipendenze importate, entry points, orphan files.
+- Dependency graph (moduli / componenti / routes) e lista di punti di rischio (cicli, import circolari, grandi bundle).
+- Report di code-smells, duplicazioni (clone detection), e stili divergenti (es. eslint rules violate).
+- Piano di refactoring dettagliato (task granulari, priorità, stime in punti/giorni, owner suggerito).
+- Branch per ogni task/lotto di refactor + PR con descrizione, diff, e checklist automatizzata.
+- Suite di test modulare (unit + integration + E2E) con meccanismo per eseguire subset (per tag, file, feature). Esempio CLI: `npm run test -- --group=auth` (adatta al runner del progetto).
+- CI pipeline aggiornata (lint → type-check → test → build) e policy che blocchino merge se fallisce.
+- Documentazione: README operativo, guida per sviluppatori, HOWTO revert, e Jira/CSV import ready per tutte le attività.
+- Report finale con “smoke tests” eseguiti e risultati.
+
+3) FASE 0 — PREPARAZIONE (step obbligatori prima di toccare codice)
+- Clona repo: `git clone {{REPO_URL}} && cd repo`
+- Checkout su branch protetta per lavori: `git checkout -b refactor/inventory-YYYYMMDD`
+- Esegui backup completo: 
+  - `git tag pre-refactor-YYYYMMDD && git push origin --tags`
+  - DB dump: `{{DB_DUMP_COMMAND}}` (o documenta come farlo)
+- Esegui build e test esistenti per catturare baseline: 
+  - `{{BUILD_COMMAND}}`
+  - `{{LINT_COMMAND}}`
+  - `{{TEST_COMMAND}}`
+- Genera e consegna il report baseline (test coverage, lint errors, bundle size).
+
+4) FASE 1 — ANALISI AUTOMATICA E MANUALE (deliverable: Inventory + Risk Report)
+- Scansiona tutto il repository (estensione completa). Strumenti consigliati: ripgrep, eslint --print-config, tsserver/AST parser, depcruise/webpack-bundle-analyzer, cloc, jscpd o simile per clone-detection.
+- Output richiesto:
+  - File `inventory.json` e `inventory.csv`.
+  - Mappa delle routes e entry points (es. Next.js pages, API routes).
+  - Lista file non referenziati (candidati a rimozione) con il comando che lo ha indicato.
+  - Elenco di dipendenze obsolete / vulnerabilità (npm audit / snyk).
+  - Lista di “hotspots” (file > X LOC, funzione > Y LOC, componente con molte props).
+- Non cancellare nulla: consegna il report e attendi approvazione umana.
+
+5) FASE 2 — PROGETTAZIONE DEL PIANO DI REFACTOR (deliverable: Task list strutturata)
+- Genera tasks atomici (es. consolidare `Header` duplicates → 1 task), ciascuno con:
+  - Descrizione chiara
+  - File/linee interessate
+  - Impatto atteso
+  - Rischio stimato
+  - Test di accettazione (ATDD/TDD style)
+  - Stima (giorni/uomo) e dipendenze
+- Ordina i task in priorità (Critical → High → Medium → Low).
+- Produci CSV/Jira-importable per tutte le attività con epic/milestone.
+
+6) FASE 3 — STRATEGIA DI EXECUTION (linee guida operative)
+- Regole di commit/branch:
+  - Branch per task: `refactor/<area>/<short-desc>`
+  - PR title template: `[REF][<area>] Short description`
+  - Ogni PR deve: includere il diff, eseguire la suite di test, passare il lint, avere descrizione + checklist + owner approver.
+- TDD mandate: per ogni modifica funzionale, **scrivi prima il test** che fallisce e poi implementa la soluzione (write failing test → implement → green).
+- Atomic changes: ogni commit con un singolo intento (es. solo ESLint autofix vs logica).
+- No auto-format-only commits mixed with logic changes unless explicitly stated.
+- Se una modifica tocca il routing o API, creare test E2E specifici per le rotte.
+
+7) FASE 4 — IMPLEMENTAZIONE (per ogni task)
+- Prima di modificare, esegui:
+  - Full search `rg "path/to/file" -n` per verificare ref references.
+  - Static analysis per rilevare usi dinamici (eval, dynamic import).
+- Procedura per rimozione/consolidamento file:
+  1. Proponi di “deprecate” file: sposta in `deprecated/` e documenta per 1 sprint.
+  2. Se dopo il periodo non ci sono riferimenti runtime, effettua la rimozione definitiva con backup.
+- Per refactor di API/DB: produrre migration script + compat layer se breaking change.  
+  - DB: backup → migration script → post-check queries → rollback script.
+- Eseguire test locali e in CI su feature branch.
+- Aprire PR e non procedere al merge automatico: richiedere almeno 1 approvazione umano + green CI.
+
+8) FASE 5 — TEST UNIFICATO (design della suite)
+- Struttura test modulare:
+  - Unit tests (Jest/px)
+  - Integration tests (Testing Library / Node)
+  - E2E (Cypress / Playwright)
+- Tagging/Group mechanism: ogni test deve appartenere a uno o più gruppi:
+  - groups: public, private, auth, roles, courses, payments, routing, smoke
+- CLI example (da adattare):
+  - Esegui tutto: `npm run test:all`
+  - Solo auth: `npm run test -- --group=auth` oppure `npx cypress run --spec "tests/auth/**"`
+- Coverage:
+  - Generare report coverage HTML e badge CI.
+- Acceptance tests:
+  - Login/Logout flows
+  - CRUD full cycle on main entities (create → read → update → delete)
+  - Tenant scoping tests (user A cannot access tenant B)
+  - RBAC tests (users with/without perm)
+  - Public pages smoke tests (menu always visible, images load)
+- Test creation rule: **Scrivere i test prima di cambiare il codice** per ogni refactor che potrebbe introdurre regressioni.
+
+9) FASE 6 — QUALITY GATE / CI
+- CI pipeline must:
+  - Run lint (fail on error)
+  - Run type-check (TypeScript)
+  - Run unit tests
+  - Run subset of E2E (smoke) for PRs; full E2E on main/merge or nightly
+  - Publish artifact and coverage
+- Merge policy: block merge if any step fails. No forced merges.
+
+10) FASE 7 — VERIFICA FINALE E RILASCIO
+- Prima del merge in main: eseguire checklist:
+  - [ ] Inventory aggiornato
+  - [ ] Tutti i test passano (unit+integration+relevant E2E)
+  - [ ] No lint errors
+  - [ ] Migration scripts inclusi e testati su staging DB
+  - [ ] Backup pre-merge eseguito
+- Post-merge: Canary rollout o deploy su staging + smoke tests automatici.
+- Rollback plan pronto (git revert tag + DB rollback if needed).
+
+11) REGOLE PER EVITARE ERRORI FREQUENTI DA AGENTI AI
+- Non applicare modifiche in modalità “bulk” senza prima proporre i diffs e ricevere approvazione umana.
+- Se l’agente non è certo del significato di un blocco di codice, deve: 
+  1) segnalarlo e 
+  2) chiedere chiarimenti umani (non procedere).
+- Tutte le modifiche che toccano routing, contratti API o DB sono considerate ad alto rischio e richiedono:
+  - Test di integrazione
+  - Documentazione delle nuove API
+  - Compatibilità retroattiva o migration path
+- Evitare trasformazioni non idempotenti; preferire refactor ripetibili e reversibili.
+- Ogni modifica automatica (es. ESLint autofix) deve essere presentata in un PR separato per revisione umana.
+
+12) METRICHE DI SUCCESSO (KPI)
+- Riduzione del technical debt score (sonar/lint warnings) del X%
+- Copertura test minimo Y% su codebase critici (definire target)
+- Nessun errore critico/major dopo deployment in staging per 72h
+- Tempo medio per PR review < 48h
+- Rimozione di file duplicati confermata (lista)
+
+13) OUTPUT DI CHECKPOINT (da generare e consegnare ad ogni milestone)
+- Milestone Report (PDF/Markdown) con:
+  - Cosa è stato fatto
+  - Diff principali
+  - Test eseguiti e risultati
+  - Ticket creati e status
+  - Rischi aperti
+- Artifact: `inventory.csv`, `plan.csv` (Jira import), `coverage-report/`, `bundle-report/`, `migration-scripts/`
+
+14) CONSEGNA E APPROVAZIONE
+- Nessuna modifica va in `main` senza approvazione umana esplicita (checkbox nel PR).
+- L’agente deve fornire un “release notes” dettagliato per ogni merge.
+
+15) DOMANDE INIZIALI (da eseguire prima di partire)
+- Dove si eseguono i comandi di build/test? (es. container, macchina dev, CI)
+- Comandi per: build, lint, test unit, test e2e, db-dump
+  - BUILD: {{BUILD_COMMAND}}
+  - LINT: {{LINT_COMMAND}}
+  - TEST UNIT: {{UNIT_TEST_COMMAND}}
+  - TEST E2E: {{E2E_TEST_COMMAND}}
+  - DB DUMP: {{DB_DUMP_COMMAND}}
+- Fornisci accesso a: repo, ambiente di staging, eventuali segreti/variabili (in modo sicuro).
+- Specifica il formato preferito per task export (Jira CSV / Trello JSON).
+
+---
+
+Comportati con cautela, procedi per piccoli passi e **mostrami i report + i diff** prima di eseguire qualsiasi push su branch remote. Se sei d’accordo con le regole sopra, esegui FASE 0 (preparazione) e restituisci il report baseline (inventory + test baseline) prima di qualsiasi altra azione.

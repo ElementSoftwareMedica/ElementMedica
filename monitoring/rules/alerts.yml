@@ -1,0 +1,290 @@
+# Prometheus Alerting Rules for Document Management System
+# Defines alerts for critical system conditions
+
+groups:
+  # High Priority Alerts - Critical System Issues
+  - name: critical-alerts
+    rules:
+      # Service Down Alerts
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Service {{ $labels.job }} is down"
+          description: "Service {{ $labels.job }} on {{ $labels.instance }} has been down for more than 1 minute."
+          runbook_url: "https://docs.yourdomain.com/runbooks/service-down"
+
+      # API Response Time
+      - alert: HighAPIResponseTime
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job=~"api-.*"}[5m])) > 2
+        for: 5m
+        labels:
+          severity: critical
+          team: backend
+        annotations:
+          summary: "High API response time detected"
+          description: "95th percentile response time is {{ $value }}s for {{ $labels.job }} on {{ $labels.instance }}"
+          runbook_url: "https://docs.yourdomain.com/runbooks/high-response-time"
+
+      # Database Connection Issues
+      - alert: DatabaseConnectionFailure
+        expr: increase(database_connection_errors_total[5m]) > 10
+        for: 2m
+        labels:
+          severity: critical
+          team: database
+        annotations:
+          summary: "Database connection failures detected"
+          description: "{{ $value }} database connection failures in the last 5 minutes on {{ $labels.instance }}"
+          runbook_url: "https://docs.yourdomain.com/runbooks/database-connection"
+
+      # High Error Rate
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+          team: backend
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value | humanizePercentage }} for {{ $labels.job }} on {{ $labels.instance }}"
+          runbook_url: "https://docs.yourdomain.com/runbooks/high-error-rate"
+
+      # Memory Usage
+      - alert: HighMemoryUsage
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes > 0.9
+        for: 5m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage is {{ $value | humanizePercentage }} on {{ $labels.instance }}"
+          runbook_url: "https://docs.yourdomain.com/runbooks/high-memory"
+
+      # Disk Space
+      - alert: DiskSpaceLow
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) < 0.1
+        for: 5m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Low disk space detected"
+          description: "Disk space is {{ $value | humanizePercentage }} available on {{ $labels.instance }}"
+          runbook_url: "https://docs.yourdomain.com/runbooks/low-disk-space"
+
+  # Warning Level Alerts
+  - name: warning-alerts
+    rules:
+      # CPU Usage
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "High CPU usage detected"
+          description: "CPU usage is {{ $value }}% on {{ $labels.instance }}"
+          runbook_url: "https://docs.yourdomain.com/runbooks/high-cpu"
+
+      # Load Average
+      - alert: HighLoadAverage
+        expr: node_load1 > 2
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "High load average detected"
+          description: "Load average is {{ $value }} on {{ $labels.instance }}"
+          runbook_url: "https://docs.yourdomain.com/runbooks/high-load"
+
+      # API Response Time Warning
+      - alert: ModerateAPIResponseTime
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job=~"api-.*"}[5m])) > 1
+        for: 10m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "Moderate API response time detected"
+          description: "95th percentile response time is {{ $value }}s for {{ $labels.job }}"
+          runbook_url: "https://docs.yourdomain.com/runbooks/moderate-response-time"
+
+      # Database Slow Queries
+      - alert: SlowDatabaseQueries
+        expr: increase(database_slow_queries_total[10m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+          team: database
+        annotations:
+          summary: "Slow database queries detected"
+          description: "{{ $value }} slow queries detected in the last 10 minutes"
+          runbook_url: "https://docs.yourdomain.com/runbooks/slow-queries"
+
+      # Redis Connection Issues
+      - alert: RedisConnectionIssues
+        expr: increase(redis_connection_errors_total[5m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+          team: cache
+        annotations:
+          summary: "Redis connection issues detected"
+          description: "{{ $value }} Redis connection errors in the last 5 minutes"
+          runbook_url: "https://docs.yourdomain.com/runbooks/redis-connection"
+
+  # Blue-Green Deployment Alerts
+  - name: deployment-alerts
+    rules:
+      # Environment Health Mismatch
+      - alert: EnvironmentHealthMismatch
+        expr: |
+          (
+            count(up{environment="blue"} == 1) != count(up{environment="green"} == 1)
+          ) and (
+            count(up{environment="blue"}) > 0 and count(up{environment="green"}) > 0
+          )
+        for: 5m
+        labels:
+          severity: warning
+          team: deployment
+        annotations:
+          summary: "Health mismatch between blue and green environments"
+          description: "Blue environment has {{ $labels.blue_count }} healthy services, Green has {{ $labels.green_count }}"
+          runbook_url: "https://docs.yourdomain.com/runbooks/environment-mismatch"
+
+      # Deployment in Progress
+      - alert: DeploymentInProgress
+        expr: deployment_status{status="in_progress"} == 1
+        for: 30m
+        labels:
+          severity: warning
+          team: deployment
+        annotations:
+          summary: "Deployment has been in progress for over 30 minutes"
+          description: "Deployment {{ $labels.deployment_id }} has been running for over 30 minutes"
+          runbook_url: "https://docs.yourdomain.com/runbooks/long-deployment"
+
+  # Security Alerts
+  - name: security-alerts
+    rules:
+      # High Authentication Failures
+      - alert: HighAuthenticationFailures
+        expr: increase(authentication_failures_total[5m]) > 50
+        for: 2m
+        labels:
+          severity: warning
+          team: security
+        annotations:
+          summary: "High number of authentication failures"
+          description: "{{ $value }} authentication failures in the last 5 minutes from {{ $labels.source_ip }}"
+          runbook_url: "https://docs.yourdomain.com/runbooks/auth-failures"
+
+      # Suspicious Activity
+      - alert: SuspiciousActivity
+        expr: increase(suspicious_requests_total[10m]) > 20
+        for: 5m
+        labels:
+          severity: warning
+          team: security
+        annotations:
+          summary: "Suspicious activity detected"
+          description: "{{ $value }} suspicious requests detected in the last 10 minutes"
+          runbook_url: "https://docs.yourdomain.com/runbooks/suspicious-activity"
+
+      # Rate Limit Exceeded
+      - alert: RateLimitExceeded
+        expr: increase(rate_limit_exceeded_total[5m]) > 100
+        for: 5m
+        labels:
+          severity: warning
+          team: security
+        annotations:
+          summary: "Rate limit frequently exceeded"
+          description: "Rate limit exceeded {{ $value }} times in the last 5 minutes from {{ $labels.source_ip }}"
+          runbook_url: "https://docs.yourdomain.com/runbooks/rate-limit"
+
+  # Business Logic Alerts
+  - name: business-alerts
+    rules:
+      # Low User Activity
+      - alert: LowUserActivity
+        expr: rate(user_actions_total[1h]) < 10
+        for: 30m
+        labels:
+          severity: info
+          team: product
+        annotations:
+          summary: "Low user activity detected"
+          description: "User activity rate is {{ $value }} actions per second over the last hour"
+          runbook_url: "https://docs.yourdomain.com/runbooks/low-activity"
+
+      # High Document Upload Failures
+      - alert: HighDocumentUploadFailures
+        expr: rate(document_upload_failures_total[10m]) / rate(document_upload_attempts_total[10m]) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "High document upload failure rate"
+          description: "Document upload failure rate is {{ $value | humanizePercentage }}"
+          runbook_url: "https://docs.yourdomain.com/runbooks/upload-failures"
+
+      # Storage Quota Exceeded
+      - alert: StorageQuotaExceeded
+        expr: storage_usage_bytes / storage_quota_bytes > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Storage quota nearly exceeded"
+          description: "Storage usage is {{ $value | humanizePercentage }} of quota"
+          runbook_url: "https://docs.yourdomain.com/runbooks/storage-quota"
+
+  # Performance Alerts
+  - name: performance-alerts
+    rules:
+      # High Request Rate
+      - alert: HighRequestRate
+        expr: rate(http_requests_total[5m]) > 1000
+        for: 10m
+        labels:
+          severity: info
+          team: backend
+        annotations:
+          summary: "High request rate detected"
+          description: "Request rate is {{ $value }} requests per second for {{ $labels.job }}"
+          runbook_url: "https://docs.yourdomain.com/runbooks/high-request-rate"
+
+      # Database Connection Pool Exhaustion
+      - alert: DatabaseConnectionPoolExhaustion
+        expr: database_connection_pool_active / database_connection_pool_max > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          team: database
+        annotations:
+          summary: "Database connection pool nearly exhausted"
+          description: "Connection pool usage is {{ $value | humanizePercentage }}"
+          runbook_url: "https://docs.yourdomain.com/runbooks/connection-pool"
+
+      # Cache Hit Rate Low
+      - alert: LowCacheHitRate
+        expr: redis_cache_hit_rate < 0.8
+        for: 15m
+        labels:
+          severity: info
+          team: cache
+        annotations:
+          summary: "Low cache hit rate"
+          description: "Cache hit rate is {{ $value | humanizePercentage }}"
+          runbook_url: "https://docs.yourdomain.com/runbooks/low-cache-hit"

@@ -1,0 +1,245 @@
+# Prometheus Configuration for Document Management System
+# Monitors all services in both blue and green environments
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'document-management'
+    environment: 'production'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+
+# Load rules once and periodically evaluate them
+rule_files:
+  - "rules/*.yml"
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    scrape_interval: 5s
+    metrics_path: /metrics
+
+  # Node Exporter for system metrics
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    scrape_interval: 10s
+    metrics_path: /metrics
+
+  # Nginx metrics
+  - job_name: 'nginx'
+    static_configs:
+      - targets: ['nginx:8080']
+    scrape_interval: 10s
+    metrics_path: /nginx-status
+    params:
+      format: ['prometheus']
+
+  # Blue Environment - API Services
+  - job_name: 'api-blue'
+    static_configs:
+      - targets: ['api_blue:4000']
+    scrape_interval: 10s
+    metrics_path: /metrics
+    params:
+      format: ['prometheus']
+    labels:
+      environment: 'blue'
+      service: 'api'
+
+  # Green Environment - API Services
+  - job_name: 'api-green'
+    static_configs:
+      - targets: ['api_green:4000']
+    scrape_interval: 10s
+    metrics_path: /metrics
+    params:
+      format: ['prometheus']
+    labels:
+      environment: 'green'
+      service: 'api'
+
+  # Blue Environment - Frontend Services
+  - job_name: 'frontend-blue'
+    static_configs:
+      - targets: ['frontend_blue:3000']
+    scrape_interval: 15s
+    metrics_path: /metrics
+    params:
+      format: ['prometheus']
+    labels:
+      environment: 'blue'
+      service: 'frontend'
+
+  # Green Environment - Frontend Services
+  - job_name: 'frontend-green'
+    static_configs:
+      - targets: ['frontend_green:3000']
+    scrape_interval: 15s
+    metrics_path: /metrics
+    params:
+      format: ['prometheus']
+    labels:
+      environment: 'green'
+      service: 'frontend'
+
+  # Blue Environment - Documentation Services
+  - job_name: 'docs-blue'
+    static_configs:
+      - targets: ['docs_blue:4002']
+    scrape_interval: 15s
+    metrics_path: /metrics
+    params:
+      format: ['prometheus']
+    labels:
+      environment: 'blue'
+      service: 'docs'
+
+  # Green Environment - Documentation Services
+  - job_name: 'docs-green'
+    static_configs:
+      - targets: ['docs_green:4002']
+    scrape_interval: 15s
+    metrics_path: /metrics
+    params:
+      format: ['prometheus']
+    labels:
+      environment: 'green'
+      service: 'docs'
+
+  # Blue Environment - Main Services
+  - job_name: 'main-blue'
+    static_configs:
+      - targets: ['main_blue:3001']
+    scrape_interval: 10s
+    metrics_path: /metrics
+    params:
+      format: ['prometheus']
+    labels:
+      environment: 'blue'
+      service: 'main'
+
+  # Green Environment - Main Services
+  - job_name: 'main-green'
+    static_configs:
+      - targets: ['main_green:3001']
+    scrape_interval: 10s
+    metrics_path: /metrics
+    params:
+      format: ['prometheus']
+    labels:
+      environment: 'green'
+      service: 'main'
+
+  # PostgreSQL Database
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+    scrape_interval: 10s
+    metrics_path: /metrics
+
+  # Redis Cache
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+    scrape_interval: 10s
+    metrics_path: /metrics
+
+  # Docker containers metrics
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+    scrape_interval: 10s
+    metrics_path: /metrics
+
+  # Application-specific metrics
+  - job_name: 'app-metrics'
+    static_configs:
+      - targets: 
+        - 'api_blue:4000'
+        - 'api_green:4000'
+    scrape_interval: 5s
+    metrics_path: /api/metrics
+    params:
+      format: ['prometheus']
+
+  # Health checks
+  - job_name: 'health-checks'
+    static_configs:
+      - targets:
+        - 'api_blue:4000'
+        - 'api_green:4000'
+        - 'frontend_blue:3000'
+        - 'frontend_green:3000'
+        - 'docs_blue:4002'
+        - 'docs_green:4002'
+        - 'main_blue:3001'
+        - 'main_green:3001'
+    scrape_interval: 30s
+    metrics_path: /health
+    params:
+      format: ['prometheus']
+
+  # Custom business metrics
+  - job_name: 'business-metrics'
+    static_configs:
+      - targets: ['api_blue:4000', 'api_green:4000']
+    scrape_interval: 30s
+    metrics_path: /api/business-metrics
+    params:
+      format: ['prometheus']
+
+  # Security metrics
+  - job_name: 'security-metrics'
+    static_configs:
+      - targets: ['api_blue:4000', 'api_green:4000']
+    scrape_interval: 60s
+    metrics_path: /api/security-metrics
+    params:
+      format: ['prometheus']
+
+# Remote write configuration (optional, for long-term storage)
+# remote_write:
+#   - url: "https://your-remote-prometheus-endpoint/api/v1/write"
+#     basic_auth:
+#       username: "your-username"
+#       password: "your-password"
+
+# Remote read configuration (optional)
+# remote_read:
+#   - url: "https://your-remote-prometheus-endpoint/api/v1/read"
+#     basic_auth:
+#       username: "your-username"
+#       password: "your-password"
+
+# Storage configuration
+storage:
+  tsdb:
+    retention.time: 30d
+    retention.size: 10GB
+    path: /prometheus/data
+
+# Web configuration
+web:
+  console.libraries: /etc/prometheus/console_libraries
+  console.templates: /etc/prometheus/consoles
+  enable-lifecycle: true
+  enable-admin-api: true
+  max-connections: 512
+  read-timeout: 30s
+  route-prefix: /
+  external-url: http://localhost:9090
+
+# Log configuration
+log:
+  level: info
+  format: logfmt

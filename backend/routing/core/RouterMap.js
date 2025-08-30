@@ -119,6 +119,34 @@ const routerMap = {
         description: 'Google Docs API root proxy (documents service)',
         cors: true,
         rateLimit: 'api'
+      },
+
+      // ✅ Dashboard (API non versionata esposta su /api/dashboard)
+      '/api/dashboard/*': {
+        target: 'api',
+        pathRewrite: { '^/api/dashboard': '/api/dashboard' },
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+        description: 'Dashboard API routes (unversioned backend)',
+        cors: true,
+        rateLimit: 'api'
+      },
+      '/api/dashboard': {
+        target: 'api',
+        pathRewrite: { '^/api/dashboard': '/api/dashboard' },
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+        description: 'Dashboard API root (unversioned backend)',
+        cors: true,
+        rateLimit: 'api'
+      },
+
+      // ✅ Counters (API non versionata esposta su /api/counters)
+      '/api/counters': {
+        target: 'api',
+        pathRewrite: { '^/api/counters': '/api/counters' },
+        methods: ['GET', 'OPTIONS'],
+        description: 'Counters endpoint (unversioned backend)',
+        cors: true,
+        rateLimit: 'api'
       }
     },
     v2: {
@@ -162,6 +190,34 @@ const routerMap = {
         target: 'documents',
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
         description: 'Google Docs API root proxy (documents service)',
+        cors: true,
+        rateLimit: 'api'
+      },
+
+      // ✅ Dashboard (API non versionata esposta su /api/dashboard)
+      '/api/dashboard/*': {
+        target: 'api',
+        pathRewrite: { '^/api/dashboard': '/api/dashboard' },
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+        description: 'Dashboard API routes (unversioned backend)',
+        cors: true,
+        rateLimit: 'api'
+      },
+      '/api/dashboard': {
+        target: 'api',
+        pathRewrite: { '^/api/dashboard': '/api/dashboard' },
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+        description: 'Dashboard API root (unversioned backend)',
+        cors: true,
+        rateLimit: 'api'
+      },
+
+      // ✅ Counters (API non versionata esposta su /api/counters)
+      '/api/counters': {
+        target: 'api',
+        pathRewrite: { '^/api/counters': '/api/counters' },
+        methods: ['GET', 'OPTIONS'],
+        description: 'Counters endpoint (unversioned backend)',
         cors: true,
         rateLimit: 'api'
       }
@@ -255,6 +311,50 @@ const routerMap = {
       redirect: '/api/v1/roles/*',
       methods: ['GET', 'POST', 'PUT', 'DELETE'],
       description: 'Legacy roles redirect'
+    },
+
+    // Unificazione entità: redirect legacy Users/Employees -> Persons
+    '/api/v1/users/*': {
+      redirect: '/api/v1/persons/*',
+      methods: ['GET', 'POST', 'PUT', 'DELETE'],
+      description: 'Legacy users to persons redirect'
+    },
+    '/api/users/*': {
+      redirect: '/api/v1/persons/*',
+      methods: ['GET', 'POST', 'PUT', 'DELETE'],
+      description: 'Legacy /api users to persons redirect'
+    },
+    '/users/*': {
+      redirect: '/api/v1/persons/*',
+      methods: ['GET', 'POST', 'PUT', 'DELETE'],
+      description: 'Legacy users to persons redirect'
+    },
+    '/api/v1/employees/*': {
+      redirect: '/api/v1/persons/*',
+      methods: ['GET', 'POST', 'PUT', 'DELETE'],
+      description: 'Legacy employees to persons redirect'
+    },
+    '/api/employees/*': {
+      redirect: '/api/v1/persons/*',
+      methods: ['GET', 'POST', 'PUT', 'DELETE'],
+      description: 'Legacy /api employees to persons redirect'
+    },
+    '/employees/*': {
+      redirect: '/api/v1/persons/*',
+      methods: ['GET', 'POST', 'PUT', 'DELETE'],
+      description: 'Legacy employees to persons redirect'
+    },
+
+    // Compatibilità aziende non versionato -> versionato
+    '/companies': {
+      redirect: '/api/v1/companies',
+      methods: ['GET', 'POST'],
+      description: 'Legacy companies root redirect'
+    },
+    '/companies/*': {
+      redirect: '/api/v1/companies/*',
+      methods: ['GET', 'POST', 'PUT', 'DELETE'],
+      description: 'Legacy companies redirect'
     }
   },
 
@@ -568,7 +668,7 @@ const routerMap = {
     enabled: true,
     level: 'info',
     includeHeaders: ['x-api-version', 'user-agent', 'x-forwarded-for'],
-    excludePaths: ['/health', '/metrics'],
+    excludePaths: ['/health', '/healthz', '/ready', '/status', '/metrics'],
     logRequests: true,
     logResponses: true,
     logErrors: true

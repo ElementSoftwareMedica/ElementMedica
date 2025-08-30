@@ -1,0 +1,4 @@
+nome,cognome,email,telefono,codicefiscale,datanascita,azienda,ruolo
+Mario,Rossi,mario.rossi@test.com,3331234567,RSSMRA80A01H501Z,01/01/1980,Test Company,EMPLOYEE
+Giulia,Bianchi,giulia.bianchi@test.com,3337654321,BNCGLI85B02H501Y,15/02/1985,Prova,EMPLOYEE
+Luca,Verdi,luca.verdi@test.com,3339876543,VRDLCU90C03H501X,20/03/1990,Azienda Inesistente,TRAINER

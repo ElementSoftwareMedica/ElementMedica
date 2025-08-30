@@ -1,3 +1,8 @@
+import dotenv from 'dotenv';
+import { PrismaClient } from '@prisma/client';
+
+dotenv.config({ path: process.env.NODE_ENV === 'production' ? '.env.production' : '.env' });
+
 /**
  * Script per verificare e correggere i permessi dell'admin
  * Questo script analizza e corregge i permessi dell'utente admin nel database

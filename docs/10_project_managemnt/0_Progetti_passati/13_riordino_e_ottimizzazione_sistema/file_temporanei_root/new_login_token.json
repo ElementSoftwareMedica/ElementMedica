@@ -1,0 +1,1 @@
+{"error":"Validation failed","message":"Invalid input data","details":[{"type":"field","msg":"Email, username, or tax code is required","path":"identifier","location":"body"},{"type":"field","msg":"Cannot read properties of undefined (reading 'length')","path":"identifier","location":"body"}]}

@@ -2,6 +2,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import logger from '../utils/logger.js';
 import prisma from '../config/prisma-optimization.js';
+import crypto from 'crypto';
 
 class AuthService {
   /**
@@ -104,8 +105,11 @@ class AuthService {
 
       const jwtRefreshSecret = process.env.JWT_REFRESH_SECRET || 'super-secret-jwt-refresh-key-for-development-change-in-production-2024';
       
+      // Aggiungi un identificatore univoco (jti) per evitare token identici generati nello stesso secondo
+      const jti = typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex');
+
       const refreshToken = jwt.sign(
-        { personId: person.id },
+        { personId: person.id, jti },
         jwtRefreshSecret,
         { 
           expiresIn: refreshTokenExpiry,
@@ -126,71 +130,22 @@ class AuthService {
   }
 
   /**
-   * Aggiorna l'ultimo accesso
-   */
-  async updateLastLogin(personId) {
-    try {
-      // Aggiorna il campo lastLogin (non lastLoginAt)
-      await prisma.person.update({
-        where: { id: personId },
-        data: { lastLogin: new Date() }
-      });
-    } catch (error) {
-      logger.error('Error updating last login:', { error: error.message, personId });
-      throw error;
-    }
-  }
-
-  /**
-   * Salva il refresh token
+   * Salva il refresh token su DB
    */
   async saveRefreshToken(token, personId, expiresAt, userAgent, ipAddress, tenantId) {
     try {
-      console.log('🔍 saveRefreshToken called with:', { personId, tenantId, typeof_tenantId: typeof tenantId });
-      
-      // Se tenantId è null, cerchiamo il primo tenant disponibile o creiamo un tenant di default
-      let finalTenantId = tenantId;
-      if (!tenantId) {
-        console.log('⚠️ tenantId is null, looking for default tenant...');
-        
-        // Cerca il primo tenant disponibile
-        const defaultTenant = await prisma.tenant.findFirst({
-          where: { isActive: true }
-        });
-        
-        if (defaultTenant) {
-          finalTenantId = defaultTenant.id;
-          console.log('✅ Using default tenant:', finalTenantId);
-        } else {
-          throw new Error('No active tenant found and tenantId is null');
-        }
-      }
-      
-      // Elimina i vecchi token scaduti o per questa persona
-      await prisma.refreshToken.deleteMany({
-        where: {
-          OR: [
-            { expiresAt: { lt: new Date() } },
-            { personId: personId } // Elimina i vecchi token per questa persona
-          ]
-        }
-      });
-
-      // Crea il nuovo token usando i campi corretti del schema
-      await prisma.refreshToken.create({
+      return await prisma.refreshToken.create({
         data: {
           token,
-          personId: personId,
-          tenantId: finalTenantId,
+          personId,
           expiresAt,
           deviceInfo: {
             userAgent: userAgent || 'Unknown',
-            ipAddress: ipAddress || 'Unknown'
-          }
+            ipAddress: ipAddress || '0.0.0.0'
+          },
+          tenantId
         }
       });
-      
-      logger.info('Refresh token saved successfully', { personId, tenantId });
     } catch (error) {
       logger.error('Error saving refresh token:', { error: error.message });
       throw error;
@@ -198,32 +153,23 @@ class AuthService {
   }
 
   /**
-   * Verifica se una persona ha un ruolo specifico
-   */
-  hasRole(person, roleType) {
-    return person.personRoles.some(pr => pr.roleType === roleType && pr.isActive);
-  }
-
-  /**
-   * Ottiene tutti i ruoli di una persona
+   * Restituisce i ruoli della persona in modo sincrono (senza query aggiuntive)
+   * Mantiene compatibilità con i chiamanti esistenti.
    */
   getPersonRoles(person) {
-    if (!person.personRoles) {
-      console.log('⚠️ AuthService.getPersonRoles: person.personRoles is null/undefined');
+    try {
+      if (!person) return [];
+      if (Array.isArray(person.personRoles)) {
+        return person.personRoles
+          .filter(pr => !pr.deletedAt)
+          .map(pr => pr.roleType)
+          .filter(Boolean);
+      }
+      return [];
+    } catch (error) {
+      logger.warn('Error getting person roles from person object', { error: error.message });
       return [];
     }
-    
-    const roles = person.personRoles
-      .filter(pr => pr.isActive)
-      .map(pr => pr.roleType);
-      
-    console.log('🔍 AuthService.getPersonRoles:', {
-      personId: person.id,
-      personRolesCount: person.personRoles.length,
-      activeRoles: roles
-    });
-    
-    return roles;
   }
 }
 

@@ -1,0 +1,8 @@
+td[data-col='select'], div[data-col='select'] {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  width: 32px !important;
+  min-width: 0 !important;
+  max-width: 40px !important;
+  text-align: center;
+} 

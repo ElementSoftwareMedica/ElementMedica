@@ -132,16 +132,31 @@ router.get('/verify', authenticateTest, async (req, res) => {
       }
     });
 
-    // Get the primary role
-    const personRole = person.personRoles.length > 0 ? 
-      (person.personRoles[0].customRole?.name || person.personRoles[0].roleType) : 
-      person.role;
-    const roles = person.personRoles.map(pr => pr.customRole?.name || pr.roleType).filter(Boolean);
-    
+    // Build roles array including customRole/roleType and fallback to globalRole
+    const roles = Array.from(new Set([
+      ...person.personRoles
+        .map(pr => pr.customRole?.name || pr.roleType)
+        .filter(Boolean),
+      ...(person.globalRole ? [person.globalRole] : []),
+      ...(Array.isArray(req.person?.roles) ? req.person.roles.filter(Boolean) : [])
+    ]));
+  
+    // Determine primary role with fallback to globalRole
+    const personRole = roles.length > 0
+      ? roles[0]
+      : (person.globalRole || (Array.isArray(req.person?.roles) && req.person.roles.length > 0 ? req.person.roles[0] : null));
+  
     // Add default permissions based on role
-    if (personRole === 'ADMIN' || personRole === 'SUPER_ADMIN' || roles.includes('ADMIN') || roles.includes('SUPER_ADMIN')) {
+    const isAdmin =
+      personRole === 'ADMIN' ||
+      personRole === 'SUPER_ADMIN' ||
+      roles.includes('ADMIN') ||
+      roles.includes('SUPER_ADMIN') ||
+      (Array.isArray(req.person?.roles) && (req.person.roles.includes('ADMIN') || req.person.roles.includes('SUPER_ADMIN')));
+    if (isAdmin) {
       // Admin permissions
       permissionMap['dashboard:view'] = true;
+      permissionMap['dashboard:read'] = true;
       permissionMap['companies:view'] = true;
       permissionMap['companies:read'] = true;
       permissionMap['companies:create'] = true;
@@ -149,6 +164,10 @@ router.get('/verify', authenticateTest, async (req, res) => {
       permissionMap['companies:edit'] = true;
       permissionMap['companies:delete'] = true;
       permissionMap['companies:manage'] = true;
+      
+      // Tenants permissions (admin defaults)
+      permissionMap['tenants:view'] = true;
+      permissionMap['tenants:read'] = true;
       
       // Persons permissions
       permissionMap['persons:view'] = true;

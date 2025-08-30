@@ -1,0 +1,6 @@
+Testing login endpoint...
+=========================
+Response:
+{"success":true,"user":{"id":"7dba16e2-0617-4077-90ef-bbd9123291ec","email":"admin@example.com","firstName":"Admin","lastName":"User","globalRole":"ADMIN","role":"Admin","roles":["ADMIN"],"status":"ACTIVE","companyId":null,"tenantId":"96a98861-78fc-4508-9533-94cc1184a705","company":null},"tokens":{"access_token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJwZXJzb25JZCI6IjdkYmExNmUyLTA2MTctNDA3Ny05MGVmLWJiZDkxMjMyOTFlYyIsImVtYWlsIjoiYWRtaW5AZXhhbXBsZS5jb20iLCJ1c2VybmFtZSI6ImFkbWluIiwidGF4Q29kZSI6bnVsbCwiY29tcGFueUlkIjpudWxsLCJ0ZW5hbnRJZCI6Ijk2YTk4ODYxLTc4ZmMtNDUwOC05NTMzLTk0Y2MxMTg0YTcwNSIsInJvbGVzIjpbIkFETUlOIl0sImlhdCI6MTc1NjU2NDk2OCwiZXhwIjoxNzU2NTY4NTY4LCJhdWQiOiJ0cmFpbmluZy1wbGF0Zm9ybS11c2VycyIsImlzcyI6InRyYWluaW5nLXBsYXRmb3JtIn0.WvavlDVlKU6_bsO3Q_z9xkf07JD4MHaWyM6wvv1o2nA","refresh_token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJwZXJzb25JZCI6IjdkYmExNmUyLTA2MTctNDA3Ny05MGVmLWJiZDkxMjMyOTFlYyIsImp0aSI6IjZjNDBjMzlkLWQ4ZjEtNDExYi04ODI3LTk4OGQzNDdjY2U2NSIsImlhdCI6MTc1NjU2NDk2OCwiZXhwIjoxNzU3MTY5NzY4LCJhdWQiOiJ0cmFpbmluZy1wbGF0Zm9ybS11c2VycyIsImlzcyI6InRyYWluaW5nLXBsYXRmb3JtIn0.JNYpVFg7sYxq38cT4VIZlaDZkD55l-nuUfD_I0Exhno","expires_in":3600,"token_type":"Bearer"}}
+HTTP_CODE:200
+=========================

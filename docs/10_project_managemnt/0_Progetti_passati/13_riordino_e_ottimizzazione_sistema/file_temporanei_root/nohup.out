@@ -1,0 +1,74 @@
+2025-06-19 23:16:05:165 [32minfo[39m: [32mInitializing authentication system[39m
+2025-06-19 23:16:05:165 [32minfo[39m: [32mSession cleanup skipped - user_sessions table not yet implemented[39m
+2025-06-19 23:16:05:165 [32minfo[39m: [32mCleaned up expired sessions[39m
+2025-06-19 23:16:05:165 [32minfo[39m: [32mAuthentication system initialized successfully[39m
+2025-06-19 23:16:05:165 [32minfo[39m: [32mAuthentication system initialized in Documents Server[39m
+2025-06-19 23:16:05:165 [32minfo[39m: [32mGoogle API Service initialized successfully[39m
+2025-06-19 23:16:05:165 [32minfo[39m: [32mGoogle API Service initialized in Documents Server[39m
+2025-06-19 23:16:05:165 [32minfo[39m: [32mDocuments Server started successfully[39m
+2025-06-19 23:16:05:165 [33mwarn[39m: [33mRedis connection error, falling back to memory cache[39m
+2025-06-19 23:16:05:165 [33mwarn[39m: [33mRedis connection closed, using memory cache[39m
+2025-06-19 23:16:05:165 [33mwarn[39m: [33mFailed to connect to Redis, using memory cache fallback[39m
+2025-06-19 23:16:05:165 [32minfo[39m: [32mCache service initialized in Documents Server[39m
+2025-06-19 23:16:05:165 [33mwarn[39m: [33mRedis connection error, falling back to memory cache[39m
+2025-06-19 23:16:05:165 [33mwarn[39m: [33mRedis connection closed, using memory cache[39m
+2025-06-19 23:16:05:165 [33mwarn[39m: [33mRedis connection error, falling back to memory cache[39m
+2025-06-19 23:16:05:165 [33mwarn[39m: [33mRedis connection closed, using memory cache[39m
+2025-06-19 23:16:05:165 [33mwarn[39m: [33mRedis connection error, falling back to memory cache[39m
+2025-06-19 23:16:05:165 [33mwarn[39m: [33mRedis connection closed, using memory cache[39m
+2025-06-19 23:16:05:165 [33mwarn[39m: [33mRedis connection error, falling back to memory cache[39m
+2025-06-19 23:16:05:165 [33mwarn[39m: [33mRedis connection closed, using memory cache[39m
+2025-06-19 23:16:06:166 [33mwarn[39m: [33mRedis connection error, falling back to memory cache[39m
+2025-06-19 23:16:06:166 [33mwarn[39m: [33mRedis connection closed, using memory cache[39m
+2025-06-19 23:16:06:166 [33mwarn[39m: [33mRedis connection error, falling back to memory cache[39m
+2025-06-19 23:16:06:166 [33mwarn[39m: [33mRedis connection closed, using memory cache[39m
+2025-06-19 23:16:06:166 [33mwarn[39m: [33mRedis connection error, falling back to memory cache[39m
+2025-06-19 23:16:06:166 [33mwarn[39m: [33mRedis connection closed, using memory cache[39m
+2025-06-19 23:16:07:167 [33mwarn[39m: [33mRedis connection error, falling back to memory cache[39m
+2025-06-19 23:16:07:167 [33mwarn[39m: [33mRedis connection closed, using memory cache[39m
+2025-06-19 23:16:07:167 [33mwarn[39m: [33mRedis connection error, falling back to memory cache[39m
+2025-06-19 23:16:07:167 [33mwarn[39m: [33mRedis connection closed, using memory cache[39m
+2025-06-19 23:16:08:168 [33mwarn[39m: [33mRedis connection error, falling back to memory cache[39m
+2025-06-19 23:16:08:168 [33mwarn[39m: [33mRedis connection closed, using memory cache[39m
+2025-06-19 23:16:08:168 [33mwarn[39m: [33mRedis connection error, falling back to memory cache[39m
+2025-06-19 23:16:08:168 [33mwarn[39m: [33mRedis connection closed, using memory cache[39m
+2025-06-19 23:16:09:169 [33mwarn[39m: [33mRedis connection error, falling back to memory cache[39m
+2025-06-19 23:16:09:169 [33mwarn[39m: [33mRedis connection closed, using memory cache[39m
+2025-06-19 23:16:09:169 [33mwarn[39m: [33mRedis connection error, falling back to memory cache[39m
+2025-06-19 23:16:09:169 [33mwarn[39m: [33mRedis connection closed, using memory cache[39m
+2025-06-19 23:16:10:1610 [33mwarn[39m: [33mRedis connection error, falling back to memory cache[39m
+2025-06-19 23:16:10:1610 [33mwarn[39m: [33mRedis connection closed, using memory cache[39m
+2025-06-19 23:16:11:1611 [33mwarn[39m: [33mRedis connection error, falling back to memory cache[39m
+2025-06-19 23:16:11:1611 [33mwarn[39m: [33mRedis connection closed, using memory cache[39m
+2025-06-19 23:16:12:1612 [33mwarn[39m: [33mRedis connection error, falling back to memory cache[39m
+2025-06-19 23:16:12:1612 [33mwarn[39m: [33mRedis connection closed, using memory cache[39m
+2025-06-19 23:16:13:1613 [33mwarn[39m: [33mRedis connection error, falling back to memory cache[39m
+2025-06-19 23:16:13:1613 [33mwarn[39m: [33mRedis connection closed, using memory cache[39m
+2025-06-19 23:16:13:1613 [33mwarn[39m: [33mRedis connection error, falling back to memory cache[39m
+2025-06-19 23:16:13:1613 [33mwarn[39m: [33mRedis connection closed, using memory cache[39m
+2025-06-19 23:16:14:1614 [33mwarn[39m: [33mRedis connection error, falling back to memory cache[39m
+2025-06-19 23:16:14:1614 [33mwarn[39m: [33mRedis connection closed, using memory cache[39m
+2025-06-19 23:16:15:1615 [33mwarn[39m: [33mRedis connection error, falling back to memory cache[39m
+2025-06-19 23:16:15:1615 [33mwarn[39m: [33mRedis connection closed, using memory cache[39m
+2025-06-19 23:16:16:1616 [33mwarn[39m: [33mRedis connection error, falling back to memory cache[39m
+2025-06-19 23:16:16:1616 [33mwarn[39m: [33mRedis connection closed, using memory cache[39m
+2025-06-19 23:16:18:1618 [33mwarn[39m: [33mRedis connection error, falling back to memory cache[39m
+2025-06-19 23:16:18:1618 [33mwarn[39m: [33mRedis connection closed, using memory cache[39m
+2025-06-19 23:16:19:1619 [33mwarn[39m: [33mRedis connection error, falling back to memory cache[39m
+2025-06-19 23:16:19:1619 [33mwarn[39m: [33mRedis connection closed, using memory cache[39m
+2025-06-19 23:16:20:1620 [33mwarn[39m: [33mRedis connection error, falling back to memory cache[39m
+2025-06-19 23:16:20:1620 [33mwarn[39m: [33mRedis connection closed, using memory cache[39m
+2025-06-19 23:16:21:1621 [33mwarn[39m: [33mRedis connection error, falling back to memory cache[39m
+2025-06-19 23:16:21:1621 [33mwarn[39m: [33mRedis connection closed, using memory cache[39m
+2025-06-19 23:16:22:1622 [33mwarn[39m: [33mRedis connection error, falling back to memory cache[39m
+2025-06-19 23:16:22:1622 [33mwarn[39m: [33mRedis connection closed, using memory cache[39m
+2025-06-19 23:16:24:1624 [33mwarn[39m: [33mRedis connection error, falling back to memory cache[39m
+2025-06-19 23:16:24:1624 [33mwarn[39m: [33mRedis connection closed, using memory cache[39m
+2025-06-19 23:16:25:1625 [33mwarn[39m: [33mRedis connection error, falling back to memory cache[39m
+2025-06-19 23:16:25:1625 [33mwarn[39m: [33mRedis connection closed, using memory cache[39m
+2025-06-19 23:16:25:1625 [32minfo[39m: [32mSIGINT received, shutting down gracefully[39m
+2025-06-19 23:16:25:1625 [32minfo[39m: [32mShutting down authentication system[39m
+2025-06-19 23:16:25:1625 [32minfo[39m: [32mAuthentication system shut down successfully[39m
+2025-06-19 23:16:25:1625 [32minfo[39m: [32mGoogle API Service shutdown completed[39m
+2025-06-19 23:16:25:1625 [32minfo[39m: [32mRedis disconnected[39m
+2025-06-19 23:16:25:1625 [32minfo[39m: [32mDocuments Server shutdown complete[39m

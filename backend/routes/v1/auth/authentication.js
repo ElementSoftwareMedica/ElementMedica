@@ -107,19 +107,51 @@ router.post('/login',
 
       const person = credentialsResult.person;
 
-      // Generate tokens using AuthService
-      const tokens = authService.generateTokens(person, remember_me);
+      // Generate tokens using AuthService with retry on unique constraint
+      let tokens;
+      let saveOk = false;
+      let lastError = null;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          tokens = authService.generateTokens(person, remember_me);
 
-      // Store refresh token
-      const expiresAt = new Date(Date.now() + (remember_me ? 30 : 7) * 24 * 60 * 60 * 1000);
-      await authService.saveRefreshToken(
-        tokens.refreshToken,
-        person.id,
-        expiresAt,
-        req.get('User-Agent'),
-        req.ip,
-        person.tenantId
-      );
+          // Store refresh token (compute expires each attempt to keep coherence)
+          const expiresAt = new Date(Date.now() + (remember_me ? 30 : 7) * 24 * 60 * 60 * 1000);
+          await authService.saveRefreshToken(
+            tokens.refreshToken,
+            person.id,
+            expiresAt,
+            req.get('User-Agent'),
+            req.ip,
+            person.tenantId
+          );
+          saveOk = true;
+          break;
+        } catch (e) {
+          lastError = e;
+          // Prisma unique constraint error code is P2002
+          const isUniqueViolation = e && (e.code === 'P2002' || (e.message && e.message.includes('Unique constraint failed') && e.message.includes('token')));
+          if (isUniqueViolation) {
+            logger.warn('Duplicate refresh token detected, regenerating (retry attempt)', {
+              attempt,
+              personId: person.id
+            });
+            continue; // retry generating tokens
+          }
+          throw e; // rethrow other errors immediately
+        }
+      }
+
+      if (!saveOk) {
+        logger.error('Failed to persist refresh token after retries', {
+          personId: person.id,
+          error: lastError ? lastError.message : 'unknown'
+        });
+        return res.status(500).json({
+          error: 'Internal server error',
+          message: 'Unable to complete login, please try again'
+        });
+      }
 
       // Clean up existing sessions for this person to avoid conflicts
       await prisma.personSession.deleteMany({
@@ -326,8 +358,11 @@ router.post('/register',
           token: refreshToken,
           personId: person.id,
           expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-          userAgent: req.get('User-Agent') || 'Unknown',
-          ipAddress: req.ip
+          deviceInfo: {
+            userAgent: req.get('User-Agent') || 'Unknown',
+            ipAddress: req.ip || '0.0.0.0'
+          },
+          tenantId: person.tenantId
         }
       });
 

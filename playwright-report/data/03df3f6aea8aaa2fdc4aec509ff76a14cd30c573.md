@@ -1,0 +1,156 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e7]:
+      - generic [ref=e8]:
+        - generic [ref=e9]:
+          - img [ref=e10]
+          - generic [ref=e12]: +39 123 456 7890
+        - generic [ref=e13]:
+          - img [ref=e14]
+          - generic [ref=e17]: info@elementformazione.it
+      - button "Area Riservata" [ref=e19] [cursor=pointer]
+    - generic [ref=e21]:
+      - link "E Element Formazione Sicurezza e Formazione Professionale" [ref=e22] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e24] [cursor=pointer]: E
+        - generic [ref=e25] [cursor=pointer]:
+          - heading "Element Formazione" [level=1] [ref=e26] [cursor=pointer]
+          - paragraph [ref=e27] [cursor=pointer]: Sicurezza e Formazione Professionale
+      - navigation [ref=e28]:
+        - link "Home" [ref=e29] [cursor=pointer]:
+          - /url: /
+        - link "Corsi" [ref=e30] [cursor=pointer]:
+          - /url: /corsi
+        - link "Servizi" [ref=e31] [cursor=pointer]:
+          - /url: /servizi
+        - link "Lavora con noi" [ref=e32] [cursor=pointer]:
+          - /url: /lavora-con-noi
+        - link "Contatti" [ref=e33] [cursor=pointer]:
+          - /url: /contatti
+      - button "Richiedi Preventivo" [ref=e35] [cursor=pointer]
+  - main [ref=e36]:
+    - generic [ref=e38]:
+      - generic [ref=e39]:
+        - heading "Accedi al tuo account" [level=2] [ref=e40]
+        - paragraph [ref=e41]: Inserisci le tue credenziali per accedere
+      - generic [ref=e42]:
+        - generic [ref=e43]:
+          - generic [ref=e44]:
+            - generic [ref=e45]: Email, Username o Codice Fiscale
+            - generic [ref=e46]:
+              - generic:
+                - img
+              - textbox "Email, Username o Codice Fiscale" [ref=e47]: admin@example.com
+          - generic [ref=e48]:
+            - generic [ref=e49]: Password
+            - generic [ref=e50]:
+              - generic:
+                - img
+              - textbox "Password" [ref=e51]: Admin123!
+              - button [ref=e52] [cursor=pointer]:
+                - img [ref=e53] [cursor=pointer]
+        - generic [ref=e57]: Request failed with status code 500
+        - button "Accedi" [ref=e59] [cursor=pointer]
+  - contentinfo [ref=e60]:
+    - generic [ref=e62]:
+      - generic [ref=e63]:
+        - generic [ref=e64]:
+          - generic [ref=e66]: E
+          - generic [ref=e67]:
+            - heading "Element Formazione" [level=3] [ref=e68]
+            - paragraph [ref=e69]: Sicurezza e Formazione Professionale
+        - paragraph [ref=e70]: Leader nella formazione sulla sicurezza sul lavoro e servizi di consulenza. Offriamo soluzioni complete per la conformità normativa e la sicurezza aziendale.
+        - generic [ref=e71]:
+          - link "Facebook" [ref=e72] [cursor=pointer]:
+            - /url: "#"
+            - img [ref=e73] [cursor=pointer]
+          - link "LinkedIn" [ref=e75] [cursor=pointer]:
+            - /url: "#"
+            - img [ref=e76] [cursor=pointer]
+          - link "Instagram" [ref=e80] [cursor=pointer]:
+            - /url: "#"
+            - img [ref=e81] [cursor=pointer]
+      - generic [ref=e84]:
+        - heading "I Nostri Servizi" [level=4] [ref=e85]
+        - list [ref=e86]:
+          - listitem [ref=e87]:
+            - link "Corsi di Formazione" [ref=e88] [cursor=pointer]:
+              - /url: /corsi
+          - listitem [ref=e89]:
+            - link "Nomina RSPP" [ref=e90] [cursor=pointer]:
+              - /url: /servizi#rspp
+          - listitem [ref=e91]:
+            - link "Medico del Lavoro" [ref=e92] [cursor=pointer]:
+              - /url: /servizi#medico
+          - listitem [ref=e93]:
+            - link "Documento di Valutazione Rischi" [ref=e94] [cursor=pointer]:
+              - /url: /servizi#dvr
+          - listitem [ref=e95]:
+            - link "Consulenza Sicurezza" [ref=e96] [cursor=pointer]:
+              - /url: /servizi#consulenza
+      - generic [ref=e97]:
+        - heading "Link Utili" [level=4] [ref=e98]
+        - list [ref=e99]:
+          - listitem [ref=e100]:
+            - link "Catalogo Corsi" [ref=e101] [cursor=pointer]:
+              - /url: /corsi
+          - listitem [ref=e102]:
+            - link "Lavora con Noi" [ref=e103] [cursor=pointer]:
+              - /url: /lavora-con-noi
+          - listitem [ref=e104]:
+            - link "Contatti" [ref=e105] [cursor=pointer]:
+              - /url: /contatti
+          - listitem [ref=e106]:
+            - link "Privacy Policy" [ref=e107] [cursor=pointer]:
+              - /url: /privacy
+          - listitem [ref=e108]:
+            - link "Cookie Policy" [ref=e109] [cursor=pointer]:
+              - /url: /cookie
+      - generic [ref=e110]:
+        - heading "Contatti" [level=4] [ref=e111]
+        - generic [ref=e112]:
+          - generic [ref=e113]:
+            - img [ref=e114]
+            - paragraph [ref=e118]:
+              - text: Via Roma 123
+              - text: 20100 Milano (MI)
+              - text: Italia
+          - generic [ref=e119]:
+            - img [ref=e120]
+            - link "+39 123 456 7890" [ref=e122] [cursor=pointer]:
+              - /url: tel:+391234567890
+          - generic [ref=e123]:
+            - img [ref=e124]
+            - link "info@elementformazione.it" [ref=e127] [cursor=pointer]:
+              - /url: mailto:info@elementformazione.it
+          - generic [ref=e128]:
+            - img [ref=e129]
+            - generic [ref=e132]:
+              - paragraph [ref=e133]: "Lun - Ven: 9:00 - 18:00"
+              - paragraph [ref=e134]: "Sab: 9:00 - 13:00"
+    - generic [ref=e137]:
+      - generic [ref=e138]: © 2025 Element Formazione. Tutti i diritti riservati.
+      - generic [ref=e139]:
+        - link "Privacy" [ref=e140] [cursor=pointer]:
+          - /url: /privacy
+        - link "Cookie" [ref=e141] [cursor=pointer]:
+          - /url: /cookie
+        - link "Termini di Servizio" [ref=e142] [cursor=pointer]:
+          - /url: /termini
+  - generic [ref=e145]:
+    - generic [ref=e146]:
+      - img [ref=e148]
+      - generic [ref=e150]:
+        - generic [ref=e151]:
+          - heading "Utilizziamo i cookie" [level=3] [ref=e152]
+          - generic [ref=e153]: GDPR
+        - paragraph [ref=e154]:
+          - text: Utilizziamo cookie tecnici necessari per il funzionamento del sito e, con il tuo consenso, cookie di analisi e marketing per migliorare i nostri servizi.
+          - button "Personalizza le preferenze" [ref=e155] [cursor=pointer]
+    - generic [ref=e156]:
+      - button "Solo necessari" [ref=e157] [cursor=pointer]
+      - button "Accetta tutti" [ref=e158] [cursor=pointer]
+```
