@@ -88,7 +88,10 @@ ssh "$SSH_USER@$HOST" bash -lc 'set -euo pipefail;
   # validate and reload via HUP
   if sshd -t; then 
     PID=$(pidof sshd || pgrep -x sshd || true); 
-    if [ -n "$PID" ]; then kill -HUP $PID; fi; 
+    if [ -n "$PID" ]; then 
+      # reload non-blocking to avoid current SSH session being dropped mid-command
+      nohup sh -c "sleep 1; kill -HUP $PID" >/dev/null 2>&1 &
+    fi; 
   fi'
 
 # 5) Wait for backend health (internal ports) using retries from inside Nginx container
