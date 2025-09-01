@@ -74,6 +74,23 @@ ssh "$SSH_USER@$HOST" "cd $APP_DIR && export NGINX_CONF=./nginx/frontend.conf &&
 echo "Waiting for Nginx HTTP to be up..."
 sleep 3
 
+# 4.5) Ensure SFTP is enabled and reload sshd safely (idempotent)
+# Notes:
+# - Avoid systemctl/service due to environment restrictions; use HUP signal after config validation
+# - Uses internal-sftp for compatibility; does not alter authentication method
+ssh "$SSH_USER@$HOST" bash -lc 'set -euo pipefail; 
+  CFG=/etc/ssh/sshd_config; 
+  if grep -qE "^\s*Subsystem\s+sftp\b" "$CFG"; then 
+    sed -i "s|^\s*Subsystem\s\+sftp.*|Subsystem sftp internal-sftp|" "$CFG"; 
+  else 
+    echo "Subsystem sftp internal-sftp" >> "$CFG"; 
+  fi; 
+  # validate and reload via HUP
+  if sshd -t; then 
+    PID=$(pidof sshd || pgrep -x sshd || true); 
+    if [ -n "$PID" ]; then kill -HUP "$PID"; fi; 
+  fi'
+
 # 5) Wait for backend health (internal ports) using retries from inside Nginx container
 echo "Checking internal health endpoints from Nginx container..."
 ssh "$SSH_USER@$HOST" bash -lc "set -euo pipefail; \
