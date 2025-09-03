@@ -129,3 +129,9 @@ Note operative:
 - GDPR: non loggare dati personali sensibili nei details; limitare retention (eventuale policy futura su GdprAuditLog/DataRetentionPolicy).
 - Tenant: garantire presenza X-Tenant-ID per POST pubblico; fallback non previsto per multi-tenant.
 - Performance: indicizzare query su timestamp/action/personId già presenti; usare paginazione server-side.
+
+## 13) Avanzamento odierno (Deploy Production) [IN PROGRESS]
+- [CHECK] DNS allineato: elementformazione.com e www.elementformazione.com → 128.140.15.15 (Hetzner) ✓
+- [PLAN] Trigger CI/CD: preparazione commit su planning.md per avviare workflow "Deploy to Hetzner (Production)" su push a main.
+- [PREREQ] Secrets minimi necessari in GitHub (da verificare): HETZNER_SSH_HOST, HETZNER_SSH_KEY, FRONTEND_URL, CORS_ALLOWED_ORIGINS, JWT_SECRET, JWT_REFRESH_SECRET, DATABASE_URL, DIRECT_URL, REDIS_ENABLED (false), PUBLIC_DOMAIN.
+- [NEXT] Dopo il trigger, monitoraggio remoto (rsync, docker compose up) e health checks HTTP/HTTPS; in caso di errore, diagnosi su secrets mancanti o build Docker.
