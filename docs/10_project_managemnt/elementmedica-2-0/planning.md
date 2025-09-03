@@ -131,23 +131,31 @@ Note operative:
 - Tenant: garantire presenza X-Tenant-ID per POST pubblico; fallback non previsto per multi-tenant.
 - Performance: indicizzare query su timestamp/action/personId già presenti; usare paginazione server-side.
 
-## 13) Avanzamento odierno (Deploy Production) [IN PROGRESS]
-- [CHECK] DNS allineato: elementformazione.com e www.elementformazione.com → 128.140.15.15 (Hetzner) ✓
-- [DONE] Trigger CI/CD eseguito: rsync su Hetzner OK, servizi api/proxy attivi.
-- [DONE] Certificati TLS: presenti in /ssl/live/elementformazione.com; switch Nginx a production.conf completato.
-- [DONE] Health esterni:
+## 13) Avanzamento odierno (Deploy Production) [COMPLETATO] ✅
+- [DONE] DNS allineato: elementformazione.com e www.elementformazione.com → 128.140.15.15 (Hetzner) ✓
+- [DONE] Configurazione .env.production: aggiornato con credenziali Supabase, JWT secrets e configurazioni corrette.
+- [DONE] Deploy remoto eseguito con successo: rsync progetto, build container (api, documents, proxy), avvio servizi.
+- [DONE] Certificati TLS: emessi/rinnovati automaticamente via Let's Encrypt, switch Nginx a production.conf completato.
+- [DONE] Health checks completi:
   - HTTP /health → OK; HTTP /api/health → OK
   - HTTPS /health → OK; HTTPS /api/health → OK
   - Redirect HTTP→HTTPS su apex e www → 301 OK
-- [INFO] Frontend servito correttamente su https://elementformazione.com e https://www.elementformazione.com
-- [WARN] Container documents (app-documents-1) in restart loop (ExitCode 0). In diagnosi: recupero log e verifica env/porta/dipendenze.
-- [FIX] Documents: corretto CMD di produzione in `backend/Dockerfile.docs` → `node servers/documents-server.js` (per avvio corretto del servizio).
-- [TRIGGER] CI/CD: push su `main` per redeploy automatico (monitoraggio GitHub Actions attivo).
+- [DONE] Frontend servito correttamente su https://elementformazione.com e https://www.elementformazione.com
+- [DONE] Container documents: risolto problema restart loop con correzione Dockerfile.docs e prisma generate.
+- [DONE] Pagine problematiche risolte: /medicina-del-lavoro e /rspp funzionano correttamente online.
+- [DONE] Tutti i servizi backend attivi e funzionanti: API (4001), Documents (4002), Proxy (4003).
 
-Prossimi passi immediati:
-- [ACTION] Investigare servizio Documents: leggere log su volume backend/logs, verificare entrypoint/cmd in Dockerfile.docs, controllare variabili richieste (Google API, Redis opzionale, PRISMA, ecc.).
-- [ACTION] Mantenere monitoraggio certbot-renew e rotazione Nginx post-rinnovo (se necessario).
-- [ACTION] Hardening CORS/Origins in .env.production se servono domini aggiuntivi.
-- [PLAN] Trigger CI/CD: preparazione commit su planning.md per avviare workflow "Deploy to Hetzner (Production)" su push a main.
-- [PREREQ] Secrets minimi necessari in GitHub (da verificare): HETZNER_SSH_HOST, HETZNER_SSH_USER, HETZNER_SSH_KEY, FRONTEND_URL, CORS_ALLOWED_ORIGINS, JWT_SECRET, JWT_REFRESH_SECRET, DATABASE_URL, DIRECT_URL, REDIS_ENABLED (false), PUBLIC_DOMAIN.
-- [NEXT] Dopo il trigger, monitoraggio remoto (rsync, docker compose up) e health checks HTTP/HTTPS; in caso di errore, diagnosi su secrets mancanti o build Docker.
+## 14) Stato finale del deploy (3 Settembre 2025)
+- ✅ **Sito completamente funzionante**: https://www.elementformazione.com
+- ✅ **HTTPS attivo**: Certificati Let's Encrypt configurati e funzionanti
+- ✅ **Backend services**: API, Documents e Proxy tutti operativi
+- ✅ **Database**: Connessione Supabase PostgreSQL configurata e testata
+- ✅ **Route pubbliche**: Tutte le pagine pubbliche accessibili (/rspp, /medicina-del-lavoro, /corsi, etc.)
+- ✅ **Infrastruttura**: Docker Compose production su Hetzner con Nginx reverse proxy
+- ✅ **Sicurezza**: CORS configurato, JWT secrets impostati, variabili d'ambiente protette
+
+Prossimi passi opzionali:
+- [OPTIONAL] Monitoraggio continuo certbot-renew per rinnovo automatico certificati
+- [OPTIONAL] Setup monitoring/logging avanzato per produzione
+- [OPTIONAL] Ottimizzazione performance e caching
+- [OPTIONAL] Backup automatici database e configurazioni
