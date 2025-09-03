@@ -1,5 +1,4 @@
-import { apiGet} from './api';
-import { API_BASE_URL } from '../config/api';
+import { apiGet, apiPost } from './api';
 
 interface GoogleDocsTemplate {
   id: string;
@@ -30,6 +29,24 @@ interface GenerateDocumentResult {
   userMessage?: string;
 }
 
+// Estrae un messaggio sicuro da un errore unknown
+const getErrorMessage = (error: unknown, fallback = 'Si è verificato un errore'): string => {
+  if (typeof error === 'string') return error;
+  if (error && typeof error === 'object' && 'message' in error) {
+    const msg = (error as { message?: unknown }).message;
+    if (typeof msg === 'string') return msg;
+  }
+  return fallback;
+};
+
+const getErrorDetails = (error: unknown): string | undefined => {
+  if (error && typeof error === 'object' && 'details' in error) {
+    const det = (error as { details?: unknown }).details;
+    if (typeof det === 'string') return det;
+  }
+  return undefined;
+};
+
 /**
  * Google Docs API service for interacting with the backend Google Docs integration
  */
@@ -43,8 +60,8 @@ const googleDocsService = {
     try {
       const response = await apiGet<GoogleDocsTemplateResponse>(`/api/google-docs/templates/${type}`);
       return response?.template || null;
-    } catch (error) {
-      console.error('Error getting default Google Docs template:', error);
+    } catch (error: unknown) {
+      console.error('Error getting default Google Docs template:', getErrorMessage(error));
       return null;
     }
   },
@@ -58,13 +75,13 @@ const googleDocsService = {
     try {
       const response = await apiPost<GenerateDocumentResult>(`/api/google-docs/generate`, params);
       return response;
-    } catch (error: any) {
-      console.error('Error generating document from Google Docs template:', error);
+    } catch (error: unknown) {
+      console.error('Error generating document from Google Docs template:', getErrorMessage(error));
       return {
         success: false,
         message: 'Error generating document',
-        error: error.message || error,
-        details: error.details || 'Check server logs for more information'
+        error: getErrorMessage(error),
+        details: getErrorDetails(error) || 'Check server logs for more information'
       };
     }
   },
@@ -81,18 +98,18 @@ const googleDocsService = {
         `/api/google-docs/attestati/${scheduledCourseId}/${employeeId}`
       );
       return response;
-    } catch (error: any) {
-      console.error('Error generating attestato from Google Docs template:', error);
-      
+    } catch (error: unknown) {
+      console.error('Error generating attestato from Google Docs template:', getErrorMessage(error));
+
       // Extract more detailed error information if available
-      const errorMessage = error.message || error;
-      
+      const errorMessage = getErrorMessage(error);
+
       return {
         success: false,
         message: 'Error generating attestato',
         error: errorMessage,
-        details: error.details || 'Check server logs for more information',
-        userMessage: 'Impossibile generare l\'attestato. Verifica che le credenziali Google API siano configurate correttamente.'
+        details: getErrorDetails(error) || 'Check server logs for more information',
+        userMessage: "Impossibile generare l'attestato. Verifica che le credenziali Google API siano configurate correttamente."
       };
     }
   }

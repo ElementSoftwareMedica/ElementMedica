@@ -6,7 +6,7 @@
 interface PendingRequest {
   url: string;
   resolve: () => Promise<void>;
-  reject: (error: any) => void;
+  reject: (error: unknown) => void;
   timestamp: number;
   priority: number;
 }
@@ -72,12 +72,13 @@ class RequestThrottler {
       
       console.log(`✅ RequestThrottler: Completed ${url}`);
       return result;
-    } catch (error: any) {
-      console.error(`❌ RequestThrottler: Failed ${url}:`, error.message);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error(`❌ RequestThrottler: Failed ${url}:`, msg);
       
       // Se è un errore di risorse insufficienti, aumenta il throttling
-      if (error.code === 'ERR_INSUFFICIENT_RESOURCES') {
-        this.handleResourceError(requestKey);
+      if (this.isErrnoException(error) && error.code === 'ERR_INSUFFICIENT_RESOURCES') {
+        this.handleResourceError();
       }
       
       throw error;
@@ -192,7 +193,10 @@ class RequestThrottler {
   /**
    * Gestisce errori di risorse insufficienti
    */
-  private handleResourceError(requestKey: string): void {
+  private isErrnoException(e: unknown): e is NodeJS.ErrnoException {
+    return typeof e === 'object' && e !== null && 'code' in e;
+  }
+  private handleResourceError(): void {
     // Riduce temporaneamente il numero di richieste simultanee
     this.maxConcurrentRequests = Math.max(1, this.maxConcurrentRequests - 1);
     

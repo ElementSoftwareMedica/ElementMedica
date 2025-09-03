@@ -49,6 +49,14 @@
 - [DONE] Verifica esterna: `curl` su https://elementformazione.com/api/health e https://www.elementformazione.com/api/health restituisce `{"status":"healthy"}`.
 - [DONE] Deploy remoto eseguito oggi: rsync progetto, upload .env, build api/documents/proxy, health interni, issue/renew cert, switch HTTPS, health HTTP/HTTPS OK.
 - [INFO] In locale: API (4001), Docs (4002), Proxy (4003) OK su /health.
+- [DONE] UI pubblica: confermato PublicButton (Link interni `to`, esterni `href`) e tracking CTA.
+- [DONE] HomePage: card servizi ora cliccabili sull’intera card con navigazione programmata, accessibilità tastiera e tracking `cta_click` (no anchor nidificati).
+- [DONE] SEO: aggiunti meta `og:site_name`, `og:locale`, `robots`, `theme-color` in PublicLayout.
+- [DONE] Build frontend: vite build OK.
+- [DONE] Health check: API (4001) e Proxy (4003) rispondono correttamente; routing avanzato `/routes/health` OK; legacy redirect `/login` 302.
+- [DONE] Verifica in anteprima con Vite: navigazione Home → Corsi/RSPP/Medicina del Lavoro e CTA “Richiedi Preventivo” funzionanti; SEO centralizzato applicato (title/description/canonical/OG/Twitter/robots/theme-color).
+- [DONE] Public og-image: aggiunto `public/og-image.svg` come immagine di default per social.
+- [DONE] Tracking CTA: uniformato su Header, Hero, Home Services e ServiceCard con `trackCtaEvent`; ActivityLogsTab mostra eventi `public · cta_click` dal backend (fallback a mock se BE non disponibile).
 
 ## 7) Prossimi passi immediati
 - CORS/Origin: mantenere allineamento tra localhost (sviluppo), domini produzione e IP pubblico (già incluso). Verifica end-to-end con autenticazione.
@@ -56,6 +64,64 @@
 - GitHub: inizializzazione repository ex-novo e push quando confermata piena funzionalità in produzione (no push prima di verifica completa).
 - Frontend build: assicurare pipeline locale (Vite build) coerente con ./dist e integrata nello script di deploy.
 - Monitoraggio/Logging: verificare mount volumi logs/ ed eventuale retention.
+- SEO: estendere PublicLayout con `og:image` e `twitter:image`, robots/canonical per tutte le pagine; aggiungere default image.
+- Activity Logs: confermare endpoint BE e tracciamento CTA lato FE con sendBeacon fallback.
 
 Note operative:
 - I file `.trae/rules/project_rules.md` e `.trae/TRAE_SYSTEM_GUIDE.md` non risultano presenti nel repository locale; applico comunque i principi GDPR e modifiche minime/reversibili.
+
+## 8) Analisi tecnica – Activity Logs (in corso)
+- Modello ActivityLog (DB): campi effettivi confermati: id, personId (user_id), action, details (String JSON-encoded), timestamp, createdAt, deletedAt, updatedAt, tenantId; nessun campo resource/resourceId/ipAddress direttamente su ActivityLog.
+- Modello GdprAuditLog (DB): include personId?, action, resourceType?, resourceId?, dataAccessed?, ipAddress?, userAgent?, companyId?, createdAt, deletedAt, tenantId. Usato per log GDPR via middleware audit.
+- Frontend types: ActivityLog nel FE prevede resource, resourceId e ipAddress; mismatch con schema reale. In CMS alcuni log sono creati con prisma.activityLog.create inserendo resourceType/resourceId dentro details (JSON) e non in campi dedicati.
+- Middleware tenant: publicRoutes definite; per rotte pubbliche salta risoluzione tenant. Per rotte non pubbliche estrae X-Tenant-ID o query.tenantId; gestione localhost vs domini prod già presente.
+- Autenticazione: req.person?.id/req.person?.personId e req.person?.tenantId usati diffusamente; richiesto authenticate per GET private; necessario optionalAuth per POST pubblico.
+- Versioning e routing: API server con version manager v1/v2; body parser applicato ai router versionati (fix V38 presente). Il proxy ha regole generiche /api/:version/* e /api/* quindi il nuovo endpoint è raggiungibile senza aggiunte esplicite.
+- Validazioni: modulo validations/audit ha schemi Zod placeholders (TODO). Da definire CreateActivityLogSchema/QuerySchema per POST/GET.
+- Audit middleware: auditLog scrive su gdprAuditLog con ipAddress/userAgent/path/metodo/dettagli; non su ActivityLog.
+
+## 9) Decisioni e implicazioni
+- Per evitare refactor lato FE immediato, il GET /api/v1/activity-logs mapperà i campi di risposta così:
+  - resource = details.resourceType || details.resource || null
+  - resourceId = details.resourceId || null
+  - ipAddress = details.ipAddress || null (se in futuro salvato nei details)
+  - user: { username, email } da relazione Person
+- Il POST pubblico accetterà: action (string), resourceType?, resourceId?, details? (oggetto), userAgent/ipAddress opzionali; salverà in ActivityLog: action, details JSON.stringify({resourceType, resourceId, ...extra}). Nessun dato sensibile; rispetto GDPR.
+- Tenant: obbligo X-Tenant-ID per POST pubblico; se assente, rifiutare 400 per contesti non pubblici. Su pagine pubbliche invieremo sempre X-Tenant-ID dal FE.
+
+## 10) Piano implementazione endpoint /api/v1/activity-logs
+- Endpoint
+  - POST /api/v1/activity-logs (public, optionalAuth, tenant richiesto via header). Body validato con Zod.
+  - GET /api/v1/activity-logs (private, authenticate + tenant). Supporto filtri: action?, personId?, dateFrom?, dateTo?, page?, pageSize?, sort?.
+- Controller
+  - POST: costruisce record ActivityLog con tenantId, personId (se autenticato), action, details JSON-encoded con resourceType/resourceId/ipAddress/userAgent e altri dettagli.
+  - GET: query con paginazione e mapping risposta verso FE (resource/resourceId/ipAddress derivati dai details), include user {username,email}.
+- Validazioni (Zod)
+  - CreateActivityLogSchema: action (string, non vuota), resourceType/resourceId opzionali, details opzionale object, header X-Tenant-ID richiesto.
+  - QueryActivityLogSchema: filtri e paginazione con default sensati, sort whitelist su timestamp/createdAt.
+- Routing/API server
+  - Registrare le rotte sul v1Router nel server API, con middleware: cors → rateLimit → optionalAuth/autenticate → tenant → controller.
+- Sicurezza
+  - Rate limit leggero sul POST pubblico; sanificazione campi details; nessun secret in log.
+
+## 11) Test da eseguire – Activity Logs
+- Health di base
+  - curl http://localhost:4001/health
+  - curl http://localhost:4003/health
+- Versioning e body parsing
+  - curl -H "x-api-version: v1" http://localhost:4003/api/v1/health
+  - curl -X POST http://localhost:4003/api/v1/auth/login -H "Content-Type: application/json" -d '{"identifier":"admin@example.com","password":"Admin123!"}'
+- POST pubblico Activity Log
+  - curl -X POST http://localhost:4003/api/v1/activity-logs \
+    -H "Content-Type: application/json" \
+    -H "X-Tenant-ID: <TENANT_ID>" \
+    -d '{"action":"CTA_CLICK","resourceType":"landing","resourceId":"cta-hero","details":{"label":"Scopri di più"}}'
+- GET privato Activity Logs
+  - curl -H "Authorization: Bearer <JWT>" -H "X-Tenant-ID: <TENANT_ID>" \
+    "http://localhost:4003/api/v1/activity-logs?page=1&pageSize=20&action=CTA_CLICK"
+
+## 12) Rischi e mitigazioni
+- Mismatch FE/BE: evitare breaking change restituendo nel GET i campi attesi dal FE mappandoli dai details; in un secondo momento riallineare i tipi TS del FE.
+- GDPR: non loggare dati personali sensibili nei details; limitare retention (eventuale policy futura su GdprAuditLog/DataRetentionPolicy).
+- Tenant: garantire presenza X-Tenant-ID per POST pubblico; fallback non previsto per multi-tenant.
+- Performance: indicizzare query su timestamp/action/personId già presenti; usare paginazione server-side.

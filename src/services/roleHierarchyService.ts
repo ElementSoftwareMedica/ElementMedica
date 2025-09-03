@@ -202,10 +202,10 @@ export function isInBothBranches(person: Person): boolean {
   
   const activeRoles = getActiveRoles(person);
   const hasEmployeeRole = activeRoles.some(role => 
-    employeeRoleTypes.includes(role.roleType as any)
+    employeeRoleTypes.includes(role.roleType as string)
   );
   const hasTrainerRole = activeRoles.some(role => 
-    trainerRoleTypes.includes(role.roleType as any)
+    trainerRoleTypes.includes(role.roleType as string)
   );
   
   return hasEmployeeRole && hasTrainerRole;

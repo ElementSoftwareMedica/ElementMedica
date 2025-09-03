@@ -1,1 +1,33 @@
-{"identifier": "admin@example.com", "password": "Admin123!"}
+HTTP/1.1 200 OK
+Content-Security-Policy: default-src 'self';script-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:* ws://localhost:*;style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;font-src 'self' https://fonts.gstatic.com data:;img-src 'self' data: blob: http://localhost:*;connect-src 'self' http://localhost:* ws://localhost:* wss://localhost:*;media-src 'self' data: blob:;object-src 'none';frame-src 'self';base-uri 'self';form-action 'self';frame-ancestors 'none';script-src-attr 'none';upgrade-insecure-requests
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Resource-Policy: same-origin
+Origin-Agent-Cluster: ?1
+Referrer-Policy: no-referrer,strict-origin-when-cross-origin
+Strict-Transport-Security: max-age=0
+X-Content-Type-Options: nosniff
+X-DNS-Prefetch-Control: off
+X-Download-Options: noopen
+X-Frame-Options: DENY
+X-Permitted-Cross-Domain-Policies: none
+X-XSS-Protection: 0
+Access-Control-Allow-Origin: http://localhost:5173
+access-control-allow-credentials: true
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS, PATCH
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, Accept, Origin, X-API-Version, X-Tenant-ID, x-tenant-id, cache-control, pragma, expires
+API-Version: v1
+x-powered-by: Express
+x-api-version: v1
+vary: Origin
+ratelimit-policy: 200;w=900
+ratelimit-limit: 200
+ratelimit-remaining: 199
+ratelimit-reset: 900
+content-type: application/json; charset=utf-8
+content-length: 1177
+etag: W/"499-Sv526YSkyorhkHxU4kZyCyas2yc"
+date: Tue, 02 Sep 2025 13:53:45 GMT
+keep-alive: timeout=5
+Connection: keep-alive
+
+{"success":true,"user":{"id":"7dba16e2-0617-4077-90ef-bbd9123291ec","email":"admin@example.com","firstName":"Admin","lastName":"User","globalRole":"ADMIN","role":"Admin","roles":["ADMIN"],"status":"ACTIVE","companyId":null,"tenantId":"131f2cb5-2e74-4e1a-abf8-ee30a50f2a41","company":null},"tokens":{"access_token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJwZXJzb25JZCI6IjdkYmExNmUyLTA2MTctNDA3Ny05MGVmLWJiZDkxMjMyOTFlYyIsImVtYWlsIjoiYWRtaW5AZXhhbXBsZS5jb20iLCJ1c2VybmFtZSI6ImFkbWluIiwidGF4Q29kZSI6bnVsbCwiY29tcGFueUlkIjpudWxsLCJ0ZW5hbnRJZCI6IjEzMWYyY2I1LTJlNzQtNGUxYS1hYmY4LWVlMzBhNTBmMmE0MSIsInJvbGVzIjpbIkFETUlOIl0sImlhdCI6MTc1NjgyMTIyNSwiZXhwIjoxNzU2ODI0ODI1LCJhdWQiOiJ0cmFpbmluZy1wbGF0Zm9ybS11c2VycyIsImlzcyI6InRyYWluaW5nLXBsYXRmb3JtIn0.h7-YUmzk_tFVF95o5Gc4ezUttSfU5QpUgvoM8OdzMtE","refresh_token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJwZXJzb25JZCI6IjdkYmExNmUyLTA2MTctNDA3Ny05MGVmLWJiZDkxMjMyOTFlYyIsImp0aSI6ImIwNzNhMjQ5LTNkYzctNGQzYy05OWI5LTcyZjBjNDMyN2RmMyIsImlhdCI6MTc1NjgyMTIyNSwiZXhwIjoxNzU3NDI2MDI1LCJhdWQiOiJ0cmFpbmluZy1wbGF0Zm9ybS11c2VycyIsImlzcyI6InRyYWluaW5nLXBsYXRmb3JtIn0._lOR9PSvSuzSYHElS9qDPuDopEiLQ1sJHQtR_wPwGOU","expires_in":3600,"token_type":"Bearer"}}

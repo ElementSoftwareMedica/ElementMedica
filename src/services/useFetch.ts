@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react';
 import { apiGet } from './api';
-import { API_BASE_URL } from '../config/api';
 
 // Tipizzazione per i dati mock
 interface MockData {
-  attestati: any[];
-  [key: string]: any[];
+  attestati: Record<string, unknown>[];
+  [key: string]: Record<string, unknown>[];
 }
 
 // Dati mock per vari tipi di entità
@@ -36,17 +35,18 @@ const MOCK_DATA: MockData = {
 /**
  * Trasforma le chiavi in snake_case in camelCase per compatibilità
  */
-function normalizeResponseData(data: any): any {
+function normalizeResponseData(data: unknown): unknown {
   if (Array.isArray(data)) {
-    return data.map(item => normalizeResponseData(item));
+    return data.map((item) => normalizeResponseData(item));
   }
   
   if (data !== null && typeof data === 'object') {
-    const normalized: Record<string, any> = {};
-    
-    for (const [key, value] of Object.entries(data)) {
+    const normalized: Record<string, unknown> = {};
+    const entries = Object.entries(data as Record<string, unknown>);
+
+    for (const [key, value] of entries) {
       // Converti da snake_case a camelCase
-      const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+      const camelKey = key.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase());
       
       // Normalizza anche i valori nidificati
       normalized[camelKey] = normalizeResponseData(value);
@@ -66,8 +66,8 @@ function normalizeResponseData(data: any): any {
 /**
  * Custom hook per gestire le chiamate API con caching opzionale
  */
-export function useFetch<T>(url: string, options?: { cache?: boolean, defaultValue?: T }) {
-  const [data, setData] = useState<T | null>(null);
+export function useFetch<T>(url: string, options?: { cache?: boolean; defaultValue?: T }) {
+  const [data, setData] = useState<T | null>(options?.defaultValue ?? null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
@@ -90,10 +90,11 @@ export function useFetch<T>(url: string, options?: { cache?: boolean, defaultVal
           // Cast esplicito a T per evitare errori di tipo
           setData(normalizedData as T);
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (isMounted) {
           console.error("Fetch error:", err);
-          setError(new Error(`Error: ${err.message}`));
+          const message = err instanceof Error ? err.message : 'Unknown error';
+          setError(new Error(`Error: ${message}`));
           
           // Se l'URL contiene un path che corrisponde a uno dei nostri mock data
           // Cerca il path nel MOCK_DATA
@@ -111,7 +112,7 @@ export function useFetch<T>(url: string, options?: { cache?: boolean, defaultVal
       }
     };
 
-    fetchData();
+    void fetchData();
 
     return () => {
       isMounted = false;

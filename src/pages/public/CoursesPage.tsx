@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, ChevronDown, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Search, Filter, ChevronDown } from 'lucide-react';
 import { PublicLayout } from '../../components/public/PublicLayout';
 import { PublicButton } from '../../components/public/PublicButton';
 import { CourseCard } from '../../components/public/CourseCard';
 import { GroupedCourseCard } from '../../components/public/GroupedCourseCard';
 import { GroupedCoursesService } from '../../services/groupedCourses';
+import { useNavigate } from 'react-router-dom';
+import { trackCtaEvent } from '../../services/logs';
 
 interface Course {
   id: string;
@@ -417,7 +419,8 @@ export const CoursesPage: React.FC = () => {
           <PublicButton
             variant="primary"
             size="lg"
-            onClick={() => window.location.href = '/contatti'}
+            to="/contatti"
+            onClick={() => { trackCtaEvent({ resource: 'public', action: 'cta_click', details: { label: 'Contattaci', href: '/contatti', section: 'CoursesPage' } }); }}
           >
             Contattaci
           </PublicButton>

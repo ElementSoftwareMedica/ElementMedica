@@ -58,6 +58,7 @@ import publicFormsRoutes from '../routes/public-forms-routes.js';
 import submissionRoutes from '../routes/v1/submission-routes.js';
 import formTemplatesRoutes from '../routes/form-templates-routes.js';
 import advancedSubmissionsRoutes from '../routes/advanced-submissions-routes.js';
+import activityLogsRoutes from '../routes/activity-logs-routes.js';
 
 // Utils
 import { logger } from '../utils/logger.js';
@@ -305,19 +306,39 @@ class APIServer {
         '/api/public/courses/categories/list',
         '/api/public/courses/stats',
         // Route pubbliche per i form
-        '/api/public/forms'
+        '/api/public/forms',
+        // Route pubblica per activity logs (POST con optionalAuth gestito a livello di route)
+        '/api/activity-logs',
+        '/api/v1/activity-logs'
       ];
         
+        // Usa sia path che originalUrl per evitare mismatch dovuti a mount points
+        const pathToCheck = req.path || '';
+        const originalToCheck = req.originalUrl || '';
+
         // Controlla se la route corrente è pubblica
         const isPublicRoute = publicRoutes.some(route => {
           // Controllo esatto per route senza parametri
-          if (req.path === route) return true;
+          if (pathToCheck === route || originalToCheck === route) return true;
           // Controllo per route che iniziano con il pattern (per gestire parametri dinamici)
-          if (req.path.startsWith(route)) return true;
+          if (pathToCheck.startsWith(route) || originalToCheck.startsWith(route)) return true;
           // Controllo specifico per route con parametri come /api/public/courses/:slug
-          if (route === '/api/public/courses' && req.path.match(/^\/api\/public\/courses\/[^\/]+$/)) return true;
+          if (route === '/api/public/courses' && (pathToCheck.match(/^\/api\/public\/courses\/[^\/]+$/) || originalToCheck.match(/^\/api\/public\/courses\/[^\/]+$/))) return true;
           return false;
         });
+
+        // DEBUG: log minimale per diagnosi
+        if (originalToCheck.includes('/activity-logs')) {
+          console.info('[conditionalAuthMiddleware] path:', pathToCheck, 'originalUrl:', originalToCheck, 'isPublicRoute:', isPublicRoute);
+        }
+        
+        // Fallback robusto con regex per activity-logs: considera pubbliche tutte le varianti /api/(v1|v2)?/activity-logs
+        if (!isPublicRoute) {
+          const isActivityLogsPublic = /^\/api\/(v[12]\/)?activity-logs(\/?|$)/.test(originalToCheck);
+          if (isActivityLogsPublic) {
+            return next();
+          }
+        }
         
         if (isPublicRoute) {
           return next();
@@ -530,14 +551,19 @@ class APIServer {
       logger.info('Registering form-templates routes...');
       v1Router.use('/form-templates', formTemplatesRoutes);
       logger.info('Form-templates routes registered successfully');
-      
+
+      // Registra route activity-logs
+      logger.info('Registering activity-logs routes...');
+      v1Router.use('/activity-logs', activityLogsRoutes);
+      logger.info('Activity-logs routes registered successfully');
+
       // Registra route pubbliche
       logger.info('Registering public courses routes...');
       this.app.use('/api/public', publicCoursesRoutes);
       logger.info('Public courses routes registered successfully');
       
       logger.info('Registering public forms routes...');
-      this.app.use('/api/public', publicFormsRoutes);
+      this.app.use('/api/public/forms', publicFormsRoutes);
       logger.info('Public forms routes registered successfully');
       
       logger.info('Setting up legacy compatibility routes...');

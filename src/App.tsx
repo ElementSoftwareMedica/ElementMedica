@@ -8,6 +8,8 @@ import ProtectedRoute from './components/shared/ProtectedRoute';
 import LoginPage from './pages/auth/LoginPage';
 import { LoadingFallback } from './components/ui/LoadingFallback';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
+import RsppPage from './pages/public/RsppPage';
+import MedicinaDelLavoroPage from './pages/public/MedicinaDelLavoroPage';
 
 // Lazy-loaded page components
 import DashboardLazy from './pages/Dashboard/Dashboard.lazy';
@@ -88,6 +90,8 @@ function App() {
         <Route path="/corsi/unified/:title" element={<UnifiedCourseDetailPage />} />
         <Route path="/corsi/:slug" element={<CourseDetailPage />} />
         <Route path="/servizi" element={<ServicesPage />} />
+        <Route path="/rspp" element={<RsppPage />} />
+        <Route path="/medicina-del-lavoro" element={<MedicinaDelLavoroPage />} />
         <Route path="/lavora-con-noi" element={<WorkWithUsPage />} />
         <Route path="/contatti" element={<ContactsPage />} />
         <Route path="/form/:id" element={<PublicFormPage />} />

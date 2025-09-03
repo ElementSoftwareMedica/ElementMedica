@@ -1,4 +1,4 @@
-import { apiGet, apiDelete } from './api';
+import { apiGet, apiDelete, apiPost, apiPut, apiDeleteWithPayload } from './api';
 
 interface Role {
   type: string;
@@ -189,21 +189,25 @@ class RolesService {
   }
 
   async getPermissions(): Promise<Permission[]> {
-    const response = await apiGet(`${this.baseUrl}/permissions`);
+    const response = await apiGet<{ success: boolean; data: { permissions: Record<string, { permissions?: Array<{ key: string; label?: string; name?: string; description?: string }> }> } }>(`${this.baseUrl}/permissions`);
     // Il backend restituisce { success: true, data: { permissions: {...}, tenants: [...], ... } }
     // Convertiamo la struttura raggruppata in un array piatto di permessi
     const permissionsData = response.data.permissions || {};
     const permissionsArray: Permission[] = [];
-    
-    Object.entries(permissionsData).forEach(([category, categoryData]: [string, any]) => {
+
+    type BackendPermission = { key: string; label?: string; name?: string; description?: string };
+    type CategoryData = { permissions?: BackendPermission[] };
+    const entries = Object.entries(permissionsData as Record<string, CategoryData>);
+
+    for (const [category, categoryData] of entries) {
       if (categoryData.permissions && Array.isArray(categoryData.permissions)) {
-        categoryData.permissions.forEach((perm: any) => {
+        for (const perm of categoryData.permissions) {
           // Estrai action ed entity dal permissionId (es. "VIEW_COMPANIES" -> action: "VIEW", entity: "COMPANIES")
           const parts = perm.key.split('_');
           if (parts.length >= 2) {
             const action = parts[0]?.toLowerCase() || 'view';
             const entity = parts.slice(1).join('_').toLowerCase() || category;
-            
+
             // Verifica che action ed entity siano validi
             if (action && entity) {
               permissionsArray.push({
@@ -222,10 +226,10 @@ class RolesService {
           } else {
             console.warn('Invalid permission key format:', perm.key);
           }
-        });
+        }
       }
-    });
-    
+    }
+
     return permissionsArray;
   }
 
@@ -278,7 +282,7 @@ class RolesService {
 
   async getPersonsByRole(roleType: string): Promise<Person[]> {
     const encodedRoleType = encodeURIComponent(roleType);
-    const response = await apiGet(`${this.baseUrl}/persons?role=${encodedRoleType}`);
+    const response = await apiGet<{ success: boolean; data: Person[] }>(`${this.baseUrl}/persons?role=${encodedRoleType}`);
     return response.data;
   }
 
@@ -287,27 +291,30 @@ class RolesService {
   }
 
   async removeRole(personId: number, roleType: string): Promise<void> {
-    await apiDelete(`${this.baseUrl}/remove`, { data: { personId, roleType } });
+    await apiDeleteWithPayload(`${this.baseUrl}/remove`, { personId, roleType });
   }
 
-  // Nuove funzioni per la gerarchia dei ruoli
+  // Recupera la gerarchia completa dei ruoli
   async getRoleHierarchy(): Promise<RoleHierarchy> {
-    const response = await apiGet<{ success: boolean, data: RoleHierarchy }>(`${this.baseUrl}/hierarchy`);
+    const response = await apiGet<{ success: boolean; data: RoleHierarchy }>(`${this.baseUrl}/hierarchy`);
     return response.data;
   }
 
+  // Recupera la gerarchia dei ruoli per uno specifico utente
   async getUserRoleHierarchy(userId: string): Promise<UserRoleHierarchy> {
-    const response = await apiGet<{ success: boolean, data: UserRoleHierarchy }>(`${this.baseUrl}/hierarchy/user/${userId}`);
+    const encodedUserId = encodeURIComponent(userId);
+    const response = await apiGet<{ success: boolean; data: UserRoleHierarchy }>(`${this.baseUrl}/hierarchy/user/${encodedUserId}`);
     return response.data;
   }
 
+  // Recupera la gerarchia dei ruoli per l'utente corrente
   async getCurrentUserRoleHierarchy(): Promise<UserRoleHierarchy> {
-    const response = await apiGet<{ success: boolean, data: { data: UserRoleHierarchy } }>(`${this.baseUrl}/hierarchy/current-user`);
-    return response.data.data;
+    const response = await apiGet<{ success: boolean; data: UserRoleHierarchy }>(`${this.baseUrl}/hierarchy/user/current`);
+    return response.data;
   }
 
   async assignRoleWithHierarchy(targetUserId: string, roleType: string): Promise<RoleAssignmentResult> {
-    const response = await apiPost(`${this.baseUrl}/hierarchy/assign`, {
+    const response = await apiPost<{ success: boolean; message: string }>(`${this.baseUrl}/hierarchy/assign`, {
       targetUserId,
       roleType
     });
@@ -320,7 +327,7 @@ class RolesService {
   }
 
   async assignPermissionsWithHierarchy(targetUserId: string, permissions: string[]): Promise<PermissionAssignmentResult> {
-    const response = await apiPost(`${this.baseUrl}/hierarchy/assign-permissions`, {
+    const response = await apiPost<{ success: boolean; message: string }>(`${this.baseUrl}/hierarchy/assign-permissions`, {
       targetUserId,
       permissions
     });
@@ -334,22 +341,22 @@ class RolesService {
 
   async getAssignableRolesAndPermissions(roleType: string): Promise<AssignableRolesAndPermissions> {
     const encodedRoleType = encodeURIComponent(roleType);
-    const response = await apiGet(`${this.baseUrl}/hierarchy/assignable/${encodedRoleType}`);
+    const response = await apiGet<{ success: boolean; data: AssignableRolesAndPermissions }>(`${this.baseUrl}/hierarchy/assignable/${encodedRoleType}`);
     return response.data;
   }
 
   async getVisibleRoles(): Promise<RoleHierarchy> {
-    const response = await apiGet(`${this.baseUrl}/hierarchy/visible`);
+    const response = await apiGet<{ success: boolean; data: RoleHierarchy }>(`${this.baseUrl}/hierarchy/visible`);
     return response.data;
   }
 
-  async moveRoleInHierarchy(roleType: string, newLevel: number, newParentRoleType?: string): Promise<any> {
-    const response = await apiPut(`${this.baseUrl}/hierarchy/move`, {
+  async moveRoleInHierarchy(roleType: string, newLevel: number, newParentRoleType?: string): Promise<{ success: boolean }> {
+    const response = await apiPut<{ success: boolean }>(`${this.baseUrl}/hierarchy/move`, {
       roleType,
       newLevel,
       newParentRoleType
     });
-    return response.data;
+    return response;
   }
 }
 

@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
 import { 
   ArrowRight,
   Award,
@@ -10,6 +9,7 @@ import {
 } from 'lucide-react';
 import { PublicButton } from './PublicButton';
 import { PublicBadge } from './PublicBadge';
+import { trackCtaEvent } from '../../services/logs';
 
 interface Course {
   id: string;
@@ -49,6 +49,7 @@ export const GroupedCourseCard: React.FC<GroupedCourseCardProps> = ({
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const { mainCourse, variants } = groupedCourse;
+  // Navigazione gestita tramite PublicButton.to
 
   const getRiskLevelVariant = (riskLevel: string): 'red' | 'yellow' | 'green' | 'gray' => {
     switch (riskLevel) {
@@ -79,6 +80,10 @@ export const GroupedCourseCard: React.FC<GroupedCourseCardProps> = ({
 
   // Crea un URL unificato per il corso raggruppato
   const unifiedSlug = encodeURIComponent(groupedCourse.title.toLowerCase().replace(/\s+/g, '-'));
+
+  const trackInfoClick = (label: string, href: string, extra?: Record<string, any>) => {
+    trackCtaEvent({ resource: 'public', action: 'cta_click', details: { label, href, section: 'GroupedCourseCard', title: groupedCourse.title, ...extra } });
+  };
 
   return (
     <div className="bg-white rounded-2xl shadow-md hover:shadow-lg transition-shadow duration-300 overflow-hidden group">
@@ -191,15 +196,14 @@ export const GroupedCourseCard: React.FC<GroupedCourseCardProps> = ({
                       </div>
                     </div>
                     <div className="flex gap-2">
-                      <Link to={`/corsi/${variant.slug}`} className="flex-1">
-                        <PublicButton variant="outline" size="sm" className="w-full">
-                          Dettagli
-                        </PublicButton>
-                      </Link>
+                      <PublicButton to={`/corsi/${variant.slug}`} variant="outline" size="sm" className="w-full">
+                        Dettagli
+                      </PublicButton>
                       <PublicButton
                         variant="ghost"
                         size="sm"
-                        onClick={() => window.location.href = '/contatti?corso=' + variant.slug}
+                        to={`/contatti?corso=${variant.slug}`}
+                        onClick={() => trackInfoClick('Info variante', '/contatti?corso=' + variant.slug, { course: variant.slug })}
                       >
                         Info
                       </PublicButton>
@@ -213,23 +217,20 @@ export const GroupedCourseCard: React.FC<GroupedCourseCardProps> = ({
 
         {/* Main Actions */}
         <div className="flex flex-col sm:flex-row gap-3">
-          <Link
+          <PublicButton
             to={`/corsi/unified/${encodeURIComponent(groupedCourse.title)}`}
-            className="flex-1"
+            variant="primary"
+            size="sm"
+            className="w-full group flex-1"
           >
-            <PublicButton
-              variant="primary"
-              size="sm"
-              className="w-full group"
-            >
-              Scopri di più
-              <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
-            </PublicButton>
-          </Link>
+            Scopri di più
+            <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
+          </PublicButton>
           <PublicButton
             variant="outline"
             size="sm"
-            onClick={() => window.location.href = '/contatti?corso=' + unifiedSlug}
+            to={`/contatti?corso=${unifiedSlug}`}
+            onClick={() => trackInfoClick('Richiedi Info', '/contatti?corso=' + unifiedSlug, { unifiedSlug })}
           >
             Richiedi Info
           </PublicButton>

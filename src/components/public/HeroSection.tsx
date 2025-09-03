@@ -1,6 +1,8 @@
 import React from 'react';
 import { ArrowRight } from 'lucide-react';
 import { PublicButton } from './PublicButton';
+// import { useNavigate } from 'react-router-dom';
+import { trackCtaEvent } from '../../services/logs';
 
 interface HeroSectionProps {
   title: string;
@@ -39,6 +41,8 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   backgroundVariant = 'gradient',
   className = ''
 }) => {
+  // const navigate = useNavigate();
+
   const getBackgroundClasses = () => {
     switch (backgroundVariant) {
       case 'gradient':
@@ -52,8 +56,19 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
     }
   };
 
-  const handleButtonClick = (href: string) => {
-    window.location.href = href;
+  const handleButtonClick = (href: string, label: string, kind: 'primary' | 'secondary') => {
+    // Traccia CTA in modo non bloccante
+    trackCtaEvent({
+      resource: 'public',
+      action: 'cta_click',
+      details: {
+        label,
+        href,
+        section: 'HeroSection',
+        variant: kind,
+        pageTitle: title
+      }
+    });
   };
 
   return (
@@ -79,7 +94,8 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                   <PublicButton 
                     variant="secondary" 
                     size="lg"
-                    onClick={() => handleButtonClick(primaryButton.href)}
+                    to={primaryButton.href}
+                    onClick={() => handleButtonClick(primaryButton.href, primaryButton.text, 'primary')}
                   >
                     {primaryButton.text}
                     {primaryButton.icon || <ArrowRight className="ml-2 w-5 h-5" />}
@@ -89,7 +105,8 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                   <PublicButton 
                     variant="outline" 
                     size="lg"
-                    onClick={() => handleButtonClick(secondaryButton.href)}
+                    to={secondaryButton.href}
+                    onClick={() => handleButtonClick(secondaryButton.href, secondaryButton.text, 'secondary')}
                   >
                     {secondaryButton.text}
                   </PublicButton>

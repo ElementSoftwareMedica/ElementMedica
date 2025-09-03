@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { PublicLayout } from '../../components/public/PublicLayout';
 import { PublicButton } from '../../components/public/PublicButton';
@@ -9,21 +9,16 @@ const PublicFormPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [formTemplate, setFormTemplate] = useState<FormTemplate | null>(null);
-  const [formData, setFormData] = useState<Record<string, any>>({});
+  const [formData, setFormData] = useState<Record<string, string | boolean>>({});
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
-  useEffect(() => {
-    if (id) {
-      loadForm();
-    }
-  }, [id]);
-
-  const loadForm = async () => {
+  const loadForm = useCallback(async (): Promise<void> => {
     try {
+      if (!id) return;
       setLoading(true);
       setError(null);
       const form = await formTemplatesService.getPublicForm(id!);
@@ -36,7 +31,7 @@ const PublicFormPage: React.FC = () => {
       setFormTemplate(form);
       
       // Inizializza i dati del form
-      const initialData: Record<string, any> = {};
+      const initialData: Record<string, string | boolean> = {};
       form.fields.forEach(field => {
         if (field.type === 'checkbox') {
           initialData[field.name] = false;
@@ -51,11 +46,23 @@ const PublicFormPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
 
-  const validateField = (field: FormField, value: any): string | null => {
-    if (field.required && (!value || (typeof value === 'string' && value.trim() === ''))) {
-      return `${field.label} è obbligatorio`;
+  useEffect(() => {
+    if (id) {
+      void loadForm();
+    }
+  }, [id, loadForm]);
+
+  const validateField = (field: FormField, value: unknown): string | null => {
+    if (field.required) {
+      if (field.type === 'checkbox') {
+        if (value !== true) return `${field.label} è obbligatorio`;
+      } else {
+        if (typeof value !== 'string' || value.trim() === '') {
+          return `${field.label} è obbligatorio`;
+        }
+      }
     }
 
     if (field.validation) {
@@ -75,11 +82,11 @@ const PublicFormPage: React.FC = () => {
     }
 
     // Validazioni specifiche per tipo
-    if (field.type === 'email' && value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+    if (field.type === 'email' && typeof value === 'string' && value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
       return 'Inserisci un indirizzo email valido';
     }
 
-    if (field.type === 'tel' && value && !/^[\+]?[0-9\s\-\(\)]+$/.test(value)) {
+    if (field.type === 'tel' && typeof value === 'string' && value && !/^[\+]?[- 0-9\s\-\(\)]+$/.test(value)) {
       return 'Inserisci un numero di telefono valido';
     }
 
@@ -104,7 +111,7 @@ const PublicFormPage: React.FC = () => {
     return isValid;
   };
 
-  const handleInputChange = (fieldName: string, value: any) => {
+  const handleInputChange = (fieldName: string, value: string | boolean): void => {
     setFormData(prev => ({
       ...prev,
       [fieldName]: value
@@ -165,7 +172,7 @@ const PublicFormPage: React.FC = () => {
           <textarea
             id={field.name}
             name={field.name}
-            value={formData[field.name] || ''}
+            value={typeof formData[field.name] === 'string' ? (formData[field.name] as string) : ''}
             onChange={(e) => handleInputChange(field.name, e.target.value)}
             placeholder={field.placeholder}
             required={field.required}
@@ -179,7 +186,7 @@ const PublicFormPage: React.FC = () => {
           <select
             id={field.name}
             name={field.name}
-            value={formData[field.name] || ''}
+            value={typeof formData[field.name] === 'string' ? (formData[field.name] as string) : ''}
             onChange={(e) => handleInputChange(field.name, e.target.value)}
             required={field.required}
             className={baseClasses}
@@ -200,7 +207,7 @@ const PublicFormPage: React.FC = () => {
               type="checkbox"
               id={field.name}
               name={field.name}
-              checked={formData[field.name] || false}
+              checked={Boolean(formData[field.name])}
               onChange={(e) => handleInputChange(field.name, e.target.checked)}
               required={field.required}
               className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
@@ -235,7 +242,7 @@ const PublicFormPage: React.FC = () => {
             type={field.type}
             id={field.name}
             name={field.name}
-            value={formData[field.name] || ''}
+            value={typeof formData[field.name] === 'string' ? (formData[field.name] as string) : ''}
             onChange={(e) => handleInputChange(field.name, e.target.value)}
             placeholder={field.placeholder}
             required={field.required}
@@ -248,10 +255,10 @@ const PublicFormPage: React.FC = () => {
   if (loading) {
     return (
       <PublicLayout>
-        <div className="min-h-screen flex items-center justify-center">
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
-            <p className="mt-4 text-gray-600">Caricamento form...</p>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Caricamento del form in corso...</p>
           </div>
         </div>
       </PublicLayout>
@@ -261,15 +268,12 @@ const PublicFormPage: React.FC = () => {
   if (error && !formTemplate) {
     return (
       <PublicLayout>
-        <div className="min-h-screen flex items-center justify-center">
-          <div className="text-center max-w-md mx-auto">
-            <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-            <h1 className="text-2xl font-bold text-gray-900 mb-4">Form non disponibile</h1>
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+          <div className="max-w-md w-full bg-white p-8 rounded-lg shadow-lg text-center">
+            <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Form non disponibile</h2>
             <p className="text-gray-600 mb-6">{error}</p>
-            <PublicButton
-              variant="primary"
-              onClick={() => navigate('/')}
-            >
+            <PublicButton onClick={() => navigate('/')} variant="primary">
               <ArrowLeft className="w-4 h-4 mr-2" />
               Torna alla Home
             </PublicButton>
@@ -282,22 +286,12 @@ const PublicFormPage: React.FC = () => {
   if (submitted) {
     return (
       <PublicLayout>
-        <div className="min-h-screen flex items-center justify-center">
-          <div className="text-center max-w-md mx-auto">
-            <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
-            <h1 className="text-2xl font-bold text-gray-900 mb-4">Form inviato con successo!</h1>
-            <p className="text-gray-600 mb-6">
-              {formTemplate?.successMessage || 'Grazie per aver compilato il form. Ti contatteremo presto.'}
-            </p>
-            {formTemplate?.redirectUrl && (
-              <p className="text-sm text-gray-500 mb-6">
-                Verrai reindirizzato automaticamente tra pochi secondi...
-              </p>
-            )}
-            <PublicButton
-              variant="primary"
-              onClick={() => navigate('/')}
-            >
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+          <div className="max-w-md w-full bg-white p-8 rounded-lg shadow-lg text-center">
+            <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Grazie!</h2>
+            <p className="text-gray-600 mb-6">Il tuo form è stato inviato con successo.</p>
+            <PublicButton onClick={() => navigate('/')} variant="primary">
               <ArrowLeft className="w-4 h-4 mr-2" />
               Torna alla Home
             </PublicButton>
@@ -312,7 +306,7 @@ const PublicFormPage: React.FC = () => {
       <div className="min-h-screen bg-gray-50 py-12">
         <div className="container mx-auto px-4">
           <div className="max-w-2xl mx-auto">
-            {/* Header */}
+
             <div className="text-center mb-8">
               <h1 className="text-3xl font-bold text-gray-900 mb-4">
                 {formTemplate?.name}
@@ -324,7 +318,6 @@ const PublicFormPage: React.FC = () => {
               )}
             </div>
 
-            {/* Form */}
             <div className="bg-white rounded-lg shadow-lg p-8">
               {error && (
                 <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">

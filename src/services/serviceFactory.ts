@@ -1,4 +1,4 @@
-import { apiGet, apiDelete, apiDeleteWithPayload } from './api';
+import { apiGet, apiDelete, apiPost, apiPut } from './api';
 
 interface ServiceMethods<T, C, U> {
   getAll: () => Promise<T[]>;
@@ -15,7 +15,11 @@ interface ServiceMethods<T, C, U> {
  * @param basePath - Path base dell'API (es. '/users')
  * @returns Un oggetto con i metodi CRUD standard
  */
-export const createService = <T, C extends object = any, U extends object = any>(basePath: string): ServiceMethods<T, C, U> => {
+export const createService = <
+  T,
+  C extends Record<string, unknown> = Record<string, unknown>,
+  U extends Record<string, unknown> = Record<string, unknown>
+>(basePath: string): ServiceMethods<T, C, U> => {
   const baseService = {
     getAll: async (): Promise<T[]> => {
       return await apiGet<T[]>(basePath);
@@ -51,4 +55,4 @@ export const createService = <T, C extends object = any, U extends object = any>
   };
 
   return baseService;
-}; 
+};

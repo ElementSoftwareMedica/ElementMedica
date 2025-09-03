@@ -1,3 +1,4 @@
+import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function createSampleFormTemplates() {
@@ -68,13 +69,13 @@ async function createSampleFormTemplates() {
         isActive: true,
         form_fields: {
           create: [
-            { name: 'nome', label: 'Nome', type: 'text', required: true, order: 1 },
-            { name: 'cognome', label: 'Cognome', type: 'text', required: true, order: 2 },
-            { name: 'email', label: 'Email', type: 'email', required: true, order: 3 },
-            { name: 'telefono', label: 'Telefono', type: 'tel', required: false, order: 4 },
-            { name: 'azienda', label: 'Azienda', type: 'text', required: false, order: 5 },
-            { name: 'corso', label: 'Corso di interesse', type: 'text', required: true, order: 6 },
-            { name: 'messaggio', label: 'Messaggio', type: 'textarea', required: false, order: 7 }
+            { id: 'ff-t1-nome', name: 'nome', label: 'Nome', type: 'text', required: true, order: 1 },
+            { id: 'ff-t1-cognome', name: 'cognome', label: 'Cognome', type: 'text', required: true, order: 2 },
+            { id: 'ff-t1-email', name: 'email', label: 'Email', type: 'email', required: true, order: 3 },
+            { id: 'ff-t1-telefono', name: 'telefono', label: 'Telefono', type: 'tel', required: false, order: 4 },
+            { id: 'ff-t1-azienda', name: 'azienda', label: 'Azienda', type: 'text', required: false, order: 5 },
+            { id: 'ff-t1-corso', name: 'corso', label: 'Corso di interesse', type: 'text', required: true, order: 6 },
+            { id: 'ff-t1-messaggio', name: 'messaggio', label: 'Messaggio', type: 'textarea', required: false, order: 7 }
           ]
         }
       }
@@ -106,12 +107,18 @@ async function createSampleFormTemplates() {
         isActive: true,
         form_fields: {
           create: [
-            { name: 'nome', label: 'Nome', type: 'text', required: true, order: 1 },
-            { name: 'cognome', label: 'Cognome', type: 'text', required: true, order: 2 },
-            { name: 'email', label: 'Email', type: 'email', required: true, order: 3 },
-            { name: 'corso', label: 'Corso frequentato', type: 'text', required: true, order: 4 },
-            { name: 'valutazione', label: 'Valutazione (1-5)', type: 'select', required: true, order: 5, options: JSON.stringify([{value: '1', label: '1'}, {value: '2', label: '2'}, {value: '3', label: '3'}, {value: '4', label: '4'}, {value: '5', label: '5'}]) },
-            { name: 'commenti', label: 'Commenti', type: 'textarea', required: false, order: 6 }
+            { id: 'ff-t2-nome', name: 'nome', label: 'Nome', type: 'text', required: true, order: 1 },
+            { id: 'ff-t2-cognome', name: 'cognome', label: 'Cognome', type: 'text', required: true, order: 2 },
+            { id: 'ff-t2-email', name: 'email', label: 'Email', type: 'email', required: true, order: 3 },
+            { id: 'ff-t2-corso', name: 'corso', label: 'Corso frequentato', type: 'text', required: true, order: 4 },
+            { id: 'ff-t2-valutazione', name: 'valutazione', label: 'Valutazione (1-5)', type: 'select', required: true, order: 5, options: [
+              { value: '1', label: '1' },
+              { value: '2', label: '2' },
+              { value: '3', label: '3' },
+              { value: '4', label: '4' },
+              { value: '5', label: '5' }
+            ] },
+            { id: 'ff-t2-commenti', name: 'commenti', label: 'Commenti', type: 'textarea', required: false, order: 6 }
           ]
         }
       }
@@ -145,14 +152,14 @@ async function createSampleFormTemplates() {
         isActive: true,
         form_fields: {
           create: [
-            { name: 'nome', label: 'Nome', type: 'text', required: true, order: 1 },
-            { name: 'cognome', label: 'Cognome', type: 'text', required: true, order: 2 },
-            { name: 'email', label: 'Email', type: 'email', required: true, order: 3 },
-            { name: 'telefono', label: 'Telefono', type: 'tel', required: false, order: 4 },
-            { name: 'posizione', label: 'Posizione di interesse', type: 'text', required: true, order: 5 },
-            { name: 'esperienza', label: 'Anni di esperienza', type: 'text', required: false, order: 6 },
-            { name: 'cv', label: 'Link CV o descrizione esperienza', type: 'textarea', required: false, order: 7 },
-            { name: 'disponibilita', label: 'Disponibilità', type: 'textarea', required: false, order: 8 }
+            { id: 'ff-t3-nome', name: 'nome', label: 'Nome', type: 'text', required: true, order: 1 },
+            { id: 'ff-t3-cognome', name: 'cognome', label: 'Cognome', type: 'text', required: true, order: 2 },
+            { id: 'ff-t3-email', name: 'email', label: 'Email', type: 'email', required: true, order: 3 },
+            { id: 'ff-t3-telefono', name: 'telefono', label: 'Telefono', type: 'tel', required: false, order: 4 },
+            { id: 'ff-t3-posizione', name: 'posizione', label: 'Posizione di interesse', type: 'text', required: true, order: 5 },
+            { id: 'ff-t3-esperienza', name: 'esperienza', label: 'Anni di esperienza', type: 'text', required: false, order: 6 },
+            { id: 'ff-t3-cv', name: 'cv', label: 'Link CV o descrizione esperienza', type: 'textarea', required: false, order: 7 },
+            { id: 'ff-t3-disponibilita', name: 'disponibilita', label: 'Disponibilità', type: 'textarea', required: false, order: 8 }
           ]
         }
       }

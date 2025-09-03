@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { Menu, X, Phone, Mail } from 'lucide-react';
 import { PublicButton } from './PublicButton';
 import { useAuthRedirect } from '../../hooks/useAuthRedirect';
+import { trackCtaEvent } from '../../services/logs';
 
 /**
  * Header pubblico per Element Formazione
@@ -30,6 +31,14 @@ export const PublicHeader: React.FC = () => {
 
   const toggleMenu = () => {
     setIsMenuOpen(!isMenuOpen);
+  };
+
+  const trackContatti = (label: string) => {
+    trackCtaEvent({
+      resource: 'public',
+      action: 'cta_click',
+      details: { label, href: '/contatti', section: 'PublicHeader' }
+    });
   };
 
   return (
@@ -100,7 +109,8 @@ export const PublicHeader: React.FC = () => {
             <PublicButton 
               variant="primary" 
               size="md"
-              onClick={() => window.location.href = '/contatti'}
+              to="/contatti"
+              onClick={() => trackContatti('Richiedi Preventivo (header desktop)')}
             >
               Richiedi Preventivo
             </PublicButton>
@@ -145,9 +155,10 @@ export const PublicHeader: React.FC = () => {
                   variant="primary" 
                   size="md" 
                   className="w-full"
+                  to="/contatti"
                   onClick={() => {
                     setIsMenuOpen(false);
-                    window.location.href = '/contatti';
+                    trackContatti('Richiedi Preventivo (header mobile)');
                   }}
                 >
                   Richiedi Preventivo

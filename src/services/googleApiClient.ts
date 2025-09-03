@@ -1,4 +1,4 @@
-import { apiGet} from './api';
+import { apiGet, apiPost } from './api';
 
 /**
  * Google Docs API endpoints
@@ -45,6 +45,23 @@ export interface AttestatiResponse extends GenerateDocumentResponse {
   scheduleId?: string;
 }
 
+const getErrorMessage = (error: unknown, fallback = 'Si è verificato un errore'): string => {
+  if (typeof error === 'string') return error;
+  if (error && typeof error === 'object' && 'message' in error) {
+    const msg = (error as { message?: unknown }).message;
+    if (typeof msg === 'string') return msg;
+  }
+  return fallback;
+};
+
+const getErrorDetails = (error: unknown): string | undefined => {
+  if (error && typeof error === 'object' && 'details' in error) {
+    const det = (error as { details?: unknown }).details;
+    if (typeof det === 'string') return det;
+  }
+  return undefined;
+};
+
 /**
  * Google API client for document template operations
  * This client provides functionality for:
@@ -65,11 +82,11 @@ const googleApiClient = {
         `${GOOGLE_API_ENDPOINTS.TEMPLATES}/${type}`
       );
       return response;
-    } catch (error: any) {
-      console.error('Error getting default template:', error);
+    } catch (error: unknown) {
+      console.error('Error getting default template:', getErrorMessage(error));
       return {
         success: false,
-        error: error.message || 'Impossibile ottenere il template predefinito'
+        error: getErrorMessage(error, 'Impossibile ottenere il template predefinito')
       };
     }
   },
@@ -88,12 +105,12 @@ const googleApiClient = {
         { type, data }
       );
       return response;
-    } catch (error: any) {
-      console.error('Error generating document:', error);
+    } catch (error: unknown) {
+      console.error('Error generating document:', getErrorMessage(error));
       return {
         success: false,
-        error: error.message || 'Impossibile generare il documento',
-        details: error.details || error.message
+        error: getErrorMessage(error, 'Impossibile generare il documento'),
+        details: getErrorDetails(error)
       };
     }
   },
@@ -111,12 +128,12 @@ const googleApiClient = {
         `${GOOGLE_API_ENDPOINTS.ATTESTATI}/${scheduledCourseId}/${employeeId}`
       );
       return response;
-    } catch (error: any) {
-      console.error('Error generating attestato:', error);
+    } catch (error: unknown) {
+      console.error('Error generating attestato:', getErrorMessage(error));
       return {
         success: false,
-        error: error.message || 'Impossibile generare l\'attestato',
-        details: error.details || error.message
+        error: getErrorMessage(error, "Impossibile generare l'attestato"),
+        details: getErrorDetails(error)
       };
     }
   },
@@ -142,10 +159,10 @@ const googleApiClient = {
           employeeId,
           scheduleId: scheduledCourseId
         });
-      } catch (error: any) {
+      } catch (error: unknown) {
         results.push({
           success: false,
-          error: `Errore per partecipante ${employeeId}: ${error.message}`,
+          error: `Errore per partecipante ${employeeId}: ${getErrorMessage(error)}`,
           employeeId,
           scheduleId: scheduledCourseId
         });

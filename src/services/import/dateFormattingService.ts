@@ -1,4 +1,4 @@
-import { DATE_FORMATS, DateFormatConfig } from '../../types/import/personImportTypes';
+import { DATE_FORMATS } from '../../types/import/personImportTypes';
 
 /**
  * Servizio per la gestione e formattazione delle date nell'importazione
@@ -78,7 +78,7 @@ export class DateFormattingService {
       // Fallback: prova a parsare direttamente
       const date = new Date(cleanDateStr);
       return !isNaN(date.getTime()) && date.getFullYear() >= 1900 && date.getFullYear() <= 2100;
-    } catch (error) {
+    } catch {
       return false;
     }
   }

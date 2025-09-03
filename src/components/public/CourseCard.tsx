@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+// removed react-router-dom imports; navigation handled via PublicButton.to
 import { 
   ArrowRight,
   Award,
@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { PublicButton } from './PublicButton';
 import { PublicBadge } from './PublicBadge';
+import { trackCtaEvent } from '../../services/logs';
 
 interface Course {
   id: string;
@@ -38,6 +39,8 @@ export const CourseCard: React.FC<CourseCardProps> = ({
   getRiskLevelLabel,
   getCourseTypeLabel
 }) => {
+  // Navigazione gestita tramite PublicButton.to
+
   const getRiskLevelVariant = (riskLevel: string): 'red' | 'yellow' | 'green' | 'gray' => {
     switch (riskLevel) {
       case 'ALTO':
@@ -63,6 +66,11 @@ export const CourseCard: React.FC<CourseCardProps> = ({
       default:
         return 'gray';
     }
+  };
+
+  const trackInfoClick = () => {
+    const href = '/contatti?corso=' + course.slug;
+    trackCtaEvent({ resource: 'public', action: 'cta_click', details: { label: 'Richiedi Info', href, section: 'CourseCard', course: course.slug, title: course.title } });
   };
 
   return (
@@ -126,23 +134,20 @@ export const CourseCard: React.FC<CourseCardProps> = ({
 
         {/* Actions */}
         <div className="flex flex-col sm:flex-row gap-3">
-          <Link
+          <PublicButton
             to={`/corsi/${course.slug}`}
-            className="flex-1"
+            variant="primary"
+            size="sm"
+            className="w-full group flex-1"
           >
-            <PublicButton
-              variant="primary"
-              size="sm"
-              className="w-full group"
-            >
-              Scopri di più
-              <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
-            </PublicButton>
-          </Link>
+            Scopri di più
+            <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
+          </PublicButton>
           <PublicButton
             variant="outline"
             size="sm"
-            onClick={() => window.location.href = '/contatti?corso=' + course.slug}
+            to={`/contatti?corso=${course.slug}`}
+            onClick={trackInfoClick}
           >
             Richiedi Info
           </PublicButton>

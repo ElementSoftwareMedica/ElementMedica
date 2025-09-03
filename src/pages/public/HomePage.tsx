@@ -1,7 +1,5 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
 import { 
-  ArrowRight,
   Award,
   CheckCircle,
   Shield,
@@ -11,30 +9,36 @@ import {
 import { PublicLayout } from '../../components/public/PublicLayout';
 import { HeroSection } from '../../components/public/HeroSection';
 import { PublicButton } from '../../components/public/PublicButton';
+import { trackCtaEvent } from '../../services/logs';
+import { useNavigate } from 'react-router-dom';
 
 /**
  * Homepage pubblica di Element Formazione
  * Presenta l'azienda e i servizi offerti
  */
-export const HomePage: React.FC = () => {
-  const services = [
+ export const HomePage: React.FC = () => {
+  const navigate = useNavigate();
+   const services = [
     {
       icon: Shield,
       title: 'Corsi di Formazione',
       description: 'Corsi sulla sicurezza sul lavoro per tutti i settori e livelli di rischio',
-      features: ['Rischio Alto, Medio, Basso', 'Aggiornamenti periodici', 'Certificazioni riconosciute']
+      features: ['Rischio Alto, Medio, Basso', 'Aggiornamenti periodici', 'Certificazioni riconosciute'],
+      href: '/corsi'
     },
     {
       icon: Users,
       title: 'Nomina RSPP',
       description: 'Servizio di Responsabile del Servizio di Prevenzione e Protezione',
-      features: ['Consulenza specializzata', 'Supporto continuo', 'Conformità normativa']
+      features: ['Consulenza specializzata', 'Supporto continuo', 'Conformità normativa'],
+      href: '/rspp'
     },
     {
       icon: Award,
       title: 'Medico del Lavoro',
       description: 'Sorveglianza sanitaria e visite mediche per i lavoratori',
-      features: ['Visite periodiche', 'Protocolli sanitari', 'Certificazioni mediche']
+      features: ['Visite periodiche', 'Protocolli sanitari', 'Certificazioni mediche'],
+      href: '/medicina-del-lavoro'
     }
   ];
 
@@ -94,16 +98,46 @@ export const HomePage: React.FC = () => {
             {services.map((service, index) => {
               const IconComponent = service.icon;
               return (
-                <div key={index} className="bg-gray-50 rounded-2xl p-8 hover:shadow-lg transition-shadow">
+                <div
+                  key={index}
+                  className="bg-gray-50 rounded-2xl p-8 hover:shadow-lg transition-shadow cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  role="link"
+                  tabIndex={0}
+                  onClick={() => {
+                    trackCtaEvent({
+                      resource: 'public',
+                      action: 'cta_click',
+                      details: {
+                        label: 'Apri servizio',
+                        href: service.href,
+                        section: 'HomePage Services',
+                        title: service.title,
+                      },
+                    });
+                    navigate(service.href);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      trackCtaEvent({
+                        resource: 'public',
+                        action: 'cta_click',
+                        details: {
+                          label: 'Apri servizio (keyboard)',
+                          href: service.href,
+                          section: 'HomePage Services',
+                          title: service.title,
+                        },
+                      });
+                      navigate(service.href);
+                    }
+                  }}
+                >
                   <div className="w-16 h-16 bg-primary-600 rounded-full flex items-center justify-center mb-6">
                     <IconComponent className="w-8 h-8 text-white" />
                   </div>
-                  <h3 className="text-xl font-semibold text-gray-900 mb-4">
-                    {service.title}
-                  </h3>
-                  <p className="text-gray-600 mb-6">
-                    {service.description}
-                  </p>
+                  <h3 className="text-xl font-semibold text-gray-900 mb-4">{service.title}</h3>
+                  <p className="text-gray-600 mb-6">{service.description}</p>
                   <ul className="space-y-2 mb-6">
                     {service.features.map((feature, featureIndex) => (
                       <li key={featureIndex} className="flex items-center text-sm text-gray-700">
@@ -112,7 +146,25 @@ export const HomePage: React.FC = () => {
                       </li>
                     ))}
                   </ul>
-                  <PublicButton variant="outline" size="sm" className="w-full">
+                  <PublicButton
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      trackCtaEvent({
+                        resource: 'public',
+                        action: 'cta_click',
+                        details: {
+                          label: 'Scopri di più',
+                          href: service.href,
+                          section: 'HomePage Services',
+                          title: service.title,
+                        },
+                      });
+                      navigate(service.href);
+                    }}
+                  >
                     Scopri di più
                   </PublicButton>
                 </div>
@@ -195,14 +247,20 @@ export const HomePage: React.FC = () => {
             <PublicButton 
               variant="secondary" 
               size="lg"
-              onClick={() => window.location.href = '/contatti'}
+              to="/contatti"
+              onClick={() => {
+                trackCtaEvent({ resource: 'public', action: 'cta_click', details: { label: 'Contattaci Ora', href: '/contatti', section: 'HomePage' } });
+              }}
             >
               Contattaci Ora
             </PublicButton>
             <PublicButton 
               variant="outline" 
               size="lg"
-              onClick={() => window.location.href = '/corsi'}
+              to="/corsi"
+              onClick={() => {
+                trackCtaEvent({ resource: 'public', action: 'cta_click', details: { label: 'Vedi i Corsi', href: '/corsi', section: 'HomePage' } });
+              }}
             >
               Vedi i Corsi
             </PublicButton>

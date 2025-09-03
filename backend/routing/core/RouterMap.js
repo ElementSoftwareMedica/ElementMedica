@@ -147,6 +147,42 @@ const routerMap = {
         description: 'Counters endpoint (unversioned backend)',
         cors: true,
         rateLimit: 'api'
+      },
+
+      // 🔁 Legacy redirect: /api/activity-logs → /api/v1/activity-logs
+      '/api/activity-logs': {
+        target: 'api',
+        pathRewrite: { '^/api/activity-logs': '/api/v1/activity-logs' },
+        methods: ['GET', 'POST', 'OPTIONS'],
+        description: 'Legacy activity logs endpoint (redirects to v1)',
+        cors: true,
+        rateLimit: 'api'
+      },
+      '/api/activity-logs/*': {
+        target: 'api',
+        pathRewrite: { '^/api/activity-logs': '/api/v1/activity-logs' },
+        methods: ['GET', 'POST', 'OPTIONS'],
+        description: 'Legacy activity logs wildcard (redirects to v1)',
+        cors: true,
+        rateLimit: 'api'
+      },
+
+      // 🔁 Legacy redirect: /api/activity-logs → /api/v1/activity-logs
+      '/api/activity-logs': {
+        target: 'api',
+        pathRewrite: { '^/api/activity-logs': '/api/v1/activity-logs' },
+        methods: ['GET', 'POST', 'OPTIONS'],
+        description: 'Legacy activity logs endpoint (redirects to v1)',
+        cors: true,
+        rateLimit: 'api'
+      },
+      '/api/activity-logs/*': {
+        target: 'api',
+        pathRewrite: { '^/api/activity-logs': '/api/v1/activity-logs' },
+        methods: ['GET', 'POST', 'OPTIONS'],
+        description: 'Legacy activity logs wildcard (redirects to v1)',
+        cors: true,
+        rateLimit: 'api'
       }
     },
     v2: {

@@ -237,6 +237,48 @@ export function createCustomProxyMiddleware(serviceName, target, options = {}) {
         userAgent: req.get('User-Agent'),
         timestamp: new Date().toISOString()
       });
+
+      // Re-stream del body quando è già stato consumato da middleware a monte (es. raw body preservation)
+      try {
+        const method = req.method;
+        if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+          const contentType = req.headers['content-type'] || '';
+          let bodyBuffer = null;
+
+          // Priorità al raw body se presente: consente inoltro byte-per-byte (es. multipart o JSON originale)
+          if (req.rawBody && req.rawBody.length) {
+            bodyBuffer = Buffer.isBuffer(req.rawBody) ? req.rawBody : Buffer.from(req.rawBody);
+          } else if (req.body && Object.keys(req.body).length) {
+            // Fallback: se qualche parser ha popolato req.body
+            if (typeof req.body === 'string') {
+              bodyBuffer = Buffer.from(req.body);
+            } else if (contentType.includes('application/json')) {
+              bodyBuffer = Buffer.from(JSON.stringify(req.body));
+            } else if (contentType.includes('application/x-www-form-urlencoded')) {
+              const params = new URLSearchParams(req.body).toString();
+              bodyBuffer = Buffer.from(params);
+            }
+          }
+
+          if (bodyBuffer && bodyBuffer.length > 0) {
+            // Imposta Content-Length coerente con il body re-inviato
+            proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyBuffer));
+            // Evita alterazioni indesiderate dell'encoding
+            // proxyReq.setHeader('Accept-Encoding', 'identity'); // opzionale
+
+            // Scrivi il body verso il target
+            proxyReq.write(bodyBuffer);
+          }
+        }
+      } catch (e) {
+        logger.error('Body re-stream failed in proxy onProxyReq', {
+          service: 'proxy-server',
+          targetService: serviceName,
+          error: e.message,
+          path: req.path,
+          method: req.method
+        });
+      }
     },
     
     // Modifica headers della risposta

@@ -67,12 +67,12 @@ export const PublicFooter: React.FC = () => {
                 </Link>
               </li>
               <li>
-                <Link to="/servizi#rspp" className="text-gray-300 hover:text-primary-400 transition-colors">
+                <Link to="/rspp" className="text-gray-300 hover:text-primary-400 transition-colors">
                   Nomina RSPP
                 </Link>
               </li>
               <li>
-                <Link to="/servizi#medico" className="text-gray-300 hover:text-primary-400 transition-colors">
+                <Link to="/medicina-del-lavoro" className="text-gray-300 hover:text-primary-400 transition-colors">
                   Medico del Lavoro
                 </Link>
               </li>

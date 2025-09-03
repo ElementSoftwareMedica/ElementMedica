@@ -16,7 +16,9 @@ export default tseslint.config(
       '*.log',
       '.env*',
       'tmp/**',
-      'temp/**'
+      'temp/**',
+      // Escludo template GDPR dal lint generale (molto verboso e fuori scope)
+      'src/templates/gdpr-entity-page/**'
     ] 
   },
   {
@@ -36,6 +38,14 @@ export default tseslint.config(
         'warn',
         { allowConstantExport: true },
       ],
+    },
+  },
+  // Override mirato per i template GDPR (fuori dallo scope attuale):
+  {
+    files: ['src/templates/gdpr-entity-page/**/*.{ts,tsx}'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-unused-vars': 'off',
     },
   }
 );

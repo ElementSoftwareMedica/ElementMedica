@@ -1,5 +1,11 @@
-import { CSV_HEADER_MAPPINGS, TITLE_CASE_FIELDS } from '../../types/import/personImportTypes';
+import { CSV_HEADER_MAPPINGS, TITLE_CASE_FIELDS, PersonData } from '../../types/import/personImportTypes';
 import { applyTitleCaseToFields } from '../../utils/textFormatters';
+
+interface CompanyLite {
+  id: string;
+  ragioneSociale?: string;
+  name?: string;
+}
 
 /**
  * Servizio per la mappatura e normalizzazione dei dati CSV
@@ -23,7 +29,7 @@ export class CsvMappingService {
   /**
    * Applica la formattazione Title Case ai campi specificati
    */
-  static applyTitleCaseFormatting(person: any): any {
+  static applyTitleCaseFormatting(person: Record<string, unknown>): Record<string, unknown> {
     return applyTitleCaseToFields(person, [...TITLE_CASE_FIELDS]);
   }
 
@@ -46,7 +52,7 @@ export class CsvMappingService {
   /**
    * Trova un'azienda corrispondente nella lista esistente
    */
-  static findMatchingCompany(companyName: string, existingCompanies: any[]): any | null {
+  static findMatchingCompany(companyName: string, existingCompanies: CompanyLite[]): CompanyLite | null {
     if (!companyName || !existingCompanies.length) return null;
 
     const normalizedName = this.normalizeCompanyName(companyName);
@@ -62,7 +68,7 @@ export class CsvMappingService {
   /**
    * Trova aziende simili per suggerimenti
    */
-  static findSimilarCompanies(companyName: string, existingCompanies: any[]): any[] {
+  static findSimilarCompanies(companyName: string, existingCompanies: CompanyLite[]): CompanyLite[] {
     if (!companyName || !existingCompanies.length) return [];
 
     const normalizedName = this.normalizeCompanyName(companyName);
@@ -81,7 +87,7 @@ export class CsvMappingService {
   /**
    * Risolve l'ID dell'azienda basandosi sul nome
    */
-  static resolveCompanyId(person: any, existingCompanies: any[]): any {
+  static resolveCompanyId(person: PersonData, existingCompanies: CompanyLite[]): PersonData {
     if (!person.companyName || typeof person.companyName !== 'string') {
       return person;
     }
@@ -106,32 +112,31 @@ export class CsvMappingService {
   /**
    * Pulisce e normalizza i dati di una persona
    */
-  static cleanPersonData(person: any): any {
-    const cleaned = { ...person };
+  static cleanPersonData(person: PersonData): PersonData {
+    const cleaned: Record<string, unknown> = { ...person };
 
     // Normalizza il codice fiscale
     if (cleaned.taxCode) {
-      cleaned.taxCode = this.normalizeTaxCode(cleaned.taxCode);
+      cleaned.taxCode = this.normalizeTaxCode(String(cleaned.taxCode));
     }
 
     // Rimuove spazi extra da tutti i campi stringa
     Object.keys(cleaned).forEach(key => {
-      if (typeof cleaned[key] === 'string') {
-        cleaned[key] = cleaned[key].trim();
+      const value = cleaned[key];
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
         // Rimuove campi vuoti
-        if (cleaned[key] === '') {
-          cleaned[key] = undefined;
-        }
+        cleaned[key] = trimmed === '' ? undefined : trimmed;
       }
     });
 
-    return cleaned;
+    return cleaned as PersonData;
   }
 
   /**
    * Valida se una riga è un template vuoto
    */
-  static isEmptyTemplate(person: any): boolean {
+  static isEmptyTemplate(person: Partial<PersonData>): boolean {
     return !person.firstName?.trim() && 
            !person.lastName?.trim() && 
            !person.taxCode?.trim();
@@ -140,19 +145,21 @@ export class CsvMappingService {
   /**
    * Prepara i dati per l'API rimuovendo campi non necessari
    */
-  static prepareForAPI(person: any): any {
-    const apiData: any = {};
+  static prepareForAPI(person: PersonData): Record<string, unknown> {
+    const apiData: Record<string, unknown> = {};
+    const source: Record<string, unknown> = person as Record<string, unknown>;
     
     // Campi da includere nell'API
     const apiFields = [
       'firstName', 'lastName', 'email', 'phone', 'taxCode', 'birthDate',
       'residenceAddress', 'city', 'province', 'postalCode', 'title', 'companyId', 
       'username', 'notes', 'roleType'
-    ];
+    ] as const;
 
     apiFields.forEach(field => {
-      if (person[field] !== undefined && person[field] !== null && person[field] !== '') {
-        apiData[field] = person[field];
+      const v = source[field as string];
+      if (v !== undefined && v !== null && v !== '') {
+        apiData[field as string] = v;
       }
     });
 
@@ -167,7 +174,7 @@ export class CsvMappingService {
   /**
    * Converte le opzioni azienda per il componente SearchableSelect
    */
-  static convertCompaniesToOptions(companies: any[]): Array<{ value: string; label: string }> {
+  static convertCompaniesToOptions(companies: CompanyLite[]): Array<{ value: string; label: string }> {
     return companies.map(company => ({
       value: company.id,
       label: company.ragioneSociale || company.name || 'Azienda senza nome'
@@ -177,7 +184,7 @@ export class CsvMappingService {
   /**
    * Estrae i nomi delle aziende uniche dai dati importati
    */
-  static extractUniqueCompanyNames(persons: any[]): string[] {
+  static extractUniqueCompanyNames(persons: PersonData[]): string[] {
     const companyNames = new Set<string>();
     
     persons.forEach(person => {
@@ -192,7 +199,7 @@ export class CsvMappingService {
   /**
    * Valida la struttura dei dati importati
    */
-  static validateImportStructure(data: any[]): { isValid: boolean; errors: string[] } {
+  static validateImportStructure(data: unknown[]): { isValid: boolean; errors: string[] } {
     const errors: string[] = [];
 
     if (!Array.isArray(data)) {
@@ -206,7 +213,7 @@ export class CsvMappingService {
     }
 
     // Verifica che almeno una riga abbia dati validi
-    const hasValidData = data.some(person => !this.isEmptyTemplate(person));
+    const hasValidData = data.some(person => !this.isEmptyTemplate(person as Partial<PersonData>));
     
     if (!hasValidData) {
       errors.push('Il file non contiene righe con dati validi');

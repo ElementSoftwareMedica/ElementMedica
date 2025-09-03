@@ -194,6 +194,25 @@ export function setupApiProxyRoutes(app) {
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-ID', 'x-tenant-id']
+    },
+    // AGGIUNTO: CORS per activity-logs (public POST, GET protetto dall'API)
+    '/api/v1/activity-logs': {
+      origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+      credentials: true,
+      methods: ['GET', 'POST', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-ID', 'x-tenant-id']
+    },
+    '/api/v1/activity-logs/*': {
+      origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+      credentials: true,
+      methods: ['GET', 'POST', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-ID', 'x-tenant-id']
+    },
+    '/api/activity-logs': {
+      origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+      credentials: true,
+      methods: ['GET', 'POST', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-ID', 'x-tenant-id']
     }
   });
   
@@ -462,6 +481,30 @@ export function setupApiProxyRoutes(app) {
     })
   );
   
+  // AGGIUNTO: Proxy per /api/v1/activity-logs (senza richiesta auth a livello proxy)
+  app.use('/api/v1/activity-logs',
+    createCorsLogger('activity-logs-v1'),
+    createApiProxy(apiTarget, {
+      pathRewrite: {
+        '^/api/v1/activity-logs': '/api/v1/activity-logs'
+      },
+      requireAuth: false,
+      enableLogging: true
+    })
+  );
+
+  // AGGIUNTO: Proxy per /api/activity-logs -> riscrive su /api/v1/activity-logs
+  app.use('/api/activity-logs',
+    createCorsLogger('activity-logs'),
+    createApiProxy(apiTarget, {
+      pathRewrite: {
+        '^/api/activity-logs': '/api/v1/activity-logs'
+      },
+      requireAuth: false,
+      enableLogging: true
+    })
+  );
+  
   // Route legacy per backward compatibility
   
   // Proxy per /courses (legacy)
@@ -519,6 +562,7 @@ export function setupApiProxyRoutes(app) {
     console.log('   - Routes: /api/counters, /api/dashboard/*');
     console.log('   - Routes: /api/v2, /api/tenants (in setupTenantRolesProxyRoutes)');
     console.log('   - API Modern routes: /api/courses, /api/v1/courses, /api/employees, /api/trainers');
+    console.log('   - AGGIUNTO: /api/v1/activity-logs, /api/activity-logs');
     console.log('   - Legacy routes: /courses, /employees, /schedules, /users');
   }
 }
@@ -642,7 +686,11 @@ export function setupAuthProxyRoutes(app) {
     createAuthProxy(authTarget, {
       enableLogging: true,
       type: 'auth',
-      requireAuth: false // Esplicitamente false per le route di login
+      requireAuth: false, // Esplicitamente false per le route di login
+      // AGGIUNTO: riscrittura per instradare /api/auth/* verso /api/v1/auth/* sull'API server
+      pathRewrite: {
+        '^/api/auth': '/api/v1/auth'
+      }
     })
   );
   

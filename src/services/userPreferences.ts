@@ -15,7 +15,7 @@ type PreferenceType = 'viewMode' | 'columnWidths' | 'hiddenColumns' | 'columnOrd
 export const savePreference = async (
   section: string,
   type: PreferenceType,
-  value: any
+  value: unknown
 ): Promise<void> => {
   try {
     const key = `${section}-${type}`;
@@ -40,7 +40,7 @@ export const getPreference = async <T>(
   try {
     const key = `${section}-${type}`;
     const value = localStorage.getItem(key);
-    return value ? JSON.parse(value) : undefined;
+    return value ? (JSON.parse(value) as T) : undefined;
   } catch (error) {
     console.error('Error loading user preference from localStorage:', error);
     return undefined;
@@ -208,4 +208,4 @@ export const useTablePreferences = (tableName: string) => {
     
     loadPreferences: () => loadTablePreferences(tableName)
   };
-}; 
+};

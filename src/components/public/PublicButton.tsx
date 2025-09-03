@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { cn } from '../../design-system/utils';
 
 interface PublicButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -6,6 +7,11 @@ interface PublicButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement
   size?: 'sm' | 'md' | 'lg';
   children: React.ReactNode;
   className?: string;
+  // Link/anchor support
+  to?: string; // internal router link
+  href?: string; // external link
+  target?: string;
+  rel?: string;
 }
 
 /**
@@ -18,6 +24,11 @@ export const PublicButton: React.FC<PublicButtonProps> = ({
   children,
   className,
   disabled,
+  to,
+  href,
+  target,
+  rel,
+  onClick,
   ...props
 }) => {
   const baseClasses = [
@@ -52,13 +63,13 @@ export const PublicButton: React.FC<PublicButtonProps> = ({
       'hover:bg-primary-50',
       'focus:ring-primary-500'
     ]
-  };
+  } as const;
 
   const sizeClasses = {
     sm: 'px-4 py-2 text-sm',
     md: 'px-6 py-3 text-base',
     lg: 'px-8 py-4 text-lg'
-  };
+  } as const;
 
   const classes = cn(
     baseClasses,
@@ -67,10 +78,42 @@ export const PublicButton: React.FC<PublicButtonProps> = ({
     className
   );
 
+  // Preferire Link quando `to` è fornito per abilitare apertura in nuova scheda con meta-click
+  if (to) {
+    return (
+      <Link
+        to={to}
+        className={classes}
+        onClick={onClick as any}
+        aria-disabled={disabled}
+      >
+        {children}
+      </Link>
+    );
+  }
+
+  // Supporto link esterni
+  if (href) {
+    const safeRel = rel || (target === '_blank' ? 'noopener noreferrer' : undefined);
+    return (
+      <a
+        href={href}
+        target={target}
+        rel={safeRel}
+        className={classes}
+        onClick={onClick as any}
+        aria-disabled={disabled}
+      >
+        {children}
+      </a>
+    );
+  }
+
   return (
     <button
       className={classes}
       disabled={disabled}
+      onClick={onClick}
       {...props}
     >
       {children}

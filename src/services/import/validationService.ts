@@ -1,4 +1,4 @@
-import { PersonData, ValidationError, ImportValidationResult } from '../../types/import/personImportTypes';
+import { PersonData, ImportValidationResult } from '../../types/import/personImportTypes';
 import { DateFormattingService } from './dateFormattingService';
 import { CsvMappingService } from './csvMappingService';
 import { isValidCodiceFiscale } from '../../lib/utils';
@@ -103,7 +103,7 @@ export class ValidationService {
   static isValidPhone(phone: string): boolean {
     if (!phone) return false;
     // Accetta numeri con o senza prefisso internazionale, spazi, trattini, parentesi
-    const phoneRegex = /^[\+]?[0-9\s\-\(\)]{6,20}$/;
+    const phoneRegex = /^[+]?[\d\s()-]{6,20}$/;
     return phoneRegex.test(phone.trim());
   }
 

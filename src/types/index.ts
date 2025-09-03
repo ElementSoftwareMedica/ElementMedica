@@ -213,6 +213,7 @@ export interface ActivityLogFilters {
   action?: string;
   startDate?: string;
   endDate?: string;
+  search?: string;
 }
 
 export * from './courses';

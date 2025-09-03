@@ -3,8 +3,12 @@ import { PublicLayout } from '../../components/public/PublicLayout';
 import { PublicButton } from '../../components/public/PublicButton';
 import { ServiceCard } from '../../components/public/ServiceCard';
 import { Shield, Heart, Briefcase, AlertTriangle, GraduationCap, FileText } from 'lucide-react';
+// import { useNavigate } from 'react-router-dom';
+import { trackCtaEvent } from '../../services/logs';
 
 const ServicesPage: React.FC = () => {
+  // const navigate = useNavigate(); // not used currently
+  // const track = trackCtaEvent; // reserved for future tracking usage
   const services = [
     {
       id: 1,
@@ -31,8 +35,8 @@ const ServicesPage: React.FC = () => {
         'Sopralluoghi periodici'
       ],
       icon: Shield,
-      buttonText: 'Richiedi Informazioni',
-      buttonHref: '/contatti'
+      buttonText: 'Scopri di più',
+      buttonHref: '/rspp'
     },
     {
       id: 3,
@@ -45,8 +49,8 @@ const ServicesPage: React.FC = () => {
         'Protocolli sanitari'
       ],
       icon: Heart,
-      buttonText: 'Richiedi Informazioni',
-      buttonHref: '/contatti'
+      buttonText: 'Scopri di più',
+      buttonHref: '/medicina-del-lavoro'
     },
     {
       id: 4,
@@ -187,10 +191,25 @@ const ServicesPage: React.FC = () => {
             Contattaci per una valutazione gratuita delle tue esigenze in materia di sicurezza sul lavoro
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <PublicButton variant="secondary" size="lg">
+            <PublicButton 
+              variant="secondary" 
+              size="lg"
+              to="/contatti"
+              onClick={() => {
+                trackCtaEvent({ resource: 'public', action: 'cta_click', details: { label: 'Richiedi Preventivo Gratuito', href: '/contatti', section: 'ServicesPage' } });
+              }}
+            >
               Richiedi Preventivo Gratuito
             </PublicButton>
-            <PublicButton variant="outline" size="lg" className="border-white text-white hover:bg-white hover:text-primary-600">
+            <PublicButton 
+              variant="outline" 
+              size="lg" 
+              className="border-white text-white hover:bg-white hover:text-primary-600"
+              to="/contatti"
+              onClick={() => {
+                trackCtaEvent({ resource: 'public', action: 'cta_click', details: { label: 'Contattaci Ora', href: '/contatti', section: 'ServicesPage' } });
+              }}
+            >
               Contattaci Ora
             </PublicButton>
           </div>

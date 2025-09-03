@@ -9,15 +9,15 @@ import { ConflictInfo, PersonData, CompanyOption } from '../../types/import/pers
  */
 export const detectDuplicates = (
   persons: PersonData[],
-  existingPersons: any[] = []
+  existingPersons: PersonData[] = []
 ): ConflictInfo[] => {
   const conflicts: ConflictInfo[] = [];
-  const fiscalCodes = new Set();
+  const fiscalCodes = new Set<string>();
 
   // Controlla duplicati negli esistenti
   existingPersons.forEach(existing => {
-    if (existing.fiscalCode) {
-      fiscalCodes.add(existing.fiscalCode.toLowerCase());
+    if (existing.taxCode) {
+      fiscalCodes.add(existing.taxCode.toLowerCase());
     }
   });
 
@@ -27,7 +27,7 @@ export const detectDuplicates = (
       
       if (fiscalCodes.has(fiscalCode)) {
         const existingPerson = existingPersons.find(
-          p => p.fiscalCode?.toLowerCase() === fiscalCode
+          p => (p.taxCode?.toLowerCase()) === fiscalCode
         );
         
         conflicts.push({
@@ -118,7 +118,7 @@ const calculateSimilarity = (str1: string, str2: string): number => {
  * Calcola la distanza di Levenshtein tra due stringhe
  */
 const levenshteinDistance = (str1: string, str2: string): number => {
-  const matrix = [];
+  const matrix: number[][] = [];
   
   for (let i = 0; i <= str2.length; i++) {
     matrix[i] = [i];
@@ -154,57 +154,55 @@ export const updateConflictResolution = (
   resolution: 'skip' | 'overwrite' | 'company',
   companyId?: string
 ): ConflictInfo[] => {
-  return conflicts.map((conflict, i) => {
-    if (i === index) {
-      return {
-        ...conflict,
-        resolution,
-        resolvedCompanyId: resolution === 'company' ? companyId : undefined
-      };
-    }
-    return conflict;
-  });
+  const updated = [...conflicts];
+  const conflict = updated[index];
+  if (!conflict) return conflicts;
+
+  conflict.resolution = resolution;
+  if (resolution === 'company') {
+    conflict.resolvedCompanyId = companyId;
+  }
+
+  return updated;
 };
 
 /**
- * Risolve i conflitti preparando i dati per l'importazione
+ * Applica la risoluzione dei conflitti ai dati delle persone
  */
 export const resolveConflicts = (
   persons: PersonData[],
   conflicts: ConflictInfo[]
 ): PersonData[] => {
-  const resolvedPersons: PersonData[] = [];
-  
-  persons.forEach((person, index) => {
-    const conflict = conflicts.find(c => c.rowIndex === index);
-    
-    if (!conflict) {
-      // Nessun conflitto, aggiungi la persona
-      resolvedPersons.push(person);
-    } else if (conflict.resolution === 'overwrite') {
-      // Sovrascrivi la persona esistente
-      resolvedPersons.push(person);
-    } else if (conflict.resolution === 'company' && conflict.resolvedCompanyId) {
-      // Assegna l'azienda risolta
-      resolvedPersons.push({
-        ...person,
+  const resolvedPersons = [...persons];
+
+  conflicts.forEach(conflict => {
+    if (conflict.type === 'duplicate' && conflict.resolution === 'overwrite' && conflict.existingPerson) {
+      // Sovrascrive i dati con quelli dell'esistente, mantenendo i nuovi dove presenti
+      const index = conflict.rowIndex;
+      resolvedPersons[index] = {
+        ...conflict.existingPerson,
+        ...resolvedPersons[index]
+      };
+    } else if (conflict.type === 'invalid_company' && conflict.resolution === 'company' && conflict.resolvedCompanyId) {
+      const index = conflict.rowIndex;
+      resolvedPersons[index] = {
+        ...resolvedPersons[index],
         companyId: conflict.resolvedCompanyId
-      });
+      };
     }
-    // Se resolution è 'skip', non aggiungere la persona
   });
-  
+
   return resolvedPersons;
 };
 
 /**
- * Ottiene un riassunto dei conflitti
+ * Restituisce un sommario dei conflitti
  */
 export const getConflictSummary = (conflicts: ConflictInfo[]) => {
   const duplicates = conflicts.filter(c => c.type === 'duplicate').length;
   const invalidCompanies = conflicts.filter(c => c.type === 'invalid_company').length;
-  const resolved = conflicts.filter(c => c.resolution).length;
-  
+  const resolved = conflicts.filter(c => !!c.resolution).length;
+
   return {
     total: conflicts.length,
     duplicates,
@@ -215,35 +213,40 @@ export const getConflictSummary = (conflicts: ConflictInfo[]) => {
 };
 
 /**
- * Verifica se tutti i conflitti sono stati risolti
+ * Verifica se tutti i conflitti sono risolti
  */
 export const areAllConflictsResolved = (conflicts: ConflictInfo[]): boolean => {
-  return conflicts.every(conflict => conflict.resolution !== undefined);
+  return conflicts.every(c => {
+    if (c.type === 'duplicate') return !!c.resolution;
+    if (c.type === 'invalid_company') return c.resolution === 'skip' || (c.resolution === 'company' && !!c.resolvedCompanyId);
+    return false;
+  });
 };
 
 /**
- * Ottiene gli indici delle righe con conflitti non risolti
+ * Restituisce gli indici dei conflitti non risolti
  */
 export const getUnresolvedConflictIndices = (conflicts: ConflictInfo[]): number[] => {
-  return conflicts
-    .filter(conflict => !conflict.resolution)
-    .map(conflict => conflict.rowIndex);
+  const indices: number[] = [];
+  conflicts.forEach((c, idx) => {
+    if (c.type === 'duplicate' && !c.resolution) indices.push(idx);
+    if (c.type === 'invalid_company' && (c.resolution !== 'skip' && !c.resolvedCompanyId)) indices.push(idx);
+  });
+  return indices;
 };
 
 /**
- * Deseleziona automaticamente le righe con conflitti di duplicato
+ * Deseleziona automaticamente le righe duplicate quando marcate come "skip"
  */
 export const autoDeselectDuplicateConflicts = (
   selectedRows: boolean[],
   conflicts: ConflictInfo[]
 ): boolean[] => {
-  const newSelectedRows = [...selectedRows];
-  
+  const updated = [...selectedRows];
   conflicts.forEach(conflict => {
     if (conflict.type === 'duplicate' && conflict.resolution === 'skip') {
-      newSelectedRows[conflict.rowIndex] = false;
+      updated[conflict.rowIndex] = false;
     }
   });
-  
-  return newSelectedRows;
+  return updated;
 };

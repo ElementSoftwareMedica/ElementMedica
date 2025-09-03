@@ -1,6 +1,8 @@
 import React from 'react';
 import { CheckCircle, LucideIcon } from 'lucide-react';
 import { PublicButton } from './PublicButton';
+import { useNavigate } from 'react-router-dom';
+import { trackCtaEvent } from '../../services/logs';
 
 interface ServiceCardProps {
   icon: LucideIcon;
@@ -27,11 +29,7 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({
   variant = 'default',
   className = ''
 }) => {
-  const handleButtonClick = () => {
-    if (buttonHref) {
-      window.location.href = buttonHref;
-    }
-  };
+  const navigate = useNavigate();
 
   const getCardClasses = () => {
     const baseClasses = 'rounded-2xl transition-all duration-300';
@@ -138,7 +136,14 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({
           variant={variant === 'featured' ? 'secondary' : 'outline'} 
           size={variant === 'compact' ? 'sm' : 'sm'} 
           className="w-full"
-          onClick={handleButtonClick}
+          to={buttonHref}
+          onClick={() =>
+            trackCtaEvent({
+              resource: 'public',
+              action: 'cta_click',
+              details: { label: buttonText, href: buttonHref, section: 'ServiceCard', title }
+            })
+          }
         >
           {buttonText}
         </PublicButton>

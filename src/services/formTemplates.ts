@@ -122,7 +122,7 @@ export interface CreateFormTemplateRequest {
   };
 }
 
-export interface UpdateFormTemplateRequest extends Partial<CreateFormTemplateRequest> {}
+export type UpdateFormTemplateRequest = Partial<CreateFormTemplateRequest>;
 
 export interface FormSubmissionFilters {
   formTemplateId?: string;
@@ -137,7 +137,7 @@ export interface FormSubmissionFilters {
 class FormTemplatesService {
   // Form Templates
   async getFormTemplates(): Promise<FormTemplate[]> {
-    const response = await apiGet<{ success: boolean; data: BackendFormTemplate[]; pagination: { total: number; pages: number } }>('/api/v1/form-templates');
+    const response = await apiGet<{ success: boolean; data: BackendFormTemplate[]; pagination: { total: number; pages: number } }>("/api/v1/form-templates");
     return transformFormTemplates(response.data);
   }
 
@@ -147,7 +147,7 @@ class FormTemplatesService {
   }
 
   async createFormTemplate(data: CreateFormTemplateRequest): Promise<FormTemplate> {
-    const response = await apiPost<{ success: boolean; data: BackendFormTemplate }>('/api/v1/form-templates', data);
+    const response = await apiPost<{ success: boolean; data: BackendFormTemplate }>("/api/v1/form-templates", data);
     return transformFormTemplate(response.data);
   }
 
@@ -232,31 +232,26 @@ class FormTemplatesService {
     if (formTemplateId) params.append('formTemplateId', formTemplateId);
     params.append('format', format);
     
-    // Costruisce l'URL solo con i parametri se presenti
-    const queryString = params.toString();
-    const url = queryString ? `/api/v1/submissions/advanced/export?${queryString}` : '/api/v1/submissions/advanced/export';
-    
-    // Per il download di blob, usiamo una configurazione speciale
-    const response = await apiGet<Blob>(url, {
-      responseType: 'blob'
-    });
+    const url = `/api/v1/submissions/advanced/export?${params.toString()}`;
+    const blob = await apiGet<Blob>(url, { responseType: 'blob' });
+    return blob;
+  }
+
+  // Public forms
+  async submitPublicForm(formTemplateId: string, data: Record<string, unknown>): Promise<{ success: boolean; message: string }> {
+    const response = await apiPost<{ success: boolean; message: string }>(`/api/v1/form-templates/${formTemplateId}/submit`, data);
     return response;
   }
 
-  // Public form submission (for frontend pubblico)
-  async submitPublicForm(formTemplateId: string, data: Record<string, unknown>): Promise<{ success: boolean; message: string }> {
-    return await apiPost<{ success: boolean; message: string }>(`/api/public/forms/${formTemplateId}/submit`, data);
-  }
-
   async getPublicForm(id: string): Promise<FormTemplate> {
-    const response = await apiGet<BackendFormTemplate>(`/api/public/forms/${id}`);
-    return transformFormTemplate(response);
+    const response = await apiGet<{ success: boolean; data: BackendFormTemplate }>(`/api/v1/form-templates/public/${id}`);
+    return transformFormTemplate(response.data);
   }
 }
 
 export const formTemplatesService = new FormTemplatesService();
 
-// Export individual functions for convenience
+// Export helper functions
 export const getFormTemplates = () => formTemplatesService.getFormTemplates();
 export const getFormTemplate = (id: string) => formTemplatesService.getFormTemplate(id);
 export const createFormTemplate = (data: CreateFormTemplateRequest) => formTemplatesService.createFormTemplate(data);
