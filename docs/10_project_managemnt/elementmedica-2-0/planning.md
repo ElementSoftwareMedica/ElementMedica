@@ -114,6 +114,7 @@ Note operative:
   - curl http://localhost:4003/health
 - Versioning e body parsing
   - curl -H "x-api-version: v1" http://localhost:4003/api/v1/health
+  - curl -H "x-api-version: v2" http://localhost:4003/api/v2/health
   - curl -X POST http://localhost:4003/api/v1/auth/login -H "Content-Type: application/json" -d '{"identifier":"admin@example.com","password":"Admin123!"}'
 - POST pubblico Activity Log
   - curl -X POST http://localhost:4003/api/v1/activity-logs \
@@ -132,6 +133,21 @@ Note operative:
 
 ## 13) Avanzamento odierno (Deploy Production) [IN PROGRESS]
 - [CHECK] DNS allineato: elementformazione.com e www.elementformazione.com → 128.140.15.15 (Hetzner) ✓
+- [DONE] Trigger CI/CD eseguito: rsync su Hetzner OK, servizi api/proxy attivi.
+- [DONE] Certificati TLS: presenti in /ssl/live/elementformazione.com; switch Nginx a production.conf completato.
+- [DONE] Health esterni:
+  - HTTP /health → OK; HTTP /api/health → OK
+  - HTTPS /health → OK; HTTPS /api/health → OK
+  - Redirect HTTP→HTTPS su apex e www → 301 OK
+- [INFO] Frontend servito correttamente su https://elementformazione.com e https://www.elementformazione.com
+- [WARN] Container documents (app-documents-1) in restart loop (ExitCode 0). In diagnosi: recupero log e verifica env/porta/dipendenze.
+- [FIX] Documents: corretto CMD di produzione in `backend/Dockerfile.docs` → `node servers/documents-server.js` (per avvio corretto del servizio).
+- [TRIGGER] CI/CD: push su `main` per redeploy automatico (monitoraggio GitHub Actions attivo).
+
+Prossimi passi immediati:
+- [ACTION] Investigare servizio Documents: leggere log su volume backend/logs, verificare entrypoint/cmd in Dockerfile.docs, controllare variabili richieste (Google API, Redis opzionale, PRISMA, ecc.).
+- [ACTION] Mantenere monitoraggio certbot-renew e rotazione Nginx post-rinnovo (se necessario).
+- [ACTION] Hardening CORS/Origins in .env.production se servono domini aggiuntivi.
 - [PLAN] Trigger CI/CD: preparazione commit su planning.md per avviare workflow "Deploy to Hetzner (Production)" su push a main.
-- [PREREQ] Secrets minimi necessari in GitHub (da verificare): HETZNER_SSH_HOST, HETZNER_SSH_KEY, FRONTEND_URL, CORS_ALLOWED_ORIGINS, JWT_SECRET, JWT_REFRESH_SECRET, DATABASE_URL, DIRECT_URL, REDIS_ENABLED (false), PUBLIC_DOMAIN.
+- [PREREQ] Secrets minimi necessari in GitHub (da verificare): HETZNER_SSH_HOST, HETZNER_SSH_USER, HETZNER_SSH_KEY, FRONTEND_URL, CORS_ALLOWED_ORIGINS, JWT_SECRET, JWT_REFRESH_SECRET, DATABASE_URL, DIRECT_URL, REDIS_ENABLED (false), PUBLIC_DOMAIN.
 - [NEXT] Dopo il trigger, monitoraggio remoto (rsync, docker compose up) e health checks HTTP/HTTPS; in caso di errore, diagnosi su secrets mancanti o build Docker.

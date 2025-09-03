@@ -43,4 +43,5 @@ EXPOSE 4002
 # Usa utente non-root
 USER nodejs
 
-CMD ["node", "documents-server.js"]
+# Fix: avviare il server dal percorso corretto
+CMD ["node", "servers/documents-server.js"]
