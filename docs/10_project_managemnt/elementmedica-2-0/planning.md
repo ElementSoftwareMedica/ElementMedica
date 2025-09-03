@@ -57,18 +57,22 @@
 - [DONE] Verifica in anteprima con Vite: navigazione Home → Corsi/RSPP/Medicina del Lavoro e CTA “Richiedi Preventivo” funzionanti; SEO centralizzato applicato (title/description/canonical/OG/Twitter/robots/theme-color).
 - [DONE] Public og-image: aggiunto `public/og-image.svg` come immagine di default per social.
 - [DONE] Tracking CTA: uniformato su Header, Hero, Home Services e ServiceCard con `trackCtaEvent`; ActivityLogsTab mostra eventi `public · cta_click` dal backend (fallback a mock se BE non disponibile).
+- [INFO] Produzione: il dominio non risulta attualmente raggiungibile; da eseguire redeploy completo dopo configurazione GitHub Secrets.
+- [INFO] Locale: build frontend OK (vite build), lint attuale FALLISCE con ~500+ errori principalmente @typescript-eslint/no-explicit-any; non blocca il deploy ma resta come attività di hardening post-ripristino prod.
 
 ## 7) Prossimi passi immediati
-- CORS/Origin: mantenere allineamento tra localhost (sviluppo), domini produzione e IP pubblico (già incluso). Verifica end-to-end con autenticazione.
+- GIT: stato pulito su branch main con remoto origin configurato. Preparare commit dei soli file di pianificazione aggiornati (no segreti) e push su main.
+- CI/CD Secrets (GitHub): impostare obbligatoriamente HETZNER_SSH_HOST, HETZNER_SSH_USER, HETZNER_SSH_KEY (chiave privata), FRONTEND_URL, CORS_ALLOWED_ORIGINS, JWT_SECRET, JWT_REFRESH_SECRET, DATABASE_URL, DIRECT_URL, REDIS_ENABLED (default false), PUBLIC_DOMAIN (opzionale, default www.elementformazione.com).
+- Deploy: avviare workflow "Deploy to Hetzner (Production)" su push a main. In alternativa, eseguire localmente `scripts/remote-deploy-hetzner.sh <HOST> <USER>` con AUTO_PUSH_ENV=1 e backend/.env.production preparato.
+- CORS/Origin: mantenere allineamento tra localhost (sviluppo), domini produzione e IP pubblico; verifica end-to-end con autenticazione.
 - Automazione rinnovo certificati: confermare servizio `certbot-renew` attivo e log di rinnovo; valutare reload Nginx post-rinnovo (se necessario).
-- GitHub: inizializzazione repository ex-novo e push quando confermata piena funzionalità in produzione (no push prima di verifica completa).
-- Frontend build: assicurare pipeline locale (Vite build) coerente con ./dist e integrata nello script di deploy.
 - Monitoraggio/Logging: verificare mount volumi logs/ ed eventuale retention.
 - SEO: estendere PublicLayout con `og:image` e `twitter:image`, robots/canonical per tutte le pagine; aggiungere default image.
 - Activity Logs: confermare endpoint BE e tracciamento CTA lato FE con sendBeacon fallback.
+- Post-deploy: verificare /health e /api/health su HTTP/HTTPS e correggere eventuali problemi di configurazione.
 
 Note operative:
-- I file `.trae/rules/project_rules.md` e `.trae/TRAE_SYSTEM_GUIDE.md` non risultano presenti nel repository locale; applico comunque i principi GDPR e modifiche minime/reversibili.
+- I file `.trae/rules/project_rules.md` e `.trae/TRAE_SYSTEM_GUIDE.md` risultano presenti nel repository; vengono rispettati (GDPR, niente segreti in VCS, modifiche minime e reversibili).
 
 ## 8) Analisi tecnica – Activity Logs (in corso)
 - Modello ActivityLog (DB): campi effettivi confermati: id, personId (user_id), action, details (String JSON-encoded), timestamp, createdAt, deletedAt, updatedAt, tenantId; nessun campo resource/resourceId/ipAddress direttamente su ActivityLog.
