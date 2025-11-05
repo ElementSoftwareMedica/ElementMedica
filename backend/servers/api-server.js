@@ -9,6 +9,7 @@ import cors from 'cors'; // CRITICO: Riabilitato per permettere l'impostazione d
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import path from 'path';
+import cookieParser from 'cookie-parser';
 
 // Configurazioni centralizzate
 import { createCorsConfig } from '../config/cors.js';
@@ -59,6 +60,11 @@ import submissionRoutes from '../routes/v1/submission-routes.js';
 import formTemplatesRoutes from '../routes/form-templates-routes.js';
 import advancedSubmissionsRoutes from '../routes/advanced-submissions-routes.js';
 import activityLogsRoutes from '../routes/activity-logs-routes.js';
+import templateRoutes from '../routes/template-routes.js';
+import documentRoutes from '../routes/document-routes.js';
+import lettereIncaricoRoutes from '../routes/lettere-incarico-routes.js';
+import registriPresenzeRoutes from '../routes/registri-presenze-routes.js';
+import attestatiRoutes from '../routes/attestati-routes.js';
 
 // Utils
 import { logger } from '../utils/logger.js';
@@ -105,6 +111,22 @@ class APIServer {
     }
   }
   
+  // Aggiunta: Validazione env critiche per JWT
+  validateEnvironment() {
+    const missing = [];
+    if (!process.env.JWT_SECRET) missing.push('JWT_SECRET');
+    if (!process.env.JWT_REFRESH_SECRET) missing.push('JWT_REFRESH_SECRET');
+
+    if (missing.length > 0) {
+      logger.error('Missing required environment variables for JWT', {
+        service: 'api-server',
+        missing
+      });
+      const msg = `JWT configuration error: missing ${missing.join(', ')}`;
+      throw new Error(msg);
+    }
+  }
+
   /**
    * Inizializza configurazioni centralizzate
    */
@@ -222,6 +244,8 @@ class APIServer {
       this.middlewareManager.register('security', this.securityConfig.helmet, { priority: 10 });
       // CRITICO: CORS riabilitato per permettere l'impostazione dei cookie
       this.middlewareManager.register('cors', cors(this.corsConfig), { priority: 20 });
+      // Parse cookies prima dell'autenticazione
+      this.middlewareManager.register('cookies', cookieParser(), { priority: 21 });
       
       // Body parser middleware - DEVE essere prima del rate limiting per evitare conflitti
       // Wrapper per body parser JSON
@@ -289,6 +313,13 @@ class APIServer {
         '/api/v1/auth/register',
         '/api/v1/auth/forgot-password',
         '/api/v1/auth/reset-password',
+        // NUOVO: whitelist per verify/me che gestiscono auth a livello di route con authenticateTest
+        '/api/v1/auth/verify',
+        '/api/v1/auth/me',
+        // Debug endpoints (sviluppo)
+        '/api/v1/auth/test-debug',
+        '/api/v1/auth/debug',
+        '/api/v1/auth/debug/find-person',
         '/api/v2/auth/login',
         '/api/v2/auth/register',
         '/api/v2/auth/forgot-password',
@@ -330,6 +361,10 @@ class APIServer {
         // DEBUG: log minimale per diagnosi
         if (originalToCheck.includes('/activity-logs')) {
           console.info('[conditionalAuthMiddleware] path:', pathToCheck, 'originalUrl:', originalToCheck, 'isPublicRoute:', isPublicRoute);
+        }
+        // DEBUG: trace auth debug routes
+        if (originalToCheck.includes('/api/v1/auth/debug')) {
+          console.info('[conditionalAuthMiddleware][DEBUG] path:', pathToCheck, 'originalUrl:', originalToCheck, 'isPublicRoute:', isPublicRoute);
         }
         
         // Fallback robusto con regex per activity-logs: considera pubbliche tutte le varianti /api/(v1|v2)?/activity-logs
@@ -557,6 +592,31 @@ class APIServer {
       v1Router.use('/activity-logs', activityLogsRoutes);
       logger.info('Activity-logs routes registered successfully');
 
+      // Registra route template management
+      logger.info('Registering template routes...');
+      v1Router.use('/templates', templateRoutes);
+      logger.info('Template routes registered successfully');
+      
+      // Registra route document management
+      logger.info('Registering document routes...');
+      v1Router.use('/documents', documentRoutes);
+      logger.info('Document routes registered successfully');
+      
+      // Registra route lettere incarico
+      logger.info('Registering lettere incarico routes...');
+      v1Router.use('/lettere-incarico', lettereIncaricoRoutes);
+      logger.info('Lettere incarico routes registered successfully');
+      
+      // Registra route registri presenze
+      logger.info('Registering registri presenze routes...');
+      v1Router.use('/registri-presenze', registriPresenzeRoutes);
+      logger.info('Registri presenze routes registered successfully');
+      
+      // Registra route attestati
+      logger.info('Registering attestati routes...');
+      v1Router.use('/attestati', attestatiRoutes);
+      logger.info('Attestati routes registered successfully');
+
       // Registra route pubbliche
       logger.info('Registering public courses routes...');
       this.app.use('/api/public', publicCoursesRoutes);
@@ -608,8 +668,7 @@ class APIServer {
           const companiesCount = await prisma.company.count({
             where: {
               tenantId: tenantId,
-              deletedAt: null,
-              isActive: true
+              deletedAt: null
             }
           });
           
@@ -687,6 +746,9 @@ class APIServer {
   async start() {
     try {
       logger.info('Starting API Server...');
+      
+      // Validazione env critiche (fail-fast)
+      this.validateEnvironment();
       
       // Inizializzazione sequenziale
       logger.info('Initializing configurations...');
