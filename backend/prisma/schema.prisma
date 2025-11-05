@@ -103,7 +103,7 @@ model Course {
   maxPeople        Int?
   pricePerPerson   Float?
   regulation       String?
-  renewalDuration  String?
+  practicalHours   Int?
   validityYears    Int?
   tenantId         String
   status           CourseStatus?    @default(DRAFT)
@@ -240,71 +240,231 @@ model ScheduleCompany {
 }
 
 model Attestato {
-  id                String         @id @default(uuid())
-  personId          String         @map("partecipante_id")
-  fileName          String         @map("nome_file")
-  fileUrl           String         @map("url")
-  generatedAt       DateTime       @default(now()) @map("data_generazione")
+  id                String   @id @default(uuid())
+  personId          String   @map("partecipante_id")
+  fileName          String   @map("nome_file")
+  fileUrl           String   @map("url")
+  generatedAt       DateTime @default(now()) @map("data_generazione")
   annoProgressivo   Int
   numeroProgressivo Int
   scheduledCourseId String
-  createdAt         DateTime       @default(now())
-  deletedAt         DateTime?
-  tenantId          String
-  updatedAt         DateTime       @updatedAt
-  person            Person         @relation("Attestato_Person", fields: [personId], references: [id], onDelete: Cascade)
-  scheduledCourse   CourseSchedule @relation(fields: [scheduledCourseId], references: [id], onDelete: Cascade)
-  tenant            Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Template integration
+  templateId      String?
+  templateVersion Int?
+  markers         Json? // Resolved marker values used
+  generatedBy     String?
+  fileSize        Int? // Size in bytes
+
+  createdAt       DateTime       @default(now())
+  deletedAt       DateTime?
+  tenantId        String
+  updatedAt       DateTime       @updatedAt
+  person          Person         @relation("Attestato_Person", fields: [personId], references: [id], onDelete: Cascade)
+  scheduledCourse CourseSchedule @relation(fields: [scheduledCourseId], references: [id], onDelete: Cascade)
+  tenant          Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  template        TemplateLink?  @relation(fields: [templateId], references: [id])
 
   @@index([tenantId])
   @@index([personId])
   @@index([scheduledCourseId])
+  @@index([templateId])
   @@map("attestati")
 }
 
 model TemplateLink {
-  id            String    @id @default(uuid())
+  id            String         @id @default(uuid())
   name          String
   url           String
-  type          String
-  content       String?
-  footer        String?
-  header        String?
-  isDefault     Boolean   @default(false)
+  type          TemplateType
+  content       String?        @db.Text
+  footer        String?        @db.Text
+  header        String?        @db.Text
+  isDefault     Boolean        @default(false)
   logoPosition  String?
-  fileFormat    String?
+  fileFormat    TemplateFormat @default(HTML)
   googleDocsUrl String?
   logoImage     String?
   companyId     String?
-  createdAt     DateTime  @default(now())
-  deletedAt     DateTime?
-  tenantId      String
-  updatedAt     DateTime  @updatedAt
-  company       Company?  @relation(fields: [companyId], references: [id])
-  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Versioning
+  version  Int     @default(1)
+  isActive Boolean @default(true)
+
+  // Markers and Schema
+  markers      Json? // Array of marker definitions: [{key, label, type, format, required}]
+  markerSchema Json? // Validation schema for marker values
+
+  // Layout and Styling
+  styles Json? // CSS and styling configuration
+  layout Json? // Page layout settings (margins, orientation, etc.)
+
+  // Google Integration
+  googleDocsId   String? // Extracted Google Docs document ID
+  googleSlidesId String? // Extracted Google Slides presentation ID
+  lastSyncedAt   DateTime?
+  syncEnabled    Boolean   @default(false)
+  autoSync       Boolean   @default(false) // Automatically sync changes from Google
+
+  // Metadata
+  description String?
+  category    String?
+  tags        String[] @default([])
+  createdBy   String?
+
+  // Standard fields
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
+  tenantId  String
+  updatedAt DateTime  @updatedAt
+
+  // Relations
+  company          Company?            @relation(fields: [companyId], references: [id])
+  tenant           Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  creator          Person?             @relation("TemplateCreator", fields: [createdBy], references: [id])
+  versions         TemplateVersion[]
+  generatedDocs    GeneratedDocument[]
+  lettereIncarico  LetteraIncarico[]
+  registriPresenze RegistroPresenze[]
+  attestati        Attestato[]
 
   @@index([tenantId])
   @@index([companyId])
+  @@index([tenantId, type])
+  @@index([tenantId, type, isActive])
+  @@index([isDefault, type])
+  @@index([deletedAt])
+  @@index([createdBy])
+}
+
+model TemplateVersion {
+  id             String   @id @default(uuid())
+  templateId     String
+  version        Int
+  content        String   @db.Text
+  header         String?  @db.Text
+  footer         String?  @db.Text
+  styles         Json? // CSS and styling configuration for this version
+  layout         Json? // Page layout settings for this version
+  markers        Json? // Marker definitions used in this version
+  changesSummary String? // Brief description of what changed
+  changeDetails  Json? // Detailed change log
+  createdBy      String
+  createdAt      DateTime @default(now())
+  tenantId       String
+
+  // Relations
+  template TemplateLink @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  creator  Person       @relation("VersionCreator", fields: [createdBy], references: [id])
+  tenant   Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, version])
+  @@index([templateId, createdAt])
+  @@index([tenantId])
+}
+
+model GeneratedDocument {
+  id              String         @id @default(uuid())
+  templateId      String
+  templateVersion Int
+  type            TemplateType
+  entityType      String // 'person', 'scheduledCourse', 'company', etc.
+  entityId        String // ID of the related entity
+  filename        String
+  filepath        String // Path in storage service
+  fileUrl         String // Public URL for download
+  fileSize        Int // Size in bytes
+  fileHash        String? // SHA-256 hash for integrity
+  mimeType        String         @default("application/pdf")
+  markers         Json // Resolved marker values used for generation
+  metadata        Json? // Additional document metadata
+  status          DocumentStatus @default(GENERATED)
+
+  // Batch generation tracking
+  batchId    String? // Group multiple documents generated together
+  batchSize  Int? // Total documents in batch
+  batchIndex Int? // Position in batch
+
+  // Delivery tracking
+  sentAt DateTime?
+  sentTo String? // Email address
+
+  // Download tracking
+  downloadCount  Int       @default(0)
+  lastDownloadAt DateTime?
+
+  // Standard fields
+  generatedBy String
+  generatedAt DateTime  @default(now())
+  tenantId    String
+  deletedAt   DateTime?
+
+  // Relations
+  template  TemplateLink @relation(fields: [templateId], references: [id])
+  generator Person       @relation("DocumentGenerator", fields: [generatedBy], references: [id])
+  tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([templateId])
+  @@index([entityType, entityId])
+  @@index([tenantId, generatedAt])
+  @@index([generatedBy])
+  @@index([batchId])
+  @@index([status])
+  @@index([type, status])
+}
+
+// Google OAuth2 Tokens for Workspace Integration
+model GoogleTokens {
+  id           String   @id @default(uuid())
+  userId       String
+  tenantId     String
+  accessToken  String   @db.Text // Encrypted OAuth2 access token
+  refreshToken String?  @db.Text // Encrypted OAuth2 refresh token
+  expiryDate   BigInt // Token expiration timestamp (Unix milliseconds)
+  scope        String[] @default([]) // OAuth scopes granted
+  tokenType    String   @default("Bearer")
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user   Person @relation("GoogleTokensUser", fields: [userId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, tenantId])
+  @@index([userId])
+  @@index([tenantId])
+  @@index([expiryDate])
 }
 
 model LetteraIncarico {
-  id                String         @id @default(uuid())
+  id                String   @id @default(uuid())
   scheduledCourseId String
   trainerId         String
   nomeFile          String
   url               String
-  dataGenerazione   DateTime       @default(now())
+  dataGenerazione   DateTime @default(now())
   numeroProgressivo Int
   annoProgressivo   Int
-  createdAt         DateTime       @default(now())
-  deletedAt         DateTime?
-  tenantId          String
-  updatedAt         DateTime       @updatedAt
-  scheduledCourse   CourseSchedule @relation(fields: [scheduledCourseId], references: [id], onDelete: Cascade)
-  tenant            Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  trainer           Person         @relation("LetteraIncaricoTrainer", fields: [trainerId], references: [id], onDelete: Cascade)
+
+  // Template integration
+  templateId      String?
+  templateVersion Int?
+  markers         Json? // Resolved marker values used
+  generatedBy     String?
+  fileSize        Int? // Size in bytes
+
+  createdAt       DateTime       @default(now())
+  deletedAt       DateTime?
+  tenantId        String
+  updatedAt       DateTime       @updatedAt
+  scheduledCourse CourseSchedule @relation(fields: [scheduledCourseId], references: [id], onDelete: Cascade)
+  tenant          Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  trainer         Person         @relation("LetteraIncaricoTrainer", fields: [trainerId], references: [id], onDelete: Cascade)
+  template        TemplateLink?  @relation(fields: [templateId], references: [id])
 
   @@unique([scheduledCourseId, trainerId])
+  @@index([templateId])
   @@index([tenantId])
   @@index([scheduledCourseId])
   @@index([trainerId])
@@ -312,29 +472,39 @@ model LetteraIncarico {
 }
 
 model RegistroPresenze {
-  id                String                         @id @default(uuid())
+  id                String   @id @default(uuid())
   scheduledCourseId String
   sessionId         String
   nomeFile          String
   url               String
-  dataGenerazione   DateTime                       @default(now())
+  dataGenerazione   DateTime @default(now())
   numeroProgressivo Int
   annoProgressivo   Int
   formatoreId       String
-  createdAt         DateTime                       @default(now())
-  deletedAt         DateTime?
-  tenantId          String
-  updatedAt         DateTime                       @updatedAt
-  formatore         Person                         @relation("RegistroFormatore", fields: [formatoreId], references: [id], onDelete: Cascade)
-  scheduledCourse   CourseSchedule                 @relation(fields: [scheduledCourseId], references: [id], onDelete: Cascade)
-  session           CourseSession                  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  tenant            Tenant                         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  presenti          RegistroPresenzePartecipante[]
+
+  // Template integration
+  templateId      String?
+  templateVersion Int?
+  markers         Json? // Resolved marker values used
+  generatedBy     String?
+  fileSize        Int? // Size in bytes
+
+  createdAt       DateTime                       @default(now())
+  deletedAt       DateTime?
+  tenantId        String
+  updatedAt       DateTime                       @updatedAt
+  formatore       Person                         @relation("RegistroFormatore", fields: [formatoreId], references: [id], onDelete: Cascade)
+  scheduledCourse CourseSchedule                 @relation(fields: [scheduledCourseId], references: [id], onDelete: Cascade)
+  session         CourseSession                  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  tenant          Tenant                         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  template        TemplateLink?                  @relation(fields: [templateId], references: [id])
+  presenti        RegistroPresenzePartecipante[]
 
   @@index([tenantId])
   @@index([formatoreId])
   @@index([scheduledCourseId])
   @@index([sessionId])
+  @@index([templateId])
   @@map("registri_presenze")
 }
 
@@ -643,78 +813,82 @@ model PersonSession {
 }
 
 model Person {
-  id                                                               String                         @id @default(uuid())
-  firstName                                                        String                         @db.VarChar(100)
-  lastName                                                         String                         @db.VarChar(100)
-  email                                                            String?                        @unique @db.VarChar(255)
-  phone                                                            String?                        @db.VarChar(20)
-  birthDate                                                        DateTime?                      @db.Date
-  taxCode                                                          String?                        @unique @db.VarChar(16)
-  vatNumber                                                        String?                        @db.VarChar(11)
-  residenceAddress                                                 String?                        @db.VarChar(255)
-  residenceCity                                                    String?                        @db.VarChar(100)
-  postalCode                                                       String?                        @db.VarChar(10)
-  province                                                         String?                        @db.VarChar(2)
-  username                                                         String?                        @unique @db.VarChar(50)
-  password                                                         String?                        @db.VarChar(255)
-  status                                                           PersonStatus                   @default(ACTIVE)
-  title                                                            String?                        @db.VarChar(100)
-  hiredDate                                                        DateTime?                      @db.Date
-  hourlyRate                                                       Decimal?                       @db.Decimal(10, 2)
-  iban                                                             String?                        @db.VarChar(34)
-  registerCode                                                     String?                        @db.VarChar(50)
-  certifications                                                   String[]
-  specialties                                                      String[]
-  profileImage                                                     String?                        @db.VarChar(500)
-  notes                                                            String?
-  lastLogin                                                        DateTime?                      @db.Timestamp(6)
-  failedAttempts                                                   Int                            @default(0) @db.SmallInt
-  lockedUntil                                                      DateTime?                      @db.Timestamp(6)
-  globalRole                                                       String?                        @db.VarChar(50)
-  tenantId                                                         String
-  companyId                                                        String?
-  createdAt                                                        DateTime                       @default(now()) @db.Timestamp(6)
-  updatedAt                                                        DateTime                       @updatedAt @db.Timestamp(6)
-  deletedAt                                                        DateTime?                      @db.Timestamp(6)
-  gdprConsentDate                                                  DateTime?                      @db.Timestamp(6)
-  gdprConsentVersion                                               String?                        @db.VarChar(10)
-  dataRetentionUntil                                               DateTime?                      @db.Date
-  preferences                                                      Json?                          @default("{}")
-  siteId                                                           String?
-  reparto                                                          String?                        @db.VarChar(100)
-  repartoId                                                        String?
-  sitesAsMedicoCompetente                                          CompanySite[]                  @relation("SiteMedicoCompetente")
-  sitesAsRSPP                                                      CompanySite[]                  @relation("SiteRSPP")
-  consentRecords                                                   ConsentRecord[]
-  schedules                                                        CourseSchedule[]               @relation("ScheduleTrainer")
-  sessionsAsCoTrainer                                              CourseSession[]                @relation("SessionCoTrainer")
-  sessionsAsTrainer                                                CourseSession[]                @relation("SessionTrainer")
-  gdprAuditLogs                                                    GdprAuditLog[]
-  repartiResponsabile                                              Reparto[]                      @relation("RepartoResponsabile")
-  sopralluogiEseguiti                                              Sopralluogo[]                  @relation("SopralluogoEsecutore")
-  activityLogs                                                     ActivityLog[]                  @relation("ActivityLog_Person")
-  attestati                                                        Attestato[]                    @relation("Attestato_Person")
-  assignedContactSubmissions                                       ContactSubmission[]
+  id                                                   String                         @id @default(uuid())
+  firstName                                            String                         @db.VarChar(100)
+  lastName                                             String                         @db.VarChar(100)
+  email                                                String?                        @unique @db.VarChar(255)
+  phone                                                String?                        @db.VarChar(20)
+  birthDate                                            DateTime?                      @db.Date
+  taxCode                                              String?                        @unique @db.VarChar(16)
+  vatNumber                                            String?                        @db.VarChar(11)
+  residenceAddress                                     String?                        @db.VarChar(255)
+  residenceCity                                        String?                        @db.VarChar(100)
+  postalCode                                           String?                        @db.VarChar(10)
+  province                                             String?                        @db.VarChar(2)
+  username                                             String?                        @unique @db.VarChar(50)
+  password                                             String?                        @db.VarChar(255)
+  status                                               PersonStatus                   @default(ACTIVE)
+  title                                                String?                        @db.VarChar(100)
+  hiredDate                                            DateTime?                      @db.Date
+  hourlyRate                                           Decimal?                       @db.Decimal(10, 2)
+  iban                                                 String?                        @db.VarChar(34)
+  registerCode                                         String?                        @db.VarChar(50)
+  certifications                                       String[]
+  specialties                                          String[]
+  profileImage                                         String?                        @db.VarChar(500)
+  notes                                                String?
+  lastLogin                                            DateTime?                      @db.Timestamp(6)
+  failedAttempts                                       Int                            @default(0) @db.SmallInt
+  lockedUntil                                          DateTime?                      @db.Timestamp(6)
+  globalRole                                           String?                        @db.VarChar(50)
+  tenantId                                             String
+  companyId                                            String?
+  createdAt                                            DateTime                       @default(now()) @db.Timestamp(6)
+  updatedAt                                            DateTime                       @updatedAt @db.Timestamp(6)
+  deletedAt                                            DateTime?                      @db.Timestamp(6)
+  gdprConsentDate                                      DateTime?                      @db.Timestamp(6)
+  gdprConsentVersion                                   String?                        @db.VarChar(10)
+  dataRetentionUntil                                   DateTime?                      @db.Date
+  preferences                                          Json?                          @default("{}")
+  siteId                                               String?
+  reparto                                              String?                        @db.VarChar(100)
+  repartoId                                            String?
+  sitesAsMedicoCompetente                              CompanySite[]                  @relation("SiteMedicoCompetente")
+  sitesAsRSPP                                          CompanySite[]                  @relation("SiteRSPP")
+  consentRecords                                       ConsentRecord[]
+  schedules                                            CourseSchedule[]               @relation("ScheduleTrainer")
+  sessionsAsCoTrainer                                  CourseSession[]                @relation("SessionCoTrainer")
+  sessionsAsTrainer                                    CourseSession[]                @relation("SessionTrainer")
+  gdprAuditLogs                                        GdprAuditLog[]
+  repartiResponsabile                                  Reparto[]                      @relation("RepartoResponsabile")
+  sopralluogiEseguiti                                  Sopralluogo[]                  @relation("SopralluogoEsecutore")
+  activityLogs                                         ActivityLog[]                  @relation("ActivityLog_Person")
+  attestati                                            Attestato[]                    @relation("Attestato_Person")
+  assignedContactSubmissions                           ContactSubmission[]
   persons_contact_submissions_createdPersonIdTopersons ContactSubmission[]            @relation("contact_submissions_createdPersonIdTopersons")
   persons_contact_submissions_relatedPersonIdTopersons ContactSubmission[]            @relation("contact_submissions_relatedPersonIdTopersons")
-  courseEnrollments                                                CourseEnrollment[]             @relation("CourseEnrollment_Person")
-  createdCustomRoles                                               CustomRole[]                   @relation("CustomRole_CreatedBy")
-  form_templates                                                   form_templates[]
-  lettereIncarico                                                  LetteraIncarico[]              @relation("LetteraIncaricoTrainer")
-  assignedRoles                                                    PersonRole[]                   @relation("AssignedRoles")
-  personRoles                                                      PersonRole[]
-  personSessions                                                   PersonSession[]                @relation("PersonSessions")
-  company                                                          Company?                       @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  repartoAssegnato                                                 Reparto?                       @relation("PersonReparto", fields: [repartoId], references: [id])
-  site                                                             CompanySite?                   @relation("PersonSite", fields: [siteId], references: [id])
-  tenant                                                           Tenant                         @relation(fields: [tenantId], references: [id])
-  preventivoPartecipanti                                           PreventivoPartecipante[]       @relation("PreventivoPartecipante_Person")
-  refreshTokens                                                    RefreshToken[]
-  registriPresenze                                                 RegistroPresenze[]             @relation("RegistroFormatore")
-  registroPresenzePartecipanti                                     RegistroPresenzePartecipante[] @relation("RegistroPresenzePartecipante_Person")
-  grantedPermissions                                               RolePermission[]               @relation("GrantedPermissions")
-  testDocuments                                                    TestDocument[]                 @relation("TestDocumentTrainer")
-  testPartecipanti                                                 TestPartecipante[]             @relation("TestPartecipante_Person")
+  courseEnrollments                                    CourseEnrollment[]             @relation("CourseEnrollment_Person")
+  createdCustomRoles                                   CustomRole[]                   @relation("CustomRole_CreatedBy")
+  form_templates                                       form_templates[]
+  lettereIncarico                                      LetteraIncarico[]              @relation("LetteraIncaricoTrainer")
+  assignedRoles                                        PersonRole[]                   @relation("AssignedRoles")
+  personRoles                                          PersonRole[]
+  personSessions                                       PersonSession[]                @relation("PersonSessions")
+  company                                              Company?                       @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  repartoAssegnato                                     Reparto?                       @relation("PersonReparto", fields: [repartoId], references: [id])
+  site                                                 CompanySite?                   @relation("PersonSite", fields: [siteId], references: [id])
+  tenant                                               Tenant                         @relation(fields: [tenantId], references: [id])
+  preventivoPartecipanti                               PreventivoPartecipante[]       @relation("PreventivoPartecipante_Person")
+  refreshTokens                                        RefreshToken[]
+  registriPresenze                                     RegistroPresenze[]             @relation("RegistroFormatore")
+  registroPresenzePartecipanti                         RegistroPresenzePartecipante[] @relation("RegistroPresenzePartecipante_Person")
+  grantedPermissions                                   RolePermission[]               @relation("GrantedPermissions")
+  testDocuments                                        TestDocument[]                 @relation("TestDocumentTrainer")
+  testPartecipanti                                     TestPartecipante[]             @relation("TestPartecipante_Person")
+  createdTemplates                                     TemplateLink[]                 @relation("TemplateCreator")
+  createdVersions                                      TemplateVersion[]              @relation("VersionCreator")
+  generatedDocuments                                   GeneratedDocument[]            @relation("DocumentGenerator")
+  googleTokens                                         GoogleTokens[]                 @relation("GoogleTokensUser")
 
   @@index([email])
   @@index([username])
@@ -869,6 +1043,9 @@ model Tenant {
   usage                        TenantUsage[]
   testDocuments                TestDocument[]
   testPartecipanti             TestPartecipante[]
+  templateVersions             TemplateVersion[]
+  generatedDocuments           GeneratedDocument[]
+  googleTokens                 GoogleTokens[]
 
   @@map("tenants")
 }
@@ -1454,4 +1631,28 @@ enum SubmissionStatus {
   IN_PROGRESS
   RESOLVED
   ARCHIVED
+}
+
+// Template Management System Enums
+enum TemplateType {
+  LETTER_OF_ENGAGEMENT // Lettera di Incarico
+  ATTENDANCE_REGISTER // Registro Presenze
+  CERTIFICATE // Attestato
+  INVOICE // Fattura (future)
+  COURSE_PROGRAM // Programma Corso (future)
+  CUSTOM // Custom documents
+}
+
+enum TemplateFormat {
+  HTML // HTML template (default)
+  DOCX // Microsoft Word
+  GOOGLE_DOCS // Google Docs
+  GOOGLE_SLIDES // Google Slides (for certificates)
+}
+
+enum DocumentStatus {
+  DRAFT // Document in draft
+  GENERATED // Document generated
+  SENT // Document sent via email
+  ARCHIVED // Document archived
 }
