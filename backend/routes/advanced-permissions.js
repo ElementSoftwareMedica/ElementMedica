@@ -19,7 +19,7 @@ router.use(tenantMiddleware);
  */
 router.get('/entities',
   authenticate(),
-  // enhancedRoleService.requirePermission('ROLE_MANAGEMENT'), // Temporaneamente disabilitato per debug
+  enhancedRoleService.requirePermission('ROLE_MANAGEMENT'), // Re-enabled (Phase 1 Security)
   async (req, res) => {
     try {
       const entities = [
