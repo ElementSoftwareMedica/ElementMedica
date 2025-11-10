@@ -293,7 +293,10 @@ class PersonCore {
 
       // Recupera gli ID effettivamente esistenti per evitare errori Prisma
       const existing = await prisma.person.findMany({
-        where: { id: { in: uniqueIds } },
+        where: { 
+          id: { in: uniqueIds },
+          deletedAt: null // ✅ FIX: Exclude soft-deleted persons (GDPR compliance)
+        },
         select: { id: true }
       });
       const existingIds = existing.map(p => p.id);
@@ -399,9 +402,12 @@ class PersonCore {
    * @param {string} excludePersonId - ID persona da escludere (opzionale)
    * @returns {Promise<boolean>} True se disponibile
    */
-  static async checkUsernameAvailability(username, excludePersonId = null) {
+  static async isUsernameAvailable(username, excludePersonId = null) {
     try {
-      const where = { username };
+      const where = { 
+        username,
+        deletedAt: null // ✅ FIX: Exclude soft-deleted persons (GDPR compliance - allow username reuse)
+      };
       if (excludePersonId) {
         where.id = { not: excludePersonId };
       }
@@ -421,9 +427,12 @@ class PersonCore {
    * @param {string} excludePersonId - ID persona da escludere (opzionale)
    * @returns {Promise<boolean>} True se disponibile
    */
-  static async checkEmailAvailability(email, excludePersonId = null) {
+  static async isEmailAvailable(email, excludePersonId = null) {
     try {
-      const where = { email };
+      const where = { 
+        email,
+        deletedAt: null // ✅ FIX: Exclude soft-deleted persons (GDPR compliance - allow email reuse)
+      };
       if (excludePersonId) {
         where.id = { not: excludePersonId };
       }
