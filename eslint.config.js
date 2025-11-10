@@ -51,5 +51,12 @@ export default tseslint.config(
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-unused-vars': 'off',
     },
+  },
+  // Backend: Enforce logger usage instead of console
+  {
+    files: ['backend/**/*.js', 'backend/**/*.ts'],
+    rules: {
+      'no-console': 'error', // No console.* allowed - use logger instead
+    },
   }
 );

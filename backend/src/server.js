@@ -1,4 +1,6 @@
 import express from 'express';
+import logger from '../utils/logger.js';
+
 
 const app = express();
 const HOST = process.env.MAIN_HOST || '0.0.0.0';
@@ -19,19 +21,19 @@ app.get('/', (req, res) => {
 });
 
 const server = app.listen(PORT, HOST, () => {
-  console.log(`Main server listening on http://${HOST}:${PORT}`);
+  logger.info(`Main server listening on http://${HOST}:${PORT}`);
 });
 
 // Graceful shutdown
 const shutdown = (signal) => {
-  console.log(`Received ${signal}, shutting down gracefully...`);
+  logger.info(`Received ${signal}, shutting down gracefully...`);
   server.close(() => {
-    console.log('HTTP server closed');
+    logger.info('HTTP server closed');
     process.exit(0);
   });
   // Force exit if not closed within timeout
   setTimeout(() => {
-    console.error('Force exit after timeout');
+    logger.error('Force exit after timeout');
     process.exit(1);
   }, 10000).unref();
 };

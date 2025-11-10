@@ -4,6 +4,7 @@
  */
 
 import { ROLE_HIERARCHY, getRoleLevel, getDefaultParentRole } from './HierarchyDefinition.js';
+import logger from "../utils/logger.js";
 import { canAssignToRole, canManageRole } from './HierarchyCalculator.js';
 import { canAssignPermission } from './PermissionManager.js';
 import { PrismaClient } from '@prisma/client';
@@ -47,7 +48,7 @@ export async function getRoleHierarchy(tenantId) {
 
     return hierarchy;
   } catch (error) {
-    console.error('Errore nel recupero della gerarchia:', error);
+    logger.error('Errore nel recupero della gerarchia:', error);
     throw error;
   }
 }
@@ -137,7 +138,7 @@ export async function assignRoleWithHierarchy(assignerId, targetUserId, roleType
     };
 
   } catch (error) {
-    console.error('Errore nell\'assegnazione del ruolo:', error);
+    logger.error('Errore nell\'assegnazione del ruolo:', error);
     return {
       success: false,
       error: error.message
@@ -246,7 +247,7 @@ export async function assignPermissionsWithHierarchy(assignerId, targetUserId, p
     };
 
   } catch (error) {
-    console.error('Errore nell\'assegnazione dei permessi:', error);
+    logger.error('Errore nell\'assegnazione dei permessi:', error);
     return {
       success: false,
       error: error.message
@@ -326,7 +327,7 @@ export async function getUserRoleHierarchy(userId, tenantId) {
     };
 
   } catch (error) {
-    console.error('Errore nel recupero della gerarchia utente:', error);
+    logger.error('Errore nel recupero della gerarchia utente:', error);
     throw error;
   }
 }
@@ -371,7 +372,7 @@ export async function updateRoleHierarchy(roleType, newLevel, newParent, tenantI
     };
 
   } catch (error) {
-    console.error('Errore nell\'aggiornamento della gerarchia:', error);
+    logger.error('Errore nell\'aggiornamento della gerarchia:', error);
     return {
       success: false,
       error: error.message
@@ -405,7 +406,7 @@ async function updateChildrenPaths(parentRoleType, tenantId) {
       await updateChildrenPaths(childRole.type, tenantId);
     }
   } catch (error) {
-    console.error('Errore nell\'aggiornamento dei percorsi figli:', error);
+    logger.error('Errore nell\'aggiornamento dei percorsi figli:', error);
     throw error;
   }
 }
@@ -460,7 +461,7 @@ export async function addRoleToHierarchy(roleData, tenantId) {
     };
 
   } catch (error) {
-    console.error('Errore nella creazione del ruolo personalizzato:', error);
+    logger.error('Errore nella creazione del ruolo personalizzato:', error);
     return {
       success: false,
       error: error.message
@@ -510,7 +511,7 @@ export async function getVisibleRolesForUser(userId, tenantId) {
     return [...visibleCustomRoles, ...systemRoles];
 
   } catch (error) {
-    console.error('Errore nel recupero dei ruoli visibili:', error);
+    logger.error('Errore nel recupero dei ruoli visibili:', error);
     throw error;
   }
 }

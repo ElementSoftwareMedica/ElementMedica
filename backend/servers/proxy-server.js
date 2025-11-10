@@ -39,7 +39,7 @@ let advancedRoutingSystem; // 🚀 NUOVO: Sistema routing avanzato
 
 // Gestione degli errori di avvio
 process.on('uncaughtException', (error) => {
-  console.error('❌ Uncaught Exception:', error);
+  logger.error('❌ Uncaught Exception:', error);
   logger.error('Uncaught Exception', { 
     service: 'proxy-server', 
     error: error.message, 
@@ -92,7 +92,7 @@ async function initializeServer() {
     }
     
     // 🚀 NUOVO: Inizializza Sistema Routing Avanzato
-    console.log('🚀 Initializing Advanced Routing System...');
+    logger.info('🚀 Initializing Advanced Routing System...');
     advancedRoutingSystem = createAdvancedRoutingSystem({
       enableLogging: true,
       logLevel: 'info',
@@ -102,25 +102,25 @@ async function initializeServer() {
     });
     
     await advancedRoutingSystem.initialize();
-    console.log('✅ Advanced Routing System initialized');
+    logger.info('✅ Advanced Routing System initialized');
     
     // Setup middleware di sicurezza (legacy)
     setupSecurity(app);
-    console.log('✅ Security middleware configured');
+    logger.info('✅ Security middleware configured');
     
     // Setup logging middleware (legacy)
     setupLogging(app);
-    console.log('✅ Logging middleware configured');
+    logger.info('✅ Logging middleware configured');
     
     // Setup body parsing solo per route locali (non proxy)
      // Il body parsing globale interferisce con il proxy
-     console.log('✅ Body parsing skipped for proxy compatibility');
+     logger.info('✅ Body parsing skipped for proxy compatibility');
     
     // 🚀 NUOVO: Configura Sistema Routing Avanzato
     // Questo sostituisce CORS, Rate Limiting, Proxy Routes
-    console.log('🔧 Configuring Advanced Routing System...');
+    logger.info('🔧 Configuring Advanced Routing System...');
     advancedRoutingSystem.configureExpress(app);
-    console.log('✅ Advanced Routing System configured');
+    logger.info('✅ Advanced Routing System configured');
     
     // Registra load balancer (legacy - mantenuto per compatibilità)
     loadBalancer.registerServer('api-primary', {
@@ -135,28 +135,28 @@ async function initializeServer() {
       type: 'documents'
     });
     
-    console.log('✅ Load balancer configured (health checks disabled)');
+    logger.info('✅ Load balancer configured (health checks disabled)');
     
     // Setup route locali (devono essere dopo il routing avanzato)
     setupLocalRoutes(app);
-    console.log('✅ Local routes configured');
+    logger.info('✅ Local routes configured');
     
     // Setup error handlers (devono essere ultimi)
     app.use(notFoundHandler);
     app.use(globalErrorHandler);
-    console.log('✅ Error handlers configured');
+    logger.info('✅ Error handlers configured');
     
     // Avvia server
     server = app.listen(config.server.port, config.server.host, () => {
-      console.log(`\n🚀 Proxy Server started successfully!`);
-      console.log(`   - Environment: ${config.server.environment}`);
-      console.log(`   - Server: http://${config.server.host}:${config.server.port}`);
-      console.log(`   - API Target: ${config.services.api.url}`);
-      console.log(`   - Documents Target: ${config.services.documents.url}`);
-      console.log(`   - Frontend: ${config.services.frontend.url}`);
-      console.log(`   - Health Check: http://${config.server.host}:${config.server.port}/health`);
-      console.log(`   - Ready Check: http://${config.server.host}:${config.server.port}/ready`);
-      console.log('');
+      logger.info(`\n🚀 Proxy Server started successfully!`);
+      logger.info(`   - Environment: ${config.server.environment}`);
+      logger.info(`   - Server: http://${config.server.host}:${config.server.port}`);
+      logger.info(`   - API Target: ${config.services.api.url}`);
+      logger.info(`   - Documents Target: ${config.services.documents.url}`);
+      logger.info(`   - Frontend: ${config.services.frontend.url}`);
+      logger.info(`   - Health Check: http://${config.server.host}:${config.server.port}/health`);
+      logger.info(`   - Ready Check: http://${config.server.host}:${config.server.port}/ready`);
+      logger.info('');
       
       logger.info('Proxy Server started', {
         service: 'proxy-server',
@@ -183,25 +183,25 @@ async function initializeServer() {
     setupGracefulShutdown({
       onShutdown: async () => {
         if (process.env.PROXY_INIT_AUTH === 'true') {
-          console.log('🔄 Shutting down authentication system...');
+          logger.info('🔄 Shutting down authentication system...');
           await shutdownAuth();
         }
         
-        console.log('🔄 Stopping load balancer...');
+        logger.info('🔄 Stopping load balancer...');
         loadBalancer.stopHealthChecks();
         
         // 🚀 NUOVO: Shutdown sistema routing avanzato
         if (advancedRoutingSystem && advancedRoutingSystem.shutdown) {
-          console.log('🔄 Shutting down Advanced Routing System...');
+          logger.info('🔄 Shutting down Advanced Routing System...');
           await advancedRoutingSystem.shutdown();
         }
       }
     });
     
-    console.log('✅ Graceful shutdown configured');
+    logger.info('✅ Graceful shutdown configured');
     
   } catch (error) {
-    console.error('❌ Failed to initialize server:', error);
+    logger.error('❌ Failed to initialize server:', error);
     logger.error('Server initialization failed', {
       service: 'proxy-server',
       error: error.message,
@@ -220,7 +220,7 @@ async function initializeServer() {
  * Avvio del server
  */
 initializeServer().catch((error) => {
-  console.error('❌ Critical error during server startup:', error);
+  logger.error('❌ Critical error during server startup:', error);
   process.exit(1);
 });
 

@@ -26,7 +26,9 @@ class GoogleDocsService {
         auth: oauth2Client
       });
       
-      console.log('🔄 [GOOGLE-DOCS] Copying document:', {
+      logger.info('Copying document', {
+        component: 'google-docs-service',
+        action: 'copyDocument',
         fileId,
         newTitle,
         tokenPrefix: accessToken.substring(0, 20) + '...'
@@ -39,7 +41,7 @@ class GoogleDocsService {
         }
       });
 
-      console.log('✅ [GOOGLE-DOCS] Document copied successfully:', {
+      logger.info('Document copied successfully', {
         originalId: fileId,
         newId: response.data.id
       });
@@ -62,7 +64,16 @@ class GoogleDocsService {
         fileId,
         newTitle
       };
-      console.error('❌ [GOOGLE-DOCS] Failed to copy document:', JSON.stringify(errorDetails));
+      logger.error('Failed to copy document', {
+        component: 'google-docs-service',
+        action: 'copyDocument',
+        error: error.message,
+        code: error.code,
+        status: error.response?.status,
+        fileId,
+        newTitle,
+        details: JSON.stringify(errorDetails)
+      });
       
       logger.error('Failed to copy document', {
         component: 'google-docs-service',

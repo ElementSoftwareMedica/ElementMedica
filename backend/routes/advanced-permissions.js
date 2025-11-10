@@ -1,4 +1,5 @@
 import express from 'express';
+import logger from "../utils/logger.js";
 import { PrismaClient } from '@prisma/client';
 import enhancedRoleService from '../services/enhancedRoleService.js';
 import { authenticate } from '../auth/middleware.js';
@@ -644,7 +645,7 @@ router.get('/entities',
         entities: entities
       });
     } catch (error) {
-      console.error('[ADVANCED_PERMISSIONS] Error getting entities:', error);
+      logger.error('[ADVANCED_PERMISSIONS] Error getting entities:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to get entities'
@@ -708,7 +709,7 @@ router.get('/resources',
         data: resources
       });
     } catch (error) {
-      console.error('[ADVANCED_PERMISSIONS] Error getting resources:', error);
+      logger.error('[ADVANCED_PERMISSIONS] Error getting resources:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to get resources'
@@ -755,7 +756,7 @@ router.get('/scopes',
         data: scopes
       });
     } catch (error) {
-      console.error('[ADVANCED_PERMISSIONS] Error getting scopes:', error);
+      logger.error('[ADVANCED_PERMISSIONS] Error getting scopes:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to get scopes'
@@ -802,7 +803,7 @@ router.get('/conditions',
         data: conditions
       });
     } catch (error) {
-      console.error('[ADVANCED_PERMISSIONS] Error getting conditions:', error);
+      logger.error('[ADVANCED_PERMISSIONS] Error getting conditions:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to get conditions'
@@ -869,7 +870,7 @@ router.post('/validate',
         }
       });
     } catch (error) {
-      console.error('[ADVANCED_PERMISSIONS] Error validating configuration:', error);
+      logger.error('[ADVANCED_PERMISSIONS] Error validating configuration:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to validate configuration'
@@ -900,7 +901,7 @@ router.get('/test',
   enhancedRoleService.requirePermission('roles.read'),
   async (req, res) => {
     try {
-      console.log('[ADVANCED_PERMISSIONS] Test endpoint called successfully');
+      logger.info('[ADVANCED_PERMISSIONS] Test endpoint called successfully');
       res.json({
         success: true,
         message: 'Test endpoint working',
@@ -912,7 +913,7 @@ router.get('/test',
         timestamp: new Date().toISOString()
       });
     } catch (error) {
-      console.error('[ADVANCED_PERMISSIONS] Test endpoint error:', error);
+      logger.error('[ADVANCED_PERMISSIONS] Test endpoint error:', error);
       res.status(500).json({
         success: false,
         error: 'Test endpoint failed'
@@ -934,7 +935,7 @@ router.get('/roles/:roleId',
       const { roleId } = req.params;
       const tenantId = req.tenant?.id;
 
-      console.log(`[ADVANCED_PERMISSIONS] Getting role permissions for roleId: ${roleId}, tenantId: ${tenantId}`);
+      logger.info(`[ADVANCED_PERMISSIONS] Getting role permissions for roleId: ${roleId}, tenantId: ${tenantId}`);
 
       // Verifica se il roleId è un RoleType valido
       const validRoleTypes = [
@@ -946,7 +947,7 @@ router.get('/roles/:roleId',
       ];
 
       if (!validRoleTypes.includes(roleId)) {
-        console.log(`[ADVANCED_PERMISSIONS] Invalid roleType: ${roleId}`);
+        logger.info(`[ADVANCED_PERMISSIONS] Invalid roleType: ${roleId}`);
         return res.status(404).json({
           success: false,
           error: 'Invalid role type'
@@ -977,7 +978,7 @@ router.get('/roles/:roleId',
         }
       });
 
-      console.log(`[ADVANCED_PERMISSIONS] Found ${rolePermissions.length} permissions for role ${roleId}`);
+      logger.info(`[ADVANCED_PERMISSIONS] Found ${rolePermissions.length} permissions for role ${roleId}`);
 
       // Ottieni anche i permessi avanzati
       const advancedPermissions = await prisma.advancedPermission.findMany({
@@ -1005,7 +1006,7 @@ router.get('/roles/:roleId',
         }
       });
 
-      console.log(`[ADVANCED_PERMISSIONS] Found ${advancedPermissions.length} advanced permissions for role ${roleId}`);
+      logger.info(`[ADVANCED_PERMISSIONS] Found ${advancedPermissions.length} advanced permissions for role ${roleId}`);
 
       // Raggruppa i permessi per categoria (ottimizzato)
       const groupedPermissions = {};
@@ -1074,7 +1075,7 @@ router.get('/roles/:roleId',
         }
       };
 
-      console.log(`[ADVANCED_PERMISSIONS] Returning response for role ${roleId}:`, {
+      logger.info(`[ADVANCED_PERMISSIONS] Returning response for role ${roleId}:`, {
         roleId: roleId,
         roleType: roleId,
         totalPermissions: response.stats.totalPermissions,
@@ -1083,7 +1084,7 @@ router.get('/roles/:roleId',
 
       res.json(response);
     } catch (error) {
-      console.error('[ADVANCED_PERMISSIONS] Error getting role permissions:', error);
+      logger.error('[ADVANCED_PERMISSIONS] Error getting role permissions:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to get role permissions'
@@ -1195,7 +1196,7 @@ router.get('/preview',
         }
       });
     } catch (error) {
-      console.error('[ADVANCED_PERMISSIONS] Error generating preview:', error);
+      logger.error('[ADVANCED_PERMISSIONS] Error generating preview:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to generate preview'

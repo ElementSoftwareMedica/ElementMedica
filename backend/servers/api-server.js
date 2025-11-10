@@ -256,7 +256,7 @@ class APIServer {
         this.bodyParsers.json(req, res, (err) => {
           if (err) {
             // Log solo errori critici
-            console.error('❌ [JSON PARSER] Error:', err);
+            logger.error('❌ [JSON PARSER] Error:', err);
           }
           next(err);
         });
@@ -267,7 +267,7 @@ class APIServer {
         this.bodyParsers.urlencoded(req, res, (err) => {
           if (err) {
             // Log solo errori critici
-            console.error('❌ [URLENCODED PARSER] Error:', err);
+            logger.error('❌ [URLENCODED PARSER] Error:', err);
           }
           next(err);
         });
@@ -363,11 +363,11 @@ class APIServer {
 
         // DEBUG: log minimale per diagnosi
         if (originalToCheck.includes('/activity-logs')) {
-          console.info('[conditionalAuthMiddleware] path:', pathToCheck, 'originalUrl:', originalToCheck, 'isPublicRoute:', isPublicRoute);
+          logger.info('[conditionalAuthMiddleware] path:', pathToCheck, 'originalUrl:', originalToCheck, 'isPublicRoute:', isPublicRoute);
         }
         // DEBUG: trace auth debug routes
         if (originalToCheck.includes('/api/v1/auth/debug')) {
-          console.info('[conditionalAuthMiddleware][DEBUG] path:', pathToCheck, 'originalUrl:', originalToCheck, 'isPublicRoute:', isPublicRoute);
+          logger.info('[conditionalAuthMiddleware][DEBUG] path:', pathToCheck, 'originalUrl:', originalToCheck, 'isPublicRoute:', isPublicRoute);
         }
         
         // Fallback robusto con regex per activity-logs: considera pubbliche tutte le varianti /api/(v1|v2)?/activity-logs
@@ -433,7 +433,7 @@ class APIServer {
             version: '1.0.0'
           });
         } catch (error) {
-          console.error('[HEALTH CHECK] Error:', error);
+          logger.error('[HEALTH CHECK] Error:', error);
           res.status(500).json({
             status: 'error',
             error: error.message
@@ -452,7 +452,7 @@ class APIServer {
           });
           // Health check response sent
         } catch (error) {
-          console.error('[HEALTH CHECK] /health Error:', error);
+          logger.error('[HEALTH CHECK] /health Error:', error);
           res.status(500).json({
             status: 'error',
             error: error.message
@@ -896,7 +896,7 @@ if (normalizedCurrentUrl === normalizedMainUrl) {
       reason: reason,
       promise: promise
     });
-    console.error('UNHANDLED REJECTION:', reason);
+    logger.error('UNHANDLED REJECTION:', reason);
     process.exit(1);
   });
   
