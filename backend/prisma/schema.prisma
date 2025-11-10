@@ -46,6 +46,7 @@ model Company {
   codiciSconto       CodiceAzienda[] // Relazione con codici sconto
 
   @@index([tenantId])
+  @@index([tenantId, deletedAt]) // Phase 2: Soft delete performance
 }
 
 model CompanySite {
@@ -136,6 +137,7 @@ model Course {
   @@index([courseType])
   @@index([category, riskLevel])
   @@index([isPublic, status])
+  @@index([tenantId, deletedAt]) // Phase 2: Soft delete performance
 }
 
 model CourseSchedule {
@@ -181,6 +183,7 @@ model CourseSchedule {
   @@index([companyId, startDate])
   @@index([tenantId])
   @@index([tenantId, status])
+  @@index([tenantId, deletedAt]) // Phase 2: Soft delete performance
 }
 
 model CourseEnrollment {
@@ -272,6 +275,7 @@ model Attestato {
   @@index([personId])
   @@index([scheduledCourseId])
   @@index([templateId])
+  @@index([tenantId, deletedAt]) // Phase 2: Soft delete performance
   @@map("attestati")
 }
 
