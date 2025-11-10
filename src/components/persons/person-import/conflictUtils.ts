@@ -5,15 +5,10 @@
 import { PersonData } from '../../../types/import/personImportTypes';
 import { Company } from '../../../types';
 import { normalizeTaxCode } from './constants';
+import type { ConflictInfo } from '../../shared/ImportPreviewTable/';
 
-export interface ConflictInfo {
-  type: 'duplicate' | 'invalid_company';
-  existingPerson?: PersonData;
-  suggestedCompanies?: Company[];
-  resolution?: 'skip' | 'overwrite' | 'assign_company';
-  selectedCompanyId?: string;
-  selectedCompanyName?: string;
-}
+// Re-export centralized ConflictInfo type
+export type { ConflictInfo };
 
 /**
  * Rileva conflitti nei dati delle persone
