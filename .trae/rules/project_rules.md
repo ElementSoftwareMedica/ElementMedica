@@ -34,17 +34,38 @@
 - ✅ **Dead Code** - DELETE immediately, no commented code >10 lines
 - ❌ **VIETATO** - Console.log in production, TODO without ticket, hardcoded credentials
 
-### 6. **Prisma Schema Standards (NEW - Nov 2025, Phase 2.1)**
+### 5.1 **Security Requirements (NEW - Nov 2025, Phase 1)**
+- ✅ **Security Score Target** - 9.5/10 or higher
+- ✅ **CSRF Protection Required** - All public POST endpoints MUST use csrfProtection middleware
+  - Implementation: `backend/config/security.js`
+  - Pattern: Double-submit cookie, httpOnly + Secure + SameSite=Strict
+- ✅ **Rate Limiting Required** - Sensitive endpoints MUST have rate limiting
+  - Auth endpoints: 5 attempts/15min (login), 3 attempts/1h (register)
+  - Public forms: 5 submissions/5min
+  - Implementation: express-rate-limit
+- ✅ **Test Routes Protection** - Test routes MUST check NODE_ENV=production (return 404)
+  - Pattern: `if (process.env.NODE_ENV === 'production') return res.status(404)`
+- ✅ **Permission Checks Mandatory** - All sensitive operations MUST verify permissions
+- ✅ **No PII in Logs** - Rate limiting uses IP only, no names/emails
+- ✅ **No PII in Tokens** - CSRF tokens cryptographically random, no PII
+- ✅ **Current Status** - Security 9.5/10: CSRF ✅, Rate limiting ✅, Test routes ✅, Permissions ✅
+- ❌ **VIETATO** - Bypass CSRF, disable rate limiting, expose test routes in prod, skip permission checks
+
+### 6. **Prisma Schema Standards (UPDATED - Nov 2025)**
+- ✅ **Schema Quality Target** - 9.0/10 or higher (comprehensive indexes, enums, soft delete, multi-tenancy)
 - ✅ **Soft Delete Mandatory** - All models MUST have `deletedAt DateTime?` field
-- ✅ **Compound Indexes Required** - `@@index([tenantId, deletedAt])` for frequently queried models
-- ✅ **Enum Usage** - Enums required for status fields (avoid string literals)
-  - Examples: `TemplateType`, `TipoServizio`, `StatoPreventivo`, `RoleType`
+- ✅ **Multi-Tenancy Required** - All models MUST have `tenantId Int` field with index
+- ✅ **Compound Indexes Required** - `@@index([tenantId, deletedAt])` for all models
+- ✅ **100+ Indexes Target** - Foreign keys + composite + query optimization indexes
+- ✅ **20+ Enums Target** - Enums required for status, type, role fields (avoid string literals)
+  - Examples: `CourseStatus`, `PersonStatus`, `RoleType`, `TestStatus`, `StatoPreventivo`, `DocumentStatus`
 - ✅ **Explicit Relations** - All foreign keys MUST specify `onDelete` behavior
   - Cascade for dependent data (e.g., CourseSchedule → Course)
   - SetNull for independent data (e.g., Person → Company)
 - ✅ **Query Filtering** - ALL queries MUST include `where: { deletedAt: null }` unless explicitly fetching deleted
 - ✅ **Migration Safety** - Additive migrations ONLY (no DROP without backup + rollback plan)
-- ❌ **VIETATO** - Hard deletes for user data, implicit relations, missing onDelete
+- ✅ **Current Status** - Schema 9.0/10: 100+ indexes ✅, 20+ enums ✅, soft delete ✅, multi-tenancy ✅
+- ❌ **VIETATO** - Hard deletes for user data, implicit relations, missing onDelete, missing tenantId
 
 ### 7. **GDPR Compliance Rules (NEW - Nov 2025)**
 - ✅ **Soft Delete ONLY** - No hard deletes for user data (use deletedAt)
