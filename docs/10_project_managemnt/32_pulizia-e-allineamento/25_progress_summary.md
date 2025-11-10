@@ -1,7 +1,7 @@
 # Progetto 32 - Pulizia e Allineamento: Progress Summary
 **Data**: 10 Novembre 2025  
-**Overall Progress**: ~33% (Phases 1, 2.1, 3.1, 3.2, 3.3, 3.4, GDPR Audit completati)  
-**Quality Score**: 8.1/10 → 8.7/10 (+0.6 improvement ✅)  
+**Overall Progress**: ~36% (Phases 1, 2.1, 3.1-3.5, GDPR Audit completati)  
+**Quality Score**: 8.1/10 → 8.8/10 (+0.7 improvement ✅)  
 **Status**: ON TRACK 🟢
 
 ---
@@ -48,6 +48,37 @@
 
 **Phase 3.4: RoleHierarchy** ✅ COMPLETE ⭐
 - Refactored: 823L → 221L main component (-73%)
+- Created: 11 modular files (avg 105L per file)
+- Pattern: **Hooks Composition** (4 hooks + 4 components + 1 util)
+- Quality: Build PASSED ✅ (9.85s), TypeScript 0 errors ✅, zero breaking changes ✅
+- Documentation: Comprehensive README + completion report
+- **Commits**: 2640ca1 (refactoring +3768/-720), 2c885f6 (documentation)
+
+**Phase 3.5: GenericImport** ✅ COMPLETE 🎉
+- Refactored: 748L → 216L main component (-71%, **-532 lines**)
+- Created: 8 modular files (1098L business logic)
+- Pattern: **Hooks Composition** (4 hooks + 2 utils + types)
+- Modules:
+  - types.ts (246L): GenericImportProps<T>, ImportState, ValidationResult, ConflictInfo
+  - useImportData (166L): CSV processing, file upload, data classification
+  - useImportValidation (132L): Entity validation, preview columns, errors
+  - useImportState (65L): Operation state, error handling
+  - useRowSelection (82L): Selection, overwrite toggles, bulk ops
+  - csvHelpers (230L): 5-stage CSV parsing with fallbacks, BOM removal, delimiter detection
+  - validationHelpers (177L): Entity-specific validators (employees, companies, trainers, courses)
+- Features Preserved:
+  - Generic type support <T extends Record<string, any>>
+  - 5-stage CSV parsing fallback (specified → auto-detect → comma → manual ; → manual ,)
+  - Multi-entity validation (aziende, dipendenti, formatori, corsi)
+  - Conflict detection with unique field normalization
+  - Company batch assignment
+  - Custom validation system
+  - All exports: defaultProcessFile, normalizeString, normalizeItemFields
+- Quality: Build PASSED ✅ (22.97s), TypeScript 0 errors ✅, zero breaking changes ✅
+- **Commit**: 4ecf574 (refactoring +2927/-640)
+- **Impact**: Complex CSV import utility now maintainable, testable, and extensible
+
+**TRAE Documentation** ✅ COMPLETE
 - Created: 11 modular files (avg 105L per file)
 - Pattern: **Hooks Composition** (4 hooks + 4 components + 1 util)
 - Quality: Build PASSED ✅ (9.85s), TypeScript 0 errors ✅, zero breaking changes ✅
