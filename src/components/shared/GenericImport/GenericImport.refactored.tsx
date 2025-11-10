@@ -11,14 +11,14 @@
  */
 
 import React, { useEffect } from 'react';
-import { useToast } from '../../hooks/ui/useToast';
-import ImportModal from './modals/ImportModal';
-import { normalizeString } from './GenericImport/utils/csvHelpers';
-import { useImportData } from './GenericImport/hooks/useImportData';
-import { useImportValidation } from './GenericImport/hooks/useImportValidation';
-import { useImportState } from './GenericImport/hooks/useImportState';
-import { useRowSelection } from './GenericImport/hooks/useRowSelection';
-import type { GenericImportProps } from './GenericImport/types';
+import { useToast } from '../../../hooks/useToast';
+import ImportModal from '../modals/ImportModal';
+import { normalizeString } from './utils/csvHelpers';
+import { useImportData } from './hooks/useImportData';
+import { useImportValidation } from './hooks/useImportValidation';
+import { useImportState } from './hooks/useImportState';
+import { useRowSelection } from './hooks/useRowSelection';
+import type { GenericImportProps } from './types';
 
 /**
  * Generic import component for CSV data
@@ -47,7 +47,7 @@ export default function GenericImport<T extends Record<string, any>>({
   onConflictResolutionChange,
   normalizeKey,
 }: GenericImportProps<T>) {
-  const toast = useToast();
+  const { showToast } = useToast();
   const norm = normalizeKey || normalizeString;
 
   // Default titles
@@ -175,7 +175,10 @@ export default function GenericImport<T extends Record<string, any>>({
           errorMessage = error.response.data.message;
         }
         setError(`Errore durante l'importazione: ${errorMessage}`);
-        toast.error(errorMessage);
+        showToast({
+          message: `Errore: ${errorMessage}`,
+          type: 'error'
+        });
       }
     } catch (error: any) {
       setError(`Errore imprevisto: ${error?.message || "Errore sconosciuto"}`);
@@ -210,7 +213,3 @@ export default function GenericImport<T extends Record<string, any>>({
     />
   );
 }
-
-// Export utilities for external use
-export { defaultProcessFile, normalizeString, normalizeItemFields } from './GenericImport/utils/csvHelpers';
-export type { GenericImportProps } from './GenericImport/types';
