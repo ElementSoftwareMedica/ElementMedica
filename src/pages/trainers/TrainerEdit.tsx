@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ChevronRight } from 'lucide-react';
+import { ChevronLeft } from 'lucide-react';
 import TrainerForm from '../../components/trainers/TrainerForm';
-import { apiGet, apiPost, apiPut } from '../../services/api';
+import TrainersService, { getTrainerById, createTrainer, updateTrainer } from '../../services/trainers';
 
 export default function TrainerEdit() {
   const { id } = useParams<{ id: string }>();
@@ -14,9 +14,9 @@ export default function TrainerEdit() {
   useEffect(() => {
     if (id) {
       setLoading(true);
-      apiGet(`/trainers/${id}`)
+      getTrainerById(id)
         .then(data => setTrainer(data))
-        .catch(err => setError(err.message || 'Trainer not found'))
+        .catch(err => setError(err?.message || 'Trainer not found'))
         .finally(() => setLoading(false));
     }
   }, [id]);
@@ -24,10 +24,10 @@ export default function TrainerEdit() {
   const handleSubmit = async (data: Record<string, unknown>) => {
     try {
       if (id) {
-        await apiPut(`/trainers/${id}`, data);
+        await updateTrainer(id, data as any);
         navigate(`/trainers/${id}`);
       } else {
-        const created = await apiPost('/trainers', data) as any;
+        const created = await createTrainer(data as any);
         navigate(`/trainers/${created.id}`);
       }
     } catch (err) {
@@ -55,25 +55,17 @@ export default function TrainerEdit() {
           to={id ? `/trainers/${id}` : '/trainers'} 
           className="inline-flex items-center text-sm text-blue-600 hover:text-blue-800"
         >
-          <span className="transform rotate-180">
-            <ChevronRight className="h-4 w-4 mr-1" />
-          </span>
-          Back to {id ? 'Trainer Details' : 'Trainers'}
+          <ChevronLeft className="h-4 w-4 mr-1" />
+          {id ? 'Torna al dettaglio formatore' : 'Torna ai formatori'}
         </Link>
       </div>
 
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="p-6">
-          <h1 className="text-2xl font-bold text-gray-800 mb-6">
-            {id ? 'Edit Trainer' : 'Add New Trainer'}
-          </h1>
-          <TrainerForm
-            trainer={trainer}
-            onSubmit={handleSubmit}
-            onCancel={handleCancel}
-          />
-        </div>
-      </div>
+      <TrainerForm
+        trainer={trainer}
+        onSubmit={handleSubmit}
+        onCancel={handleCancel}
+        roleType="TRAINER"
+      />
     </div>
   );
 }

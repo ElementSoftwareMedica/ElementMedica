@@ -255,7 +255,7 @@ function formatUptime(seconds) {
 function checkEnvironmentConfig() {
   const requiredEnvVars = [
     'DATABASE_URL',
-    'JWT_SECRET',
+    // JWT secrets non richiesti dal proxy: non firma né verifica token
     'ENCRYPTION_KEY'
   ];
   
@@ -264,7 +264,10 @@ function checkEnvironmentConfig() {
     'DOCUMENTS_SERVER_URL',
     'FRONTEND_URL',
     'PROXY_PORT',
-    'NODE_ENV'
+    'NODE_ENV',
+    // Mostra se presenti ma non obbligatori per il proxy
+    'JWT_SECRET',
+    'JWT_REFRESH_SECRET'
   ];
   
   const missing = requiredEnvVars.filter(varName => !process.env[varName]);

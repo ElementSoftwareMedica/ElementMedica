@@ -1,0 +1,388 @@
+
+/Users/matteo.michielon/project 2.0/src/components/schedules/ScheduleEventModal.duration.test.tsx
+  12:104  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  17:20   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  18:18   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  37:10   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  42:31   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  43:33   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  44:29   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/matteo.michielon/project 2.0/src/components/schedules/ScheduleEventModal.original.tsx
+    7:10   error    'apiGet' is defined but never used                                                                                                                                   @typescript-eslint/no-unused-vars
+   11:8    error    'GroupedCoursesService' is defined but never used                                                                                                                    @typescript-eslint/no-unused-vars
+   22:96   error    'extractCoursesUtil' is defined but never used                                                                                                                       @typescript-eslint/no-unused-vars
+   31:6    error    'Person' is defined but never used                                                                                                                                   @typescript-eslint/no-unused-vars
+   38:6    error    'DateEntry' is defined but never used                                                                                                                                @typescript-eslint/no-unused-vars
+   86:18   error    'e' is defined but never used                                                                                                                                        @typescript-eslint/no-unused-vars
+   97:10   error    'hasScheduled' is assigned a value but never used                                                                                                                    @typescript-eslint/no-unused-vars
+  102:68   error    Unexpected any. Specify a different type                                                                                                                             @typescript-eslint/no-explicit-any
+  138:23   error    'setAttendance' is assigned a value but never used                                                                                                                   @typescript-eslint/no-unused-vars
+  162:29   error    Unexpected any. Specify a different type                                                                                                                             @typescript-eslint/no-explicit-any
+  176:6    warning  React Hook useEffect has a missing dependency: 'setFormData'. Either include it or remove the dependency array                                                       react-hooks/exhaustive-deps
+  182:29   error    Unexpected any. Specify a different type                                                                                                                             @typescript-eslint/no-explicit-any
+  183:53   error    Unexpected any. Specify a different type                                                                                                                             @typescript-eslint/no-explicit-any
+  189:60   error    Unexpected any. Specify a different type                                                                                                                             @typescript-eslint/no-explicit-any
+  191:56   error    Unexpected any. Specify a different type                                                                                                                             @typescript-eslint/no-explicit-any
+  195:9    error    'requiredCerts' is assigned a value but never used                                                                                                                   @typescript-eslint/no-unused-vars
+  198:29   error    Unexpected any. Specify a different type                                                                                                                             @typescript-eslint/no-explicit-any
+  204:158  warning  React Hook useMemo has a missing dependency: 'formData'. Either include it or remove the dependency array                                                            react-hooks/exhaustive-deps
+  244:6    warning  React Hook useEffect has a missing dependency: 'setFormData'. Either include it or remove the dependency array                                                       react-hooks/exhaustive-deps
+  260:6    warning  React Hook useEffect has missing dependencies: 'formData.course_type', 'formData.risk_level', and 'setFormData'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+  273:6    warning  React Hook useCallback has a missing dependency: 'setFormData'. Either include it or remove the dependency array                                                     react-hooks/exhaustive-deps
+  283:6    warning  React Hook useCallback has a missing dependency: 'setFormData'. Either include it or remove the dependency array                                                     react-hooks/exhaustive-deps
+  299:6    warning  React Hook useCallback has a missing dependency: 'setFormData'. Either include it or remove the dependency array                                                     react-hooks/exhaustive-deps
+  306:6    warning  React Hook useCallback has a missing dependency: 'setFormData'. Either include it or remove the dependency array                                                     react-hooks/exhaustive-deps
+  311:48   error    Unexpected any. Specify a different type                                                                                                                             @typescript-eslint/no-explicit-any
+  315:55   error    Unexpected any. Specify a different type                                                                                                                             @typescript-eslint/no-explicit-any
+  330:6    warning  React Hook useCallback has a missing dependency: 'setSelectedCompanies'. Either include it or remove the dependency array                                            react-hooks/exhaustive-deps
+  341:6    warning  React Hook useCallback has a missing dependency: 'setSelectedPersons'. Either include it or remove the dependency array                                              react-hooks/exhaustive-deps
+  346:6    warning  React Hook useCallback has a missing dependency: 'setSelectedPersons'. Either include it or remove the dependency array                                              react-hooks/exhaustive-deps
+  351:6    warning  React Hook useCallback has a missing dependency: 'setSelectedPersons'. Either include it or remove the dependency array                                              react-hooks/exhaustive-deps
+  363:34   error    Unexpected any. Specify a different type                                                                                                                             @typescript-eslint/no-explicit-any
+
+/Users/matteo.michielon/project 2.0/src/components/schedules/ScheduleEventModal.tsx
+   70:5    error    'canProceedToStep' is assigned a value but never used                                                              @typescript-eslint/no-unused-vars
+  107:10   error    'hasScheduled' is assigned a value but never used                                                                  @typescript-eslint/no-unused-vars
+  125:71   error    Unexpected any. Specify a different type                                                                           @typescript-eslint/no-explicit-any
+  125:112  error    Unexpected any. Specify a different type                                                                           @typescript-eslint/no-explicit-any
+  131:35   error    Unexpected any. Specify a different type                                                                           @typescript-eslint/no-explicit-any
+  131:49   error    Unexpected any. Specify a different type                                                                           @typescript-eslint/no-explicit-any
+  153:55   error    Unexpected any. Specify a different type                                                                           @typescript-eslint/no-explicit-any
+  187:60   error    Unexpected any. Specify a different type                                                                           @typescript-eslint/no-explicit-any
+  212:57   error    Unexpected any. Specify a different type                                                                           @typescript-eslint/no-explicit-any
+  214:29   error    Unexpected any. Specify a different type                                                                           @typescript-eslint/no-explicit-any
+  231:57   error    Unexpected any. Specify a different type                                                                           @typescript-eslint/no-explicit-any
+  247:57   error    Unexpected any. Specify a different type                                                                           @typescript-eslint/no-explicit-any
+  257:57   error    Unexpected any. Specify a different type                                                                           @typescript-eslint/no-explicit-any
+  258:55   error    Unexpected any. Specify a different type                                                                           @typescript-eslint/no-explicit-any
+  259:29   error    Unexpected any. Specify a different type                                                                           @typescript-eslint/no-explicit-any
+  260:142  error    Unexpected any. Specify a different type                                                                           @typescript-eslint/no-explicit-any
+  261:36   error    Unexpected any. Specify a different type                                                                           @typescript-eslint/no-explicit-any
+  295:6    warning  React Hook useEffect has a missing dependency: 'selectedCourse'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  301:73   error    Unexpected any. Specify a different type                                                                           @typescript-eslint/no-explicit-any
+  302:75   error    Unexpected any. Specify a different type                                                                           @typescript-eslint/no-explicit-any
+  315:56   error    Unexpected any. Specify a different type                                                                           @typescript-eslint/no-explicit-any
+  317:31   error    Unexpected any. Specify a different type                                                                           @typescript-eslint/no-explicit-any
+  322:63   error    Unexpected any. Specify a different type                                                                           @typescript-eslint/no-explicit-any
+  324:32   error    Unexpected any. Specify a different type                                                                           @typescript-eslint/no-explicit-any
+  333:62   error    '_handleNextHook' is assigned a value but never used                                                               @typescript-eslint/no-unused-vars
+  333:91   error    '_handleBackHook' is assigned a value but never used                                                               @typescript-eslint/no-unused-vars
+  344:57   error    Unexpected any. Specify a different type                                                                           @typescript-eslint/no-explicit-any
+  354:14   error    'formIsValid' is assigned a value but never used                                                                   @typescript-eslint/no-unused-vars
+  355:13   error    'formErrors' is assigned a value but never used                                                                    @typescript-eslint/no-unused-vars
+  356:5    error    'fieldErrors' is assigned a value but never used                                                                   @typescript-eslint/no-unused-vars
+  357:19   error    'validationStep0Valid' is assigned a value but never used                                                          @typescript-eslint/no-unused-vars
+  358:19   error    'validationStep1Valid' is assigned a value but never used                                                          @typescript-eslint/no-unused-vars
+  359:19   error    'validationStep2Valid' is assigned a value but never used                                                          @typescript-eslint/no-unused-vars
+  361:5    error    'validateField' is assigned a value but never used                                                                 @typescript-eslint/no-unused-vars
+  367:57   error    Unexpected any. Specify a different type                                                                           @typescript-eslint/no-explicit-any
+  380:36   error    Unexpected any. Specify a different type                                                                           @typescript-eslint/no-explicit-any
+  440:65   error    Unexpected any. Specify a different type                                                                           @typescript-eslint/no-explicit-any
+
+/Users/matteo.michielon/project 2.0/src/components/schedules/ScheduleEventModalRefactored.tsx
+  29:5  error  'persons' is assigned a value but never used         @typescript-eslint/no-unused-vars
+  47:5  error  'personSearch' is assigned a value but never used    @typescript-eslint/no-unused-vars
+  48:5  error  'personTab' is assigned a value but never used       @typescript-eslint/no-unused-vars
+  49:5  error  'selectedDayIdx' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  50:5  error  'showStatusMenu' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  51:5  error  'isEditing' is assigned a value but never used       @typescript-eslint/no-unused-vars
+
+/Users/matteo.michielon/project 2.0/src/components/schedules/ScheduleForm.tsx
+   76:25   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   76:50   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  104:143  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/matteo.michielon/project 2.0/src/components/schedules/ScheduleTrainingWizard.tsx
+  108:64  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  255:93  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  257:37  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  257:73  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/matteo.michielon/project 2.0/src/components/schedules/__tests__/OptimizedComponents.test.tsx
+  1:8  error  'React' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/matteo.michielon/project 2.0/src/components/schedules/__tests__/ScheduleEventModal.test.tsx
+  2:26  error  'fireEvent' is defined but never used  @typescript-eslint/no-unused-vars
+  2:46  error  'act' is defined but never used        @typescript-eslint/no-unused-vars
+
+/Users/matteo.michielon/project 2.0/src/components/schedules/components/AttendanceManager.tsx
+   90:36  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  113:36  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/matteo.michielon/project 2.0/src/components/schedules/components/CompanyEmployeeSelector.tsx
+   64:66  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   67:49  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   67:78  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  114:63  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/matteo.michielon/project 2.0/src/components/schedules/components/CourseDetailsForm.tsx
+   46:11  error  'GroupedCourseOption' is defined but never used  @typescript-eslint/no-unused-vars
+  139:21  error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+
+/Users/matteo.michielon/project 2.0/src/components/schedules/components/DateTimeManager.tsx
+   47:21  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   52:28  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   53:33  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  150:38  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  168:22  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  181:38  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/matteo.michielon/project 2.0/src/components/schedules/components/ScheduleModalErrorBoundary.tsx
+   66:22  error    'prevProps' is defined but never used                                                                                           @typescript-eslint/no-unused-vars
+  215:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+  221:52  error    Unexpected any. Specify a different type                                                                                        @typescript-eslint/no-explicit-any
+
+/Users/matteo.michielon/project 2.0/src/components/schedules/components/ScheduleModalLoadingStates.tsx
+  224:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/Users/matteo.michielon/project 2.0/src/components/schedules/components/TrainerSelector.tsx
+  30:9  error  'getTrainerName' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/Users/matteo.michielon/project 2.0/src/components/schedules/components/steps/StepAttendance.tsx
+  13:12  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  26:22  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  27:21  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  28:18  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/matteo.michielon/project 2.0/src/components/schedules/components/steps/StepAttendanceSimple.tsx
+   5:23  error  'Company' is defined but never used             @typescript-eslint/no-unused-vars
+  28:3   error  'personTab' is defined but never used           @typescript-eslint/no-unused-vars
+  32:3   error  'onAttendanceChange' is defined but never used  @typescript-eslint/no-unused-vars
+  34:3   error  'onPersonTabChange' is defined but never used   @typescript-eslint/no-unused-vars
+
+/Users/matteo.michielon/project 2.0/src/components/schedules/components/steps/StepCompanySelection.tsx
+   3:15  error  'FormData' is defined but never used      @typescript-eslint/no-unused-vars
+  25:14  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  26:12  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/matteo.michielon/project 2.0/src/components/schedules/components/steps/StepCompanySelectionOptimized.tsx
+   4:15  error  'FormData' is defined but never used      @typescript-eslint/no-unused-vars
+  34:16  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  35:14  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/matteo.michielon/project 2.0/src/components/schedules/components/steps/StepCompanySelectionSimple.tsx
+  4:10  error  'Button' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/matteo.michielon/project 2.0/src/components/schedules/components/steps/StepCourseDetailsOptimized.tsx
+  21:16  error  Unexpected any. Specify a different type                    @typescript-eslint/no-explicit-any
+  22:15  error  Unexpected any. Specify a different type                    @typescript-eslint/no-explicit-any
+  23:17  error  Unexpected any. Specify a different type                    @typescript-eslint/no-explicit-any
+  80:9   error  'courseOptions' is assigned a value but never used          @typescript-eslint/no-unused-vars
+  89:9   error  'handleCourseSelection' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/Users/matteo.michielon/project 2.0/src/components/schedules/components/steps/StepCourseDetailsSimple.tsx
+  27:13  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/matteo.michielon/project 2.0/src/components/schedules/components/steps/StepDateTime.tsx
+  10:22  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  11:21  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  12:18  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/matteo.michielon/project 2.0/src/components/schedules/components/steps/StepDateTimeOptimized.tsx
+  14:16  error    Unexpected any. Specify a different type                                                                   @typescript-eslint/no-explicit-any
+  15:15  error    Unexpected any. Specify a different type                                                                   @typescript-eslint/no-explicit-any
+  16:17  error    Unexpected any. Specify a different type                                                                   @typescript-eslint/no-explicit-any
+  88:6   warning  React Hook useMemo has a missing dependency: 'computed'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+/Users/matteo.michielon/project 2.0/src/components/schedules/context/ScheduleModalContext.tsx
+    2:61  error    'ScheduleFormData' is defined but never used                                                                                    @typescript-eslint/no-unused-vars
+    7:11  error    'ExistingEvent' is defined but never used                                                                                       @typescript-eslint/no-unused-vars
+   11:18  error    Unexpected any. Specify a different type                                                                                        @typescript-eslint/no-explicit-any
+  263:19  error    Unexpected any. Specify a different type                                                                                        @typescript-eslint/no-explicit-any
+  275:3   error    'existingEvent' is assigned a value but never used                                                                              @typescript-eslint/no-unused-vars
+  290:31  error    Unexpected any. Specify a different type                                                                                        @typescript-eslint/no-explicit-any
+  291:29  error    Unexpected any. Specify a different type                                                                                        @typescript-eslint/no-explicit-any
+  398:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/Users/matteo.michielon/project 2.0/src/components/schedules/hooks/useAdvancedMemoization.ts
+    1:19  error    'useCallback' is defined but never used                                                                          @typescript-eslint/no-unused-vars
+    8:14  error    Unexpected any. Specify a different type                                                                         @typescript-eslint/no-explicit-any
+    9:12  error    Unexpected any. Specify a different type                                                                         @typescript-eslint/no-explicit-any
+   23:22  error    Unexpected any. Specify a different type                                                                         @typescript-eslint/no-explicit-any
+   24:20  error    Unexpected any. Specify a different type                                                                         @typescript-eslint/no-explicit-any
+   86:38  error    Unexpected any. Specify a different type                                                                         @typescript-eslint/no-explicit-any
+   87:87  error    Unexpected any. Specify a different type                                                                         @typescript-eslint/no-explicit-any
+   95:83  error    Unexpected any. Specify a different type                                                                         @typescript-eslint/no-explicit-any
+  117:26  error    Unexpected any. Specify a different type                                                                         @typescript-eslint/no-explicit-any
+  135:54  error    Unexpected any. Specify a different type                                                                         @typescript-eslint/no-explicit-any
+  143:6   warning  React Hook useMemo has a missing dependency: 'selectedCourse'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  148:25  error    Unexpected any. Specify a different type                                                                         @typescript-eslint/no-explicit-any
+  170:30  error    Unexpected any. Specify a different type                                                                         @typescript-eslint/no-explicit-any
+  187:34  error    Unexpected any. Specify a different type                                                                         @typescript-eslint/no-explicit-any
+  188:36  error    Unexpected any. Specify a different type                                                                         @typescript-eslint/no-explicit-any
+
+/Users/matteo.michielon/project 2.0/src/components/schedules/hooks/useAttendance.ts
+  46:36  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/matteo.michielon/project 2.0/src/components/schedules/hooks/useCourseVariants.ts
+  32:41  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  32:75  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  44:43  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/matteo.michielon/project 2.0/src/components/schedules/hooks/useFormData.ts
+   30:20  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  212:34  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/matteo.michielon/project 2.0/src/components/schedules/hooks/useFormValidation.ts
+    3:10  error  'validateScheduleForm' is defined but never used  @typescript-eslint/no-unused-vars
+   21:20  error  Unexpected any. Specify a different type          @typescript-eslint/no-explicit-any
+   25:22  error  Unexpected any. Specify a different type          @typescript-eslint/no-explicit-any
+   26:20  error  Unexpected any. Specify a different type          @typescript-eslint/no-explicit-any
+   45:41  error  Unexpected any. Specify a different type          @typescript-eslint/no-explicit-any
+   59:3   error  'courseDuration' is defined but never used        @typescript-eslint/no-unused-vars
+   60:3   error  'totalSelectedHours' is defined but never used    @typescript-eslint/no-unused-vars
+  118:45  error  Unexpected any. Specify a different type          @typescript-eslint/no-explicit-any
+  122:47  error  Unexpected any. Specify a different type          @typescript-eslint/no-explicit-any
+  217:60  error  Unexpected any. Specify a different type          @typescript-eslint/no-explicit-any
+
+/Users/matteo.michielon/project 2.0/src/components/schedules/hooks/useScheduleContext.ts
+    2:109  error    'toIdString' is defined but never used                                                                                    @typescript-eslint/no-unused-vars
+   94:20   error    Unexpected any. Specify a different type                                                                                  @typescript-eslint/no-explicit-any
+   98:12   error    Unexpected any. Specify a different type                                                                                  @typescript-eslint/no-explicit-any
+  182:24   error    Unexpected any. Specify a different type                                                                                  @typescript-eslint/no-explicit-any
+  182:43   error    Unexpected any. Specify a different type                                                                                  @typescript-eslint/no-explicit-any
+  182:59   error    Unexpected any. Specify a different type                                                                                  @typescript-eslint/no-explicit-any
+  182:73   error    Unexpected any. Specify a different type                                                                                  @typescript-eslint/no-explicit-any
+  188:34   error    Unexpected any. Specify a different type                                                                                  @typescript-eslint/no-explicit-any
+  188:50   error    Unexpected any. Specify a different type                                                                                  @typescript-eslint/no-explicit-any
+  207:18   error    'e' is defined but never used                                                                                             @typescript-eslint/no-unused-vars
+  317:55   error    Unexpected any. Specify a different type                                                                                  @typescript-eslint/no-explicit-any
+  368:6    warning  React Hook useCallback has a missing dependency: 'timeStringToMinutes'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+/Users/matteo.michielon/project 2.0/src/components/schedules/hooks/useScheduleModalState.ts
+   3:15  error  'ScheduleEventModalProps' is defined but never used  @typescript-eslint/no-unused-vars
+  66:18  error  'e' is defined but never used                        @typescript-eslint/no-unused-vars
+
+/Users/matteo.michielon/project 2.0/src/components/schedules/hooks/useScheduleModalStateOptimized.ts
+    3:15  error  'ScheduleEventModalProps' is defined but never used  @typescript-eslint/no-unused-vars
+  192:18  error  'e' is defined but never used                        @typescript-eslint/no-unused-vars
+
+/Users/matteo.michielon/project 2.0/src/components/schedules/hooks/useScheduleSave.ts
+  15:24  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  16:30  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  19:23  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  24:26  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  24:48  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  24:67  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  43:51  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  43:73  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  43:92  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/matteo.michielon/project 2.0/src/components/schedules/hooks/useSelections.ts
+   2:10  error  'toIdString' is defined but never used    @typescript-eslint/no-unused-vars
+   3:15  error  'RiskLevel' is defined but never used     @typescript-eslint/no-unused-vars
+   3:26  error  'CourseType' is defined but never used    @typescript-eslint/no-unused-vars
+   3:38  error  'DeliveryMode' is defined but never used  @typescript-eslint/no-unused-vars
+   8:12  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  30:24  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  30:43  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  30:59  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  30:73  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  36:34  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  36:50  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  42:55  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/matteo.michielon/project 2.0/src/components/schedules/hooks/useTrainerFilters.ts
+  34:6  warning  React Hook useMemo has a missing dependency: 'formData'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+/Users/matteo.michielon/project 2.0/src/components/schedules/types/index.ts
+  17:18  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  61:18  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/matteo.michielon/project 2.0/src/components/schedules/utils.ts
+    4:10   error  'RISK_LEVEL_OPTIONS' is defined but never used   @typescript-eslint/no-unused-vars
+    4:30   error  'COURSE_TYPE_OPTIONS' is defined but never used  @typescript-eslint/no-unused-vars
+   49:37   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+   49:43   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+   50:41   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+   51:58   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+   52:54   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+   53:58   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+   54:52   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+   55:16   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+   80:19   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+   81:27   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+   82:14   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+   83:13   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+   87:39   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+   87:73   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+   92:31   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+   92:49   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+   95:60   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+   95:81   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+   96:61   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+   96:82   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+   98:46   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+   99:21   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  121:13   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  126:29   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  173:34   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  174:39   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  176:57   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  177:54   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  179:41   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  180:35   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  190:13   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  194:11   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  198:59   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  202:54   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  203:53   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  210:58   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  218:26   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  228:45   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  329:19   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  330:27   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  331:14   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  337:39   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  337:73   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  348:162  error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  349:31   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  349:49   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  352:27   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  352:48   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  355:27   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  355:48   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  358:58   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  358:79   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  359:58   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  359:79   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  371:19   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  372:27   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  373:14   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  378:38   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  379:39   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  379:73   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  384:31   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  384:49   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  384:78   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  384:98   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  388:36   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  388:57   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  391:36   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  391:57   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  398:33   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  403:34   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  411:19   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  412:27   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  413:14   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  417:42   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  424:39   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  424:73   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  429:31   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  429:49   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  429:78   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  429:98   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  433:36   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  433:57   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  436:36   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  436:57   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  441:46   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  442:21   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  460:58   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  463:17   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  467:14   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  468:18   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+
+✖ 309 problems (289 errors, 20 warnings)
+

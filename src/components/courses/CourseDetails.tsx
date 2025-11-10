@@ -137,7 +137,7 @@ const CourseDetails: React.FC = () => {
             <div className="mb-2"><span className="font-medium">Corso:</span> {course.title}</div>
             <div className="mb-2"><span className="font-medium">Durata corso:</span> {course.duration}</div>
             <div className="mb-2"><span className="font-medium">Anni validità:</span> {course.validityYears || 'N/A'}</div>
-            <div className="mb-2"><span className="font-medium">Durata corso aggiornamento:</span> {course.renewalDuration || 'N/A'}</div>
+            <div className="mb-2"><span className="font-medium">Ore formazione pratica:</span> {course.practicalHours ? `${course.practicalHours}h` : 'N/A'}</div>
             <div className="mb-2"><span className="font-medium">€/persona:</span> {course.pricePerPerson ? `€${course.pricePerPerson}` : 'N/A'}</div>
             <div className="mb-2"><span className="font-medium">Certificazioni:</span> {course.certifications || 'N/A'}</div>
           </div>

@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Users } from 'lucide-react';
-import { apiGet } from '../../services/api';
 import { useToast } from '../../hooks/useToast';
+import { getEmployees as getEmployeesService } from '../../services/employees';
 
 interface Person {
   id: string;
@@ -21,19 +21,23 @@ const EmployeesSection: React.FC<EmployeesSectionProps> = ({ companyId }) => {
   const [employees, setEmployees] = useState<Person[]>([]);
   const [loading, setLoading] = useState(true);
   const { showToast } = useToast();
+  const showToastRef = useRef(showToast);
+  useEffect(() => {
+    showToastRef.current = showToast;
+  }, [showToast]);
 
   const fetchEmployees = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await apiGet(`/api/v1/persons?companyId=${companyId}&roleType=EMPLOYEE`) as { persons?: Person[] };
-      setEmployees(response.persons || []);
+      const list = await getEmployeesService({ companyId });
+      setEmployees(list as unknown as Person[]);
     } catch (error) {
       console.error('Error fetching employees:', error);
-      showToast({ message: 'Errore nel caricamento delle persone', type: 'error' });
+      showToastRef.current?.({ message: 'Errore nel caricamento delle persone', type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, [companyId, showToast]);
+  }, [companyId]);
 
   useEffect(() => {
     fetchEmployees();

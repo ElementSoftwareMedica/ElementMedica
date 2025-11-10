@@ -1,4 +1,4 @@
-import { apiGet, apiDelete } from './api';
+import { apiGet, apiDelete, apiPost, apiPut, apiDeleteWithPayload } from './api';
 
 export interface Person {
   id: string;
@@ -10,7 +10,8 @@ export interface Person {
   residenceAddress?: string;
   position?: string;
   department?: string;
-  companyId?: number;
+  companyId?: string | number; // ✅ FIX: Supporta sia UUID (string) che ID numerico
+  birthDate?: string;
   roleType: string;
   isActive: boolean;
   isOnline?: boolean; // Stato online/offline basato su sessioni attive
@@ -84,8 +85,84 @@ export class PersonsService {
     if (filters.page) params.append('page', filters.page.toString());
     if (filters.limit) params.append('limit', filters.limit.toString());
     
-    const response = await apiGet(`/api/v1/persons?${params.toString()}`) as PersonsResponse;
-    return response;
+    const raw = await apiGet(`/api/v1/persons?${params.toString()}`) as any;
+
+    // Development logging for debugging
+    if (process.env.NODE_ENV === 'development' && raw) {
+      const samplePerson = raw?.persons?.[0] || raw?.data?.persons?.[0] || raw?.data?.[0] || raw?.[0];
+      if (samplePerson) {
+        console.debug('[PersonsService] Sample person:', {
+          id: samplePerson.id,
+          companyId: samplePerson.companyId,
+          hasCompanyId: !!samplePerson.companyId
+        });
+      }
+    }
+
+    // Estrai array persone da possibili shape
+    const rawPersons: any[] = Array.isArray(raw?.persons)
+      ? raw.persons
+      : Array.isArray(raw?.data?.persons)
+        ? raw.data.persons
+        : Array.isArray(raw?.data)
+          ? raw.data
+          : Array.isArray(raw?.items)
+            ? raw.items
+            : Array.isArray(raw)
+              ? raw
+              : [];
+
+    const mapIsActive = (p: any): boolean => {
+      if (typeof p?.isActive === 'boolean') return p.isActive;
+      if (p?.deletedAt) return false;
+      if (typeof p?.status === 'string') return p.status.toUpperCase() === 'ACTIVE';
+      return true; // default attivo se non specificato
+    };
+    const toNumberSafe = (v: any): number | undefined => {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : undefined;
+    };
+
+    const persons: Person[] = rawPersons.map((p: any) => {
+      // ✅ FIX: Supporta sia UUID (string) che ID numerico, senza conversione forzata
+      const companyId = p?.companyId ?? p?.company_id ?? p?.company?.id;
+      const finalCompanyId = companyId ? (typeof companyId === 'number' ? companyId : String(companyId)) : undefined;
+      
+      return {
+        id: String(p.id),
+        firstName: p.firstName ?? p.first_name ?? '',
+        lastName: p.lastName ?? p.last_name ?? '',
+        email: p.email ?? '',
+        username: p.username ?? p.email ?? '',
+        phone: p.phone,
+        residenceAddress: p.residenceAddress ?? p.address ?? p.residence_address,
+        position: p.position,
+        department: p.department,
+        companyId: finalCompanyId, // ✅ Mantieni il tipo originale (string o number)
+        roleType: p.roleType ?? p.role_type ?? p.role ?? 'USER',
+        isActive: mapIsActive(p),
+        isOnline: p.isOnline,
+        lastLogin: p.lastLogin ?? p.last_login,
+        lastActivityAt: p.lastActivityAt ?? p.last_activity_at,
+        createdAt: p.createdAt ?? p.created_at ?? '',
+        updatedAt: p.updatedAt ?? p.updated_at ?? ''
+      };
+    });
+
+    // Metadati di paginazione con fallback
+    const total: number = typeof raw?.total === 'number' ? raw.total
+      : typeof raw?.data?.total === 'number' ? raw.data.total
+      : typeof raw?.count === 'number' ? raw.count
+      : persons.length;
+    const page: number = typeof raw?.page === 'number' ? raw.page
+      : typeof raw?.data?.page === 'number' ? raw.data.page
+      : 1;
+    const limit: number | undefined = typeof filters.limit === 'number' ? filters.limit : undefined;
+    const totalPages: number = typeof raw?.totalPages === 'number' ? raw.totalPages
+      : typeof raw?.data?.totalPages === 'number' ? raw.data.totalPages
+      : limit ? Math.max(1, Math.ceil(total / limit)) : 1;
+
+    return { persons, total, page, totalPages } as PersonsResponse;
   }
 
   /**
@@ -214,7 +291,7 @@ export class PersonsService {
    * Elimina più persone contemporaneamente
    */
   static async deleteMultiplePersons(personIds: string[]): Promise<void> {
-    await apiDelete('/api/v1/persons/bulk', { userIds: personIds }); // Manteniamo userIds per compatibilità backend
+    await apiDeleteWithPayload('/api/v1/persons/bulk', { personIds });
   }
 
   /**

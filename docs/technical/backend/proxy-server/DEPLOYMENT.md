@@ -394,7 +394,7 @@ type: Opaque
 data:
   SSL_CERT: <base64-encoded-cert>
   SSL_KEY: <base64-encoded-key>
-  JWT_SECRET: <base64-encoded-secret>
+  Nota: Il Proxy non firma JWT. Non richiede JWT_SECRET/JWT_REFRESH_SECRET; le variabili JWT appartengono all'API Server.
 ```
 
 ### Deployment

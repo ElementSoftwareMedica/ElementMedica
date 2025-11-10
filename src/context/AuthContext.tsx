@@ -15,8 +15,9 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (identifier: string, password: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   hasPermission: (resource: string, action: string) => boolean;
+  // Nessun bypass: autenticazione obbligatoria
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -25,65 +26,134 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [user, setUser] = useState<AuthResponse['user'] | null>(null);
   const [permissions, setPermissions] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  // Dev bypass rimosso
 
   // Verifica lo stato di autenticazione all'avvio
   useEffect(() => {
     const verifyAuth = async () => {
       console.log('🔍 AuthContext: Verifying authentication on startup...');
-      
-      if (authService.isAuthenticated()) {
-        console.log('🔑 AuthContext: Token found, verifying...');
-        try {
+
+      // Nessun bypass in dev: esegui sempre verifica standard
+
+      try {
+        // Migrazione chiavi storage per compatibilità con versioni legacy
+        authService.migrateStorageKeys();
+
+        let token = authService.getToken();
+        if (!token) {
+          // Primo tentativo: verifica basata su cookie di sessione (withCredentials)
+          console.log('🚫 No access token found. Trying cookie-based verify...');
+          try {
+            const res = await authService.verifyToken();
+            console.log('📋 Cookie verify response:', { valid: res.valid, hasUser: !!res.user, hasPermissions: !!res.permissions });
+            if (res.valid && res.user) {
+              // Map backend roles array to frontend single role
+              const mappedUser = {
+                ...res.user,
+                role: res.user.roles?.includes('SUPER_ADMIN') ? 'Admin' :
+                      res.user.roles?.includes('ADMIN') ? 'Admin' :
+                      res.user.roles?.includes('COMPANY_ADMIN') ? 'Administrator' : 'User'
+              };
+              console.log('✅ AuthContext: Cookie session authenticated:', { id: mappedUser.id, role: mappedUser.role, roles: mappedUser.roles });
+
+              if (res.permissions && typeof res.permissions === 'object') {
+                setUser(mappedUser);
+                const convertedPermissions = convertBackendToFrontendPermissions(res.permissions);
+                setPermissions(convertedPermissions);
+              } else {
+                setUser(mappedUser);
+                setPermissions({});
+              }
+              // Autenticazione valida via cookie, termina qui
+              return;
+            }
+          } catch (e) {
+            console.log('❌ Cookie verify failed. Trying refresh with refresh token...');
+          }
+
+          // Secondo tentativo: prova refresh con refresh token client-side
+          const refreshed = await authService.refreshAccess();
+          if (refreshed) {
+            console.log('✅ Access token obtained via refresh');
+            token = refreshed;
+          } else {
+            console.log('❌ Refresh failed or no refresh token available. Skipping verify.');
+            setUser(null);
+            setPermissions({});
+            return;
+          }
+        }
+
+        const performVerify = async () => {
           const res = await authService.verifyToken();
           console.log('📋 AuthContext: Verify response:', { valid: res.valid, hasUser: !!res.user, hasPermissions: !!res.permissions });
           
           if (res.valid && res.user) {
-          // Map backend roles array to frontend single role
-          const mappedUser = {
-            ...res.user,
-            role: res.user.roles?.includes('SUPER_ADMIN') ? 'Admin' : 
-                  res.user.roles?.includes('ADMIN') ? 'Admin' : 
-                  res.user.roles?.includes('COMPANY_ADMIN') ? 'Administrator' : 'User'
-          };
-          console.log('✅ AuthContext: User authenticated:', { id: mappedUser.id, role: mappedUser.role, roles: mappedUser.roles });
-          console.log('🔐 AuthContext: Raw permissions from backend:', res.permissions);
-          console.log('🔐 AuthContext: Companies permissions:', Object.keys(res.permissions || {}).filter(p => p.includes('companies')));
-          
-          // Verifica che i permessi siano validi
-          if (res.permissions && typeof res.permissions === 'object') {
-            setUser(mappedUser);
-            // Converti i permessi dal formato backend al formato frontend per compatibilità
-            const convertedPermissions = convertBackendToFrontendPermissions(res.permissions);
-            setPermissions(convertedPermissions);
-            console.log('🔐 AuthContext: Permissions set:', Object.keys(convertedPermissions).length, 'permissions');
-            console.log('🔐 AuthContext: Backend permissions:', Object.keys(res.permissions).filter(p => res.permissions[p] === true));
-            console.log('🔐 AuthContext: Frontend permissions:', Object.keys(convertedPermissions).filter(p => convertedPermissions[p] === true));
+            // Map backend roles array to frontend single role
+            const mappedUser = {
+              ...res.user,
+              role: res.user.roles?.includes('SUPER_ADMIN') ? 'Admin' : 
+                    res.user.roles?.includes('ADMIN') ? 'Admin' : 
+                    res.user.roles?.includes('COMPANY_ADMIN') ? 'Administrator' : 'User'
+            };
+            console.log('✅ AuthContext: User authenticated:', { id: mappedUser.id, role: mappedUser.role, roles: mappedUser.roles });
+            console.log('🔐 AuthContext: Raw permissions from backend:', res.permissions);
             
-            // Test hasPermission subito dopo aver impostato i permessi
-            console.log('🧪 Testing hasPermission for companies:read immediately after setting permissions...');
-            const testResult = hasPermissionTest('companies', 'read', mappedUser, convertedPermissions || {});
-            console.log('🧪 Test result:', testResult);
-          } else {
-            console.error('❌ AuthContext: Invalid permissions object:', res.permissions);
-            setUser(mappedUser);
-            setPermissions({});
-          }
+            // Verifica che i permessi siano validi
+            if (res.permissions && typeof res.permissions === 'object') {
+              setUser(mappedUser);
+              // Converti i permessi dal formato backend al formato frontend per compatibilità
+              const convertedPermissions = convertBackendToFrontendPermissions(res.permissions);
+              setPermissions(convertedPermissions);
+              console.log('🔐 AuthContext: Permissions set:', Object.keys(convertedPermissions).length, 'permissions');
+            } else {
+              console.error('❌ AuthContext: Invalid permissions object:', res.permissions);
+              setUser(mappedUser);
+              setPermissions({});
+            }
           } else {
             console.log('❌ AuthContext: Invalid token response');
             throw new Error('Invalid token response');
           }
-        } catch (error) {
-          console.error('❌ AuthContext: Error verifying token:', error);
-          authService.removeToken();
-          setUser(null);
-          setPermissions({});
+        };
+
+        try {
+          await performVerify();
+        } catch (error: any) {
+          const status = error?.response?.status;
+          console.warn('⚠️ Verify failed', { status, message: error?.message });
+
+          if (status === 401 || status === 403) {
+            console.log('🔄 Trying refresh then retry verify...');
+            const refreshed = await authService.refreshAccess();
+            if (refreshed) {
+              try {
+                await performVerify();
+              } catch (e2) {
+                console.error('❌ Verify retry after refresh failed:', e2);
+                authService.removeToken();
+                authService.removeRefreshToken();
+                setUser(null);
+                setPermissions({});
+              }
+            } else {
+              console.log('❌ Refresh failed, clearing auth state');
+              authService.removeToken();
+              authService.removeRefreshToken();
+              setUser(null);
+              setPermissions({});
+            }
+          } else {
+            console.error('❌ AuthContext: Error verifying token:', error);
+            authService.removeToken();
+            setUser(null);
+            setPermissions({});
+          }
         }
-      } else {
-        console.log('🚫 AuthContext: No token found');
+      } finally {
+        console.log('🏁 AuthContext: Setting isLoading to false');
+        setIsLoading(false);
       }
-      
-      console.log('🏁 AuthContext: Setting isLoading to false');
-      setIsLoading(false);
     };
 
     verifyAuth();
@@ -97,33 +167,33 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       console.log('📋 Login response structure:', {
         hasData: !!response,
         hasTokens: !!response.tokens,
-        hasAccessToken: !!response.tokens?.access_token,
+        hasAccessToken: !!(response as any)?.tokens && (("access_token" in (response as any).tokens) || ("accessToken" in (response as any).tokens)),
         hasUser: !!response.user,
         userRoles: response.user?.roles,
         tenantId: response.user?.tenantId
       });
       
-      // La risposta del backend ha la struttura: {success, user, tokens: {access_token, refresh_token, ...}}
-      if (response.tokens?.access_token) {
-        console.log('💾 Saving token:', response.tokens.access_token.substring(0, 20) + '...');
-        authService.saveToken(response.tokens.access_token);
+      // Normalizza le chiavi dei token per supportare sia snake_case che camelCase dal backend
+      const accessToken = (response as any)?.tokens?.access_token || (response as any)?.tokens?.accessToken;
+      const refreshToken = (response as any)?.tokens?.refresh_token || (response as any)?.tokens?.refreshToken;
+      
+      if (accessToken) {
+        authService.saveToken(accessToken);
+        
+        // Salva anche il refresh token se presente
+        if (refreshToken) {
+          authService.saveRefreshToken(refreshToken);
+        }
         
         // Salva il tenant ID nel localStorage per le chiamate API
         if (response.user?.tenantId) {
           localStorage.setItem('tenantId', response.user.tenantId);
-          console.log('🏢 Saving tenant ID:', response.user.tenantId);
         }
         
         // Verifica che il token sia stato salvato correttamente
         const savedToken = authService.getToken();
-        console.log('✅ Token saved verification:', savedToken ? savedToken.substring(0, 20) + '...' : 'NO TOKEN SAVED');
-        
-        // Verifica nuovamente che il token sia disponibile
-        const tokenAfterDelay = authService.getToken();
-        console.log('🔍 Token verification after delay:', tokenAfterDelay ? tokenAfterDelay.substring(0, 20) + '...' : 'STILL NO TOKEN');
-        
-        if (!tokenAfterDelay) {
-          console.error('🚨 CRITICAL: Token not available after delay - this will cause auth/verify to fail');
+        if (!savedToken) {
+          console.error('🚨 CRITICAL: Token not available after save - this will cause auth/verify to fail');
           throw new Error('Token not saved properly');
         }
         
@@ -141,103 +211,86 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           role: response.user.role || mappedRole // Use backend role if available, otherwise use mapped role
         };
         
-        console.log('🔄 Role mapping:', {
-          backendRole: response.user.role,
-          mappedRole: mappedRole,
-          finalRole: mappedUser.role,
-          roles: response.user.roles
-        });
-        console.log('👤 Mapped user:', { id: mappedUser.id, role: mappedUser.role, originalRoles: mappedUser.roles });
-        console.log('🔄 Setting user in AuthContext:', mappedUser);
         setUser(mappedUser);
-        console.log('✅ User set in AuthContext, triggering re-render');
-        
-        // Log immediate state after login
-        console.log('🔍 AuthContext state after login:', {
-          hasUser: !!mappedUser,
-          userId: mappedUser.id,
-          userRole: mappedUser.role,
-          userEmail: mappedUser.email
-        });
         
         // Get permissions after login - con retry
-        console.log('🔐 Getting permissions after login...');
         let permissionsLoaded = false;
         let retryCount = 0;
         const maxRetries = 3;
         
         while (!permissionsLoaded && retryCount < maxRetries) {
           try {
-            console.log(`🔄 Attempting to verify token (attempt ${retryCount + 1}/${maxRetries})...`);
             const verifyRes = await authService.verifyToken();
-            console.log('📋 Verify response:', {
-              valid: verifyRes.valid,
-              hasPermissions: !!verifyRes.permissions,
-              permissionsCount: Object.keys(verifyRes.permissions || {}).length,
-              companiesRead: verifyRes.permissions?.['companies:read']
-            });
             
             if (verifyRes.valid && verifyRes.permissions) {
               // Converti i permessi dal formato backend al formato frontend per compatibilità
               const convertedPermissions = convertBackendToFrontendPermissions(verifyRes.permissions);
               setPermissions(convertedPermissions);
-              console.log('✅ Permissions loaded successfully:', Object.keys(convertedPermissions).length, 'permissions');
-              console.log('🔐 Login: Backend permissions:', Object.keys(verifyRes.permissions).filter(p => verifyRes.permissions[p] === true));
-              console.log('🔐 Login: Frontend permissions:', Object.keys(convertedPermissions).filter(p => convertedPermissions[p] === true));
               permissionsLoaded = true;
             } else {
-              console.warn('⚠️ Invalid verify response or no permissions');
               retryCount++;
-              if (retryCount < maxRetries) {
-                console.log('⏳ Retrying immediately...');
-              }
             }
-          } catch (error) {
-            console.error(`❌ Error getting permissions (attempt ${retryCount + 1}):`, error);
+          } catch (e) {
             retryCount++;
-            if (retryCount < maxRetries) {
-              console.log('⏳ Retrying immediately...');
-            }
           }
         }
-        
-        if (!permissionsLoaded) {
-          console.error('❌ Failed to load permissions after', maxRetries, 'attempts');
-          setPermissions({});
-        }
-        
-        console.log('🎯 Login process completed');
       } else {
-        throw new Error('No access token received');
+        // Fallback: autenticazione basata su cookie (token non presente nel body)
+        console.warn('⚠️ No access token in login response body. Attempting cookie-based session verification...');
+
+        // Salva il tenant ID se presente
+        if (response.user?.tenantId) {
+          localStorage.setItem('tenantId', response.user.tenantId);
+        }
+
+        try {
+          const verifyRes = await authService.verifyToken();
+          if (verifyRes.valid && verifyRes.user) {
+            // Map backend roles array to frontend single role
+            const mappedUser = {
+              ...verifyRes.user,
+              role: verifyRes.user.roles?.includes('SUPER_ADMIN') ? 'Admin' :
+                    verifyRes.user.roles?.includes('ADMIN') ? 'Admin' :
+                    verifyRes.user.roles?.includes('COMPANY_ADMIN') ? 'Administrator' : 'User'
+            };
+            setUser(mappedUser);
+
+            if (verifyRes.permissions && typeof verifyRes.permissions === 'object') {
+              const convertedPermissions = convertBackendToFrontendPermissions(verifyRes.permissions);
+              setPermissions(convertedPermissions);
+            } else {
+              setPermissions({});
+            }
+          } else {
+            console.error('❌ Cookie-based verify failed after login.');
+            throw new Error('Login response missing access token and cookie verification failed');
+          }
+        } catch (e) {
+          console.error('❌ AuthContext: Cookie-based verification error:', e);
+          throw e;
+        }
       }
-    } catch (error: any) {
-      console.error('❌ Login error:', error);
-      
-      // Gestione specifica per errore 429 (Rate Limiting)
-      if (error.response?.status === 429) {
-        const retryAfter = error.response?.data?.retryAfter || '15 minutes';
-        const errorMessage = `Troppi tentativi di login. Riprova tra ${retryAfter}.`;
-        console.error('🚫 Rate limit exceeded:', errorMessage);
-        throw new Error(errorMessage);
-      }
-      
-      // Gestione altri errori di rete
-      if (error.code === 'ERR_NETWORK' || error.code === 'ERR_CONNECTION_REFUSED') {
-        throw new Error('Errore di connessione al server. Verifica la connessione di rete.');
-      }
-      
-      // Re-throw dell'errore originale per altri casi
+    } catch (error) {
+      console.error('❌ AuthContext: Login error:', error);
       throw error;
     }
   };
 
   // Logout
-  const logout = () => {
-    authService.removeToken();
-    localStorage.removeItem('tenantId'); // Rimuovi anche il tenant ID
-    setUser(null);
-    setPermissions({});
-    window.location.href = '/login'; // Redirect al login
+  const logout = async () => {
+    try {
+      // Prova a revocare la sessione lato backend usando il refresh token
+      await authService.logout();
+    } catch (error) {
+      console.warn('⚠️ Logout backend failed, proceeding with client cleanup:', error);
+    } finally {
+      authService.removeToken();
+      authService.removeRefreshToken();
+      localStorage.removeItem('tenantId'); // Rimuovi anche il tenant ID
+      setUser(null);
+      setPermissions({});
+      window.location.href = '/login'; // Redirect al login
+    }
   };
 
   // Funzione di test per hasPermission (per debug)
@@ -324,97 +377,59 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // Ora tutti gli utenti, inclusi gli admin, devono avere permessi esplicitamente assegnati
     // Questo garantisce un controllo granulare dei permessi conforme al GDPR
     
-    // Verifica permesso diretto (sia formato frontend che backend)
-    if (permissions[permissionToCheck] === true) {
-      console.log(`✅ Access granted: user has ${permissionToCheck} permission (direct match)`);
+    // Verifica permesso all:* (permesso universale)
+    if (permissions['all:' + (action || '')] === true) {
+      console.log('✅ Access granted: user has all:' + (action || '') + ' permission');
       return true;
     }
     
-    // Se abbiamo due parametri, prova anche altri formati
-    if (action) {
-      // Verifica permesso all:* (permesso universale)
-      if (permissions['all:' + action] === true) {
-        console.log('✅ Access granted: user has all:' + action + ' permission');
-        return true;
-      }
-      
-      // Verifica permesso resource:all (permesso per tutte le azioni sulla risorsa)
-      if (permissions[resourceOrPermission + ':all'] === true) {
-        console.log('✅ Access granted: user has ' + resourceOrPermission + ':all permission');
-        return true;
-      }
-      
-      // Prova anche il formato backend usando hasBackendPermission
-      // Questo è utile quando si passa un permesso nel formato backend direttamente
-      const backendPermissionResult = hasBackendPermission(permissionToCheck, permissions);
-      if (backendPermissionResult) {
-        console.log(`✅ Access granted: user has ${permissionToCheck} permission (backend format match)`);
-        return true;
-      }
-      
-      // Concedi accesso se c'è almeno un permesso con quel resource
-      if (action === 'read') {
-        // For 'read' actions, check if the user has any permission for this resource
-        const resourcePermissions = Object.keys(permissions)
-          .filter(key => key.startsWith(resourceOrPermission + ':') && permissions[key] === true);
-        
-        console.log(`🔍 Found ${resourcePermissions.length} permissions for resource '${resourceOrPermission}':`, resourcePermissions);
-        
-        if (resourcePermissions.length > 0) {
-          console.log('✅ Access granted: user has some permission for ' + resourceOrPermission);
-          return true;
-        }
-      }
-    } else {
-      // Se è un singolo parametro, prova anche il formato backend
-      const backendPermissionResult = hasBackendPermission(permissionToCheck, permissions);
-      if (backendPermissionResult) {
-        console.log(`✅ Access granted: user has ${permissionToCheck} permission (backend format match)`);
+    // Verifica permesso resource:all (permesso per tutte le azioni sulla risorsa)
+    if (permissions[(resourceOrPermission + ':all')] === true) {
+      console.log('✅ Access granted: user has ' + resourceOrPermission + ':all permission');
+      return true;
+    }
+    
+    // Verifica dei permessi specifici
+    const permissionKey = action ? `${resourceOrPermission}:${action}` : resourceOrPermission;
+    const hasSpecificPermission = permissions[permissionKey] === true;
+
+    // Concedi accesso se c'è almeno un permesso con quel resource per azioni di lettura
+    if (!hasSpecificPermission && action === 'read') {
+      const hasAnyPermissionForResource = Object.keys(permissions)
+        .some(key => key.startsWith(resourceOrPermission + ':') && permissions[key] === true);
+      if (hasAnyPermissionForResource) {
+        console.log('✅ Access granted: user has some permission for ' + resourceOrPermission);
         return true;
       }
     }
-    
-    console.log(`❌ Permission check result: false for ${permissionToCheck}`);
-    return false;
+
+    console.log(`${hasSpecificPermission ? '✅' : '❌'} Permission check result:`, hasSpecificPermission);
+    return hasSpecificPermission;
   };
 
-  const value = {
-    user,
-    permissions,
-    isAuthenticated: !!user,
-    isLoading,
-    login,
-    logout,
-    hasPermission
-  };
-  
-  // Debug log per monitorare lo stato
-  console.log('🔄 AuthContext state:', {
-    hasUser: !!user,
-    userRole: user?.role,
-    isAuthenticated: !!user,
-    isLoading,
-    permissionsCount: Object.keys(permissions).length
-  });
-
-  // Esponi l'AuthContext nel browser per il testing (solo in development)
-  if (typeof window !== 'undefined' && import.meta.env.DEV) {
-    (window as any).authContextForTesting = value;
-  }
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={{
+      user,
+      permissions,
+      isAuthenticated: !!user,
+      isLoading,
+      login,
+      logout,
+      hasPermission
+    }}>
+      {children}
+    </AuthContext.Provider>
+  );
 };
 
 export const useAuth = (): AuthContextType => {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
+  const context = React.useContext(AuthContext);
+  if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
 };
 
-// Export named per compatibilità Vite Fast Refresh
 export { AuthContext };
 
-// Re-export per centralizzare l'import dell'hook ottimizzato
 export default useAuth;

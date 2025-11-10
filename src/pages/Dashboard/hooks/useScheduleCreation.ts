@@ -57,11 +57,11 @@ export const useScheduleCreation = (onSuccess?: () => void) => {
         'create',
         {
           courseId: data.courseId,
-          companiesCount: data.companies?.length || 0
+          companiesCount: data.companyIds?.length || 0
         }
       );
       
-      const result = await apiPost('/schedules', data);
+      const result = await apiPost<{ id: string }>('/api/v1/schedules', data);
       
       logGdprAction(
         tenant?.id || 'unknown',

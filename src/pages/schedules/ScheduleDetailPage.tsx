@@ -4,11 +4,60 @@ import ScheduleEventModalLazy from '../../components/schedules/ScheduleEventModa
 import { 
   Award,
   ClipboardList,
-  Edit,
   FileText,
   Folder
 } from 'lucide-react';
 import { apiGet } from '../../services/api';
+import { getTrainers } from '../../services/trainers';
+import { Company, PersonData } from '../../types';
+
+// Tipi locali per tipizzare la pagina ed evitare any
+interface Trainer {
+  id: string;
+  firstName: string;
+  lastName: string;
+}
+
+interface CourseSimple {
+  id: string;
+  title?: string;
+  name?: string;
+  duration?: number;
+  certifications?: string[];
+}
+
+interface ScheduleSession {
+  id: string;
+  date: string; // ISO
+  start: string; // HH:mm
+  end: string;   // HH:mm
+  trainer?: Trainer;
+  co_trainer?: Trainer;
+}
+
+interface Enrollment {
+  employee: { id: string; firstName: string; lastName: string; companyId?: string };
+}
+
+interface ScheduleCompanyRef {
+  company: { id: string; ragioneSociale?: string; name?: string };
+}
+
+interface AttendanceEntry { employeeIds: string[] }
+
+interface ScheduleDetail {
+  id: string;
+  course: { id: string; title?: string; name?: string };
+  status?: string;
+  sessions?: ScheduleSession[];
+  companies?: ScheduleCompanyRef[];
+  enrollments?: Enrollment[];
+  attendance?: AttendanceEntry[];
+  location?: string;
+  maxParticipants?: number;
+  notes?: string;
+  deliveryMode?: 'in-person' | 'online' | 'hybrid' | string;
+}
 
 const sidebarButtons = [
   { label: 'Lettere di Incarico', icon: <Folder className="w-5 h-5 text-blue-500" /> },
@@ -20,11 +69,11 @@ const sidebarButtons = [
 
 const ScheduleDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const [schedule, setSchedule] = useState<any>(null);
-  const [trainers, setTrainers] = useState<any[]>([]);
-  const [companies, setCompanies] = useState<any[]>([]);
-  const [employees, setEmployees] = useState<any[]>([]);
-  const [courses, setCourses] = useState<any[]>([]);
+  const [schedule, setSchedule] = useState<ScheduleDetail | null>(null);
+  const [trainers, setTrainers] = useState<Trainer[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [employees, setEmployees] = useState<PersonData[]>([]);
+  const [courses, setCourses] = useState<CourseSimple[]>([]);
   const [loading, setLoading] = useState(true);
   const [showEdit, setShowEdit] = useState(false);
 
@@ -33,17 +82,17 @@ const ScheduleDetailPage: React.FC = () => {
       setLoading(true);
       try {
         const [schedData, trData, compData, empData, crsData] = await Promise.all([
-          apiGet(`/schedules/${id}`),
-          apiGet('/trainers'),
+          apiGet(`/api/v1/schedules/${id}`),
+          getTrainers(),
           apiGet('/companies'),
           apiGet('/persons'),
           apiGet('/courses'),
         ]);
-        setSchedule(schedData);
-        setTrainers(trData);
-        setCompanies(compData);
-        setEmployees(empData);
-        setCourses(crsData);
+        setSchedule(schedData as ScheduleDetail);
+        setTrainers(trData as Trainer[]);
+        setCompanies(compData as Company[]);
+        setEmployees(empData as PersonData[]);
+        setCourses(crsData as CourseSimple[]);
       } finally {
         setLoading(false);
       }
@@ -65,15 +114,15 @@ const ScheduleDetailPage: React.FC = () => {
     'online': 'Online',
     'hybrid': 'Ibrido',
   };
-  const modalitaErogazione = modalitaMap[schedule.deliveryMode] || schedule.deliveryMode;
+  const modalitaErogazione = modalitaMap[schedule.deliveryMode || ''] || schedule.deliveryMode;
 
   // Raggruppa partecipanti per azienda senza duplicati
   const aziendePartecipanti: Record<string, { nome: string, partecipanti: { id: string, nome: string }[] }> = {};
-  schedule.enrollments?.forEach((enr: any) => {
+  schedule.enrollments?.forEach((enr: Enrollment) => {
     const aziendaId = enr.employee.companyId;
     if (!aziendaId) return;
     if (!aziendePartecipanti[aziendaId]) {
-      const companyObj = schedule.companies.find((c: any) => c.company.id === aziendaId)?.company;
+      const companyObj = schedule.companies?.find((c: ScheduleCompanyRef) => c.company.id === aziendaId)?.company;
       aziendePartecipanti[aziendaId] = {
         nome: companyObj?.ragioneSociale || companyObj?.name || 'Azienda sconosciuta',
         partecipanti: []
@@ -103,14 +152,14 @@ const ScheduleDetailPage: React.FC = () => {
         <ScheduleEventModalLazy
           trainings={courses.map(c => ({ id: c.id, title: c.title || c.name, duration: c.duration, certifications: c.certifications }))}
           trainers={trainers}
-          companies={companies.map(c => ({ id: c.id, ragioneSociale: c.ragioneSociale, name: c.name }))}
-          employees={employees}
+          companies={companies.map((c: Company) => ({ id: c.id, ragioneSociale: c.ragioneSociale, name: c.name }))}
+          persons={employees}
           existingEvent={{
             ...schedule,
             trainingId: schedule.course.id,
             trainerId: schedule.sessions?.[0]?.trainer?.id || '',
             coTrainerId: schedule.sessions?.[0]?.co_trainer?.id || '',
-            dates: schedule.sessions?.map((sess: any) => ({
+            dates: schedule.sessions?.map((sess: ScheduleSession) => ({
               date: sess.date.split('T')[0],
               start: sess.start,
               end: sess.end,
@@ -121,16 +170,17 @@ const ScheduleDetailPage: React.FC = () => {
             maxParticipants: schedule.maxParticipants,
             notes: schedule.notes,
             deliveryMode: schedule.deliveryMode,
-            companyIds: schedule.companies?.map((sc: any) => sc.company.id) || [],
-            employeeIds: schedule.enrollments?.map((e: any) => e.employee.id) || [],
+            company_ids: schedule.companies?.map((sc: ScheduleCompanyRef) => sc.company.id) || [],
+            employee_ids: schedule.enrollments?.map((e: Enrollment) => e.employee.id) || [],
           }}
           initialDate={schedule.sessions?.[0]?.date.split('T')[0]}
-          initialTime={{ start: schedule.sessions?.[0]?.start, end: schedule.sessions?.[0]?.end }}
+          initialTime={{ start: schedule.sessions?.[0]?.start as string, end: schedule.sessions?.[0]?.end as string }}
           onClose={() => setShowEdit(false)}
           onSuccess={async () => {
             setShowEdit(false);
-            const schedData = await apiGet(`/schedules/${id}`);
-            setSchedule(schedData);
+            const schedData = await apiGet(`/api/v1/schedules/${id}`);
+
+            setSchedule(schedData as ScheduleDetail);
           }}
         />
       )}
@@ -218,14 +268,14 @@ const ScheduleDetailPage: React.FC = () => {
               `}>Sessioni</h2>
           {schedule.sessions?.length ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-4">
-                  {schedule.sessions.map((sess: any, idx: number) => {
+                  {schedule.sessions.map((sess: ScheduleSession, idx: number) => {
                     // Get present employee IDs for this session
                     const presentIds = schedule.attendance && schedule.attendance[idx] && Array.isArray(schedule.attendance[idx].employeeIds)
                       ? schedule.attendance[idx].employeeIds
                       : [];
                     // Get employee objects for present IDs
                     const presentEmployees = schedule.enrollments
-                      ? schedule.enrollments.filter((enr: any) => presentIds.includes(enr.employee.id))
+                      ? schedule.enrollments.filter((enr: Enrollment) => presentIds.includes(enr.employee.id))
                       : [];
                     return (
                       <div key={sess.id} className="border rounded p-3 flex flex-col gap-1">
@@ -251,7 +301,7 @@ const ScheduleDetailPage: React.FC = () => {
                           <div className="mt-2">
                             <span className="font-semibold text-xs text-gray-500">Presenti:</span>
                             <ul className="list-disc pl-5 text-sm text-gray-800">
-                              {presentEmployees.map((enr: any) => (
+                              {presentEmployees.map((enr: Enrollment) => (
                                 <li key={enr.employee.id}>{enr.employee.firstName} {enr.employee.lastName}</li>
                               ))}
                             </ul>

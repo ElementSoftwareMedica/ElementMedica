@@ -6,6 +6,7 @@ import path from 'path'
 export default defineConfig({
   server: {
     port: 5173,
+    strictPort: true,
     proxy: {
       '/api': {
         target: 'http://localhost:4003',
@@ -47,6 +48,13 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
         rewrite: (path) => path.replace(/^\/roles/, '/api/roles')
+      },
+      // Proxy locale SOLO per l'endpoint di bulk import corsi
+      // Evitiamo di proxare "/courses" per non interferire con il routing SPA su reload
+      '/courses/bulk-import': {
+        target: 'http://localhost:4003',
+        changeOrigin: true,
+        secure: false
       }
     }
   },

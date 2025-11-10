@@ -8,9 +8,8 @@
  * - Performance: Ottimizzazione delle operazioni sui dati
  */
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import ImportModal from '../../shared/modals/ImportModal';
-import PersonImportConflictModal from '../PersonImportConflictModal';
 import { PersonData } from '../../../types/import/personImportTypes';
 import { Company } from '../../../types';
 
@@ -23,6 +22,7 @@ import {
   prepareDataForImport, 
   formatPersonsForAPI 
 } from './dataProcessing';
+import { normalizeTaxCode } from './constants';
 
 interface PersonImportProps {
   onImport: (persons: PersonData[], overwriteIds?: string[]) => Promise<void>;
@@ -44,12 +44,20 @@ const PersonImportRefactored: React.FC<PersonImportProps> = ({
   const [conflicts, setConflicts] = useState<{ [index: number]: ConflictInfo }>({});
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
 
-  // Inizializza tutte le righe come selezionate quando cambiano i dati di preview
+  // Normalizza i taxCode degli existingPersons (upper+trim) per confronti coerenti
+  const normalizedExistingPersons = useMemo(() => {
+    return existingPersons.map(p => ({
+      ...p,
+      taxCode: p.taxCode ? normalizeTaxCode(p.taxCode) : p.taxCode,
+    }));
+  }, [existingPersons]);
+
+  // Inizializza le righe selezionate solo se non già impostate
   useEffect(() => {
-    if (previewData.length > 0) {
+    if (previewData.length > 0 && selectedRows.size === 0) {
       setSelectedRows(new Set(Array.from({ length: previewData.length }, (_, i) => i)));
     }
-  }, [previewData]);
+  }, [previewData, selectedRows.size]);
 
   // Gestore per il cambio di selezione delle righe
   const handleRowSelectionChange = (newSelectedRows: Set<number>) => {
@@ -58,14 +66,14 @@ const PersonImportRefactored: React.FC<PersonImportProps> = ({
 
   // Funzione personalizzata per processare il file
   const customProcessFile = useCallback(async (file: File) => {
-    const result = await processPersonImportFile(file, existingCompanies, existingPersons);
+    const result = await processPersonImportFile(file, existingCompanies, normalizedExistingPersons);
     
     setConflicts(result.conflicts);
     setPreviewData(result.data);
     setSelectedRows(result.selectedRows);
     
     return result.data;
-  }, [existingCompanies, existingPersons]);
+  }, [existingCompanies, normalizedExistingPersons]);
 
   // Aggiorna la risoluzione di un conflitto
   const updateConflictResolution = (index: number, resolution: Partial<ConflictInfo>) => {
@@ -162,7 +170,7 @@ const PersonImportRefactored: React.FC<PersonImportProps> = ({
         onClose={onClose}
         processFile={customProcessFile}
         uniqueKey="taxCode"
-        existingData={existingPersons}
+        existingData={normalizedExistingPersons}
         previewColumns={PREVIEW_COLUMNS}
         validateRows={validatePersons}
         supportedFormats={['.csv']}
@@ -178,35 +186,10 @@ const PersonImportRefactored: React.FC<PersonImportProps> = ({
         onRowSelectionChange={handleRowSelectionChange}
         availableCompanies={existingCompanies}
         onCompanyChange={handleCompanyChange}
+        normalizeKey={normalizeTaxCode}
       />
       
-      {/* Modal per gestire i conflitti di duplicati */}
-      {Object.keys(conflicts).length > 0 && (
-        <PersonImportConflictModal
-          isOpen={Object.keys(conflicts).length > 0}
-          conflicts={Object.entries(conflicts).map(([index, conflictInfo]) => ({
-            person: previewData[parseInt(index)],
-            index: parseInt(index),
-            type: conflictInfo.type,
-            existingPerson: conflictInfo.existingPerson,
-            suggestedCompanies: conflictInfo.suggestedCompanies
-          }))}
-          onResolve={(resolutions) => {
-            // Converte le risoluzioni dal formato del modal al formato interno
-            resolutions.forEach(resolution => {
-              updateConflictResolution(resolution.index, {
-                resolution: resolution.action,
-                selectedCompanyId: resolution.companyId,
-                selectedCompanyName: resolution.companyName
-              });
-            });
-          }}
-          onClose={() => {
-            // Chiudi il modal dei conflitti ma mantieni aperto l'ImportModal
-          }}
-          existingCompanies={existingCompanies}
-        />
-      )}
+      {/* RIMOSSO: Modal per gestire i conflitti di duplicati (PersonImportConflictModal) */}
     </>
   );
 };

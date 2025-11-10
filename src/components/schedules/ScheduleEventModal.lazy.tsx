@@ -5,43 +5,16 @@ import { ErrorBoundary } from '../ui/ErrorBoundary';
 // Lazy load the heavy ScheduleEventModal component
 const ScheduleEventModalComponent = lazy(() => import('./ScheduleEventModal'));
 
-// Import types from the main component
-interface Training {
-  id: string | number;
-  title: string;
-  certifications?: string[];
-  duration?: string | number;
-}
-
-interface Trainer {
-  id: string | number;
-  firstName: string;
-  lastName: string;
-  certifications?: string[];
-}
-
-interface Company {
-  id: string | number;
-  ragioneSociale?: string;
-  name?: string;
-}
-
-interface Person {
-  id: string | number;
-  firstName: string;
-  lastName: string;
-  companyId: string | number;
-  company_id?: string | number;
-  company?: { id: string | number; name: string };
-  email?: string;
-  position?: string;
-}
+// Import shared types from utils
+type Training = import('./utils').Training;
+type Trainer = import('./utils').Trainer;
+type Person = import('./utils').Person;
 
 // Props interface (re-export from the original component)
 export interface ScheduleEventModalProps {
   trainings: Training[];
   trainers: Trainer[];
-  companies: Company[];
+  companies: import('../../types').Company[];
   persons: Person[];
   existingEvent?: Record<string, unknown>;
   onClose: () => void;

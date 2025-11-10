@@ -1,5 +1,14 @@
+export interface ImportResults {
+  results: {
+    created?: any[];
+    updated?: any[];
+    errors?: any[];
+    sitesCreated?: any[];
+  };
+}
+
 export interface CompanyImportProps {
-  onImport: (companies: CompanyData[], overwriteIds?: string[]) => Promise<void>;
+  onImport: (companies: CompanyData[], overwriteIds?: string[]) => Promise<ImportResults>;
   onClose: () => void;
   existingCompanies?: CompanyData[];
 }
@@ -26,6 +35,7 @@ export interface CompanyData {
   _isNewSite?: boolean;
   _isDuplicateSite?: boolean;
   _isNewCompanyWithSite?: boolean;
+  [key: string]: unknown; // Index signature per compatibilità con GenericImport
 }
 
 export interface ConflictModalProps {

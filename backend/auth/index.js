@@ -168,11 +168,15 @@ export async function initializeAuth() {
         try {
             await cleanupExpiredSessions();
         } catch (error) {
+            const msg = error?.message || '';
             // Prisma missing table error (commonly code P2021) or message indicating non-existing table
-            const isMissingTable = error?.code === 'P2021' || /does not exist/i.test(error?.message || '');
-            if (isMissingTable) {
-                logger.warn('Skipping session cleanup: refresh_tokens table not found. Proceeding without blocking startup.', {
+            const isMissingTable = error?.code === 'P2021' || /does not exist/i.test(msg);
+            // Database non raggiungibile (PrismaClientInitializationError o messaggi simili)
+            const isDbUnreachable = error?.name === 'PrismaClientInitializationError' || /Can't reach database server/i.test(msg);
+            if (isMissingTable || isDbUnreachable) {
+                logger.warn('Skipping session cleanup', {
                     component: 'auth-system',
+                    reason: isMissingTable ? 'refresh_tokens table not found' : 'database unreachable',
                     code: error?.code
                 });
             } else {

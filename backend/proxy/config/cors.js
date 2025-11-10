@@ -29,7 +29,9 @@ export const corsConfig = {
     'X-Tenant-ID',
     'cache-control',
     'pragma',
-    'expires'
+    'expires',
+    'X-Refresh-Token',
+    'x-refresh-token'
   ]
 };
 

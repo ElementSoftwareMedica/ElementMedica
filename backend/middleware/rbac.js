@@ -302,6 +302,66 @@ export class RBACService {
                             permissions['form_submissions:delete'] = true;
                             permissions['form_submissions:manage'] = true;
                             break;
+                        // Codici Sconto permissions
+                        case 'VIEW_CODICI_SCONTO':
+                            permissions['read:codici_sconto'] = true;
+                            permissions['codici_sconto:read'] = true;
+                            permissions['codici_sconto:view'] = true;
+                            break;
+                        case 'CREATE_CODICI_SCONTO':
+                            permissions['create:codici_sconto'] = true;
+                            permissions['codici_sconto:create'] = true;
+                            break;
+                        case 'EDIT_CODICI_SCONTO':
+                            permissions['update:codici_sconto'] = true;
+                            permissions['codici_sconto:edit'] = true;
+                            permissions['codici_sconto:update'] = true;
+                            break;
+                        case 'DELETE_CODICI_SCONTO':
+                            permissions['delete:codici_sconto'] = true;
+                            permissions['codici_sconto:delete'] = true;
+                            break;
+                        case 'MANAGE_CODICI_SCONTO':
+                            permissions['read:codici_sconto'] = true;
+                            permissions['create:codici_sconto'] = true;
+                            permissions['update:codici_sconto'] = true;
+                            permissions['delete:codici_sconto'] = true;
+                            permissions['codici_sconto:manage'] = true;
+                            break;
+                        // Preventivi permissions
+                        case 'VIEW_PREVENTIVI':
+                            permissions['read:preventivi'] = true;
+                            permissions['preventivi:read'] = true;
+                            permissions['preventivi:view'] = true;
+                            break;
+                        case 'CREATE_PREVENTIVI':
+                            permissions['create:preventivi'] = true;
+                            permissions['preventivi:create'] = true;
+                            break;
+                        case 'EDIT_PREVENTIVI':
+                            permissions['update:preventivi'] = true;
+                            permissions['preventivi:edit'] = true;
+                            permissions['preventivi:update'] = true;
+                            break;
+                        case 'DELETE_PREVENTIVI':
+                            permissions['delete:preventivi'] = true;
+                            permissions['preventivi:delete'] = true;
+                            break;
+                        case 'MANAGE_PREVENTIVI':
+                            permissions['read:preventivi'] = true;
+                            permissions['create:preventivi'] = true;
+                            permissions['update:preventivi'] = true;
+                            permissions['delete:preventivi'] = true;
+                            permissions['preventivi:manage'] = true;
+                            break;
+                        case 'GENERATE_PREVENTIVI_PDF':
+                            permissions['preventivi:generate_pdf'] = true;
+                            permissions['preventivi:pdf'] = true;
+                            break;
+                        case 'SEND_PREVENTIVI':
+                            permissions['preventivi:send'] = true;
+                            permissions['preventivi:email'] = true;
+                            break;
                         default:
                             // For any other permissions, use lowercase format
                             const [action, resource] = permission.toLowerCase().split('_');
@@ -367,6 +427,45 @@ export class RBACService {
                 permissions['form_submissions:delete'] = true;
                 permissions['form_submissions:manage'] = true;
                 permissions['form_submissions:export'] = true;
+                // Add courses permissions for admin (align with routes expectations)
+                permissions['courses:read'] = true;
+                permissions['courses:create'] = true;
+                permissions['courses:edit'] = true;
+                permissions['courses:update'] = true;
+                permissions['courses:delete'] = true;
+                // Add template permissions for admin
+                permissions['VIEW_TEMPLATES'] = true; // Direct mapping for middleware
+                permissions['CREATE_TEMPLATES'] = true; // Direct mapping for middleware
+                permissions['EDIT_TEMPLATES'] = true; // Direct mapping for middleware
+                permissions['DELETE_TEMPLATES'] = true; // Direct mapping for middleware
+                permissions['MANAGE_TEMPLATES'] = true; // Direct mapping for middleware
+                permissions['templates:read'] = true;
+                permissions['templates:create'] = true;
+                permissions['templates:edit'] = true;
+                permissions['templates:update'] = true;
+                permissions['templates:delete'] = true;
+                permissions['templates:manage'] = true;
+                permissions['templates:duplicate'] = true;
+                permissions['templates:view_versions'] = true;
+                permissions['templates:restore_version'] = true;
+                // Add Google integration permissions for admin
+                permissions['google:connect'] = true;
+                permissions['google:import'] = true;
+                permissions['google:manage'] = true;
+                // Add codici sconto permissions for admin
+                permissions['read:codici_sconto'] = true;
+                permissions['create:codici_sconto'] = true;
+                permissions['update:codici_sconto'] = true;
+                permissions['delete:codici_sconto'] = true;
+                permissions['codici_sconto:manage'] = true;
+                // Add preventivi permissions for admin
+                permissions['read:preventivi'] = true;
+                permissions['create:preventivi'] = true;
+                permissions['update:preventivi'] = true;
+                permissions['delete:preventivi'] = true;
+                permissions['preventivi:manage'] = true;
+                permissions['preventivi:generate_pdf'] = true;
+                permissions['preventivi:send'] = true;
             }
             
             return permissions;

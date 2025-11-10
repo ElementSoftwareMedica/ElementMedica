@@ -263,7 +263,8 @@ export function setupApiProxyRoutes(app) {
     createAuthLogger('companies-direct'),
     createApiProxy(apiTarget, {
       pathRewrite: {
-        '^/companies': '/api/v1/companies'
+        '^/companies': '/api/v1/companies',
+        '^/': '/api/v1/companies/'
       },
       enableLogging: true
     })
@@ -274,7 +275,8 @@ export function setupApiProxyRoutes(app) {
     createAuthLogger('companies'),
     createApiProxy(apiTarget, {
       pathRewrite: {
-        '^/api/companies': '/api/v1/companies'
+        '^/api/companies': '/api/v1/companies',
+        '^/': '/api/v1/companies/'
       },
       enableLogging: true
     })
@@ -352,6 +354,17 @@ export function setupApiProxyRoutes(app) {
     createApiProxy(apiTarget, {
       pathRewrite: {
         '^/api/persons': '/api/v1/persons'
+      },
+      enableLogging: true
+    })
+  );
+  
+  // Proxy diretto per /api/v1/persons (supporto esplicito alle nuove chiamate FE)
+  app.use('/api/v1/persons',
+    createAuthLogger('persons-v1'),
+    createApiProxy(apiTarget, {
+      pathRewrite: {
+        '^/api/v1/persons': '/api/v1/persons'
       },
       enableLogging: true
     })
@@ -442,7 +455,7 @@ export function setupApiProxyRoutes(app) {
     createAuthLogger('courses-api'),
     createApiProxy(apiTarget, {
       pathRewrite: {
-        '^/api/courses': '/api/courses'
+        '^/api/courses': '/api/v1/courses'
       },
       enableLogging: true
     })
@@ -464,8 +477,9 @@ export function setupApiProxyRoutes(app) {
     createAuthLogger('employees-api'),
     createApiProxy(apiTarget, {
       pathRewrite: {
-        '^/api/employees': '/api/employees'
+        '^/api/employees': '/api/v1/employees'
       },
+      requireAuth: true,
       enableLogging: true
     })
   );
@@ -475,7 +489,7 @@ export function setupApiProxyRoutes(app) {
     createAuthLogger('trainers-api'),
     createApiProxy(apiTarget, {
       pathRewrite: {
-        '^/api/trainers': '/api/trainers'
+        '^/api/trainers': '/api/v1/trainers'
       },
       enableLogging: true
     })
@@ -523,8 +537,9 @@ export function setupApiProxyRoutes(app) {
     createAuthLogger('employees-legacy'),
     createApiProxy(apiTarget, {
       pathRewrite: {
-        '^/employees': '/api/employees'
+        '^/employees': '/api/v1/employees'
       },
+      requireAuth: true,
       enableLogging: true
     })
   );
@@ -561,9 +576,9 @@ export function setupApiProxyRoutes(app) {
     console.log('   - Routes: /api/persons, /api/gdpr, /api/settings, /api/advanced-permissions');
     console.log('   - Routes: /api/counters, /api/dashboard/*');
     console.log('   - Routes: /api/v2, /api/tenants (in setupTenantRolesProxyRoutes)');
-    console.log('   - API Modern routes: /api/courses, /api/v1/courses, /api/employees, /api/trainers');
+    console.log('   - API Modern routes: /api/courses, /api/v1/courses, /api/employees -> /api/v1/employees, /api/trainers');
     console.log('   - AGGIUNTO: /api/v1/activity-logs, /api/activity-logs');
-    console.log('   - Legacy routes: /courses, /employees, /schedules, /users');
+    console.log('   - Legacy routes: /courses, /employees -> /api/v1/employees, /schedules, /users');
   }
 }
 
@@ -582,7 +597,7 @@ export function setupAuthProxyRoutes(app) {
       origin: process.env.FRONTEND_URL || 'http://localhost:5173',
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-ID', 'x-tenant-id']
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-ID', 'x-tenant-id', 'X-Refresh-Token', 'x-refresh-token']
     },
     '/api/v1/auth/login': {
       origin: process.env.FRONTEND_URL || 'http://localhost:5173',
@@ -606,13 +621,13 @@ export function setupAuthProxyRoutes(app) {
       origin: process.env.FRONTEND_URL || 'http://localhost:5173',
       credentials: true,
       methods: ['POST', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization']
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Refresh-Token', 'x-refresh-token']
     },
     '/api/auth/*': {
       origin: process.env.FRONTEND_URL || 'http://localhost:5173',
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-ID', 'x-tenant-id']
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-ID', 'x-tenant-id', 'X-Refresh-Token', 'x-refresh-token']
     },
     '/api/auth/verify': {
       origin: process.env.FRONTEND_URL || 'http://localhost:5173',
@@ -636,7 +651,7 @@ export function setupAuthProxyRoutes(app) {
       origin: process.env.FRONTEND_URL || 'http://localhost:5173',
       credentials: true,
       methods: ['POST', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization']
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Refresh-Token', 'x-refresh-token']
     }
   });
   

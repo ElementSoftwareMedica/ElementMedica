@@ -1,6 +1,6 @@
-// Mappatura degli header CSV ai campi del database - COMPLETA E SENZA DUPLICATI
+// Mappatura degli header CSV ai campi del database - COMPATTA (rimosse colonne legacy sedi)
 export const csvHeaderMap: Record<string, string> = {
-  // === CAMPI COMPANY (tutti i campi dello schema Prisma) ===
+  // === CAMPI COMPANY (schema Prisma) ===
   'Ragione Sociale': 'ragioneSociale',
   'Codice ATECO': 'codiceAteco',
   'P.IVA': 'piva',
@@ -8,14 +8,6 @@ export const csvHeaderMap: Record<string, string> = {
   'SDI': 'sdi',
   'PEC': 'pec',
   'IBAN': 'iban',
-  'Sede Azienda': 'sedeAzienda',
-  'Città': 'citta',
-  'Provincia': 'provincia',
-  'CAP': 'cap',
-  'Mail': 'mail',
-  'Telefono': 'telefono',
-  'Persona Riferimento': 'personaRiferimento',
-  'Persona di Riferimento': 'personaRiferimento', // Alias per compatibilità
   'Note': 'note',
   'Slug': 'slug',
   'Domain': 'domain',
@@ -46,48 +38,24 @@ export const csvHeaderMap: Record<string, string> = {
   'Prossimo Sopralluogo Medico': 'prossimoSopralluogoMedico',
   'Note Sopralluogo Medico': 'noteSopralluogoMedico',
   
-  // === ALIAS ALTERNATIVI INGLESI (senza duplicati) ===
-  'Company Name': 'companyName',
-  'ATECO Code': 'atecoCode',
-  'VAT Number': 'vatNumber',
-  'Tax Code': 'taxCode',
-  'Email': 'email',
-  'Phone': 'phone',
-  'City': 'city',
-  'Province': 'province',
-  'ZIP': 'zip',
-  'Address': 'address',
-  'Contact Person': 'contactPerson',
-  'Notes': 'notes',
-  'Active': 'active',
-  
-  // === CAMPI SITE SPECIFICI ===
-  'Site Name': 'siteName',
-  'Site Address': 'siteAddress',
-  'Site City': 'siteCity',
-  'Site Province': 'siteProvince',
-  'Site ZIP': 'siteZip',
-  'Site Contact': 'siteContact',
-  'Site Phone': 'sitePhone',
-  'Site Email': 'siteEmail',
-  'DVR Document': 'dvrDocument',
-  'Departments': 'departments',
-  'Reparti': 'reparti'
+  // === ALIAS INGLESI (mappati ai campi canonici) ===
+  'Company Name': 'ragioneSociale',
+  'ATECO Code': 'codiceAteco',
+  'VAT Number': 'piva',
+  'Tax Code': 'codiceFiscale',
+
+
+  'Notes': 'note'
 };
 
-// Ordine delle colonne per il modal di importazione
+// Ordine delle colonne per il modal di importazione (senza campi site legacy)
 export const columnOrder = [
   'ragioneSociale',
   'piva',
   'codiceFiscale',
   'codiceAteco',
-  'sedeAzienda',
-  'citta',
-  'provincia',
-  'cap',
-  'mail',
-  'telefono',
-  'personaRiferimento',
+
+  
   'siteName',
   'siteIndirizzo',
   'siteCitta',
@@ -105,9 +73,10 @@ export const columnOrder = [
 export const titleCaseFields = [
   'ragioneSociale',
   'sedeAzienda',
-  'citta',
-  'provincia',
-  'personaRiferimento',
+
+  
+
+  
   'siteName',
   'siteCitta',
   'siteProvincia',
@@ -123,13 +92,8 @@ export const apiFieldMap: Record<string, string> = {
   'sdi': 'sdi',
   'pec': 'pec',
   'iban': 'iban',
-  'sedeAzienda': 'address',
-  'citta': 'city',
-  'provincia': 'province',
-  'cap': 'postalCode',
-  'mail': 'email',
-  'telefono': 'phone',
-  'personaRiferimento': 'contactPerson',
+
+
   'note': 'notes',
   'slug': 'slug',
   'domain': 'domain',

@@ -4,7 +4,10 @@ import { useAuth } from '../../../context/AuthContext';
 import { useTenant } from '../../../context/TenantContext';
 import { logGdprAction, checkConsent } from '../../../utils/gdpr';
 import { dummyData } from '../../../data/dummyData';
-import type { Course } from '../../../types/course';
+import type { Course } from '../../../types';
+import { getTrainers } from '../../../services/trainers';
+import { getCompanies } from '../../../services/companies';
+import { getPersons } from '../../../services/persons';
 
 export interface DashboardCounters {
   companies: number;
@@ -154,7 +157,7 @@ export const useDashboardData = () => {
         hasPermission('dashboard', 'read') || 
         hasPermission('dashboard', 'view') || 
         hasPermission('companies', 'read') ||
-        hasPermission('administration', 'view')
+        hasPermission('schedules', 'read')
       );
       
       if (!hasDashboardAccess) {
@@ -164,16 +167,21 @@ export const useDashboardData = () => {
       // Fetch counters
       const countersData = await apiGet<DashboardCounters>('/api/counters');
       
-      // Fetch other data
-      const [coursesData, trainersData, schedulesData] = await Promise.allSettled([
+      // Fetch all data including companies and persons like SchedulesPage does
+      const [coursesData, trainersData, schedulesData, companiesData, personsData] = await Promise.allSettled([
         apiGet('/courses').catch(() => []),
-        apiGet('/trainers').catch(() => []),
-        apiGet('/api/v1/schedules').catch(() => [])
+        getTrainers().catch(() => []),
+        apiGet('/api/v1/schedules').catch(() => []),
+        getCompanies().catch(() => []),
+        getPersons({ limit: 1000, page: 1 }).catch(() => ({ persons: [] }))
       ]);
       
       const coursesResult = coursesData.status === 'fulfilled' ? (coursesData.value as Course[]) : [];
       const trainersResult = trainersData.status === 'fulfilled' ? (trainersData.value as DashboardTrainer[]) : [];
       const schedulesResult = schedulesData.status === 'fulfilled' ? (schedulesData.value as DashboardSchedule[]) : [];
+      const companiesResult = companiesData.status === 'fulfilled' ? (companiesData.value as DashboardCompany[]) : [];
+      const personsResult = personsData.status === 'fulfilled' ? 
+        ((personsData.value as any)?.persons ?? personsData.value) as DashboardEmployee[] : [];
       
       // Transform trainers data
       const transformedTrainers = trainersResult.map((trainer) => ({
@@ -182,11 +190,20 @@ export const useDashboardData = () => {
         lastName: trainer.lastName || ''
       }));
       
+      // Transform companies data to match expected format
+      const transformedCompanies = companiesResult.map((company: any) => ({
+        id: company.id,
+        name: company.name || company.ragioneSociale || '',
+        ragioneSociale: company.ragioneSociale || company.name || '',
+        employeeCount: company.employeeCount || 0,
+        sector: company.sector || ''
+      }));
+      
       if (mountedRef.current) {
         setCourses(coursesResult);
         setTrainers(transformedTrainers);
-        setCompanies([]);
-        setEmployees([]);
+        setCompanies(transformedCompanies);
+        setEmployees(personsResult);
         setSchedules(schedulesResult);
         setCounters(countersData);
         setDataSource('api');
@@ -202,6 +219,8 @@ export const useDashboardData = () => {
           recordCounts: {
             courses: coursesResult.length,
             trainers: transformedTrainers.length,
+            companies: transformedCompanies.length,
+            employees: personsResult.length,
             schedules: schedulesResult.length
           }
         }
@@ -253,6 +272,13 @@ export const useDashboardData = () => {
     loading,
     error,
     dataSource,
-    refetch: fetchData
+    data: {
+      courses,
+      trainers,
+      companies,
+      employees,
+      schedules
+    } as DashboardData,
+    refreshData: fetchData
   };
 };

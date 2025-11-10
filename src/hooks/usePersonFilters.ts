@@ -64,22 +64,85 @@ export const usePersonFilters = ({
     }
   }, [persons, filterType, filterConfig]);
 
+  // Helper per estrarre lista da possibili formati di risposta
+  const extractList = (resp: any): any[] => {
+    if (!resp) return [];
+    if (Array.isArray(resp)) return resp;
+    if (Array.isArray(resp?.persons)) return resp.persons; // Risposta paginata v1
+    if (Array.isArray(resp?.data?.persons)) return resp.data.persons; // Variante annidata
+    if (Array.isArray(resp?.data)) return resp.data; // Risposta con data: []
+    if (Array.isArray(resp?.items)) return resp.items; // Risposta con items: []
+    if (Array.isArray(resp?.results)) return resp.results; // Variante results: []
+    if (Array.isArray(resp?.rows)) return resp.rows; // Variante rows: []
+    return [];
+  };
+
+  // Normalizza alias dei campi lato frontend per consistenza (es. codiceFiscale/fiscalCode -> taxCode)
+  const mapAliases = (items: any[]): Person[] => {
+    return items.map((p: any) => {
+      // Preserva il valore se già presente, altrimenti usa alias conosciuti (camelCase e snake_case)
+      const taxCode = p.taxCode ?? p.codiceFiscale ?? p.fiscalCode ?? p.codice_fiscale ?? p.fiscal_code ?? p.cf;
+      return {
+        ...p,
+        ...(taxCode ? { taxCode } : {})
+      } as Person;
+    });
+  };
+
   // Fetch delle persone dal backend
   const fetchPersons = async (): Promise<void> => {
     try {
       setLoading(true);
       setError(null);
       
-      // Usa l'endpoint unificato per le persone con parametro includeDeleted
-      const params = includeDeleted ? '?includeDeleted=true' : '';
-      console.log(`🔍 usePersonFilters - Chiamando API: /api/v1/persons${params}`);
-      const data = await apiGet<Person[]>(`/api/v1/persons${params}`);
-      console.log(`🔍 usePersonFilters - Ricevuti ${data?.length || 0} elementi dall'API`);
-      console.log(`🔍 usePersonFilters - includeDeleted: ${includeDeleted}, filterType: ${filterType}`);
-      if (data && data.length > 0) {
-        console.log(`🔍 usePersonFilters - Primo elemento:`, data[0]);
+      // Costruzione parametri: includi soft-deleted quando richiesto
+      const LIMIT = 1000; // pagina ampia per l'import
+      const qs = new URLSearchParams();
+      if (includeDeleted) qs.set('includeDeleted', 'true');
+      qs.set('limit', String(LIMIT));
+      
+      // Strategia: per l'import recupera tutte le pagine finché disponibili
+      let page = 1;
+      let all: any[] = [];
+      let keepFetching = true;
+
+      while (keepFetching) {
+        qs.set('page', String(page));
+        const url = `/api/v1/persons${qs.toString() ? `?${qs.toString()}` : ''}`;
+
+        // Debug leggero
+        console.log(`usePersonFilters: fetching ${url}`);
+        const resp: any = await apiGet<any>(url);
+        const chunk = extractList(resp);
+
+        // Se l'API ignora la paginazione e restituisce sempre l'intera lista, evita duplicati
+        if (page === 1) {
+          all = chunk;
+        } else {
+          // Accoda evitando duplicati per id
+          const existingIds = new Set(all.map((x: any) => x.id));
+          const toAdd = chunk.filter((x: any) => x && !existingIds.has(x.id));
+          all = all.concat(toAdd);
+        }
+
+        // Condizioni di stop: nessun elemento o meno del limite previsto (ultima pagina)
+        if (!Array.isArray(chunk) || chunk.length < LIMIT || !includeDeleted) {
+          keepFetching = false;
+        } else {
+          page += 1;
+          // Failsafe: evita eccessivo numero di richieste
+          if (page > 25) keepFetching = false;
+        }
       }
-      setPersons(data || []);
+
+      const list: Person[] = mapAliases(all);
+
+      console.log(`usePersonFilters: fetched ${list.length} persons (includeDeleted=${includeDeleted}, filterType=${filterType})`);
+      if (list.length > 0) {
+        console.log('usePersonFilters: sample item', list[0]);
+      }
+
+      setPersons(list);
     } catch (err) {
       console.error('Error fetching persons:', err);
       setError(err instanceof Error ? err.message : 'Errore nel caricamento delle persone');

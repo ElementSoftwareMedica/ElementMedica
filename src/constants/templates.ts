@@ -14,7 +14,7 @@ export const FILE_FORMATS = [
 
 // Definisci i nomi delle entità
 export const ENTITY_LABELS = {
-  'scheduled-courses': 'Corsi Programmati',
+  'schedules': 'Corsi Programmati',
   'courses': 'Corsi',
   'trainers': 'Formatori',
   'employees': 'Dipendenti',
@@ -23,7 +23,7 @@ export const ENTITY_LABELS = {
 
 // Definisci i campi per ogni entità
 export const ENTITY_FIELDS = {
-  'scheduled-courses': [
+  'schedules': [
     { desc: 'Nome corso', placeholder: 'corso_nome' },
     { desc: 'Docente principale', placeholder: 'docente_nome' },
     { desc: 'Co-relatore/i', placeholder: 'co_relatori' },

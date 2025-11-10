@@ -94,7 +94,10 @@ describe('Authentication Tests', () => {
   describe('JWT Token Operations', () => {
     it('should generate JWT token', () => {
       const payload = { personId: 1, email: 'admin@example.com', role: 'admin' };
-      const secret = process.env.JWT_SECRET || 'test-secret';
+      const secret = process.env.JWT_SECRET;
+      if (!secret) {
+        throw new Error('JWT_SECRET non configurato per i test (.env.test)');
+      }
       
       const token = jwt.sign(payload, secret, { expiresIn: '1h' });
       
@@ -104,7 +107,10 @@ describe('Authentication Tests', () => {
 
     it('should verify valid JWT token', () => {
       const payload = { personId: 1, email: 'admin@example.com', role: 'admin' };
-      const secret = process.env.JWT_SECRET || 'test-secret';
+      const secret = process.env.JWT_SECRET;
+      if (!secret) {
+        throw new Error('JWT_SECRET non configurato per i test (.env.test)');
+      }
       
       const token = jwt.sign(payload, secret, { expiresIn: '1h' });
       const decoded = jwt.verify(token, secret);

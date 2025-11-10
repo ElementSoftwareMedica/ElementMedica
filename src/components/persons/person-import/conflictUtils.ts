@@ -4,6 +4,7 @@
 
 import { PersonData } from '../../../types/import/personImportTypes';
 import { Company } from '../../../types';
+import { normalizeTaxCode } from './constants';
 
 export interface ConflictInfo {
   type: 'duplicate' | 'invalid_company';
@@ -27,8 +28,9 @@ export const detectConflicts = (
   persons.forEach((person, index) => {
     // Controlla duplicati di codice fiscale
     if (person.taxCode) {
+      const personTC = normalizeTaxCode(person.taxCode);
       const existingPerson = existingPersons.find(ep => 
-        ep.taxCode && ep.taxCode.toLowerCase().trim() === person.taxCode!.toLowerCase().trim()
+        ep.taxCode && normalizeTaxCode(ep.taxCode) === personTC
       );
       
       if (existingPerson) {

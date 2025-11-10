@@ -30,13 +30,12 @@ export function formatCurrency(value: number, decimals = 2): string {
 }
 
 /**
- * Formatta un codice fiscale italiano in modo leggibile con spazi
- * (RSSMRA80A01H501Z -> RSS MRA 80A01 H501Z)
+ * Formatta un codice fiscale con spazi per leggibilità
  * @param cf - Codice fiscale da formattare
  * @returns Codice fiscale formattato con spazi
  */
-export function formatCodiceFiscale(cf: string): string {
-  if (!cf || cf.length !== 16) return cf || '';
+export function formatCodiceFiscale(cf: string | null | undefined): string {
+  if (!cf || typeof cf !== 'string' || cf.length !== 16) return cf || '';
   
   return `${cf.substring(0, 3)} ${cf.substring(3, 6)} ${cf.substring(6, 8)}${cf.substring(8, 10)} ${cf.substring(10, 15)}${cf.substring(15)}`.toUpperCase();
 }
@@ -47,8 +46,8 @@ export function formatCodiceFiscale(cf: string): string {
  * @param checkChecksum - Se true, verifica anche il carattere di controllo (default: true)
  * @returns True se il formato è valido, false altrimenti
  */
-export function isValidCodiceFiscale(cf: string, checkChecksum = true): boolean {
-  if (!cf) return false;
+export function isValidCodiceFiscale(cf: string | null | undefined, checkChecksum = true): boolean {
+  if (!cf || typeof cf !== 'string') return false;
   
   const normalizedCf = cf.toUpperCase().trim();
   

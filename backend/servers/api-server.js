@@ -61,10 +61,13 @@ import formTemplatesRoutes from '../routes/form-templates-routes.js';
 import advancedSubmissionsRoutes from '../routes/advanced-submissions-routes.js';
 import activityLogsRoutes from '../routes/activity-logs-routes.js';
 import templateRoutes from '../routes/template-routes.js';
+import googleAuthRoutes from '../routes/google-auth-routes.js';
 import documentRoutes from '../routes/document-routes.js';
 import lettereIncaricoRoutes from '../routes/lettere-incarico-routes.js';
 import registriPresenzeRoutes from '../routes/registri-presenze-routes.js';
 import attestatiRoutes from '../routes/attestati-routes.js';
+import preventiviRoutes from '../routes/preventivi-routes.js';
+import codiciScontoRoutes from '../routes/codici-sconto-routes.js';
 
 // Utils
 import { logger } from '../utils/logger.js';
@@ -597,6 +600,11 @@ class APIServer {
       v1Router.use('/templates', templateRoutes);
       logger.info('Template routes registered successfully');
       
+      // Registra route Google OAuth2
+      logger.info('Registering Google OAuth2 routes...');
+      v1Router.use('/google', googleAuthRoutes);
+      logger.info('Google OAuth2 routes registered successfully');
+      
       // Registra route document management
       logger.info('Registering document routes...');
       v1Router.use('/documents', documentRoutes);
@@ -616,6 +624,16 @@ class APIServer {
       logger.info('Registering attestati routes...');
       v1Router.use('/attestati', attestatiRoutes);
       logger.info('Attestati routes registered successfully');
+
+      // Registra route preventivi
+      logger.info('Registering preventivi routes...');
+      this.app.use('/api/preventivi', preventiviRoutes);
+      logger.info('Preventivi routes registered successfully');
+
+      // Registra route codici sconto
+      logger.info('Registering codici sconto routes...');
+      this.app.use('/api/codici-sconto', codiciScontoRoutes);
+      logger.info('Codici sconto routes registered successfully');
 
       // Registra route pubbliche
       logger.info('Registering public courses routes...');

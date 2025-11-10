@@ -1,226 +1,304 @@
-import { apiGet, apiDelete } from './api';
-import { API_ENDPOINTS } from '../config/api';
-
-interface Template {
-  id: string;
-  type: string;
-  url: string;
-  googleDocsUrl?: string;
-  isDefault?: boolean;
-}
-
-interface GenerateAttestatiResponse {
-  success: boolean;
-  message: string;
-  attestati: any[];
-  errors?: any[];
-}
-
-interface CheckExistingAttesatoResult {
-  exists: boolean;
-  attestatoId?: string;
-  name?: string;
-}
-
 /**
- * Attestati service for managing course certificates
+ * Attestati Service
+ * Service for certificate management with template system integration
  */
-const attestatiService = {
-  /**
-   * Get all attestati documents
-   */
-  async getAllAttestati() {
+
+import api from './api';
+
+export interface Attestato {
+  id: string;
+  personId: string;
+  fileName: string;
+  fileUrl: string;
+  generatedAt: string;
+  annoProgressivo: number;
+  numeroProgressivo: number;
+  scheduledCourseId: string;
+  templateId?: string;
+  templateVersion?: number;
+  markers?: Record<string, any>;
+  generatedBy?: string;
+  fileSize?: number;
+  tenantId: string;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt?: string | null;
+  person?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    cf: string;
+    email?: string;
+  };
+  scheduledCourse?: {
+    id: string;
+    course?: {
+      id: string;
+      title: string;
+      code?: string;
+      duration?: number;
+    };
+    trainer?: {
+      id: string;
+      firstName: string;
+      lastName: string;
+    };
+  };
+  template?: {
+    id: string;
+    name: string;
+    version: number;
+  };
+}
+
+export interface GenerateAttestatoParams {
+  scheduleId: string;
+  personId: string;
+  templateId?: string;
+  sendEmail?: boolean;
+  validityYears?: number;
+}
+
+export interface BatchGenerateParams {
+  scheduleId: string;
+  personIds: string[];
+  templateId?: string;
+  sendEmail?: boolean;
+  validityYears?: number;
+}
+
+export interface GenerateAttestatoResponse {
+  attestato: Attestato;
+  document: {
+    id: string;
+    type: string;
+    entityId: string;
+    templateId: string;
+    filePath: string;
+    fileUrl: string;
+  };
+  downloadUrl: string;
+}
+
+export interface BatchGenerateResponse {
+  batchId: string;
+  total: number;
+  success: number;
+  failed: number;
+  results: Array<{
+    success: boolean;
+    personId: string;
+    personName?: string;
+    attestatoId?: string;
+    downloadUrl?: string;
+    error?: string;
+  }>;
+  errors: Array<{
+    personId: string;
+    personName?: string;
+    error: string;
+  }>;
+}
+
+export interface SendEmailParams {
+  recipientEmail?: string;
+  subject?: string;
+  message?: string;
+}
+
+export interface ListAttestatiParams {
+  scheduleId?: string;
+  personId?: string;
+  year?: number;
+}
+
+class AttestatiService {
+  async list(params?: ListAttestatiParams): Promise<Attestato[]> {
     try {
-      return await apiGet(`/api${API_ENDPOINTS.ATTESTATI}`);
+      const queryParams = new URLSearchParams();
+      if (params?.scheduleId) queryParams.append('scheduleId', params.scheduleId);
+      if (params?.personId) queryParams.append('personId', params.personId);
+      if (params?.year) queryParams.append('year', params.year.toString());
+      const queryString = queryParams.toString();
+      const url = `/api/v1/attestati${queryString ? `?${queryString}` : ''}`;
+      const response = await api.get<Attestato[]>(url);
+      return response.data;
     } catch (error) {
-      console.error('Error fetching attestati:', error);
+      console.error('Error listing attestati:', error);
       throw error;
     }
-  },
-  
-  /**
-   * Check if attestato exists for a specific employee and course
-   */
-  async checkExistingAttestato(scheduledCourseId: string, employeeId: string): Promise<CheckExistingAttesatoResult> {
+  }
+
+  async get(id: string): Promise<Attestato> {
     try {
-      return await apiGet<CheckExistingAttesatoResult>(
-        `/api/attestati/check-existing?scheduledCourseId=${scheduledCourseId}&employeeId=${employeeId}`
-      );
+      const response = await api.get<Attestato>(`/api/v1/attestati/${id}`);
+      return response.data;
     } catch (error) {
-      console.error('Error checking for existing attestato:', error);
-      return { exists: false };
-    }
-  },
-  
-  /**
-   * Generate attestati for a scheduled course
-   */
-  async generateAttestati(scheduledCourseId: string, options: { 
-    templateId?: string, 
-    templateUrl?: string,
-    overwriteExisting?: boolean,
-    employeeIds?: string[]
-  } = {}) {
-    try {
-      console.log("generateAttestati called with options:", {
-        scheduledCourseId,
-        ...options
-      });
-      
-      // Get default template if none specified
-      let templateUrl = options.templateUrl;
-      let templateId = options.templateId;
-      
-      if (!templateUrl && !templateId) {
-        // Fetch available templates
-        const templates = await apiGet<Template[]>('/api/template-links');
-        const attestatoTemplate = templates.find((tpl) => tpl.type === 'attestato' && tpl.isDefault);
-        
-        if (!attestatoTemplate) {
-          throw new Error('Nessun template attestato configurato nelle impostazioni.');
-        }
-        
-        templateUrl = attestatoTemplate.url;
-        templateId = attestatoTemplate.id;
-      }
-      
-      // Build request data
-      const requestData: Record<string, any> = {
-        scheduledCourseId,
-        overwriteExisting: options.overwriteExisting || false
-      };
-      
-      // Add template info
-      if (templateUrl) {
-        requestData.templateUrl = templateUrl;
-      }
-      
-      if (templateId) {
-        requestData.templateId = templateId;
-      }
-      
-      // Add specific employees if provided - IMPORTANT: backend expects participantIds, not employeeIds
-      if (options.employeeIds && options.employeeIds.length > 0) {
-        requestData.participantIds = options.employeeIds; // Fixed parameter name
-        console.log(`Converting employeeIds to participantIds for ${options.employeeIds.length} employees`);
-      } else {
-        console.warn("No employeeIds provided in options - server will reject request");
-      }
-      
-      // Make API request
-      console.log("Sending attestati generation request:", requestData);
-      
-      // Make API request using centralized service
-      console.log("Sending attestati generation request:", requestData);
-      
-      try {
-        const response = await apiPost<GenerateAttestatiResponse>(
-          '/api/attestati/genera',
-          requestData
-        );
-        
-        console.log("Server responded with:", {
-          success: response.success,
-          message: response.message,
-          attestatiCount: response.attestati?.length || 0
-        });
-        
-        return response;
-      } catch (error: any) {
-        console.error('Error generating attestati:', error);
-        throw error;
-      }
-    } catch (error) {
-      console.error('Error generating attestati:', error);
+      console.error('Error getting attestato:', error);
       throw error;
     }
-  },
-  
-  /**
-   * Delete an attestato
-   */
-  async deleteAttestato(id: string) {
-    if (!id) {
-      throw new Error('ID attestato non valido');
-    }
-    
+  }
+
+  async generate(params: GenerateAttestatoParams): Promise<GenerateAttestatoResponse> {
     try {
-      console.log(`Attempting to delete attestato ${id}`);
-      const result = await apiDelete(`/api/attestati/${id}`);
-      console.log(`Successfully deleted attestato ${id}`);
-      return result;
-    } catch (error: any) {
+      const response = await api.post<GenerateAttestatoResponse>('/api/v1/attestati/generate', params);
+      return response.data;
+    } catch (error) {
+      console.error('Error generating attestato:', error);
+      throw error;
+    }
+  }
+
+  async generateBatch(params: BatchGenerateParams): Promise<BatchGenerateResponse> {
+    try {
+      const response = await api.post<BatchGenerateResponse>('/api/v1/attestati/generate-batch', params);
+      return response.data;
+    } catch (error) {
+      console.error('Error generating batch attestati:', error);
+      throw error;
+    }
+  }
+
+  async delete(id: string): Promise<{ message: string }> {
+    try {
+      const response = await api.delete<{ message: string }>(`/api/v1/attestati/${id}`);
+      return response.data;
+    } catch (error) {
       console.error('Error deleting attestato:', error);
-      throw new Error(`Errore durante l'eliminazione dell'attestato: ${error.message || error}`);
+      throw error;
     }
-  },
-  
-  /**
-   * Delete multiple attestati at once
-   */
-  async deleteMultipleAttestati(ids: string[]) {
-    if (!ids.length) {
-      throw new Error('Nessun attestato selezionato');
-    }
-    
+  }
+
+  async deleteMultipleAttestati(ids: string[]): Promise<{ success: boolean; message: string; failedCount?: number }> {
     try {
-      console.log(`Deleting ${ids.length} attestati`);
-      
-      // Define possible endpoints - using Vite proxy
-      const endpoints = [
-        `/api/attestati/delete-multiple`,
-        `/attestati/delete-multiple`
-      ];
-      
-      // Define different formats for the request payload that servers might expect
-      const payloadFormats = [
-        { ids },
-        { attestatoIds: ids },
-        { id: ids }
-      ];
-      
-      let lastError = null;
-      
-      // Try each endpoint with each payload format
-      for (const endpoint of endpoints) {
-        for (const payload of payloadFormats) {
-          try {
-            console.log(`Trying to delete multiple attestati with endpoint: ${endpoint} and payload:`, payload);
-            const response = await apiPost(endpoint, payload);
-            
-            console.log(`Successfully deleted attestati with endpoint: ${endpoint}`);
-            return response;
-          } catch (error: any) {
-            lastError = error;
-            console.warn(`Error with endpoint ${endpoint}:`, error.message || error);
-          }
-        }
-      }
-      
-      // If all batch endpoints failed, try deleting one by one
-      console.log('All batch deletion endpoints failed, trying to delete attestati one by one');
-      const results = await Promise.allSettled(ids.map(id => this.deleteAttestato(id)));
-      
-      const succeeded = results.filter(r => r.status === 'fulfilled').length;
-      const failed = results.filter(r => r.status === 'rejected').length;
-      
-      if (succeeded > 0) {
-        console.log(`Successfully deleted ${succeeded}/${ids.length} attestati individually`);
-        return { 
+      try {
+        const response = await api.post<{ success: boolean; message: string; deleted?: number }>('/api/v1/attestati/delete-batch', { ids });
+        return {
           success: true,
-          message: `Deleted ${succeeded}/${ids.length} attestati`,
-          failedCount: failed
+          message: response.data.message || `${response.data.deleted || ids.length} attestati eliminati`,
+          failedCount: 0
         };
+      } catch (batchError: any) {
+        if (batchError.response?.status === 404) {
+          // Fallback: sequential delete with delay to avoid rate limiting
+          const results: Array<{ status: 'fulfilled' | 'rejected' }> = [];
+          for (const id of ids) {
+            try {
+              await this.delete(id);
+              results.push({ status: 'fulfilled' });
+              // Delay 500ms between requests to avoid 429
+              if (ids.indexOf(id) < ids.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, 500));
+              }
+            } catch (err) {
+              results.push({ status: 'rejected' });
+            }
+          }
+          const succeeded = results.filter((r) => r.status === 'fulfilled').length;
+          const failed = results.filter((r) => r.status === 'rejected').length;
+          if (succeeded > 0) {
+            return { success: true, message: `Deleted ${succeeded}/${ids.length} attestati`, failedCount: failed };
+          }
+          throw new Error('Failed to delete any attestati');
+        }
+        throw batchError;
       }
-      
-      // Se arriviamo qui, tutti gli endpoint hanno fallito
-      console.error('Error deleting multiple attestati:', lastError);
-      throw lastError || new Error('Failed to delete attestati with all available endpoints');
     } catch (error) {
       console.error('Error in deleteMultipleAttestati:', error);
       throw error;
     }
   }
-};
 
+  async download(id: string): Promise<void> {
+    try {
+      const response = await api.get<Blob>(`/api/v1/attestati/${id}/download`, { responseType: 'blob' });
+      const blob = new Blob([response.data as BlobPart], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `attestato_${id}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading attestato:', error);
+      throw error;
+    }
+  }
+
+  getDownloadUrl(id: string): string {
+    return `/api/v1/attestati/${id}/download`;
+  }
+
+  async downloadZipBatch(attestatoIds: string[]): Promise<void> {
+    try {
+      const response = await api.post<Blob>('/api/v1/attestati/download-zip-batch', { attestatoIds }, { responseType: 'blob' });
+      const blob = new Blob([response.data as BlobPart], { type: 'application/zip' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `attestati_${new Date().getTime()}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading ZIP batch:', error);
+      throw error;
+    }
+  }
+
+  async sendEmail(id: string, params?: SendEmailParams): Promise<{ message: string; recipientEmail: string; attestatoId: string }> {
+    try {
+      const response = await api.post<{ message: string; recipientEmail: string; attestatoId: string }>(`/api/v1/attestati/${id}/send-email`, params || {});
+      return response.data;
+    } catch (error) {
+      console.error('Error sending attestato email:', error);
+      throw error;
+    }
+  }
+
+  async getStatistics(scheduleId: string): Promise<{ total: number; generated: number; pending: number; byYear: Record<number, number> }> {
+    try {
+      const attestati = await this.list({ scheduleId });
+      const byYear = attestati.reduce((acc, a) => {
+        const year = a.annoProgressivo;
+        acc[year] = (acc[year] || 0) + 1;
+        return acc;
+      }, {} as Record<number, number>);
+      return { total: attestati.length, generated: attestati.length, pending: 0, byYear };
+    } catch (error) {
+      console.error('Error getting attestati statistics:', error);
+      throw error;
+    }
+  }
+
+  async exists(scheduleId: string, personId: string): Promise<boolean> {
+    try {
+      const attestati = await this.list({ scheduleId, personId });
+      return attestati.length > 0;
+    } catch (error) {
+      console.error('Error checking attestato existence:', error);
+      return false;
+    }
+  }
+
+  async getForPersons(scheduleId: string, personIds: string[]): Promise<Map<string, Attestato | null>> {
+    try {
+      const attestati = await this.list({ scheduleId });
+      const map = new Map<string, Attestato | null>();
+      personIds.forEach((personId) => {
+        const attestato = attestati.find((a) => a.personId === personId);
+        map.set(personId, attestato || null);
+      });
+      return map;
+    } catch (error) {
+      console.error('Error getting attestati for persons:', error);
+      throw error;
+    }
+  }
+}
+
+const attestatiService = new AttestatiService();
 export default attestatiService;

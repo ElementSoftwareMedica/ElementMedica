@@ -4,7 +4,7 @@
  */
 
 import { JWTService } from './jwt.js';
-import jwt from 'jsonwebtoken';
+// removed: import jwt from 'jsonwebtoken';
 import logger from '../utils/logger.js';
 
 import prisma from '../config/prisma-optimization.js';
@@ -51,35 +51,7 @@ export function authenticate(options = {}) {
             }
             
             // Verify JWT token
-            let decoded;
-            
-            try {
-                decoded = JWTService.verifyAccessToken(token);
-            } catch (jwtError) {
-                // Fallback to direct jwt verification for authService tokens
-                const secretsToTry = [
-                    process.env.JWT_SECRET,
-                    'your-super-secret-jwt-key-change-this-in-production',
-                    'super-secret-jwt-key-for-development-change-in-production-2024'
-                ].filter(Boolean);
-                
-                let lastError = jwtError;
-                for (const secret of secretsToTry) {
-                    try {
-                        decoded = jwt.verify(token, secret, {
-                            issuer: 'training-platform',
-                            audience: 'training-platform-users'
-                        });
-                        break; // Success, exit loop
-                    } catch (fallbackError) {
-                        lastError = fallbackError;
-                    }
-                }
-                
-                if (!decoded) {
-                    throw lastError; // Throw last error if all attempts failed
-                }
-            }
+            const decoded = JWTService.verifyAccessToken(token);
             
             const person = await prisma.person.findUnique({
                 where: { id: decoded.personId },
@@ -91,6 +63,7 @@ export function authenticate(options = {}) {
                     lastName: true,
                     companyId: true,
                     tenantId: true,
+                    globalRole: true,
                     status: true,
                     deletedAt: true,
                     lockedUntil: true
@@ -145,6 +118,11 @@ export function authenticate(options = {}) {
             
             // Extract roles and permissions
             const roles = personRoles.map(pr => pr.roleType);
+            
+            // Add globalRole if set (takes precedence)
+            if (person.globalRole && !roles.includes(person.globalRole)) {
+                roles.push(person.globalRole);
+            }
             
             // Load permissions for admin users to avoid authorization issues
             let permissions = [];

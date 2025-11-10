@@ -58,6 +58,9 @@ export interface GDPREntityTemplateProps<T extends Record<string, any> & { id: s
       }>;
   sortOptions?: Array<{ key: string; label: string }>;
   
+  // Parametri di query statici per filtrare lato backend (es. roleType)
+  staticQueryParams?: Record<string, string | number | boolean>;
+  
   // Configurazione CSV
   csvHeaders: Array<{ key: string; label: string }> | Record<string, string>;
   csvTemplateData?: Record<string, any>[];
@@ -117,6 +120,7 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
   searchFields,
   filterOptions = [],
   sortOptions = [],
+  staticQueryParams,
   csvHeaders,
   csvTemplateData,
   onCreateEntity,
@@ -147,7 +151,7 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
     apiEndpoint,
     entityNamePlural,
     entityDisplayNamePlural,
-    readPermission
+    staticQueryParams
   });
   
   const operations = useGDPREntityOperations({

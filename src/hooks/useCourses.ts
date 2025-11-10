@@ -12,7 +12,7 @@ export interface CourseInsert {
   code?: string;
   pricePerPerson?: number;
   maxPeople?: number;
-  renewalDuration?: string;
+  practicalHours?: number;
   regulation?: string;
   certifications?: string;
   contents?: string;
@@ -28,7 +28,7 @@ export interface CourseUpdate {
   code?: string;
   pricePerPerson?: number;
   maxPeople?: number;
-  renewalDuration?: string;
+  practicalHours?: number;
   regulation?: string;
   certifications?: string;
   contents?: string;

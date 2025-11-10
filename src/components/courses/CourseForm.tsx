@@ -33,7 +33,7 @@ export const CourseForm: React.FC<CourseFormProps> = ({
     description: course?.description || '',
     duration: course?.duration?.toString() || '',
     validityYears: course?.validityYears?.toString() || '',
-    renewalDuration: course?.renewalDuration || '',
+    practicalHours: course?.practicalHours || 0,
     pricePerPerson: course?.pricePerPerson?.toString() || '',
     certifications: course?.certifications || '',
     maxPeople: course?.maxPeople?.toString() || '',
@@ -63,12 +63,16 @@ export const CourseForm: React.FC<CourseFormProps> = ({
     try {
       const payload = {
         ...formData,
-        duration: formData.duration ? Number(formData.duration) : 0,
+        // duration come stringa normalizzata (coerente con backend)
+        duration: formData.duration && formData.duration.trim() !== '' ? formData.duration.trim() : undefined,
         validityYears: formData.validityYears ? Number(formData.validityYears) : undefined,
         pricePerPerson: formData.pricePerPerson ? Number(formData.pricePerPerson) : undefined,
         maxPeople: formData.maxPeople ? Number(formData.maxPeople) : undefined,
         riskLevel: formData.riskLevel && formData.riskLevel !== '' ? formData.riskLevel as Course['riskLevel'] : undefined,
         courseType: formData.courseType && formData.courseType !== '' ? formData.courseType as Course['courseType'] : undefined,
+        // Normalizza identificativi opzionali
+        code: formData.code && formData.code.trim() !== '' ? formData.code.trim() : undefined,
+        slug: formData.slug && formData.slug.trim() !== '' ? formData.slug.trim() : undefined,
       };
       
       if (course) {
@@ -216,15 +220,16 @@ export const CourseForm: React.FC<CourseFormProps> = ({
             
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Durata corso aggiornamento
+                Ore formazione pratica
               </label>
               <input
-                type="text"
-                name="renewalDuration"
-                value={formData.renewalDuration}
+                type="number"
+                name="practicalHours"
+                value={formData.practicalHours}
                 onChange={handleChange}
+                min="0"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-                placeholder="Es: 4 ore"
+                placeholder="Es: 4"
               />
             </div>
           </div>

@@ -10,24 +10,41 @@ import {
   FileText,
   Mail,
   MapPin,
-  Phone
+  Phone,
+  GraduationCap
 } from 'lucide-react';
-import { apiGet } from '../../services/api';
+import { getTrainerById, Trainer } from '../../services/trainers';
 
 const TAX_CODE_REGEX = /^[a-zA-Z]{6}[0-9]{2}[abcdehlmprstABCDEHLMPRST]{1}[0-9]{2}([a-zA-Z]{1}[0-9]{3})[a-zA-Z]{1}$/;
 
+interface ExtendedTrainer extends Trainer {
+  tax_code?: string;
+  vat_number?: string;
+  tariffa_oraria?: number;
+  register_code?: string;
+  iban?: string;
+  residenceAddress?: string;
+  residenceCity?: string;
+  province?: string;
+  postalCode?: string;
+  birthDate?: string;
+  notes?: string;
+}
+
 const TrainerDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const [trainer, setTrainer] = useState<any>(null);
+  const [trainer, setTrainer] = useState<ExtendedTrainer | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchData() {
       setLoading(true);
       try {
-        const trainerData = await apiGet(`/trainers/${id}`);
-        setTrainer(trainerData);
-      } catch (err) {
+        if (!id) throw new Error('Missing trainer id');
+        const trainerData = await getTrainerById(id);
+        setTrainer(trainerData as ExtendedTrainer);
+      } catch (error) {
+        console.error(error);
         setTrainer(null);
       } finally {
         setLoading(false);

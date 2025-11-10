@@ -4,6 +4,7 @@ import ImportPreviewTable, { ImportPreviewColumn, ConflictInfo } from '../Import
 import Button from '../../../design-system/atoms/Button/Button';
 import ErrorDisplay from '../ErrorDisplay';
 import CSVFormatError from '../CSVFormatError';
+import { createPortal } from 'react-dom';
 
 export interface ImportModalProps<T> {
   /** Titolo del modale (es. "Importa Aziende") */
@@ -52,6 +53,8 @@ export interface ImportModalProps<T> {
   selectedRows?: Set<number>;
   /** Callback per gestire la selezione delle righe */
   onRowSelectionChange?: (selectedRows: Set<number>) => void;
+  /** Funzione per normalizzare la chiave unica per il confronto duplicati */
+  normalizeKey?: (value: any) => string;
 }
 
 /**
@@ -80,7 +83,8 @@ export default function ImportModal<T extends Record<string, any>>({
   conflicts,
   onConflictResolutionChange,
   selectedRows,
-  onRowSelectionChange
+  onRowSelectionChange,
+  normalizeKey
 }: ImportModalProps<T>) {
   const [dragActive, setDragActive] = useState(false);
   const [error, setError] = useState<string>('');
@@ -92,6 +96,16 @@ export default function ImportModal<T extends Record<string, any>>({
   const [expectedHeaders, setExpectedHeaders] = useState<string[]>([]);
   const [foundHeaders, setFoundHeaders] = useState<string[]>([]);
 
+  // Normalizzazione centralizzata della chiave unica
+  const normalizeKeyFn = (v: any) => (normalizeKey ? normalizeKey(v) : String(v ?? '').toLowerCase().trim());
+  const norm = (v: any) => normalizeKeyFn(v);
+
+  // Handler interno: aggiorna lo stato locale e propaga verso l'alto
+  const handleOverwriteChangeInternal = (selected: string[]) => {
+    setOverwriteIds(selected);
+    if (onOverwriteChange) onOverwriteChange(selected);
+  };
+
   // Aggiorna la preview quando cambiano i dati iniziali
   React.useEffect(() => {
     if (initialPreviewData && initialPreviewData.length > 0) {
@@ -99,6 +113,12 @@ export default function ImportModal<T extends Record<string, any>>({
       if (validateRows) {
         const errors = validateRows(initialPreviewData);
         setRowErrors(errors);
+        // Auto-deseleziona le righe con errori per permettere import parziale dei soli record validi
+        if (onRowSelectionChange) {
+          const errorIdx = new Set(Object.keys(errors).map((k) => Number(k)));
+          const validIdx = initialPreviewData.map((_, i) => i).filter((i) => !errorIdx.has(i));
+          onRowSelectionChange(new Set(validIdx));
+        }
       }
     }
   }, [initialPreviewData, validateRows]);
@@ -180,6 +200,13 @@ export default function ImportModal<T extends Record<string, any>>({
         const errors = validateRows(processedData);
         setRowErrors(errors);
         
+        // Auto-deseleziona le righe con errori per permettere import parziale
+        if (onRowSelectionChange) {
+          const errorIdx = new Set(Object.keys(errors).map((k) => Number(k)));
+          const validIdx = processedData.map((_, i) => i).filter((i) => !errorIdx.has(i));
+          onRowSelectionChange(new Set(validIdx));
+        }
+        
         // Se ci sono errori in tutte le righe, potrebbe indicare un problema di formato
         const rowCount = processedData.length;
         const errorCount = Object.keys(errors).length;
@@ -238,15 +265,13 @@ export default function ImportModal<T extends Record<string, any>>({
   const handleImport = async () => {
     if (preview.length === 0) return;
     
-    // Se ci sono errori di validazione, non procedere con l'importazione
-    if (Object.keys(rowErrors).length > 0) {
-      setError('Ci sono errori nei dati. Correggi il file e riprova.');
-      return;
-    }
-    
-    // Verifica che ci siano righe selezionate per l'importazione
-    if (selectedRows && selectedRows.size === 0) {
-      setError('Nessuna riga selezionata per l\'importazione');
+    // Calcola le righe selezionate valide (esclude quelle con errori)
+    const allIdx = preview.map((_, i) => i);
+    const selected = selectedRows ? Array.from(selectedRows) : allIdx;
+    const validSelected = selected.filter((i) => !rowErrors[i]);
+
+    if (validSelected.length === 0) {
+      setError('Nessuna riga valida selezionata per l\'importazione');
       return;
     }
     
@@ -254,8 +279,8 @@ export default function ImportModal<T extends Record<string, any>>({
     setError('');
     
     try {
-      // Passa anche le righe selezionate alla funzione di importazione
-      await onImport(preview, overwriteIds, selectedRows);
+      // Passa anche le righe selezionate (solo quelle valide) alla funzione di importazione
+      await onImport(preview, overwriteIds, new Set(validSelected));
       // Non chiamiamo onClose qui, lo lasciamo gestire al chiamante in base al risultato
     } catch (err) {
       console.error('Errore durante l\'importazione:', err);
@@ -283,9 +308,8 @@ export default function ImportModal<T extends Record<string, any>>({
           if (index < preview.length) {
             const item = preview[index];
             const isExisting = item[uniqueKey] && existingData.some(e => {
-              const itemValue = String(item[uniqueKey] || '').trim().toUpperCase();
-              const existingValue = String(e[uniqueKey] || '').trim().toUpperCase();
-              return itemValue === existingValue;
+              const itemValueNorm = norm(item[uniqueKey]);
+              return norm(e[uniqueKey]) === itemValueNorm;
             });
             
             if (isExisting) {
@@ -316,10 +340,7 @@ export default function ImportModal<T extends Record<string, any>>({
         // Numero di elementi che sono nuovi (non duplicati)
         const nonDuplicateCount = preview.filter(item => 
           !item[uniqueKey] || !existingData.some(e => {
-            // Normalizza i valori per il confronto
-            const itemValue = String(item[uniqueKey] || '').trim().toUpperCase();
-            const existingValue = String(e[uniqueKey] || '').trim().toUpperCase();
-            return itemValue === existingValue;
+            return norm(e[uniqueKey]) === norm(item[uniqueKey]);
           })
         ).length;
         
@@ -341,8 +362,8 @@ export default function ImportModal<T extends Record<string, any>>({
     return `Importa tutti (${preview.length})`;
   };
 
-  return (
-    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black bg-opacity-30 p-4">
+  return createPortal(
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black bg-opacity-30 p-4" role="dialog" aria-modal="true">
       <div className="bg-white rounded-2xl shadow-xl max-w-6xl w-full mx-auto flex flex-col max-h-[90vh]">
         {/* Header fisso */}
         <div className="flex justify-between items-center p-6 border-b border-gray-200 flex-shrink-0">
@@ -432,7 +453,7 @@ export default function ImportModal<T extends Record<string, any>>({
                 existing={existingData}
                 uniqueKey={uniqueKey}
                 rowErrors={rowErrors}
-                onOverwriteChange={setOverwriteIds}
+                onOverwriteChange={handleOverwriteChangeInternal}
                 showBulkSelectButtons={showBulkSelectButtons}
                 useSingleCheckboxColumn={useSingleCheckboxColumn}
                 availableCompanies={availableCompanies}
@@ -442,6 +463,7 @@ export default function ImportModal<T extends Record<string, any>>({
                 onConflictResolutionChange={onConflictResolutionChange}
                 selectedRows={selectedRows}
                 onRowSelectionChange={onRowSelectionChange}
+                normalizeKey={normalizeKey}
               />
             )}
           </div>
@@ -460,12 +482,13 @@ export default function ImportModal<T extends Record<string, any>>({
           <Button
             onClick={handleImport}
             variant="primary"
-            disabled={preview.length === 0 || importing || Object.keys(rowErrors).length > 0}
+            disabled={preview.length === 0 || importing}
           >
             {getImportButtonText()}
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

@@ -47,7 +47,7 @@ graph TB
         MAIN["Main Server<br/>Port: 4001"]
         API["API Server<br/>Port: 4001"]
         DOCS["Documents Server<br/>Port: 4002"]
-        PROXY["Proxy Server<br/>Port: 8888"]
+        PROXY["Proxy Server<br/>Port: 4003"]
     end
     
     subgraph "Data Layer"
@@ -108,7 +108,7 @@ graph TB
 
 ### Backend Layer Ottimizzato
 
-#### Proxy Server (Port 8888) - OTTIMIZZATO (Progetto 16)
+#### Proxy Server (Port 4003) - OTTIMIZZATO (Progetto 16)
 - **Ruolo:** Load balancer e reverse proxy ottimizzato
 - **Tecnologie:** Node.js, Express modulare
 - **Responsabilità:**

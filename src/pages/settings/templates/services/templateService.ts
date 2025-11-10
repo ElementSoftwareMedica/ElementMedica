@@ -4,6 +4,7 @@
  */
 
 import axios from 'axios';
+import { API_BASE_URL } from '../../../../config/api';
 import type {
   Template,
   TemplateListResponse,
@@ -14,9 +15,8 @@ import type {
   TemplateVersion,
 } from '../types/template.types';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4001';
-
 // Create axios instance with default config
+// Uses centralized API_BASE_URL which routes through proxy (port 4003) in development
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {

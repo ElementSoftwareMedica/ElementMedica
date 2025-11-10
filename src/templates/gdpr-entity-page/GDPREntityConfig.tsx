@@ -13,6 +13,7 @@ import {
   Trash2,
   Users
 } from 'lucide-react';
+import { Course } from '../../types/courses';
 
 /**
  * Configurazioni predefinite per il template GDPR Entity
@@ -111,7 +112,7 @@ export const companiesConfig: GDPREntityConfig<Company> = {
 };
 
 // Configurazione per Courses
-export const coursesConfig: Partial<GDPREntityTemplateProps<any>> = {
+export const coursesConfig: GDPREntityConfig<Course> = {
   entityName: 'course',
   entityNamePlural: 'courses',
   entityDisplayName: 'Corso',
@@ -129,6 +130,26 @@ export const coursesConfig: Partial<GDPREntityTemplateProps<any>> = {
         options: [] // Sarà popolato dinamicamente
       },
       {
+        key: 'riskLevel',
+        label: 'Livello di Rischio',
+        options: [
+          { label: 'Alto', value: 'ALTO' },
+          { label: 'Medio', value: 'MEDIO' },
+          { label: 'Basso', value: 'BASSO' },
+          { label: 'A', value: 'A' },
+          { label: 'B', value: 'B' },
+          { label: 'C', value: 'C' }
+        ]
+      },
+      {
+        key: 'courseType',
+        label: 'Tipo Corso',
+        options: [
+          { label: 'Primo Corso', value: 'PRIMO_CORSO' },
+          { label: 'Aggiornamento', value: 'AGGIORNAMENTO' }
+        ]
+      },
+      {
         key: 'duration',
         label: 'Durata',
         options: [
@@ -141,6 +162,9 @@ export const coursesConfig: Partial<GDPREntityTemplateProps<any>> = {
   sortOptions: [
     { key: 'title', label: 'Titolo (A-Z)' },
     { key: 'title', label: 'Titolo (Z-A)' },
+    { key: 'category', label: 'Categoria' },
+    { key: 'riskLevel', label: 'Livello Rischio' },
+    { key: 'courseType', label: 'Tipo Corso' },
     { key: 'duration', label: 'Durata (crescente)' },
     { key: 'duration', label: 'Durata (decrescente)' }
   ],
@@ -148,6 +172,8 @@ export const coursesConfig: Partial<GDPREntityTemplateProps<any>> = {
     'title': 'Corso',
     'code': 'Codice',
     'category': 'Categoria',
+    'riskLevel': 'LivelloRischio',
+    'courseType': 'TipoCorso',
     'duration': 'DurataCorso',
     'validityYears': 'AnniValidita',
     'renewalDuration': 'DurataCorsoAggiornamento',
@@ -162,6 +188,8 @@ export const coursesConfig: Partial<GDPREntityTemplateProps<any>> = {
     'Corso': 'Nome del corso',
     'Codice': 'ABC123',
     'Categoria': 'Categoria corso',
+    'LivelloRischio': 'BASSO',
+    'TipoCorso': 'PRIMO_CORSO',
     'DurataCorso': '8',
     'AnniValidita': '5',
     'DurataCorsoAggiornamento': '4',

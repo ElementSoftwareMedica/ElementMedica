@@ -1,8 +1,10 @@
 import React, { useEffect, useRef } from 'react';
 import { 
+  Copy,
   Edit,
   FileOutput,
   FileText,
+  History,
   Settings,
   Star,
   Trash2
@@ -17,6 +19,8 @@ interface TemplateActionDropdownProps {
   onEditProperties: (template: Template) => void;
   onSetAsDefault: (id: string, type: string) => void;
   onRemove: (id: string) => void;
+  onDuplicate?: (template: Template) => void;
+  onViewVersions?: (template: Template) => void;
   onExportPdf?: (template: Template) => void;
   onExportDocx?: (template: Template) => void;
   buttonRef: React.RefObject<HTMLButtonElement>;
@@ -30,6 +34,8 @@ export const TemplateActionDropdown: React.FC<TemplateActionDropdownProps> = ({
   onEditProperties,
   onSetAsDefault,
   onRemove,
+  onDuplicate,
+  onViewVersions,
   onExportPdf,
   onExportDocx,
   buttonRef
@@ -99,6 +105,32 @@ export const TemplateActionDropdown: React.FC<TemplateActionDropdownProps> = ({
           <Star className="w-4 h-4 mr-2 text-yellow-500" />
           Imposta come Predefinito
         </button>
+        
+        {onDuplicate && (
+          <button
+            onClick={() => {
+              onDuplicate(template);
+              toggleDropdown();
+            }}
+            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+          >
+            <Copy className="w-4 h-4 mr-2 text-purple-500" />
+            Duplica Template
+          </button>
+        )}
+        
+        {onViewVersions && (
+          <button
+            onClick={() => {
+              onViewVersions(template);
+              toggleDropdown();
+            }}
+            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+          >
+            <History className="w-4 h-4 mr-2 text-indigo-500" />
+            Storico Versioni
+          </button>
+        )}
         
         {onExportPdf && (
           <button

@@ -1,5 +1,7 @@
 # 🗺️ Roadmap Dettagliata - Riorganizzazione Project 2.0
 
+> Nota storica: questo documento riflette lo stato all'epoca (es. Proxy 8888, Frontend 3000). Oggi le porte sono fisse: API 4001, Proxy 4003, Frontend 5173. Per le istruzioni operative aggiornate fare riferimento a docs/technical/deployment/deployment-guide.md e docs/technical/architecture/.
+
 ## Fase 1: Analisi e Pianificazione Dettagliata (2-3 settimane)
 
 ### Week 1: Analisi Architettura Attuale ✅ COMPLETATA

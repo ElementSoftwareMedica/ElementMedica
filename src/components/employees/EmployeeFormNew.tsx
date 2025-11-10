@@ -44,6 +44,8 @@ interface PersonFormNewProps {
   onSuccess: () => void;
   /** Callback chiamata alla chiusura del form */
   onClose: () => void;
+  /** RoleType per controllare visibilità sezioni */
+  roleType?: string;
 }
 
 /**
@@ -80,6 +82,7 @@ const EmployeeFormNew: React.FC<PersonFormNewProps> = ({
   companies,
   onSuccess,
   onClose,
+  roleType = 'EMPLOYEE',
 }) => {
   // Stato per i dati del form
   const [formData, setFormData] = useState({
@@ -220,8 +223,9 @@ const EmployeeFormNew: React.FC<PersonFormNewProps> = ({
       newErrors.codiceFiscale = 'Formato Codice Fiscale non valido';
     }
     
-    if (!formData.companyId) {
-      newErrors.companyId = 'L\'Azienda è obbligatoria';
+    // L'azienda è obbligatoria solo per EMPLOYEE
+    if (roleType === 'EMPLOYEE' && !formData.companyId) {
+      newErrors.companyId = "L'Azienda è obbligatoria";
     }
     
     // Validazione email
@@ -248,6 +252,7 @@ const EmployeeFormNew: React.FC<PersonFormNewProps> = ({
       // Prepara i dati da inviare
       const payload = {
         ...formData,
+        roleType,
         birthDate: formatDateForPrisma(formData.birthDate),
         hiredDate: formatDateForPrisma(formData.hiredDate),
       };
@@ -384,59 +389,61 @@ const EmployeeFormNew: React.FC<PersonFormNewProps> = ({
         </EntityFormGrid>
       </EntityFormSection>
       
-          <EntityFormSection title="Lavoro" description="Informazioni lavorative della persona">
-        <EntityFormGrid columns={2}>
-          <EntityFormField
-            name="companyId"
-            label="Azienda"
-            type="select"
-            value={formData.companyId}
-            onChange={handleChange}
-            required
-                leftIcon={<Building size={18} />}
-            error={errors.companyId}
-            options={companies.map(company => ({
-              value: company.id,
-              label: company.ragioneSociale
-            }))}
-          />
-          
-          <EntityFormField
-            name="title"
-                label="Ruolo / Mansione"
-            value={formData.title}
-            onChange={handleChange}
-            leftIcon={<Briefcase size={18} />}
-            error={errors.title}
-          />
-          
-          <EntityFormField
-            name="hiredDate"
-            label="Data Assunzione"
-            type="date"
-            value={formData.hiredDate}
-            onChange={handleChange}
-            leftIcon={<Calendar size={18} />}
-            error={errors.hiredDate}
-          />
-          
-          <EntityFormField
-            name="status"
-            label="Stato"
-            type="select"
-            value={formData.status}
-            onChange={handleChange}
-                leftIcon={<User size={18} />}
-                error={errors.status}
-            options={[
-              { value: 'ACTIVE', label: 'Attivo' },
-              { value: 'INACTIVE', label: 'Inattivo' },
-                  { value: 'SUSPENDED', label: 'In Aspettativa' },
-                  { value: 'TERMINATED', label: 'Cessato' }
-            ]}
-          />
-        </EntityFormGrid>
-      </EntityFormSection>
+          {roleType === 'EMPLOYEE' && (
+            <EntityFormSection title="Lavoro" description="Informazioni lavorative della persona">
+              <EntityFormGrid columns={2}>
+                <EntityFormField
+                  name="companyId"
+                  label="Azienda"
+                  type="select"
+                  value={formData.companyId}
+                  onChange={handleChange}
+                  required={roleType === 'EMPLOYEE'}
+                  leftIcon={<Building size={18} />}
+                  error={errors.companyId}
+                  options={companies.map(company => ({
+                    value: company.id,
+                    label: company.ragioneSociale
+                  }))}
+                />
+                
+                <EntityFormField
+                  name="title"
+                  label="Ruolo / Mansione"
+                  value={formData.title}
+                  onChange={handleChange}
+                  leftIcon={<Briefcase size={18} />}
+                  error={errors.title}
+                />
+                
+                <EntityFormField
+                  name="hiredDate"
+                  label="Data Assunzione"
+                  type="date"
+                  value={formData.hiredDate}
+                  onChange={handleChange}
+                  leftIcon={<Calendar size={18} />}
+                  error={errors.hiredDate}
+                />
+                
+                <EntityFormField
+                  name="status"
+                  label="Stato"
+                  type="select"
+                  value={formData.status}
+                  onChange={handleChange}
+                  leftIcon={<User size={18} />}
+                  error={errors.status}
+                  options={[
+                    { value: 'ACTIVE', label: 'Attivo' },
+                    { value: 'INACTIVE', label: 'Inattivo' },
+                    { value: 'SUSPENDED', label: 'In Aspettativa' },
+                    { value: 'TERMINATED', label: 'Cessato' }
+                  ]}
+                />
+              </EntityFormGrid>
+            </EntityFormSection>
+          )}
       
           <EntityFormSection title="Contatti" description="Informazioni di contatto della persona">
         <EntityFormGrid columns={2}>

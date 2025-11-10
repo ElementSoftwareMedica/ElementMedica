@@ -202,15 +202,15 @@ check_database() {
 check_api_server() {
     echo "🔌 Controllo API Server..."
     
-    # Test endpoint health
-    if timeout $API_RESPONSE_TIMEOUT curl -s "http://localhost:3000/health" > /dev/null 2>&1; then
-        # Test endpoint critico
-        if timeout $API_RESPONSE_TIMEOUT curl -s "http://localhost:3000/api/person" > /dev/null 2>&1; then
+    # Test endpoint health (API Server 4001)
+    if timeout $API_RESPONSE_TIMEOUT curl -s "http://localhost:4001/health" > /dev/null 2>&1; then
+        # Test endpoint critico (API health namespaced)
+        if timeout $API_RESPONSE_TIMEOUT curl -s "http://localhost:4001/api/health" > /dev/null 2>&1; then
             API_FAILURES=0
             return 0
         else
             API_FAILURES=$((API_FAILURES + 1))
-            send_alert "WARNING" "API" "Endpoint /api/person non risponde (tentativo $API_FAILURES)"
+            send_alert "WARNING" "API" "Endpoint /api/health non risponde (tentativo $API_FAILURES)"
             return 1
         fi
     else
@@ -230,7 +230,7 @@ check_api_server() {
 check_documents_server() {
     echo "📄 Controllo Documents Server..."
     
-    if timeout $API_RESPONSE_TIMEOUT curl -s "http://localhost:3001/health" > /dev/null 2>&1; then
+    if timeout $API_RESPONSE_TIMEOUT curl -s "http://localhost:4002/health" > /dev/null 2>&1; then
         DOCS_FAILURES=0
         return 0
     else
@@ -250,7 +250,7 @@ check_documents_server() {
 check_proxy_server() {
     echo "🔀 Controllo Proxy Server..."
     
-    if timeout $API_RESPONSE_TIMEOUT curl -s "http://localhost:3002/health" > /dev/null 2>&1; then
+    if timeout $API_RESPONSE_TIMEOUT curl -s "http://localhost:4003/health" > /dev/null 2>&1; then
         PROXY_FAILURES=0
         return 0
     else
@@ -614,7 +614,7 @@ switch_to_failover() {
         sleep 10
         
         # Verifica funzionamento
-        if timeout 30 curl -s "http://localhost:3000/health" > /dev/null 2>&1; then
+        if timeout 30 curl -s "http://localhost:4001/health" > /dev/null 2>&1; then
             echo "✅ Switch a database failover completato"
             echo "[$TIMESTAMP] ✅ Switch a database failover completato" >> $LOG_FILE
             return 0
@@ -836,7 +836,7 @@ echo "[$TIMESTAMP] === SERVICE FAILOVER TERMINATO ===" >> $LOG_FILE
 pm2 restart api  # o documents, proxy
 
 # Verifica ripristino
-curl http://localhost:3000/health
+curl http://localhost:4001/health
 ```
 
 ### Scenario 2: Database Corrotto (Livello 2)
@@ -1275,7 +1275,7 @@ echo | tee -a "$REPORT_FILE"
 echo "🔌 SERVIZI" | tee -a "$REPORT_FILE"
 echo "==========" | tee -a "$REPORT_FILE"
 
-services=("API:3000:/health" "Documents:3001:/health" "Proxy:3002:/health")
+services=("API:4001:/health" "Documents:4002:/health" "Proxy:4003:/health")
 
 for service_info in "${services[@]}"; do
     IFS=':' read -r name port endpoint <<< "$service_info"
@@ -1506,7 +1506,7 @@ df -h
 pm2 list
 
 # Test connettività
-curl http://localhost:3000/health
+curl http://localhost:4001/health
 ```
 
 ---

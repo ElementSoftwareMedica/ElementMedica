@@ -1,5 +1,22 @@
 import axios from 'axios';
-import { getToken, removeToken } from './auth';
+import { getToken, removeToken, getRefreshToken, removeRefreshToken, refreshAccess } from './auth';
+
+// Coordinamento refresh token
+let isRefreshing = false;
+let refreshPromise: Promise<string | null> | null = null;
+const refreshSubscribers: Array<(token: string | null) => void> = [];
+
+const subscribeTokenRefresh = (cb: (token: string | null) => void) => {
+  refreshSubscribers.push(cb);
+};
+const onRefreshed = (token: string | null) => {
+  while (refreshSubscribers.length) {
+    const cb = refreshSubscribers.shift();
+    try {
+      cb && cb(token);
+    } catch {}
+  }
+};
 import { API_BASE_URL } from '../config/api';
 import { checkConsent, logGdprAction, ConsentRequiredError } from '../utils/gdpr';
 import { recordApiCall, startTimer } from '../utils/metrics';
@@ -12,6 +29,7 @@ interface ExtendedAxiosConfig {
   _skipDeduplication?: boolean;
   _cacheKey?: string;
   _isApiGetCall?: boolean;
+  _retry?: boolean;
   method?: string;
   url?: string;
   headers?: Record<string, string>;
@@ -90,21 +108,30 @@ const apiClient = axios.create({
 // Request interceptor for API calls
 apiClient.interceptors.request.use(
   (config: any) => {
+    // CRITICAL FIX: Validate HTTP method FIRST for ALL requests
+    // This must happen before any early returns to prevent 'toUpperCase' errors
+    if (!config.method || typeof config.method !== 'string' || config.method.trim() === '') {
+      config.method = 'GET';
+      console.warn('🔧 [API INTERCEPTOR] Method was invalid, forcing to GET');
+    } else {
+      config.method = config.method.toUpperCase();
+    }
+
     // SOLUZIONE ULTRA-SEMPLIFICATA: Per chiamate apiGet, fai il minimo indispensabile
     if (config._isApiGetCall) {
       // Per apiGet, fai solo le operazioni essenziali senza toccare nulla di Axios
 
       // Solo token e headers essenziali
       const token = getToken();
+      const isAuthRefresh = config.url?.includes('/auth/refresh');
+      const isAuthLogin = config.url?.includes('/auth/login');
 
-      if (token) {
+      if (token && !isAuthRefresh && !isAuthLogin) {
         if (!config.headers) config.headers = {};
         (config.headers as Record<string, any>)['Authorization'] = `Bearer ${token}`;
-      } else {
-        // Per endpoint di autenticazione, questo è critico
-        if (config.url?.includes('/auth/verify')) {
-          console.error('🚨 [CRITICAL] No token found for /auth/verify endpoint!');
-        }
+      } else if (!token && config.url?.includes('/auth/verify')) {
+        // Per endpoint di autenticazione, non loggare come critico: in fase di startup è atteso
+        console.warn('⚠️ No token for /auth/verify; attempting cookie-based verification');
       }
 
       // Imposta l'header X-Tenant-ID solo se presente in localStorage (niente fallback o gating host)
@@ -126,8 +153,136 @@ apiClient.interceptors.request.use(
         config.url = config.url.replace(/^\/api\//, '/');
       }
 
+      // RISCRITTURA LEGACY anche per apiGet: mappa '/trainers' e '/api/trainers' su '/api/v1/trainers'
+      if (typeof config.url === 'string') {
+        const u = config.url;
+        // Casi senza prefisso /api
+        if (u === '/trainers') {
+          config.url = '/api/v1/trainers';
+        } else if (u.startsWith('/trainers/')) {
+          config.url = `/api/v1${u}`;
+        } else if (u.startsWith('/trainers?')) {
+          config.url = `/api/v1${u}`;
+        }
+        // Casi con prefisso /api
+        else if (u === '/api/trainers') {
+          config.url = '/api/v1/trainers';
+        } else if (u.startsWith('/api/trainers/')) {
+          config.url = `/api/v1${u.substring(4)}`;
+        } else if (u.startsWith('/api/trainers?')) {
+          config.url = `/api/v1${u.substring(4)}`;
+        }
+      }
+
+      // RISCRITTURA LEGACY per companies: mappa '/companies' e '/api/companies' su '/api/v1/companies'
+      if (typeof config.url === 'string') {
+        const u = config.url;
+        // Casi senza prefisso /api
+        if (u === '/companies') {
+          config.url = '/api/v1/companies';
+        } else if (u.startsWith('/companies/')) {
+          config.url = `/api/v1${u}`; // es. /companies/123 -> /api/v1/companies/123
+        } else if (u.startsWith('/companies?')) {
+          config.url = `/api/v1${u}`; // es. /companies?search=x -> /api/v1/companies?search=x
+        }
+        // Casi con prefisso /api
+        else if (u === '/api/companies') {
+          config.url = '/api/v1/companies';
+        } else if (u.startsWith('/api/companies/')) {
+          config.url = `/api/v1${u.substring(4)}`;
+        } else if (u.startsWith('/api/companies?')) {
+          config.url = `/api/v1${u.substring(4)}`;
+        }
+      }
+
+      // RISCRITTURA LEGACY per persons: mappa '/persons' e '/api/persons' su '/api/v1/persons'
+      if (typeof config.url === 'string') {
+        const u = config.url;
+        // Casi senza prefisso /api
+        if (u === '/persons') {
+          config.url = '/api/v1/persons';
+        } else if (u.startsWith('/persons/')) {
+          config.url = `/api/v1${u}`;
+        } else if (u.startsWith('/persons?')) {
+          config.url = `/api/v1${u}`;
+        }
+        // Casi con prefisso /api
+        else if (u === '/api/persons') {
+          config.url = '/api/v1/persons';
+        } else if (u.startsWith('/api/persons/')) {
+          config.url = `/api/v1${u.substring(4)}`;
+        } else if (u.startsWith('/api/persons?')) {
+          config.url = `/api/v1${u.substring(4)}`;
+        }
+      }
+
+      // RISCRITTURA LEGACY per schedules: mappa '/schedules' e '/api/schedules' su '/api/v1/schedules'
+      // e '/schedules-with-attestati' su '/api/v1/schedules/with-attestati'
+      if (typeof config.url === 'string') {
+        const u = config.url;
+        // Schedules (senza prefisso /api)
+        if (u === '/schedules') {
+          config.url = '/api/v1/schedules';
+        } else if (u.startsWith('/schedules/')) {
+          config.url = `/api/v1${u}`; // es. /schedules/123 -> /api/v1/schedules/123
+        } else if (u.startsWith('/schedules?')) {
+          config.url = `/api/v1${u}`; // es. /schedules?status= -> /api/v1/schedules?status=
+        }
+        // Schedules (con prefisso /api)
+        else if (u === '/api/schedules') {
+          config.url = '/api/v1/schedules';
+        } else if (u.startsWith('/api/schedules/')) {
+          config.url = `/api/v1${u.substring(4)}`;
+        } else if (u.startsWith('/api/schedules?')) {
+          config.url = `/api/v1${u.substring(4)}`;
+        }
+        // with-attestati (senza prefisso /api)
+        else if (u === '/schedules-with-attestati') {
+          config.url = '/api/v1/schedules/with-attestati';
+        }
+        // with-attestati (con prefisso /api)
+        else if (u === '/api/schedules-with-attestati') {
+          config.url = '/api/v1/schedules/with-attestati';
+        }
+      }
+
+      // RISCRITTURA LEGACY per courses: mappa '/courses' e '/api/courses' su '/api/v1/courses'
+      // Include sottopercorsi (es. /courses/bulk-import) e querystring
+      if (typeof config.url === 'string') {
+        const u = config.url;
+        // Casi senza prefisso /api
+        if (u === '/courses') {
+          config.url = '/api/v1/courses';
+        } else if (u.startsWith('/courses/')) {
+          // Eccezione: non riscrivere l'endpoint di bulk-import corsi
+          if (!u.startsWith('/courses/bulk-import')) {
+            config.url = `/api/v1${u}`;
+          }
+        } else if (u.startsWith('/courses?')) {
+          config.url = `/api/v1${u}`;
+        }
+        // Casi con prefisso /api
+        else if (u === '/api/courses') {
+          config.url = '/api/v1/courses';
+        } else if (u.startsWith('/api/courses/')) {
+          // Eccezione: non riscrivere l'endpoint di bulk-import corsi
+          if (!u.startsWith('/api/courses/bulk-import')) {
+            config.url = `/api/v1${u.substring(4)}`;
+          }
+        } else if (u.startsWith('/api/courses?')) {
+          config.url = `/api/v1${u.substring(4)}`;
+        }
+      }
+
       // Normalizzazione URL: se comincia con '/' ma non con '/api', prefissa '/api'
-      if (typeof config.url === 'string' && config.url.startsWith('/') && !config.url.startsWith('/api') && !/^https?:\/\//i.test(config.url)) {
+      if (
+        typeof config.url === 'string' &&
+        config.url.startsWith('/') &&
+        !config.url.startsWith('/api') &&
+        !/^https?:\/\//i.test(config.url) &&
+        // Eccezione: mantieni path nativo per bulk-import corsi per sfruttare la regola proxy dedicata di Vite
+        config.url !== '/courses/bulk-import'
+      ) {
         config.url = `/api${config.url}`;
       }
 
@@ -146,41 +301,8 @@ apiClient.interceptors.request.use(
     }
 
     // Per tutte le altre chiamate (non apiGet), gestisci normalmente
-    let safeMethodForLogging = 'GET';
-
-    try {
-      const method = config.method;
-
-      // SOLUZIONE DEFINITIVA: Controllo più rigoroso per valori null, undefined, vuoti o non stringa
-      if (method === null ||
-          method === undefined ||
-          method === '' ||
-          typeof method !== 'string' ||
-          (typeof method === 'object' && method !== null)) {
-
-        // CORREZIONE CRITICA: SEMPRE impostare un metodo valido per evitare errori toUpperCase
-        config.method = 'GET';
-        safeMethodForLogging = 'GET';
-        console.log('🔧 [API INTERCEPTOR] Method was null/undefined/empty/non-string, forcing to GET. Original method:', typeof method, method);
-      } else {
-        // Assicurati che sia una stringa valida prima di chiamare toUpperCase
-        const methodStr = String(method).trim();
-        if (methodStr.length > 0 && /^[A-Za-z]+$/.test(methodStr)) {
-          config.method = methodStr.toUpperCase();
-          safeMethodForLogging = methodStr.toUpperCase();
-        } else {
-          console.log('🔧 [API INTERCEPTOR] Method was invalid string format, forcing to GET. Original method:', methodStr);
-          // CORREZIONE CRITICA: SEMPRE impostare un metodo valido
-          config.method = 'GET';
-          safeMethodForLogging = 'GET';
-        }
-      }
-    } catch (error) {
-      console.warn('🚨 [API INTERCEPTOR] Error processing HTTP method, forcing to GET:', error);
-      // CORREZIONE CRITICA: SEMPRE impostare un metodo valido in caso di errore
-      config.method = 'GET';
-      safeMethodForLogging = 'GET';
-    }
+    // Method is already validated and uppercased at the start of the interceptor
+    const safeMethodForLogging = config.method; // Already guaranteed to be uppercase string
 
     // PROTEZIONE ULTRA-ROBUSTA: Assicurati che headers sia sempre un oggetto valido
     if (!config.headers || typeof config.headers !== 'object' || config.headers === null) {
@@ -200,8 +322,115 @@ apiClient.interceptors.request.use(
       config.url = config.url.replace(/^\/api\//, '/');
     }
 
+    // RISCRITTURA LEGACY: mappa '/trainers' e '/api/trainers' su '/api/v1/trainers' (inclusi percorsi nidificati e query)
+    if (typeof config.url === 'string') {
+      const u = config.url;
+      // Casi senza prefisso /api
+      if (u === '/trainers') {
+        config.url = '/api/v1/trainers';
+      } else if (u.startsWith('/trainers/')) {
+        config.url = `/api/v1${u}`;
+      } else if (u.startsWith('/trainers?')) {
+        config.url = `/api/v1${u}`;
+      }
+      // Casi con prefisso /api
+      else if (u === '/api/trainers') {
+        config.url = '/api/v1/trainers';
+      } else if (u.startsWith('/api/trainers/')) {
+        config.url = `/api/v1${u.substring(4)}`;
+      } else if (u.startsWith('/api/trainers?')) {
+        config.url = `/api/v1${u.substring(4)}`;
+      }
+    }
+
+    // RISCRITTURA LEGACY per companies: mappa '/companies' e '/api/companies' su '/api/v1/companies' (inclusi percorsi nidificati e query)
+    if (typeof config.url === 'string') {
+      const u = config.url;
+      // Casi senza prefisso /api
+      if (u === '/companies') {
+        config.url = '/api/v1/companies';
+      } else if (u.startsWith('/companies/')) {
+        config.url = `/api/v1${u}`;
+      } else if (u.startsWith('/companies?')) {
+        config.url = `/api/v1${u}`;
+      }
+      // Casi con prefisso /api
+      else if (u === '/api/companies') {
+        config.url = '/api/v1/companies';
+      } else if (u.startsWith('/api/companies/')) {
+        config.url = `/api/v1${u.substring(4)}`;
+      } else if (u.startsWith('/api/companies?')) {
+        config.url = `/api/v1${u.substring(4)}`;
+      }
+    }
+
+    // RISCRITTURA LEGACY per schedules: mappa '/schedules' e '/api/schedules' su '/api/v1/schedules'
+    // e '/schedules-with-attestati' su '/api/v1/schedules/with-attestati'
+    if (typeof config.url === 'string') {
+      const u = config.url;
+      // Schedules (senza prefisso /api)
+      if (u === '/schedules') {
+        config.url = '/api/v1/schedules';
+      } else if (u.startsWith('/schedules/')) {
+        config.url = `/api/v1${u}`;
+      } else if (u.startsWith('/schedules?')) {
+        config.url = `/api/v1${u}`;
+      }
+      // Schedules (con prefisso /api)
+      else if (u === '/api/schedules') {
+        config.url = '/api/v1/schedules';
+      } else if (u.startsWith('/api/schedules/')) {
+        config.url = `/api/v1${u.substring(4)}`;
+      } else if (u.startsWith('/api/schedules?')) {
+        config.url = `/api/v1${u.substring(4)}`;
+      }
+      // with-attestati (senza prefisso /api)
+      else if (u === '/schedules-with-attestati') {
+        config.url = '/api/v1/schedules/with-attestati';
+      }
+      // with-attestati (con prefisso /api)
+      else if (u === '/api/schedules-with-attestati') {
+        config.url = '/api/v1/schedules/with-attestati';
+      }
+    }
+
+    // RISCRITTURA LEGACY per courses: mappa '/courses' e '/api/courses' su '/api/v1/courses'
+    // Include sottopercorsi (es. /courses/bulk-import) e querystring
+    if (typeof config.url === 'string') {
+      const u = config.url;
+      // Casi senza prefisso /api
+      if (u === '/courses') {
+        config.url = '/api/v1/courses';
+      } else if (u.startsWith('/courses/')) {
+        // Eccezione: non riscrivere l'endpoint di bulk-import corsi
+        if (!u.startsWith('/courses/bulk-import')) {
+          config.url = `/api/v1${u}`;
+        }
+      } else if (u.startsWith('/courses?')) {
+        config.url = `/api/v1${u}`;
+      }
+      // Casi con prefisso /api
+      else if (u === '/api/courses') {
+        config.url = '/api/v1/courses';
+      } else if (u.startsWith('/api/courses/')) {
+        // Eccezione: non riscrivere l'endpoint di bulk-import corsi
+        if (!u.startsWith('/api/courses/bulk-import')) {
+          config.url = `/api/v1${u.substring(4)}`;
+        }
+      } else if (u.startsWith('/api/courses?')) {
+        config.url = `/api/v1${u.substring(4)}`;
+      }
+    }
+
     // Normalizzazione URL: se comincia con '/' ma non con '/api', prefissa '/api'
-    if (typeof config.url === 'string' && config.url.startsWith('/') && !config.url.startsWith('/api') && !/^https?:\/\//i.test(config.url)) {
+    if (
+      typeof config.url === 'string' &&
+      config.url.startsWith('/') &&
+      !config.url.startsWith('/api') &&
+      !/^https?:\/\//i.test(config.url) &&
+      // Eccezione: mantieni path nativo per bulk-import corsi per sfruttare la regola proxy dedicata di Vite
+      config.url !== '/courses/bulk-import'
+    ) {
       config.url = `/api${config.url}`;
     }
 
@@ -232,19 +461,20 @@ apiClient.interceptors.request.use(
 
     // Add auth token if available
     const token = getToken();
-    if (token) {
+    const isAuthUrl = config.url?.includes('/auth/');
+    if (token && !isAuthUrl) {
       (config.headers as Record<string, any>)['Authorization'] = `Bearer ${token}`;
       // Debug per getCurrentTenant
       if (config.url?.includes('/tenants/current')) {
         console.log('🔐 Adding token to /tenants/current request:', {
           hasToken: !!token,
-          tokenStart: token.substring(0, 20) + '...',
+          // tokenStart rimosso per evitare esposizione di parti del token
           url: config.url,
           fullURL: (config.baseURL || '') + (config.url || ''),
           timestamp: new Date().toISOString()
         });
       }
-    } else if (config.url?.includes('/tenants/current')) {
+    } else if (!token && config.url?.includes('/tenants/current')) {
       console.warn('⚠️ No token available for /tenants/current request:', {
         url: config.url,
         fullURL: (config.baseURL || '') + (config.url || ''),
@@ -296,25 +526,50 @@ apiClient.interceptors.request.use(
         console.log(`📦 Cache hit for ${config.url}`);
 
         // Log GDPR action per cache hit (non-blocking)
-        logGdprAction(
-           'system',
-           'API_CACHE_HIT',
-           'api',
-           config.url || 'unknown',
-           {
-             url: config.url,
-             cacheAge: Date.now() - cached.timestamp
-           }
-         );
+        if (!config._skipGdprCheck) {
+          logGdprAction(
+             'system',
+             'API_CACHE_HIT',
+             'api',
+             config.url || 'unknown',
+             {
+               url: config.url,
+               cacheAge: Date.now() - cached.timestamp
+             }
+           );
+        }
 
-        // Simula risposta cached
+        // CRITICAL FIX: Create a completely clean config object for cached response
+        // This prevents method corruption issues when axios processes the cached response
+        const cleanConfig = {
+          url: config.url || '',
+          method: 'get', // Lowercase 'get' is the correct format for axios
+          baseURL: config.baseURL || '',
+          headers: {
+            ...(config.headers || {}),
+            'X-Cached-Response': 'true'
+          },
+          params: config.params,
+          timeout: config.timeout || 30000,
+          _cached: true,
+          _skipDeduplication: true, // Don't process cached responses again
+          _skipGdprCheck: true
+        };
+
+        // Return a properly formatted axios response object
         const response = {
           data: cached.data,
           status: 200,
           statusText: 'OK (Cached)',
-          headers: {},
-          config: config,
-          request: {}
+          headers: {
+            'content-type': 'application/json',
+            'cache-control': 'private, max-age=0',
+            'x-cache': 'HIT'
+          },
+          config: cleanConfig,
+          request: {},
+          // Ensure axios recognizes this as a valid response
+          [Symbol.toStringTag]: 'AxiosResponse'
         };
 
         recordApiCall(config.url || '', safeMethodForLogging, timer(), 200, { 
@@ -331,16 +586,18 @@ apiClient.interceptors.request.use(
       console.log(`🔄 Deduplicating request: ${safeMethodForLogging} ${config.url}`);
       
       // Log GDPR action per deduplication (non-blocking)
-      logGdprAction(
-         'system',
-         'API_REQUEST_DEDUPLICATED',
-         'api',
-         config.url || 'unknown',
-         {
-           url: config.url,
-           method: safeMethodForLogging
-         }
-       );
+      if (!config._skipGdprCheck) {
+        logGdprAction(
+           'system',
+           'API_REQUEST_DEDUPLICATED',
+           'api',
+           config.url || 'unknown',
+           {
+             url: config.url,
+             method: safeMethodForLogging
+           }
+         );
+      }
       
       recordApiCall(config.url || '', safeMethodForLogging, timer(), 200, { 
         cached: false, 
@@ -353,8 +610,8 @@ apiClient.interceptors.request.use(
     // Intercettore per limitare richieste parallele eccessive allo stesso endpoint
     const url = config.url || '';
     
-    // Se abbiamo troppe richieste pendenti o abbiamo già una richiesta per questo URL, possiamo rifiutare
-    if (pendingRequests.count > 5) {
+    // Limite aumentato per permettere batch operations (es. generazione attestati multipli)
+    if (pendingRequests.count > 20) {
       throw new Error('Troppe richieste simultanee');
     }
     
@@ -452,17 +709,6 @@ apiClient.interceptors.response.use(
   (response) => {
     const config = response.config as ExtendedAxiosConfig;
     const timer = startTimer();
-    
-    // Cleanup del conteggio richieste
-    if (config && config._requestUrl) {
-      pendingRequests.count = Math.max(0, pendingRequests.count - 1);
-      pendingRequests.urls.delete(config._requestUrl);
-    }
-
-    // Cleanup active requests
-    if (config._cacheKey) {
-      activeRequests.delete(config._cacheKey);
-    }
 
     // Validazione JSON response - Skip per status code che non dovrebbero avere body
     const statusCodesWithoutBody = [204, 205, 304]; // No Content, Reset Content, Not Modified
@@ -474,18 +720,20 @@ apiClient.interceptors.response.use(
         console.error('JSON validation failed:', jsonError);
         
         // Log GDPR action per errore JSON (non-blocking)
-        logGdprAction(
-           'system',
-           'API_JSON_VALIDATION_ERROR',
-           'api',
-           config._requestUrl || 'unknown',
-           {
-             url: config._requestUrl,
-             status: response.status
-           },
-           false,
-           jsonError instanceof Error ? jsonError.message : 'JSON validation failed'
-         );
+        if (!config?._skipGdprCheck) {
+          logGdprAction(
+             'system',
+             'API_JSON_VALIDATION_ERROR',
+             'api',
+             config._requestUrl || 'unknown',
+             {
+               url: config._requestUrl,
+               status: response.status
+             },
+             false,
+             jsonError instanceof Error ? jsonError.message : 'JSON validation failed'
+           );
+        }
         
         recordApiCall(config._requestUrl || '', config.method || 'GET', timer(), response.status, {
           cached: false,
@@ -519,18 +767,20 @@ apiClient.interceptors.response.use(
     }
 
     // Log GDPR action per successful response (non-blocking)
-    logGdprAction(
-       'system',
-       'API_RESPONSE_SUCCESS',
-       'api',
-       config._requestUrl || 'unknown',
-       {
-         url: config._requestUrl,
-         method: config.method,
-         status: response.status,
-         cached: response.statusText?.includes('Cached') || false
-       }
-     );
+    if (!config?._skipGdprCheck) {
+      logGdprAction(
+         'system',
+         'API_RESPONSE_SUCCESS',
+         'api',
+         config._requestUrl || 'unknown',
+         {
+           url: config._requestUrl,
+           method: config.method,
+           status: response.status,
+           cached: response.statusText?.includes('Cached') || false
+         }
+       );
+    }
 
     // Record metrics
     recordApiCall(config._requestUrl || '', config.method || 'GET', timer(), response.status, {
@@ -540,7 +790,7 @@ apiClient.interceptors.response.use(
     
     return response;
   },
-  (error) => {
+  async (error) => {
     const config = error?.config as ExtendedAxiosConfig;
     const timer = startTimer();
     
@@ -559,20 +809,22 @@ apiClient.interceptors.response.use(
     const status = error.response?.status || 0;
 
     // Log GDPR action per errore (non-blocking)
-    logGdprAction(
-       'system',
-       'API_RESPONSE_ERROR',
-       'api',
-       config?._requestUrl || 'unknown',
-       {
-         url: config?._requestUrl,
-         method: config?.method,
-         status,
-         errorType: error.constructor.name
-       },
-       false,
-       errorMessage
-     );
+    if (!config?._skipGdprCheck) {
+      logGdprAction(
+         'system',
+         'API_RESPONSE_ERROR',
+         'api',
+         config?._requestUrl || 'unknown',
+         {
+           url: config?._requestUrl,
+           method: config?.method,
+           status,
+           errorType: error.constructor.name
+         },
+         false,
+         errorMessage
+       );
+    }
 
     // Record metrics per errore
     recordApiCall(config?._requestUrl || '', config?.method || 'GET', timer(), status, {
@@ -585,77 +837,8 @@ apiClient.interceptors.response.use(
     if (process.env.NODE_ENV !== 'production' && error?.config?.url) {
       console.debug(`API Error [${error.config?.url}]: ${error.code || error.name || 'Unknown error'}`);
     }
-    
-    // Handle auth errors - be more selective to avoid unnecessary logouts
-    if (error.response?.status === 401 || error.response?.status === 403) {
-      const url = config?._requestUrl || error.config?.url || '';
-      
-      // CORREZIONE CRITICA: Non gestire errori 401 durante il login
-      // Un 401 durante il login significa credenziali errate, non token scaduto
-      const isLoginEndpoint = url.includes('/login');
-      const isAuthVerifyEndpoint = url.includes('/auth/verify');
-      const isPermissionEndpoint = url.includes('/advanced-permissions') || url.includes('/permissions');
-      const isCriticalAuthError = error.response?.data?.code === 'AUTH_TOKEN_EXPIRED' || 
-                                  error.response?.data?.code === 'AUTH_TOKEN_INVALID' ||
-                                  error.response?.data?.code === 'AUTH_TOKEN_MISSING' ||
-                                  error.response?.data?.code === 'AUTH_SESSION_INVALID';
-      
-      // Don't logout for login endpoint - 401 means wrong credentials, not expired token
-      if (isLoginEndpoint) {
-        console.warn('Login failed with 401 - wrong credentials, not logging out:', {
-          url,
-          status: error.response?.status,
-          code: error.response?.data?.code,
-          message: error.response?.data?.message
-        });
-      }
-      // Don't logout for permission-related endpoints - these might fail due to insufficient permissions
-      // but the user is still authenticated
-      else if (isPermissionEndpoint && !isCriticalAuthError) {
-        console.warn('Permission-related error, not logging out:', {
-          url,
-          status: error.response?.status,
-          code: error.response?.data?.code,
-          message: error.response?.data?.message
-        });
-      } 
-      // Only logout for token verification endpoints or critical auth errors
-      else if (isAuthVerifyEndpoint || isCriticalAuthError) {
-        console.log('Critical authentication error, clearing token and redirecting to login', {
-          url,
-          status: error.response?.status,
-          code: error.response?.data?.code
-        });
-        
-        // Log GDPR action per redirect (non-blocking)
-        logGdprAction(
-           'system',
-           'AUTH_ERROR_REDIRECT',
-           'auth',
-           url || 'unknown',
-           {
-             status,
-             url,
-             errorCode: error.response?.data?.code
-           },
-           false,
-           'Authentication error redirect'
-         );
-        
-        removeToken();
-        if (window.location.pathname !== '/login') {
-          window.location.href = '/login';
-        }
-      } else {
-        // Log the error but don't logout for non-critical auth errors
-        console.warn('Non-critical auth error, not logging out:', {
-          url,
-          status: error.response?.status,
-          code: error.response?.data?.code
-        });
-      }
-    }
-    
+
+    // Evita side effects su auth per errori generici
     return Promise.reject(error);
   }
 );
@@ -679,6 +862,16 @@ export const apiGet = async <T>(url: string, params = {}): Promise<T> => {
         headers: {}
       };
       
+      // Propaga _skipGdprCheck a livello config e rimuovilo dalla querystring
+      const skipGdpr = (params as any)?._skipGdprCheck === true;
+      if (skipGdpr) {
+        (config as any)._skipGdprCheck = true;
+        if (config.params && typeof config.params === 'object') {
+          const { _skipGdprCheck, ...rest } = config.params as any;
+          config.params = rest;
+        }
+      }
+      
       // Headers no-cache per endpoint di autenticazione
       if (isAuthEndpoint) {
         config.headers!['Cache-Control'] = 'no-cache, no-store, must-revalidate';
@@ -696,15 +889,19 @@ export const apiGet = async <T>(url: string, params = {}): Promise<T> => {
       return response.data as T;
     } catch (error: unknown) {
       // Errore più descrittivo per ERR_INSUFFICIENT_RESOURCES
-      if (error && typeof error === 'object' && 'code' in error && error.code === 'ERR_INSUFFICIENT_RESOURCES') {
+      if (error && typeof error === 'object' && 'code' in error && (error as any).code === 'ERR_INSUFFICIENT_RESOURCES') {
         console.error('Browser resource limit reached - try again in a moment');
       }
-      console.error('🚨 [API GET] Error details:', {
-        url,
-        error: error instanceof Error ? error.message : 'Unknown error',
-        code: error && typeof error === 'object' && 'code' in error ? error.code : 'Unknown',
-        config: error && typeof error === 'object' && 'config' in error ? error.config : 'Unknown'
-      });
+      // Non loggare dettagli se la chiamata ha _skipGdprCheck
+      const cfg = (error && typeof error === 'object' && 'config' in error) ? (error as any).config as ExtendedAxiosConfig : undefined;
+      if (!cfg?._skipGdprCheck) {
+        console.error('🚨 [API GET] Error details:', {
+          url,
+          error: error instanceof Error ? error.message : 'Unknown error',
+          code: error && typeof error === 'object' && 'code' in error ? (error as any).code : 'Unknown',
+          config: error && typeof error === 'object' && 'config' in error ? (error as any).config : 'Unknown'
+        });
+      }
       throw error;
     }
   }, 2); // Priorità alta per le GET
@@ -864,8 +1061,8 @@ export async function apiPost<T = unknown>(
       const enhancedConfig: Record<string, unknown> = { 
         ...config,
         timeout: timeoutValue,
-        // Abilita withCredentials per le chiamate di autenticazione
-        withCredentials: withCredentialsValue,
+        // Abilita withCredentials per inviare i cookie di sessione
+        withCredentials: true,
         // Assicurati che il content-type sia corretto
         headers: {
           'Content-Type': 'application/json',
@@ -899,7 +1096,7 @@ export const apiPut = async <T>(url: string, data = {}): Promise<T> => {
   try {
     const response = await apiClient.put(url, data, {
       timeout: getTimeoutForUrl(url),
-      withCredentials: url.includes('/auth/') ? true : false
+      withCredentials: true
     });
     return response.data as T;
   } catch (error: unknown) {
@@ -982,6 +1179,40 @@ export const apiUpload = async <T>(url: string, formData: FormData, config?: Rec
   }
 };
 
+/**
+ * Invalida la cache per un pattern di URL specifico
+ * @param urlPattern - Pattern dell'URL da invalidare (es: '/api/v1/attestati')
+ */
+export const invalidateCache = (urlPattern: string): void => {
+  const keysToDelete: string[] = [];
+  
+  // Cerca tutte le chiavi che matchano il pattern
+  responseCache.forEach((_, key) => {
+    if (key.includes(urlPattern)) {
+      keysToDelete.push(key);
+    }
+  });
+  
+  // Elimina le chiavi trovate
+  keysToDelete.forEach(key => {
+    responseCache.delete(key);
+    console.log(`🗑️ Cache invalidated for: ${key}`);
+  });
+  
+  if (keysToDelete.length > 0) {
+    console.log(`🗑️ Invalidated ${keysToDelete.length} cache entries for pattern: ${urlPattern}`);
+  }
+};
+
+/**
+ * Cancella completamente la cache
+ */
+export const clearCache = (): void => {
+  const size = responseCache.size;
+  responseCache.clear();
+  console.log(`🗑️ Cleared entire cache (${size} entries)`);
+};
+
 // API Service Object per compatibilità con import esistenti
 export const apiService = {
   get: apiGet,
@@ -990,7 +1221,46 @@ export const apiService = {
   delete: apiDelete,
   deleteWithPayload: apiDeleteWithPayload,
   upload: apiUpload,
-  client: apiClient
+  client: apiClient,
+  invalidateCache,
+  clearCache
 };
 
 export default apiClient;
+
+
+async function refreshAccessToken(): Promise<string | null> {
+  if (isRefreshing && refreshPromise) return refreshPromise;
+
+  isRefreshing = true;
+  // Pre-check opzionale sul refresh token (auth.refreshAccess lo gestisce già, ma evitiamo call inutili)
+  const currentRefresh = getRefreshToken();
+  if (!currentRefresh) {
+    isRefreshing = false;
+    return null;
+  }
+
+  const doRefresh = async (): Promise<string | null> => {
+    try {
+      // Centralizza su auth.refreshAccess che gestisce fetch e salvataggio token
+      const newToken = await refreshAccess();
+      return newToken;
+    } catch (e) {
+      // Log minimale, senza dettagli sensibili
+      console.error('Error refreshing access token via auth.refreshAccess');
+      return null;
+    } finally {
+      isRefreshing = false;
+    }
+  };
+
+  refreshPromise = doRefresh().then((token) => {
+    onRefreshed(token);
+    refreshPromise = null;
+    return token;
+  });
+
+  return refreshPromise;
+}
+
+// Patch intercettore response: cerca il blocco 401 e aggiunge refresh

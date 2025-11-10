@@ -149,6 +149,42 @@ const routerMap = {
         rateLimit: 'api'
       },
 
+      // 🔁 Legacy redirect: /api/courses → /api/v1/courses
+      '/api/courses': {
+        target: 'api',
+        pathRewrite: { '^/api/courses': '/api/v1/courses' },
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+        description: 'Legacy courses endpoint (redirects to v1)',
+        cors: true,
+        rateLimit: 'api'
+      },
+      '/api/courses/*': {
+        target: 'api',
+        pathRewrite: { '^/api/courses': '/api/v1/courses' },
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+        description: 'Legacy courses wildcard (redirects to v1)',
+        cors: true,
+        rateLimit: 'api'
+      },
+
+      // 🔁 Legacy redirect: /api/trainers → /api/v1/trainers
+      '/api/trainers': {
+        target: 'api',
+        pathRewrite: { '^/api/trainers': '/api/v1/trainers' },
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+        description: 'Legacy trainers endpoint (redirects to v1)',
+        cors: true,
+        rateLimit: 'api'
+      },
+      '/api/trainers/*': {
+        target: 'api',
+        pathRewrite: { '^/api/trainers': '/api/v1/trainers' },
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+        description: 'Legacy trainers wildcard (redirects to v1)',
+        cors: true,
+        rateLimit: 'api'
+      },
+
       // 🔁 Legacy redirect: /api/activity-logs → /api/v1/activity-logs
       '/api/activity-logs': {
         target: 'api',
@@ -181,6 +217,42 @@ const routerMap = {
         pathRewrite: { '^/api/activity-logs': '/api/v1/activity-logs' },
         methods: ['GET', 'POST', 'OPTIONS'],
         description: 'Legacy activity logs wildcard (redirects to v1)',
+        cors: true,
+        rateLimit: 'api'
+      },
+
+      // 💰 Preventivi API (Quotations)
+      '/api/preventivi': {
+        target: 'api',
+        pathRewrite: { '^/api/preventivi': '/api/preventivi' },
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+        description: 'Preventivi (Quotations) API endpoint',
+        cors: true,
+        rateLimit: 'api'
+      },
+      '/api/preventivi/*': {
+        target: 'api',
+        pathRewrite: { '^/api/preventivi': '/api/preventivi' },
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+        description: 'Preventivi API wildcard routes',
+        cors: true,
+        rateLimit: 'api'
+      },
+
+      // 🎫 Codici Sconto API (Discount Codes)
+      '/api/codici-sconto': {
+        target: 'api',
+        pathRewrite: { '^/api/codici-sconto': '/api/codici-sconto' },
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+        description: 'Codici Sconto (Discount Codes) API endpoint',
+        cors: true,
+        rateLimit: 'api'
+      },
+      '/api/codici-sconto/*': {
+        target: 'api',
+        pathRewrite: { '^/api/codici-sconto': '/api/codici-sconto' },
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+        description: 'Codici Sconto API wildcard routes',
         cors: true,
         rateLimit: 'api'
       }
@@ -334,6 +406,18 @@ const routerMap = {
       method: 'POST',
       description: 'Legacy auth login redirect'
     },
+
+    // Compatibilità: /api/auth/* → /api/v1/auth/*
+    '/api/auth': {
+      redirect: '/api/v1/auth',
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+      description: 'Legacy non-versioned auth root redirect'
+    },
+    '/api/auth/*': {
+      redirect: '/api/v1/auth/*',
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+      description: 'Legacy non-versioned auth wildcard redirect'
+    },
     
     // Route legacy aziende
     '/v1/companies/*': {
@@ -366,19 +450,44 @@ const routerMap = {
       description: 'Legacy users to persons redirect'
     },
     '/api/v1/employees/*': {
-      redirect: '/api/v1/persons/*',
-      methods: ['GET', 'POST', 'PUT', 'DELETE'],
-      description: 'Legacy employees to persons redirect'
+      target: 'api',
+      pathRewrite: { '^/api/v1/employees': '/api/v1/employees' },
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+      description: 'Employees API v1',
+      cors: true,
+      rateLimit: 'api'
+    },
+    '/api/employees': {
+      target: 'api',
+      pathRewrite: { '^/api/employees': '/api/v1/employees' },
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+      description: 'Legacy employees endpoint (redirects to v1)',
+      cors: true,
+      rateLimit: 'api'
     },
     '/api/employees/*': {
-      redirect: '/api/v1/persons/*',
-      methods: ['GET', 'POST', 'PUT', 'DELETE'],
-      description: 'Legacy /api employees to persons redirect'
+      target: 'api',
+      pathRewrite: { '^/api/employees': '/api/v1/employees' },
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+      description: 'Legacy employees wildcard (redirects to v1)',
+      cors: true,
+      rateLimit: 'api'
+    },
+    '/employees': {
+      target: 'api',
+      pathRewrite: { '^/employees': '/api/v1/employees' },
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+      description: 'Legacy employees root (redirects to v1)',
+      cors: true,
+      rateLimit: 'api'
     },
     '/employees/*': {
-      redirect: '/api/v1/persons/*',
-      methods: ['GET', 'POST', 'PUT', 'DELETE'],
-      description: 'Legacy employees to persons redirect'
+      target: 'api',
+      pathRewrite: { '^/employees': '/api/v1/employees' },
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+      description: 'Legacy employees wildcard (redirects to v1)',
+      cors: true,
+      rateLimit: 'api'
     },
 
     // Compatibilità aziende non versionato -> versionato
@@ -435,7 +544,7 @@ const routerMap = {
       origin: 'http://localhost:5173',
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires']
+      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires', 'X-Refresh-Token', 'x-refresh-token']
     },
     
     // API v1 - CORS standard
@@ -443,7 +552,7 @@ const routerMap = {
       origin: 'http://localhost:5173',
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires']
+      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires', 'X-Refresh-Token', 'x-refresh-token']
     },
     
     // API v2 - CORS standard
@@ -451,7 +560,7 @@ const routerMap = {
       origin: 'http://localhost:5173',
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires']
+      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires', 'X-Refresh-Token', 'x-refresh-token']
     },
     
     // API Roles - CORS specifico per ruoli (CRITICO per /api/roles/permissions)
@@ -459,7 +568,7 @@ const routerMap = {
       origin: 'http://localhost:5173',
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires']
+      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires', 'X-Refresh-Token', 'x-refresh-token']
     },
     
     // API Trainers - CORS specifico per formatori (CRITICO per /api/trainers)
@@ -467,7 +576,7 @@ const routerMap = {
       origin: 'http://localhost:5173',
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires']
+      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires', 'X-Refresh-Token', 'x-refresh-token']
     },
     
     // API Advanced Permissions - CORS specifico per permessi avanzati (CRITICO per /api/v1/advanced-permissions)
@@ -475,7 +584,7 @@ const routerMap = {
       origin: 'http://localhost:5173',
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires']
+      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires', 'X-Refresh-Token', 'x-refresh-token']
     },
     
     // API Form Templates - CORS specifico per form templates (CRITICO per /api/v1/form-templates)
@@ -483,7 +592,7 @@ const routerMap = {
       origin: 'http://localhost:5173',
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires']
+      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires', 'X-Refresh-Token', 'x-refresh-token']
     },
     
     // API Form Templates exact path - CORS specifico per form templates (path esatto)
@@ -491,7 +600,7 @@ const routerMap = {
       origin: 'http://localhost:5173',
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires']
+      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires', 'X-Refresh-Token', 'x-refresh-token']
     },
     
     // API Form Submissions - CORS specifico per form submissions (CRITICO per /api/v1/submissions)
@@ -499,7 +608,7 @@ const routerMap = {
       origin: 'http://localhost:5173',
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires']
+      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires', 'X-Refresh-Token', 'x-refresh-token']
     },
     
     // API Form Submissions exact path - CORS specifico per form submissions (path esatto)
@@ -507,7 +616,7 @@ const routerMap = {
       origin: 'http://localhost:5173',
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires']
+      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires', 'X-Refresh-Token', 'x-refresh-token']
     },
     
     // API CMS - CORS specifico per CMS (CRITICO per /api/v1/cms)
@@ -515,7 +624,7 @@ const routerMap = {
       origin: 'http://localhost:5173',
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires']
+      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires', 'X-Refresh-Token', 'x-refresh-token']
     },
     
     // API CMS exact path - CORS specifico per CMS (path esatto)
@@ -523,7 +632,7 @@ const routerMap = {
       origin: 'http://localhost:5173',
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires']
+      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires', 'X-Refresh-Token', 'x-refresh-token']
     },
     
     // Advanced Permissions - CORS specifico per permessi avanzati (CRITICO per /advanced-permissions)
@@ -531,7 +640,7 @@ const routerMap = {
       origin: 'http://localhost:5173',
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires']
+      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires', 'X-Refresh-Token', 'x-refresh-token']
     },
     
     // Trainers - CORS specifico per formatori (CRITICO per /trainers)
@@ -539,7 +648,7 @@ const routerMap = {
       origin: 'http://localhost:5173',
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires']
+      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires', 'X-Refresh-Token', 'x-refresh-token']
     },
     
     // Trainers exact path - CORS specifico per formatori (path esatto)
@@ -547,7 +656,7 @@ const routerMap = {
       origin: 'http://localhost:5173',
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires']
+      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires', 'X-Refresh-Token', 'x-refresh-token']
     },
     
     // Courses - CORS specifico per corsi (CRITICO per /courses)
@@ -555,7 +664,7 @@ const routerMap = {
       origin: 'http://localhost:5173',
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires']
+      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires', 'X-Refresh-Token', 'x-refresh-token']
     },
     
     // Courses exact path - CORS specifico per corsi (path esatto)
@@ -563,7 +672,7 @@ const routerMap = {
       origin: 'http://localhost:5173',
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires']
+      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires', 'X-Refresh-Token', 'x-refresh-token']
     },
     
     // Schedules - CORS specifico per programmazioni (CRITICO per /schedules)
@@ -571,7 +680,7 @@ const routerMap = {
       origin: 'http://localhost:5173',
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires']
+      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires', 'X-Refresh-Token', 'x-refresh-token']
     },
     
     // Schedules exact path - CORS specifico per programmazioni (path esatto)
@@ -579,7 +688,7 @@ const routerMap = {
       origin: 'http://localhost:5173',
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires']
+      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires', 'X-Refresh-Token', 'x-refresh-token']
     },
     
     // Tenants - CORS specifico per tenant (CRITICO per /tenants/current)
@@ -587,7 +696,7 @@ const routerMap = {
       origin: 'http://localhost:5173',
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires']
+      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires', 'X-Refresh-Token', 'x-refresh-token']
     },
     
     // Companies - CORS specifico per aziende (pattern esatto)
@@ -595,7 +704,7 @@ const routerMap = {
       origin: 'http://localhost:5173',
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires']
+      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires', 'X-Refresh-Token', 'x-refresh-token']
     },
     
     // Companies - CORS specifico per aziende
@@ -603,7 +712,7 @@ const routerMap = {
       origin: 'http://localhost:5173',
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires']
+      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires', 'X-Refresh-Token', 'x-refresh-token']
     },
     
     // API generiche - CORS permissivo
@@ -611,7 +720,7 @@ const routerMap = {
       origin: 'http://localhost:5173',
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires']
+      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'X-Tenant-ID', 'x-tenant-id', 'cache-control', 'pragma', 'expires', 'X-Refresh-Token', 'x-refresh-token']
     },
     
     // Route legacy - CORS permissivo
@@ -619,7 +728,7 @@ const routerMap = {
       origin: 'http://localhost:5173',
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'cache-control', 'pragma', 'expires']
+      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'cache-control', 'pragma', 'expires', 'X-Refresh-Token', 'x-refresh-token']
     },
     
     // Documenti - CORS per upload
@@ -627,7 +736,7 @@ const routerMap = {
       origin: 'http://localhost:5173',
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'cache-control', 'pragma', 'expires']
+      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'cache-control', 'pragma', 'expires', 'X-Refresh-Token', 'x-refresh-token']
     },
     
     // Google Docs API - CORS dedicato
@@ -635,13 +744,13 @@ const routerMap = {
       origin: 'http://localhost:5173',
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'cache-control', 'pragma', 'expires']
+      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'cache-control', 'pragma', 'expires', 'X-Refresh-Token', 'x-refresh-token']
     },
     '/api/google-docs': {
       origin: 'http://localhost:5173',
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'cache-control', 'pragma', 'expires']
+      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'cache-control', 'pragma', 'expires', 'X-Refresh-Token', 'x-refresh-token']
     },
 
     // Route statiche - CORS base
@@ -671,7 +780,7 @@ const routerMap = {
       origin: 'http://localhost:5173',
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'cache-control', 'pragma', 'expires']
+      headers: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-API-Version', 'cache-control', 'pragma', 'expires', 'X-Refresh-Token', 'x-refresh-token']
     }
   },
 

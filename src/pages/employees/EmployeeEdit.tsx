@@ -140,6 +140,7 @@ const EmployeeEdit: React.FC = () => {
         companies={companies}
         onSuccess={handleSuccess}
         onClose={handleClose}
+        roleType="EMPLOYEE"
       />
     </div>
   );

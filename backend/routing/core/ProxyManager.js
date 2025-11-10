@@ -158,6 +158,18 @@ export default class ProxyManager {
       return next(); // Passa al middleware successivo
     }
 
+    // Enforce requireAuth per route protette prima di qualsiasi proxying
+    const requiresAuth = routeConfig?.config?.requireAuth === true;
+    if (requiresAuth && req.method !== 'OPTIONS') {
+      const authHeader = req.headers['authorization'] || req.headers['Authorization'];
+      if (!authHeader || !/^Bearer\s+.+/i.test(authHeader)) {
+        // Aggiungi header informativi anche sugli errori
+        this.addInformativeHeaders(req, res, routeConfig);
+        res.setHeader('WWW-Authenticate', 'Bearer realm="api"');
+        return res.status(401).json({ error: 'Unauthorized', message: 'Missing or invalid Authorization header', code: 'AUTH_REQUIRED' });
+      }
+    }
+
     // Gestione completa della richiesta HTTP con response handling
     // Per DELETE, usa il proxy standard se non c'è body
     if (req.method === 'DELETE' && !req.rawBody) {
@@ -333,6 +345,29 @@ export default class ProxyManager {
         params: dynamicMatch.params,
         isDynamic: true
       };
+    }
+    
+    // 3. Infine controlla le route LEGACY con configurazione proxy (non redirect)
+    const legacyRoutes = RouterMapUtils.getLegacyRoutes();
+    for (const [routePattern, legacyConfig] of Object.entries(legacyRoutes)) {
+      // Salta le entry che definiscono un semplice redirect; saranno gestite dal middleware legacy
+      if (!legacyConfig || legacyConfig.redirect) continue;
+      
+      const matchResult = this.matchRoute(path, routePattern);
+      if (matchResult.match) {
+        const rewrittenPath = this.applyPathRewrite(path, legacyConfig.pathRewrite);
+        
+        return {
+          service: legacyConfig.target,
+          target: RouterMapUtils.getServiceUrl(legacyConfig.target),
+          pathRewrite: legacyConfig.pathRewrite,
+          rewrittenPath,
+          config: legacyConfig,
+          version: version, // preserva la versione risolta dal sistema (default v1)
+          params: matchResult.params,
+          isDynamic: false
+        };
+      }
     }
     
     return null;

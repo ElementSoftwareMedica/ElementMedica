@@ -13,10 +13,23 @@ import logger from '../utils/logger.js';
 export function auditLog(action, options = {}) {
     return async (req, res, next) => {
         try {
+            // Get tenant ID from request
+            const tenantId = req.tenant?.id || req.person?.tenantId || req.headers['x-tenant-id'];
+            
+            if (!tenantId) {
+                logger.warn('Audit log skipped - no tenant ID', {
+                    component: 'audit-middleware',
+                    action,
+                    path: req.path
+                });
+                return next();
+            }
+
             const auditData = {
                 action,
                 personId: req.person?.id || null,
                 companyId: req.person?.companyId || null,
+                tenantId,
                 ipAddress: req.ip,
                 userAgent: req.get('User-Agent'),
                 path: req.path,
@@ -35,12 +48,12 @@ export function auditLog(action, options = {}) {
                     action: auditData.action,
                     personId: auditData.personId,
                     companyId: auditData.companyId,
+                    tenantId: auditData.tenantId,
                     ipAddress: auditData.ipAddress,
                     userAgent: auditData.userAgent,
-                    path: auditData.path,
-                    method: auditData.method,
-                    details: JSON.stringify(auditData.details),
-                    timestamp: auditData.timestamp
+                    resourceType: options.resourceType || null,
+                    resourceId: options.resourceId || null,
+                    dataAccessed: options.dataAccessed ? JSON.parse(JSON.stringify(options.dataAccessed)) : null
                 }
             });
 

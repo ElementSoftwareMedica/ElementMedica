@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   Building2,
   Calendar,
@@ -74,6 +74,10 @@ const CompanySites: React.FC<CompanySitesProps> = ({ companyId, selectedSiteId, 
     siteName: string;
   }>({ type: null, siteId: '', siteName: '' });
   const { showToast } = useToast();
+  const showToastRef = useRef(showToast);
+  useEffect(() => {
+    showToastRef.current = showToast;
+  }, [showToast]);
 
   // Filtra le sedi in base alla selezione
   const filteredSites = selectedSiteId 
@@ -87,11 +91,11 @@ const CompanySites: React.FC<CompanySitesProps> = ({ companyId, selectedSiteId, 
       setSites(response.sites || []);
     } catch (error) {
       console.error('Error fetching company sites:', error);
-      showToast({ message: 'Errore nel caricamento delle sedi', type: 'error' });
+      showToastRef.current?.({ message: 'Errore nel caricamento delle sedi', type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, [companyId, showToast]);
+  }, [companyId]);
 
   useEffect(() => {
     fetchSites();

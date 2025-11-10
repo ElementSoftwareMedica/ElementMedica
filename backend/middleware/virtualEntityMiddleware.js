@@ -81,13 +81,26 @@ export function filterVirtualEntityResults(virtualEntityName) {
           const virtualEntity = VIRTUAL_ENTITIES[virtualEntityName.toUpperCase()];
           if (virtualEntity) {
             data.data = data.data.filter(person => {
-              if (!person.roles) return false;
-              
-              return person.roles.some(role => {
-                return virtualEntity.roleFilter.roleTypes.includes(role.roleType) &&
-                       role.isActive && !role.deletedAt;
+              // Supporta sia person.personRoles (schema attuale) che person.roles (eventuale legacy)
+              const roles = person.personRoles || person.roles || [];
+              if (!Array.isArray(roles) || roles.length === 0) return false;
+
+              return roles.some(role => {
+                return (
+                  virtualEntity.roleFilter.roleTypes.includes(role.roleType) &&
+                  // Considera isActive true o non specificato (in molti casi la query già filtra isActive=true)
+                  (role.isActive !== false) &&
+                  !role.deletedAt
+                );
               });
             });
+
+            // Mantieni la coerenza tra total e data filtrata
+            if (typeof data.total === 'number') {
+              data.total = data.data.length;
+            } else {
+              data.total = data.data.length;
+            }
           }
         }
 

@@ -4,6 +4,7 @@
  */
 
 import logger from '../utils/logger.js';
+import { JWTService } from '../auth/jwt.js';
 
 // Modelli che richiedono tenantId
 const TENANT_REQUIRED_MODELS = [
@@ -188,7 +189,7 @@ export function createTenantContextMiddleware() {
       const token = req.headers.authorization?.replace('Bearer ', '');
       
       if (token) {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const decoded = JWTService.verifyAccessToken(token);
         req.tenantId = decoded.tenantId;
         
         // Imposta nel contesto globale per Prisma middleware

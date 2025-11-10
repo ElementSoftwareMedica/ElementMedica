@@ -153,7 +153,23 @@ router.get('/with-attestati', authenticateToken(), requirePermission('read:sched
 });
 
 // Create new schedule
-router.post('/', authenticateToken(), requirePermission('create:schedules'), validateSchedule, async (req, res) => {
+router.post('/', 
+  // 🔧 DEBUG: Log PRIMA di tutti i middleware per vedere se arriva la richiesta
+  (req, res, next) => {
+    console.log('[POST /schedules] ========================================');
+    console.log('[POST /schedules] 🎯 REQUEST INTERCEPTED');
+    console.log('[POST /schedules] Method:', req.method);
+    console.log('[POST /schedules] URL:', req.url);
+    console.log('[POST /schedules] Content-Type:', req.headers['content-type']);
+    console.log('[POST /schedules] Body present:', !!req.body);
+    console.log('[POST /schedules] Body keys:', req.body ? Object.keys(req.body) : 'NO BODY');
+    console.log('[POST /schedules] ========================================');
+    next();
+  },
+  authenticateToken(), 
+  requirePermission('create:schedules'), 
+  validateSchedule, 
+  async (req, res) => {
   const {
     courseId,
     startDate,
@@ -168,14 +184,55 @@ router.post('/', authenticateToken(), requirePermission('create:schedules'), val
   } = req.body;
 
   try {
+    // 🔍 DEBUG: Log payload ricevuto
+    console.log('[POST /schedules] Payload ricevuto:', JSON.stringify({
+      courseId,
+      courseIdType: typeof courseId,
+      startDate,
+      endDate,
+      location,
+      maxParticipants,
+      deliveryMode,
+      datesCount: dates?.length,
+      companyIdsCount: companyIds?.length,
+      personIdsCount: personIds?.length,
+      sampleDate: dates?.[0],
+      sampleCompanyId: companyIds?.[0],
+      samplePersonId: personIds?.[0]
+    }, null, 2));
+
     // Validate main company ID
     const mainCompanyId = Array.isArray(companyIds) && companyIds.length > 0 ? companyIds[0] : null;
     if (!mainCompanyId) {
+      console.error('[POST /schedules] ❌ Validation error: No companyId provided');
       return res.status(400).json({ 
         error: 'Validation error',
         message: 'At least one companyId is required'
       });
     }
+
+    // Get tenantId from authenticated person
+    const tenantId = req.person?.tenantId || req.tenant?.id || req.tenantId;
+    if (!tenantId) {
+      console.error('[POST /schedules] ❌ Validation error: No tenantId found');
+      console.error('[POST /schedules] req.person:', req.person);
+      console.error('[POST /schedules] req.tenant:', req.tenant);
+      return res.status(400).json({ 
+        error: 'Validation error',
+        message: 'Tenant ID is required'
+      });
+    }
+    console.log('[POST /schedules] ✅ TenantId found:', tenantId);
+
+    // Map deliveryMode from frontend format to database enum
+    const deliveryModeMap = {
+      'in-person': 'IN_PERSON',
+      'online': 'ONLINE',
+      'hybrid': 'HYBRID',
+      'self-paced': 'SELF_PACED'
+    };
+    const mappedDeliveryMode = deliveryMode ? deliveryModeMap[deliveryMode.toLowerCase()] || deliveryMode.toUpperCase().replace('-', '_') : null;
+    console.log('[POST /schedules] DeliveryMode mapping:', { original: deliveryMode, mapped: mappedDeliveryMode });
 
     // Build schedule data
     const scheduleData = {
@@ -184,20 +241,31 @@ router.post('/', authenticateToken(), requirePermission('create:schedules'), val
       location,
       maxParticipants,
       notes,
-      deliveryMode,
+      deliveryMode: mappedDeliveryMode,
       createdAt: new Date(),
       updatedAt: new Date()
     };
 
     // 1. Create the main schedule
+    console.log('[POST /schedules] 📝 Creating schedule with data:', {
+      ...scheduleData,
+      courseId,
+      tenantId
+    });
+    
     const schedule = await prisma.courseSchedule.create({
       data: {
         ...scheduleData,
         course: {
           connect: { id: courseId }
+        },
+        tenant: {
+          connect: { id: tenantId }
         }
       },
     });
+    
+    console.log('[POST /schedules] ✅ Schedule created:', schedule.id);
 
     // 2. Create sessions (dates)
     if (Array.isArray(dates)) {
@@ -205,11 +273,12 @@ router.post('/', authenticateToken(), requirePermission('create:schedules'), val
         await prisma.courseSession.create({
           data: {
             scheduleId: schedule.id,
+            tenantId: tenantId,
             date: new Date(session.date),
             start: session.start,
             end: session.end,
             trainerId: session.trainerId || null,
-            coTrainerId: session.coTrainerId || null,
+            coTrainerId: session.coTrainerId || null
           },
         });
       }
@@ -222,6 +291,7 @@ router.post('/', authenticateToken(), requirePermission('create:schedules'), val
           data: {
             scheduleId: schedule.id,
             companyId,
+            tenantId: tenantId
           },
         });
       }
@@ -236,6 +306,7 @@ router.post('/', authenticateToken(), requirePermission('create:schedules'), val
           data: { 
             scheduleId: schedule.id, 
             personId,
+            tenantId: tenantId,
             createdAt: new Date()
           }
         })
@@ -250,7 +321,7 @@ router.post('/', authenticateToken(), requirePermission('create:schedules'), val
         sessions: {
           include: {
             trainer: true,
-            co_trainer: true,
+            coTrainer: true,
           },
         },
         companies: { include: { company: true } },
@@ -260,10 +331,16 @@ router.post('/', authenticateToken(), requirePermission('create:schedules'), val
 
     res.status(201).json(fullSchedule);
   } catch (error) {
+    console.error('[POST /schedules] ❌ ERROR:', error);
+    console.error('[POST /schedules] Error message:', error.message);
+    console.error('[POST /schedules] Error code:', error.code);
+    console.error('[POST /schedules] Stack:', error.stack);
+    
     logger.error('Failed to create schedule', {
       component: 'schedules-routes',
       action: 'createSchedule',
       error: error.message,
+      code: error.code,
       stack: error.stack,
       personId: req.person?.id,
       scheduleData: req.body

@@ -5,6 +5,7 @@ import { checkAdvancedPermission, filterDataByPermissions, requireOwnCompany } f
 
 const router = express.Router();
 import prisma from '../config/prisma-optimization.js';
+import { randomUUID } from 'crypto';
 
 const { authenticate: authenticateToken } = middleware;
 
@@ -15,44 +16,72 @@ const { authenticate: authenticateToken } = middleware;
  */
 function sanitizeCompanyData(companyData) {
   // Campi validi per il modello Company (basati sullo schema Prisma)
+  // Rimuoviamo i campi duplicati che appartengono a CompanySite
   const validCompanyFields = [
-    'id', 'iban', 'pec', 'sdi', 'cap', 'citta', 'mail', 'note', 'piva', 
-    'provincia', 'telefono', 'tenantId', 'slug', 'domain', 'settings', 
-    'codiceAteco', 'codiceFiscale', 'createdAt', 'deletedAt', 'isActive', 
-    'personaRiferimento', 'sedeAzienda', 'subscriptionPlan', 'updatedAt', 
-    'ragioneSociale'
+    'id', 'iban', 'pec', 'sdi', 'tenantId', 'slug', 'domain', 'settings',
+    'codiceAteco', 'codiceFiscale', 'createdAt', 'deletedAt', 'isActive',
+    'subscriptionPlan', 'updatedAt', 'ragioneSociale', 'note', 'piva'
   ];
 
-  // Campi che appartengono al modello CompanySite
-  const companySiteFields = [
-    'siteName', 'siteIndirizzo', 'siteCitta', 'siteProvincia', 'siteCap',
-    'sitePersonaRiferimento', 'siteTelefono', 'siteMail', 'dvr', 'rsppId',
-    'medicoCompetenteId', 'ultimoSopralluogo', 'prossimoSopralluogo',
-    'valutazioneSopralluogo', 'sopralluogoEseguitoDa', 'ultimoSopralluogoRSPP',
-    'prossimoSopralluogoRSPP', 'noteSopralluogoRSPP', 'ultimoSopralluogoMedico',
-    'prossimoSopralluogoMedico', 'noteSopralluogoMedico', 'Sito (Domain)',
-    'nomeSede', 'indirizzo' // Campi legacy
-  ];
+  // Campi che appartengono al modello CompanySite (inclusi alias legacy)
+  const companySiteFieldMap = {
+    // alias -> canonical key in siteData
+    siteName: 'siteName',
+    nomeSede: 'siteName',
+    sedeAzienda: 'siteName',
+    siteIndirizzo: 'siteIndirizzo',
+    indirizzo: 'siteIndirizzo',
+    siteCitta: 'siteCitta',
+    citta: 'siteCitta',
+    siteProvincia: 'siteProvincia',
+    provincia: 'siteProvincia',
+    siteCap: 'siteCap',
+    cap: 'siteCap',
+    sitePersonaRiferimento: 'sitePersonaRiferimento',
+    personaRiferimento: 'sitePersonaRiferimento',
+    siteTelefono: 'siteTelefono',
+    telefono: 'siteTelefono',
+    siteMail: 'siteMail',
+    mail: 'siteMail',
+    dvr: 'dvr',
+    rsppId: 'rsppId',
+    medicoCompetenteId: 'medicoCompetenteId',
+    ultimoSopralluogo: 'ultimoSopralluogo',
+    prossimoSopralluogo: 'prossimoSopralluogo',
+    valutazioneSopralluogo: 'valutazioneSopralluogo',
+    sopralluogoEseguitoDa: 'sopralluogoEseguitoDa',
+    ultimoSopralluogoRSPP: 'ultimoSopralluogoRSPP',
+    prossimoSopralluogoRSPP: 'prossimoSopralluogoRSPP',
+    noteSopralluogoRSPP: 'noteSopralluogoRSPP',
+    ultimoSopralluogoMedico: 'ultimoSopralluogoMedico',
+    prossimoSopralluogoMedico: 'prossimoSopralluogoMedico',
+    noteSopralluogoMedico: 'noteSopralluogoMedico',
+    'Sito (Domain)': 'domain'
+  };
 
   const companyDataOnly = {};
   const siteDataOnly = {};
 
-  // Separa i campi in base al modello di appartenenza
   Object.keys(companyData).forEach(key => {
     if (validCompanyFields.includes(key)) {
       companyDataOnly[key] = companyData[key];
-    } else if (companySiteFields.includes(key)) {
-      siteDataOnly[key] = companyData[key];
+    } else if (companySiteFieldMap[key]) {
+      const canonical = companySiteFieldMap[key];
+      siteDataOnly[canonical] = companyData[key];
     } else {
       // Log per campi non riconosciuti (per debug)
       logger.debug(`Campo non riconosciuto ignorato: ${key}`, {
         component: 'companies-routes',
         action: 'sanitizeCompanyData',
-        field: key,
-        value: companyData[key]
+        field: key
       });
     }
   });
+
+  // Normalizza siteName
+  if (!siteDataOnly.siteName) {
+    siteDataOnly.siteName = siteDataOnly.siteCitta || 'Sede Principale';
+  }
 
   return {
     companyData: companyDataOnly,
@@ -95,7 +124,26 @@ router.get('/',
           tenantId: req.tenantId, // Filtra per tenant
           deletedAt: null // Escludi i record eliminati (soft delete)
         },
-        orderBy: { createdAt: 'desc' }
+        orderBy: { createdAt: 'desc' },
+        include: {
+          sites: {
+            where: { deletedAt: null },
+            select: {
+              id: true,
+              siteName: true,
+              citta: true,
+              indirizzo: true,
+              cap: true,
+              provincia: true,
+              telefono: true,
+              mail: true,
+              rsppId: true,
+              medicoCompetenteId: true,
+              createdAt: true,
+              updatedAt: true
+            }
+          }
+        }
       });
       
       res.json(companies);
@@ -131,9 +179,27 @@ router.get('/:id',
         },
         include: {
           persons: true,
+          sites: {
+            where: { deletedAt: null },
+            select: {
+              id: true,
+              siteName: true,
+              citta: true,
+              indirizzo: true,
+              cap: true,
+              provincia: true,
+              telefono: true,
+              mail: true,
+              rsppId: true,
+              medicoCompetenteId: true,
+              createdAt: true,
+              updatedAt: true
+            }
+          },
           _count: {
             select: {
-              persons: true
+              persons: true,
+              sites: true
             }
           }
         }
@@ -171,9 +237,10 @@ router.post('/',
     try {
       // Remove 'name' field if present (legacy compatibility)
       const { name, ...data } = req.body;
+      const { companyData: mainCompanyData, siteData } = sanitizeCompanyData(data);
       
       // Validate required fields
-      if (!data.ragioneSociale) {
+      if (!mainCompanyData.ragioneSociale) {
         return res.status(400).json({
           error: 'Validation error',
           message: 'ragioneSociale is required'
@@ -183,11 +250,11 @@ router.post('/',
       // Check for duplicate P.IVA if provided
       const person = req.person || req.user;
       let company;
-      if (data.piva) {
+      if (mainCompanyData.piva) {
         // Prima cerca aziende attive con stessa P.IVA nel tenant corrente
         const activeCompanyByPiva = await prisma.company.findFirst({
           where: {
-            piva: data.piva,
+            piva: mainCompanyData.piva,
             tenantId: person.tenantId,
             deletedAt: null
           }
@@ -197,14 +264,14 @@ router.post('/',
           // Azienda attiva: errore duplicato
           return res.status(409).json({
             error: 'Duplicate P.IVA',
-            message: `Un'azienda con P.IVA ${data.piva} esiste già`
+            message: `Un'azienda con P.IVA ${mainCompanyData.piva} esiste già`
           });
         }
         
         // Poi cerca aziende soft-deleted con stessa P.IVA (anche in altri tenant)
         const deletedCompanyByPiva = await prisma.company.findFirst({
           where: {
-            piva: data.piva,
+            piva: mainCompanyData.piva,
             deletedAt: { not: null }
           },
           orderBy: { deletedAt: 'desc' } // Prendi la più recentemente eliminata
@@ -213,7 +280,7 @@ router.post('/',
         if (deletedCompanyByPiva) {
           // Azienda soft-deleted: ripristina e sovrascrivi i dati
           // Rimuovi i campi slug e domain per evitare constraint violation durante il ripristino
-          const { slug, domain, ...restoreData } = data;
+          const { slug, domain, ...restoreData } = mainCompanyData;
           
           company = await prisma.company.update({
             where: { id: deletedCompanyByPiva.id },
@@ -229,7 +296,7 @@ router.post('/',
             component: 'companies-routes',
             action: 'createCompany',
             companyId: company.id,
-            piva: data.piva,
+            piva: mainCompanyData.piva,
             previousTenantId: deletedCompanyByPiva.tenantId,
             newTenantId: person.tenantId
           });
@@ -237,7 +304,7 @@ router.post('/',
           // Nessuna azienda con questa P.IVA: crea nuova
           company = await prisma.company.create({ 
             data: {
-              ...data,
+              ...mainCompanyData,
               tenantId: person.tenantId
             }
           });
@@ -246,37 +313,37 @@ router.post('/',
         // Nessuna P.IVA fornita: crea nuova azienda
         company = await prisma.company.create({ 
           data: {
-            ...data,
+            ...mainCompanyData,
             tenantId: person.tenantId
           }
         });
       }
 
-      // Crea automaticamente la sede principale se ci sono dati di indirizzo
-      if (company && (data.citta || data.indirizzo || data.sedeAzienda)) {
+      // Crea automaticamente la sede principale se ci sono dati di sede
+      if (company && (siteData.siteCitta || siteData.siteIndirizzo || siteData.siteName || siteData.siteProvincia || siteData.siteCap || siteData.siteTelefono || siteData.siteMail || siteData.sitePersonaRiferimento)) {
         try {
-          const siteData = {
+          const siteDataPayload = {
             companyId: company.id,
-            siteName: data.sedeAzienda || 'Sede Principale',
-            citta: data.citta,
-            indirizzo: data.indirizzo,
-            cap: data.cap,
-            provincia: data.provincia,
-            telefono: data.telefono,
-            mail: data.email,
-            personaRiferimento: data.personaRiferimento,
+            siteName: siteData.siteName || siteData.siteCitta || 'Sede Principale',
+            citta: siteData.siteCitta,
+            indirizzo: siteData.siteIndirizzo,
+            cap: siteData.siteCap,
+            provincia: siteData.siteProvincia,
+            telefono: siteData.siteTelefono,
+            mail: siteData.siteMail,
+            personaRiferimento: siteData.sitePersonaRiferimento,
             tenantId: person.tenantId
           };
 
           // Rimuovi campi undefined/null per evitare errori
-          Object.keys(siteData).forEach(key => {
-            if (siteData[key] === undefined || siteData[key] === null) {
-              delete siteData[key];
+          Object.keys(siteDataPayload).forEach(key => {
+            if (siteDataPayload[key] === undefined || siteDataPayload[key] === null) {
+              delete siteDataPayload[key];
             }
           });
 
           const mainSite = await prisma.companySite.create({
-            data: siteData
+            data: siteDataPayload
           });
 
           logger.info('Main site created automatically', {
@@ -291,8 +358,8 @@ router.post('/',
           logger.warn('Failed to create main site automatically', {
             component: 'companies-routes',
             action: 'createCompany',
-            companyId: company.id,
-            error: siteError.message
+            error: siteError.message,
+            companyId: company.id
           });
         }
       }
@@ -332,49 +399,102 @@ router.put('/:id',
       const { id } = req.params;
       // Remove 'name' field if present (legacy compatibility)
       const { name, ...data } = req.body;
+      const { companyData: mainCompanyData, siteData } = sanitizeCompanyData(data);
       
-      // Check if company exists
-      const existingCompany = await prisma.company.findFirst({ 
-        where: { 
-          id,
-          deletedAt: null // Escludi i record eliminati (soft delete)
-        }
-      });
-      if (!existingCompany) {
-        return res.status(404).json({ 
-          error: 'Company not found',
-          message: `Company with ID ${id} does not exist`
+      // Validate required fields
+      if (!mainCompanyData.ragioneSociale) {
+        return res.status(400).json({
+          error: 'Validation error',
+          message: 'ragioneSociale is required'
         });
       }
       
-      // Check for duplicate P.IVA if provided and different from current
-      if (data.piva && data.piva !== existingCompany.piva) {
-        const existingCompanyByPiva = await prisma.company.findFirst({
+      // Check for duplicate P.IVA if provided and update existing company
+      const person = req.person || req.user;
+
+      // Assicurati che l'azienda esista
+      const existingCompany = await prisma.company.findUnique({ where: { id } });
+      if (!existingCompany || existingCompany.deletedAt) {
+        return res.status(404).json({
+          error: 'Company not found',
+          message: `Company with ID ${id} does not exist or has been deleted`
+        });
+      }
+
+      // Se la P.IVA viene cambiata, verifica duplicati nel tenant corrente
+      if (mainCompanyData.piva && mainCompanyData.piva !== existingCompany.piva) {
+        const conflict = await prisma.company.findFirst({
           where: {
-            piva: data.piva,
+            piva: mainCompanyData.piva,
+            tenantId: person.tenantId,
             deletedAt: null,
             id: { not: id }
           }
         });
-        
-        if (existingCompanyByPiva) {
+        if (conflict) {
           return res.status(409).json({
             error: 'Duplicate P.IVA',
-            message: `Un'azienda con P.IVA ${data.piva} esiste già`
+            message: `Un'azienda con P.IVA ${mainCompanyData.piva} esiste già`
           });
         }
       }
-      
-      // Rimuovi i campi slug e domain per evitare constraint violation durante l'aggiornamento
-      // L'azienda manterrà i suoi valori originali per questi campi unici
-      const { slug, domain, ...updateData } = data;
-      
-      const company = await prisma.company.update({ 
-        where: { id }, 
-        data: {
-          ...updateData
-        }
+
+      // Non consentire aggiornamento di slug/domain via questo endpoint
+      const { slug, domain, ...updateData } = mainCompanyData;
+
+      const company = await prisma.company.update({
+        where: { id },
+        data: updateData
       });
+
+      // Se sono presenti dati di sede, crea opzionalmente una sede (idempotente)
+      if (siteData.siteCitta || siteData.siteIndirizzo || siteData.siteName) {
+        try {
+          const siteName = siteData.siteName || siteData.siteCitta || 'Sede Principale';
+
+          // Evita duplicati: match su nome + indirizzo/città se presenti
+          const existingSite = await prisma.companySite.findFirst({
+            where: {
+              companyId: id,
+              siteName,
+              ...(siteData.siteIndirizzo ? { indirizzo: siteData.siteIndirizzo } : {}),
+              ...(siteData.siteCitta ? { citta: siteData.siteCitta } : {})
+            }
+          });
+
+          if (!existingSite) {
+            const companySiteData = {
+              companyId: id,
+              siteName,
+              citta: siteData.siteCitta,
+              indirizzo: siteData.siteIndirizzo,
+              cap: siteData.siteCap,
+              provincia: siteData.siteProvincia,
+              telefono: siteData.siteTelefono,
+              mail: siteData.siteMail,
+              tenantId: person.tenantId
+            };
+            Object.keys(companySiteData).forEach(key => {
+              if (companySiteData[key] === undefined || companySiteData[key] === null) delete companySiteData[key];
+            });
+            const newSite = await prisma.companySite.create({ data: companySiteData });
+            logger.info('Site created during company update', {
+              component: 'companies-routes',
+              action: 'updateCompany',
+              companyId: id,
+              siteId: newSite.id,
+              siteName: newSite.siteName
+            });
+          }
+        } catch (siteError) {
+          logger.warn('Failed to create site during update', {
+            component: 'companies-routes',
+            action: 'updateCompany',
+            companyId: id,
+            error: siteError.message
+          });
+        }
+      }
       
       res.json(company);
     } catch (error) {
@@ -487,6 +607,8 @@ router.post('/import',
   checkAdvancedPermission('companies', 'create'),
   async (req, res) => {
     try {
+      const importId = (req.headers['x-import-id'] && String(req.headers['x-import-id'])) || randomUUID();
+      const startedAt = Date.now();
       const { companies, overwriteIds = [] } = req.body;
       
       if (!companies || !Array.isArray(companies)) {
@@ -555,124 +677,172 @@ router.post('/import',
               // Se l'azienda esistente è eliminata (soft delete), riattivala e aggiorna i dati
               if (existingCompany && existingCompany.deletedAt) {
                 logger.info('Reactivating deleted company', {
-                  component: 'companies-routes',
-                  action: 'importCompanies',
-                  companyId: existingCompany.id,
-                  piva: pivaKey,
-                  ragioneSociale: companyData.ragioneSociale
+                  component: 'companies-routes', action: 'importCompanies', importId, index: i,
+                  companyId: existingCompany.id
                 });
-
-                // Sanitizza i dati separando Company da CompanySite
                 const { companyData: mainCompanyData, siteData } = sanitizeCompanyData(companyData);
                 mainCompanyData.tenantId = person.tenantId;
-                mainCompanyData.deletedAt = null; // Riattiva l'azienda
-
-                // Rimuovi i campi slug e domain per evitare constraint violation durante la riattivazione
-                // L'azienda manterrà i suoi valori originali per questi campi unici
-                delete mainCompanyData.slug;
-                delete mainCompanyData.domain;
-
-                // Sanitizza i campi booleani per evitare errori Prisma
-                if (mainCompanyData.isActive !== undefined) {
-                  if (typeof mainCompanyData.isActive === 'string') {
-                    // Converte stringhe vuote o "false" in false, tutto il resto in true
-                    mainCompanyData.isActive = mainCompanyData.isActive !== '' && 
-                                               mainCompanyData.isActive.toLowerCase() !== 'false' && 
-                                               mainCompanyData.isActive !== '0';
-                  }
+                mainCompanyData.deletedAt = null;
+                delete mainCompanyData.slug; delete mainCompanyData.domain;
+                if (mainCompanyData.isActive !== undefined && typeof mainCompanyData.isActive === 'string') {
+                  mainCompanyData.isActive = mainCompanyData.isActive !== '' && mainCompanyData.isActive.toLowerCase() !== 'false' && mainCompanyData.isActive !== '0';
                 }
-
-                // Aggiorna l'azienda eliminata con i nuovi dati
-                const reactivatedCompany = await prisma.company.update({
-                  where: { id: existingCompany.id },
-                  data: mainCompanyData
-                });
-
-                results.updated.push(reactivatedCompany);
-
-                // Crea automaticamente la sede principale se ci sono dati di indirizzo
-                if (siteData.siteCitta || siteData.siteIndirizzo || siteData.nomeSede || siteData.indirizzo || 
-                    companyData.citta || companyData.indirizzo) {
-                  try {
+                const { company: reactivatedCompany, site: createdSite } = await prisma.$transaction(async (tx) => {
+                  const company = await tx.company.update({ where: { id: existingCompany.id }, data: mainCompanyData });
+                  let site = null;
+                  // crea sito se presenti dati di sede
+                  const hasSiteInput = siteData.siteCitta || siteData.siteIndirizzo || siteData.siteName;
+                  if (hasSiteInput) {
                     const companySiteData = {
-                      companyId: reactivatedCompany.id,
-                      siteName: siteData.nomeSede || siteData.siteName || companyData.citta || reactivatedCompany.sedeAzienda || 'Sede Principale',
-                      citta: siteData.siteCitta || companyData.citta,
-                      indirizzo: siteData.siteIndirizzo || siteData.indirizzo,
-                      cap: siteData.siteCap || companyData.cap,
-                      provincia: siteData.siteProvincia || companyData.provincia,
-                      telefono: siteData.siteTelefono || companyData.telefono,
-                      mail: siteData.siteMail || companyData.mail,
+                      companyId: company.id,
+                      siteName: siteData.siteName || siteData.siteCitta || 'Sede Principale',
+                      citta: siteData.siteCitta,
+                      indirizzo: siteData.siteIndirizzo,
+                      cap: siteData.siteCap,
+                      provincia: siteData.siteProvincia,
+                      telefono: siteData.siteTelefono,
+                      mail: siteData.siteMail,
                       tenantId: person.tenantId
                     };
-
-                    // Rimuovi campi undefined/null per evitare errori
-                    Object.keys(companySiteData).forEach(key => {
-                      if (companySiteData[key] === undefined || companySiteData[key] === null) {
-                        delete companySiteData[key];
+                    Object.keys(companySiteData).forEach(k => { if (companySiteData[k] === undefined || companySiteData[k] === null) delete companySiteData[k]; });
+                    // idempotenza ricerca + creazione
+                    const existingSiteTx = await tx.companySite.findFirst({
+                      where: {
+                        companyId: company.id,
+                        siteName: companySiteData.siteName,
+                        ...(companySiteData.indirizzo ? { indirizzo: companySiteData.indirizzo } : {}),
+                        ...(companySiteData.citta ? { citta: companySiteData.citta } : {})
                       }
                     });
-
-                    const newSite = await prisma.companySite.create({
-                      data: companySiteData
-                    });
-
-                    results.sitesCreated.push({
-                      companyId: reactivatedCompany.id,
-                      companyName: reactivatedCompany.ragioneSociale,
-                      site: newSite
-                    });
-                  } catch (siteError) {
-                    logger.warn('Failed to create site during reactivation', {
-                      component: 'companies-routes',
-                      action: 'importCompanies',
-                      companyId: reactivatedCompany.id,
-                      error: siteError.message,
-                      index: i
-                    });
+                    if (!existingSiteTx) {
+                      site = await tx.companySite.create({ data: companySiteData });
+                    }
                   }
+                  return { company, site };
+                });
+                results.updated.push(reactivatedCompany);
+                if (createdSite) {
+                  results.sitesCreated.push({ companyId: reactivatedCompany.id, site: createdSite });
                 }
-
-                // Aggiorna la mappa con l'azienda riattivata
                 companiesByPiva.set(pivaKey, { company: reactivatedCompany, index: i });
                 continue;
               }
 
-              // Se l'azienda è attiva, verifica se è una sede diversa
-              const isDifferentSite = companyData.nomeSede && 
-                (companyData.nomeSede !== targetCompany.sedeAzienda ||
-                 companyData.citta !== targetCompany.citta ||
-                 companyData.indirizzo !== targetCompany.indirizzo);
+              // Overwrite esplicito richiesto: aggiorna Company e gestisci sede idempotente
+              const overwriteRequested = Array.isArray(overwriteIds) && overwriteIds.some((id) => String(id) === String(targetCompany.id));
+              if (overwriteRequested) {
+                try {
+                  const { companyData: mainCompanyData, siteData } = sanitizeCompanyData(companyData);
+                  mainCompanyData.tenantId = person.tenantId;
+                  delete mainCompanyData.slug; delete mainCompanyData.domain;
+                  if (mainCompanyData.isActive !== undefined && typeof mainCompanyData.isActive === 'string') {
+                    mainCompanyData.isActive = mainCompanyData.isActive !== '' && mainCompanyData.isActive.toLowerCase() !== 'false' && mainCompanyData.isActive !== '0';
+                  }
 
-              if (isDifferentSite && companyData.nomeSede) {
-                // Ottieni il tenantId dall'utente autenticato
-                const tenantId = person.tenantId;
-                
-                // Crea una nuova sede per l'azienda esistente
-                const siteData = {
-                  companyId: targetCompany.id,
-                  siteName: companyData.nomeSede,
-                  citta: companyData.citta,
-                  indirizzo: companyData.indirizzo,
-                  cap: companyData.cap,
-                  provincia: companyData.provincia,
-                  telefono: companyData.telefono,
-                  mail: companyData.mail,
-                  tenantId: tenantId
-                };
+                  const { company: updatedCompany, site: createdSite } = await prisma.$transaction(async (tx) => {
+                    const company = await tx.company.update({ where: { id: targetCompany.id }, data: mainCompanyData });
+                    let site = null;
+                    const hasSiteInput = siteData.siteCitta || siteData.siteIndirizzo || siteData.siteName;
+                    if (hasSiteInput) {
+                      const siteName = siteData.siteName || siteData.siteCitta || 'Sede Principale';
+                      const companySiteData = {
+                        companyId: company.id,
+                        siteName,
+                        citta: siteData.siteCitta,
+                        indirizzo: siteData.siteIndirizzo,
+                        cap: siteData.siteCap,
+                        provincia: siteData.siteProvincia,
+                        telefono: siteData.siteTelefono,
+                        mail: siteData.siteMail,
+                        tenantId: person.tenantId
+                      };
+                      Object.keys(companySiteData).forEach(k => { if (companySiteData[k] === undefined || companySiteData[k] === null) delete companySiteData[k]; });
+                      const existingSiteTx = await tx.companySite.findFirst({
+                        where: {
+                          companyId: company.id,
+                          siteName,
+                          ...(companySiteData.indirizzo ? { indirizzo: companySiteData.indirizzo } : {}),
+                          ...(companySiteData.citta ? { citta: companySiteData.citta } : {})
+                        }
+                      });
+                      if (!existingSiteTx) {
+                        site = await tx.companySite.create({ data: companySiteData });
+                      }
+                    }
+                    return { company, site };
+                  });
 
-                const newSite = await prisma.companySite.create({
-                  data: siteData
-                });
+                  results.updated.push(updatedCompany);
+                  if (createdSite) {
+                    results.sitesCreated.push({
+                      companyId: updatedCompany.id,
+                      companyName: updatedCompany.ragioneSociale,
+                      site: createdSite
+                    });
+                  }
+                  companiesByPiva.set(pivaKey, { company: updatedCompany, index: i });
+                  continue;
+                } catch (overwriteErr) {
+                  logger.warn('Failed to overwrite existing company during import', {
+                    component: 'companies-routes', action: 'importCompanies', companyId: targetCompany.id, error: overwriteErr.message, index: i
+                  });
+                  results.errors.push({ index: i, error: `Errore aggiornamento azienda esistente: ${overwriteErr.message}`, data: companyData });
+                  continue;
+                }
+              }
 
-                results.sitesCreated.push({
-                  companyId: targetCompany.id,
-                  companyName: targetCompany.ragioneSociale,
-                  site: newSite
-                });
+              // Azienda attiva: gestisco eventuale creazione sede in modo idempotente basato su siteData canonico
+              const { companyData: _ignoredMainCompanyData, siteData } = sanitizeCompanyData(companyData);
+              const hasSiteInput = siteData.siteCitta || siteData.siteIndirizzo || siteData.siteName;
+              if (hasSiteInput) {
+                try {
+                  const tenantId = person.tenantId;
+                  const siteName = siteData.siteName || siteData.siteCitta || 'Sede Principale';
+                  const companySiteData = {
+                    companyId: targetCompany.id,
+                    siteName,
+                    citta: siteData.siteCitta,
+                    indirizzo: siteData.siteIndirizzo,
+                    cap: siteData.siteCap,
+                    provincia: siteData.siteProvincia,
+                    telefono: siteData.siteTelefono,
+                    mail: siteData.siteMail,
+                    tenantId
+                  };
+                  Object.keys(companySiteData).forEach(k => { if (companySiteData[k] === undefined || companySiteData[k] === null) delete companySiteData[k]; });
+                  const existingSite = await prisma.companySite.findFirst({
+                    where: {
+                      companyId: targetCompany.id,
+                      siteName,
+                      ...(companySiteData.indirizzo ? { indirizzo: companySiteData.indirizzo } : {}),
+                      ...(companySiteData.citta ? { citta: companySiteData.citta } : {})
+                    }
+                  });
+                  if (!existingSite) {
+                    const newSite = await prisma.companySite.create({ data: companySiteData });
+                    results.sitesCreated.push({
+                      companyId: targetCompany.id,
+                      companyName: targetCompany.ragioneSociale,
+                      site: newSite
+                    });
+                  }
+                } catch (siteErr) {
+                  logger.warn('Failed to create site for active company during import', {
+                    component: 'companies-routes',
+                    action: 'importCompanies',
+                    companyId: targetCompany.id,
+                    error: siteErr.message,
+                    index: i
+                  });
+                  results.errors.push({
+                    index: i,
+                    error: `Errore creazione sede per azienda attiva: ${siteErr.message}`,
+                    data: companyData
+                  });
+                }
                 continue;
               } else {
-                // Azienda attiva con stessa sede - segnala come conflitto che richiede decisione utente
+                // Azienda attiva senza informazioni di sede nel record import: segnalo conflitto
                 results.errors.push({
                   index: i,
                   error: `Azienda con P.IVA ${pivaKey} già esistente. Utilizzare l'opzione di sovrascrittura per aggiornare i dati.`,
@@ -686,320 +856,233 @@ router.post('/import',
                 });
                 continue;
               }
-            }
-
-            // Aggiungi alla mappa per il controllo dei duplicati nel batch
-            companiesByPiva.set(pivaKey, { company: null, index: i });
-          }
-
-          // Gestione duplicati per Codice Fiscale (se non c'è P.IVA)
-          if (!companyData.piva && companyData.codiceFiscale) {
-            const cfKey = companyData.codiceFiscale.trim().toUpperCase();
-            
-            // Verifica se c'è già un'azienda con questo Codice Fiscale nel batch corrente
-            const batchCompanyByCF = companiesByCF.get(cfKey);
-
-            if (batchCompanyByCF) {
-              // Duplicato nel batch corrente - segnala errore
-              results.errors.push({
-                index: i,
-                error: `Codice Fiscale ${cfKey} duplicato nel file CSV alla riga ${batchCompanyByCF.index + 1}`,
-                data: companyData
-              });
-              continue;
-            }
-            
-            // Verifica se esiste già un'azienda con questo Codice Fiscale nel database (incluse quelle eliminate)
-            const existingCompanyByCF = await prisma.company.findFirst({
-              where: {
-                codiceFiscale: cfKey
-              },
-              include: {
-                sites: true
-              }
-            });
-
-            if (existingCompanyByCF) {
-              // Se l'azienda esistente è eliminata (soft delete), riattivala e aggiorna i dati
-              if (existingCompanyByCF.deletedAt) {
-                logger.info('Reactivating deleted company by CF', {
-                  component: 'companies-routes',
-                  action: 'importCompanies',
-                  companyId: existingCompanyByCF.id,
-                  codiceFiscale: cfKey,
-                  ragioneSociale: companyData.ragioneSociale
-                });
-
-                // Sanitizza i dati separando Company da CompanySite
+            } else {
+                // Nessuna azienda esistente con questa P.IVA: crea nuova Company (e sede opzionale)
                 const { companyData: mainCompanyData, siteData } = sanitizeCompanyData(companyData);
                 mainCompanyData.tenantId = person.tenantId;
-                mainCompanyData.deletedAt = null; // Riattiva l'azienda
-
-                // Rimuovi i campi slug e domain per evitare constraint violation durante la riattivazione
-                // L'azienda manterrà i suoi valori originali per questi campi unici
-                delete mainCompanyData.slug;
-                delete mainCompanyData.domain;
-
-                // Sanitizza i campi booleani per evitare errori Prisma
-                if (mainCompanyData.isActive !== undefined) {
-                  if (typeof mainCompanyData.isActive === 'string') {
-                    // Converte stringhe vuote o "false" in false, tutto il resto in true
-                    mainCompanyData.isActive = mainCompanyData.isActive !== '' && 
-                                               mainCompanyData.isActive.toLowerCase() !== 'false' && 
-                                               mainCompanyData.isActive !== '0';
-                  }
+                delete mainCompanyData.slug; delete mainCompanyData.domain;
+                if (mainCompanyData.isActive !== undefined && typeof mainCompanyData.isActive === 'string') {
+                  mainCompanyData.isActive = mainCompanyData.isActive !== '' && mainCompanyData.isActive.toLowerCase() !== 'false' && mainCompanyData.isActive !== '0';
                 }
 
-                // Aggiorna l'azienda eliminata con i nuovi dati
-                const reactivatedCompany = await prisma.company.update({
-                  where: { id: existingCompanyByCF.id },
-                  data: mainCompanyData
-                });
+                const company = await prisma.company.create({ data: mainCompanyData });
 
-                results.updated.push(reactivatedCompany);
+                // Se presenti dati di sede, crea la sede principale
+                const hasSiteInput = siteData.siteCitta || siteData.siteIndirizzo || siteData.siteName;
+                let createdSite = null;
+                if (hasSiteInput) {
+                  const siteName = siteData.siteName || siteData.siteCitta || 'Sede Principale';
+                  const companySiteData = {
+                    companyId: company.id,
+                    siteName,
+                    citta: siteData.siteCitta,
+                    indirizzo: siteData.siteIndirizzo,
+                    cap: siteData.siteCap,
+                    provincia: siteData.siteProvincia,
+                    telefono: siteData.siteTelefono,
+                    mail: siteData.siteMail,
+                    tenantId: person.tenantId
+                  };
+                  Object.keys(companySiteData).forEach(k => { if (companySiteData[k] === undefined || companySiteData[k] === null) delete companySiteData[k]; });
+                  createdSite = await prisma.companySite.create({ data: companySiteData });
+                }
 
-                // Crea automaticamente la sede principale se ci sono dati di indirizzo
-                if (siteData.siteCitta || siteData.siteIndirizzo || siteData.nomeSede || siteData.indirizzo || 
-                    companyData.citta || companyData.indirizzo) {
-                  try {
-                    const companySiteData = {
-                      companyId: reactivatedCompany.id,
-                      siteName: siteData.nomeSede || siteData.siteName || companyData.citta || reactivatedCompany.sedeAzienda || 'Sede Principale',
-                      citta: siteData.siteCitta || companyData.citta,
-                      indirizzo: siteData.siteIndirizzo || siteData.indirizzo,
-                      cap: siteData.siteCap || companyData.cap,
-                      provincia: siteData.siteProvincia || companyData.provincia,
-                      telefono: siteData.siteTelefono || companyData.telefono,
-                      mail: siteData.siteMail || companyData.mail,
-                      tenantId: person.tenantId
-                    };
+                results.created.push(company);
 
-                    // Rimuovi campi undefined/null per evitare errori
-                    Object.keys(companySiteData).forEach(key => {
-                      if (companySiteData[key] === undefined || companySiteData[key] === null) {
-                        delete companySiteData[key];
+                // Aggiorna le mappe del batch
+                companiesByPiva.set(pivaKey, { company, index: i });
+                if (companyData.codiceFiscale) {
+                  companiesByCF.set(companyData.codiceFiscale.trim().toUpperCase(), { company, index: i });
+                }
+
+                if (createdSite) {
+                  results.sitesCreated.push({
+                    companyId: company.id,
+                    companyName: company.ragioneSociale,
+                    site: createdSite
+                  });
+                }
+              }
+            } else {
+              // Nessuna P.IVA: gestione per Codice Fiscale o creazione nuova Company
+              const cfKey = (companyData.codiceFiscale && companyData.codiceFiscale.trim().toUpperCase()) || null;
+              if (cfKey) {
+                const batchCF = companiesByCF.get(cfKey);
+                if (batchCF) {
+                  results.errors.push({ index: i, error: `Codice Fiscale ${cfKey} duplicato nel file CSV alla riga ${batchCF.index + 1}`, data: companyData });
+                } else {
+                  const existingByCF = await prisma.company.findFirst({ where: { codiceFiscale: cfKey }, include: { sites: true } });
+                  if (existingByCF) {
+                    if (existingByCF.deletedAt) {
+                      const { companyData: mainCompanyData, siteData } = sanitizeCompanyData(companyData);
+                      mainCompanyData.tenantId = person.tenantId;
+                      mainCompanyData.deletedAt = null;
+                      delete mainCompanyData.slug; delete mainCompanyData.domain;
+                      if (mainCompanyData.isActive !== undefined && typeof mainCompanyData.isActive === 'string') {
+                        mainCompanyData.isActive = mainCompanyData.isActive !== '' && mainCompanyData.isActive.toLowerCase() !== 'false' && mainCompanyData.isActive !== '0';
                       }
-                    });
-
-                    const newSite = await prisma.companySite.create({
-                      data: companySiteData
-                    });
-
-                    results.sitesCreated.push({
-                      companyId: reactivatedCompany.id,
-                      companyName: reactivatedCompany.ragioneSociale,
-                      site: newSite
-                    });
-                  } catch (siteError) {
-                    logger.warn('Failed to create site during CF reactivation', {
-                      component: 'companies-routes',
-                      action: 'importCompanies',
-                      companyId: reactivatedCompany.id,
-                      error: siteError.message,
-                      index: i
-                    });
+                      const { company: reactivatedCompany, site: createdSite } = await prisma.$transaction(async (tx) => {
+                        const company = await tx.company.update({ where: { id: existingByCF.id }, data: mainCompanyData });
+                        let site = null;
+                        const hasSiteInput = siteData.siteCitta || siteData.siteIndirizzo || siteData.siteName;
+                        if (hasSiteInput) {
+                          const siteName = siteData.siteName || siteData.siteCitta || 'Sede Principale';
+                          const companySiteData = { companyId: company.id, siteName, citta: siteData.siteCitta, indirizzo: siteData.siteIndirizzo, cap: siteData.siteCap, provincia: siteData.siteProvincia, telefono: siteData.siteTelefono, mail: siteData.siteMail, tenantId: person.tenantId };
+                          Object.keys(companySiteData).forEach(k => { if (companySiteData[k] === undefined || companySiteData[k] === null) delete companySiteData[k]; });
+                          site = await tx.companySite.create({ data: companySiteData });
+                        }
+                        return { company, site };
+                      });
+                      results.updated.push(reactivatedCompany);
+                      if (createdSite) { results.sitesCreated.push({ companyId: reactivatedCompany.id, site: createdSite }); }
+                      companiesByCF.set(cfKey, { company: reactivatedCompany, index: i });
+                    } else {
+                      const { companyData: _ignored, siteData } = sanitizeCompanyData(companyData);
+                      const hasSiteInput = siteData.siteCitta || siteData.siteIndirizzo || siteData.siteName;
+                      if (hasSiteInput) {
+                        try {
+                          const siteName = siteData.siteName || siteData.siteCitta || 'Sede Principale';
+                          const companySiteData = { companyId: existingByCF.id, siteName, citta: siteData.siteCitta, indirizzo: siteData.siteIndirizzo, cap: siteData.siteCap, provincia: siteData.siteProvincia, telefono: siteData.siteTelefono, mail: siteData.siteMail, tenantId: person.tenantId };
+                          Object.keys(companySiteData).forEach(k => { if (companySiteData[k] === undefined || companySiteData[k] === null) delete companySiteData[k]; });
+                          const existingSite = await prisma.companySite.findFirst({ where: { companyId: existingByCF.id, siteName, ...(companySiteData.indirizzo ? { indirizzo: companySiteData.indirizzo } : {}), ...(companySiteData.citta ? { citta: companySiteData.citta } : {}) } });
+                          if (!existingSite) {
+                            const newSite = await prisma.companySite.create({ data: companySiteData });
+                            results.sitesCreated.push({ companyId: existingByCF.id, companyName: existingByCF.ragioneSociale, site: newSite });
+                          }
+                        } catch (siteErr) {
+                          logger.warn('Failed to create site for active company (CF) during import', { component: 'companies-routes', action: 'importCompanies', companyId: existingByCF.id, error: siteErr.message, index: i });
+                          results.errors.push({ index: i, error: `Errore creazione sede per azienda attiva (CF): ${siteErr.message}`, data: companyData });
+                        }
+                      } else {
+                        results.errors.push({ index: i, error: `Azienda con Codice Fiscale ${cfKey} già esistente. Utilizzare l'opzione di sovrascrittura per aggiornare i dati.`, data: companyData, existingCompany: { id: existingByCF.id, ragioneSociale: existingByCF.ragioneSociale, piva: existingByCF.piva, codiceFiscale: existingByCF.codiceFiscale } });
+                      }
+                    }
+                  } else {
+                    const { companyData: mainCompanyData, siteData } = sanitizeCompanyData(companyData);
+                    mainCompanyData.tenantId = person.tenantId;
+                    delete mainCompanyData.slug; delete mainCompanyData.domain;
+                    if (mainCompanyData.isActive !== undefined && typeof mainCompanyData.isActive === 'string') {
+                      mainCompanyData.isActive = mainCompanyData.isActive !== '' && mainCompanyData.isActive.toLowerCase() !== 'false' && mainCompanyData.isActive !== '0';
+                    }
+                    const company = await prisma.company.create({ data: mainCompanyData });
+                    let createdSite = null;
+                    const hasSiteInput = siteData.siteCitta || siteData.siteIndirizzo || siteData.siteName;
+                    if (hasSiteInput) {
+                      const siteName = siteData.siteName || siteData.siteCitta || 'Sede Principale';
+                      const companySiteData = { companyId: company.id, siteName, citta: siteData.siteCitta, indirizzo: siteData.siteIndirizzo, cap: siteData.siteCap, provincia: siteData.siteProvincia, telefono: siteData.siteTelefono, mail: siteData.siteMail, tenantId: person.tenantId };
+                      Object.keys(companySiteData).forEach(k => { if (companySiteData[k] === undefined || companySiteData[k] === null) delete companySiteData[k]; });
+                      createdSite = await prisma.companySite.create({ data: companySiteData });
+                    }
+                    results.created.push(company);
+                    companiesByCF.set(cfKey, { company, index: i });
+                    if (createdSite) {
+                      results.sitesCreated.push({ companyId: company.id, companyName: company.ragioneSociale, site: createdSite });
+                    }
                   }
                 }
-
-                continue;
               } else {
-                // Azienda attiva con stesso CF - segnala come conflitto che richiede decisione utente
-                results.errors.push({
-                  index: i,
-                  error: `Azienda con Codice Fiscale ${cfKey} già esistente. Utilizzare l'opzione di sovrascrittura per aggiornare i dati.`,
-                  data: companyData,
-                  existingCompany: {
-                    id: existingCompanyByCF.id,
-                    ragioneSociale: existingCompanyByCF.ragioneSociale,
-                    piva: existingCompanyByCF.piva,
-                    codiceFiscale: existingCompanyByCF.codiceFiscale
-                  }
-                });
-                continue;
+                // Né P.IVA né Codice Fiscale: crea comunque la Company con i dati disponibili
+                const { companyData: mainCompanyData, siteData } = sanitizeCompanyData(companyData);
+                mainCompanyData.tenantId = person.tenantId;
+                delete mainCompanyData.slug; delete mainCompanyData.domain;
+                if (mainCompanyData.isActive !== undefined && typeof mainCompanyData.isActive === 'string') {
+                  mainCompanyData.isActive = mainCompanyData.isActive !== '' && mainCompanyData.isActive.toLowerCase() !== 'false' && mainCompanyData.isActive !== '0';
+                }
+                const company = await prisma.company.create({ data: mainCompanyData });
+                let createdSite = null;
+                const hasSiteInput = siteData.siteCitta || siteData.siteIndirizzo || siteData.siteName;
+                if (hasSiteInput) {
+                  const siteName = siteData.siteName || siteData.siteCitta || 'Sede Principale';
+                  const companySiteData = { companyId: company.id, siteName, citta: siteData.siteCitta, indirizzo: siteData.siteIndirizzo, cap: siteData.siteCap, provincia: siteData.siteProvincia, telefono: siteData.siteTelefono, mail: siteData.siteMail, tenantId: person.tenantId };
+                  Object.keys(companySiteData).forEach(k => { if (companySiteData[k] === undefined || companySiteData[k] === null) delete companySiteData[k]; });
+                  createdSite = await prisma.companySite.create({ data: companySiteData });
+                }
+                results.created.push(company);
+                if (createdSite) { results.sitesCreated.push({ companyId: company.id, companyName: company.ragioneSociale, site: createdSite }); }
               }
             }
 
-            // Aggiungi alla mappa per il controllo dei duplicati nel batch
-            companiesByCF.set(cfKey, { company: null, index: i });
-          }
-
-          // Ottieni il tenantId dall'utente autenticato
-          const tenantId = person.tenantId;
-          
-          if (!tenantId) {
+          } catch (error) {
+            logger.error('Error importing company', {
+              component: 'companies-routes',
+              action: 'importCompany',
+              error: error.message,
+              index: i,
+              companyData
+            });
+            
             results.errors.push({
               index: i,
-              error: 'TenantId non trovato per l\'utente autenticato',
+              error: error.message,
               data: companyData
             });
-            continue;
           }
+        }
 
-          // Sanitizza i dati separando Company da CompanySite
-          const { companyData: mainCompanyData, siteData } = sanitizeCompanyData(companyData);
-          
-          // Aggiungi il tenantId ai dati dell'azienda
-          mainCompanyData.tenantId = tenantId;
-          
-          // Sanitizza i campi booleani per evitare errori Prisma
-          if (mainCompanyData.isActive !== undefined) {
-            if (typeof mainCompanyData.isActive === 'string') {
-              // Converte stringhe vuote o "false" in false, tutto il resto in true
-              mainCompanyData.isActive = mainCompanyData.isActive !== '' && 
-                                         mainCompanyData.isActive.toLowerCase() !== 'false' && 
-                                         mainCompanyData.isActive !== '0';
+        // Se ci sono conflitti che richiedono decisione utente, restituisci status 409
+        const hasConflicts = results.errors.some(error => error.existingCompany);
+        const totalOps = results.created.length + results.updated.length;
+        
+        if (hasConflicts && totalOps === 0) {
+          // Solo conflitti, nessuna operazione completata
+          res.status(409).json({
+            success: false,
+            message: 'Conflitti rilevati durante l\'importazione',
+            results,
+            summary: {
+              total: companies.length,
+              created: results.created.length,
+              updated: results.updated.length,
+              sitesCreated: results.sitesCreated.length,
+              errors: results.errors.length,
+              conflicts: results.errors.filter(e => e.existingCompany).length
             }
-          } else {
-            // Se isActive non è specificato, imposta true di default per le aziende importate
-            mainCompanyData.isActive = true;
-          }
-          
-          // Crea o aggiorna l'azienda
-          let company;
-          const isUpdate = overwriteIds.includes(companyData.id);
-          
-          if (isUpdate && companyData.id) {
-            // Rimuovi i campi slug e domain per evitare constraint violation durante l'aggiornamento
-            // L'azienda manterrà i suoi valori originali per questi campi unici
-            const updateData = { ...mainCompanyData };
-            delete updateData.slug;
-            delete updateData.domain;
-            
-            company = await prisma.company.update({
-              where: { id: companyData.id },
-              data: updateData
-            });
-            results.updated.push(company);
-          } else {
-            company = await prisma.company.create({
-              data: mainCompanyData
-            });
-            results.created.push(company);
-          }
-
-          // Aggiorna le mappe con l'azienda creata
-          if (companyData.piva) {
-            const existing = companiesByPiva.get(companyData.piva.trim());
-            if (existing) {
-              existing.company = company;
-            }
-          }
-          if (companyData.codiceFiscale) {
-            const existing = companiesByCF.get(companyData.codiceFiscale.trim().toUpperCase());
-            if (existing) {
-              existing.company = company;
-            }
-          }
-
-          // Crea automaticamente la sede principale se ci sono dati di indirizzo
-          if (siteData.siteCitta || siteData.siteIndirizzo || siteData.nomeSede || siteData.indirizzo || 
-              mainCompanyData.citta || mainCompanyData.indirizzo) {
-            try {
-              const companySiteData = {
-                companyId: company.id,
-                siteName: siteData.nomeSede || siteData.siteName || mainCompanyData.citta || company.sedeAzienda || 'Sede Principale',
-                citta: siteData.siteCitta || mainCompanyData.citta,
-                indirizzo: siteData.siteIndirizzo || siteData.indirizzo,
-                cap: siteData.siteCap || mainCompanyData.cap,
-                provincia: siteData.siteProvincia || mainCompanyData.provincia,
-                telefono: siteData.siteTelefono || mainCompanyData.telefono,
-                mail: siteData.siteMail || mainCompanyData.mail,
-                tenantId: tenantId
-              };
-
-              // Rimuovi campi undefined/null per evitare errori
-              Object.keys(companySiteData).forEach(key => {
-                if (companySiteData[key] === undefined || companySiteData[key] === null) {
-                  delete companySiteData[key];
-                }
-              });
-
-              const newSite = await prisma.companySite.create({
-                data: companySiteData
-              });
-
-              results.sitesCreated.push({
-                companyId: company.id,
-                companyName: company.ragioneSociale,
-                site: newSite
-              });
-            } catch (siteError) {
-              // Log l'errore ma non bloccare l'importazione
-              logger.warn('Failed to create site during import', {
-                component: 'companies-routes',
-                action: 'importCompanies',
-                companyId: company.id,
-                error: siteError.message,
-                index: i
-              });
-            }
-          }
-
-        } catch (error) {
-          logger.error('Error importing company', {
-            component: 'companies-routes',
-            action: 'importCompany',
-            error: error.message,
-            index: i,
-            companyData
           });
-          
-          results.errors.push({
-            index: i,
-            error: error.message,
-            data: companyData
+        } else if (totalOps === 0) {
+          // Nessuna creazione/aggiornamento effettuata (solo errori di validazione o altri errori non di conflitto)
+          res.status(400).json({
+            success: false,
+            message: 'Nessuna azienda importata. Verificare i dati e riprovare.',
+            results,
+            summary: {
+              total: companies.length,
+              created: results.created.length,
+              updated: results.updated.length,
+              sitesCreated: results.sitesCreated.length,
+              errors: results.errors.length,
+              conflicts: results.errors.filter(e => e.existingCompany).length
+            }
+          });
+        } else {
+          // Operazioni completate con successo (con o senza alcuni conflitti)
+          res.json({
+            success: true,
+            results,
+            summary: {
+              total: companies.length,
+              created: results.created.length,
+              updated: results.updated.length,
+              sitesCreated: results.sitesCreated.length,
+              errors: results.errors.length,
+              conflicts: results.errors.filter(e => e.existingCompany).length
+            }
           });
         }
-      }
 
-      // Se ci sono conflitti che richiedono decisione utente, restituisci status 409
-      const hasConflicts = results.errors.some(error => error.existingCompany);
-      
-      if (hasConflicts && results.created.length === 0 && results.updated.length === 0) {
-        // Solo conflitti, nessuna operazione completata
-        res.status(409).json({
-          success: false,
-          message: 'Conflitti rilevati durante l\'importazione',
-          results,
-          summary: {
-            total: companies.length,
-            created: results.created.length,
-            updated: results.updated.length,
-            sitesCreated: results.sitesCreated.length,
-            errors: results.errors.length,
-            conflicts: results.errors.filter(e => e.existingCompany).length
-          }
+      } catch (error) {
+        logger.error('Failed to import companies', {
+          component: 'companies-routes',
+          action: 'importCompanies',
+          error: error.message,
+          stack: error.stack
         });
-      } else {
-        // Operazioni completate con successo (con o senza alcuni conflitti)
-        res.json({
-          success: true,
-          results,
-          summary: {
-            total: companies.length,
-            created: results.created.length,
-            updated: results.updated.length,
-            sitesCreated: results.sitesCreated.length,
-            errors: results.errors.length,
-            conflicts: results.errors.filter(e => e.existingCompany).length
-          }
+        
+        res.status(500).json({ 
+          error: 'Internal server error',
+          message: 'Failed to import companies'
         });
       }
-
-    } catch (error) {
-      logger.error('Failed to import companies', {
-        component: 'companies-routes',
-        action: 'importCompanies',
-        error: error.message,
-        stack: error.stack
-      });
-      
-      res.status(500).json({ 
-        error: 'Internal server error',
-        message: 'Failed to import companies'
-      });
     }
-  }
 );
 
 export { router as default };

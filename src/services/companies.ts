@@ -6,7 +6,7 @@ type CompanyInsert = Database['public']['Tables']['companies']['Insert'];
 type CompanyUpdate = Database['public']['Tables']['companies']['Update'];
 
 // Creazione del servizio base usando la factory
-const baseService = createService<Company, CompanyInsert, CompanyUpdate>('/companies');
+const baseService = createService<Company, CompanyInsert, CompanyUpdate>('/api/v1/companies');
 
 // Estensione del servizio con eventuali metodi specifici
 const companyService = baseService.extend({

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { CheckCircle, AlertCircle } from 'lucide-react';
 
 export interface ImportPreviewColumn {
@@ -40,25 +40,11 @@ interface ImportPreviewTableProps<T> {
   selectedRows?: Set<number>;
   /** NUOVO: Callback per gestire la selezione delle righe */
   onRowSelectionChange?: (selectedRows: Set<number>) => void;
+  /** NUOVO: Funzione di normalizzazione chiave univoca (es. CF) */
+  normalizeKey?: (value: unknown) => string;
+  /** Mappature chiavi CSV -> chiavi DB per confronto valori */
+  fieldMappings?: Record<string, string[]>;
 }
-
-// Mappa dei campi tra nomi diversi (CSV e database)
-const fieldMappings: Record<string, string[]> = {
-  // CSV key: [possibili chiavi nel database]
-  'nome': ['firstName', 'nome'],
-  'cognome': ['lastName', 'cognome'],
-  'codice_fiscale': ['codiceFiscale', 'codice_fiscale', 'taxCode'],
-  'company_name': ['companyName', 'company_name', 'companyId'],
-  'profilo_professionale': ['title', 'profilo_professionale', 'mansione', 'position'],
-  'email': ['email'],
-  'telefono': ['phone', 'telefono'],
-  'indirizzo': ['residenceAddress', 'indirizzo'],
-  'citta': ['city', 'citta'],
-  'provincia': ['province', 'provincia'],
-  'cap': ['postalCode', 'postal_code', 'cap'],
-  'data_nascita': ['birthDate', 'birth_date', 'data_nascita'],
-  'department_id': ['departmentId', 'department_id']
-};
 
 export default function ImportPreviewTable<T extends Record<string, any>>({
   columns,
@@ -75,13 +61,15 @@ export default function ImportPreviewTable<T extends Record<string, any>>({
   conflicts = {},
   onConflictResolutionChange,
   selectedRows = new Set(Array.from({ length: preview.length }, (_, i) => i)), // Default: tutte le righe selezionate
-  onRowSelectionChange
+  onRowSelectionChange,
+  normalizeKey,
+  fieldMappings = {}
 }: ImportPreviewTableProps<T>) {
   const [colWidths, setColWidths] = useState<Record<string, number>>(() => 
     columns.reduce((acc, col) => ({ ...acc, [col.key]: col.width }), {} as Record<string, number>)
   );
   const [overwriteToggles, setOverwriteToggles] = useState<{ [id: string]: boolean }>({});
-  const [initialized, setInitialized] = useState(false);
+  // (rimosso) const [initialized, setInitialized] = useState(false);
   const [isCompanyDropdownOpen, setIsCompanyDropdownOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
@@ -91,43 +79,145 @@ export default function ImportPreviewTable<T extends Record<string, any>>({
   const startWidth = useRef<number>(0);
   const dropdownRef = useRef<HTMLDivElement>(null);
   
-  // Identifica le righe duplicate utilizzando la chiave univoca (con normalizzazione)
-  const existingKeys = new Set(
+  // Funzione di normalizzazione per la chiave univoca
+  const normalizeKeyFn = (v: any) => (normalizeKey ? normalizeKey(v) : String(v ?? '').toLowerCase().trim());
+  
+  // Helper per confrontare array di stringhe (ordinati)
+  const arraysEqual = (a: string[], b: string[]) => {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+    return true;
+  };
+
+  // Helper per confronto shallow dei toggle
+  const togglesShallowEqual = (a: { [id: string]: boolean }, b: { [id: string]: boolean }) => {
+    const aKeys = Object.keys(a);
+    const bKeys = Object.keys(b);
+    if (aKeys.length !== bKeys.length) return false;
+    for (const k of aKeys) {
+      if (a[k] !== b[k]) return false;
+    }
+    return true;
+  };
+
+  // Identifica le righe duplicate utilizzando la chiave univoca (con normalizzazione) - memorizzato per evitare ricreazioni inutili
+  const existingKeys = useMemo(() => new Set(
     existing
       .map(item => item[uniqueKey])
       .filter(Boolean)
-      .map(value => String(value).toLowerCase().trim())
-  );
+      .map(value => normalizeKeyFn(value))
+  ), [existing, uniqueKey, normalizeKey]);
 
-  // Imposta i toggle predefiniti per i duplicati all'inizializzazione, solo una volta
+  // Helper per normalizzare valori chiave
+  const norm = (v: any) => normalizeKeyFn(v);
+
+  // Signature per capire quando preview/existing cambiano sostanzialmente
+  const previewSignature = useMemo(() => {
+    try {
+      return preview.map(item => (item && item[uniqueKey] ? norm(item[uniqueKey]) : '')).join('|');
+    } catch {
+      return String(preview.length);
+    }
+  }, [preview, uniqueKey, normalizeKey]);
+
+  const existingSignature = useMemo(() => {
+    const arr = Array.from(existingKeys);
+    arr.sort();
+    return arr.join('|');
+  }, [existingKeys]);
+
+  const prevPreviewSigRef = useRef<string>('');
+  const prevExistingSigRef = useRef<string>('');
+  const lastReportedIdsRef = useRef<string[]>([]);
+  
+  // Inizializza/sincronizza i toggle di sovrascrittura quando cambiano preview/existing
   useEffect(() => {
-    if (!initialized) {
-      const toggles: { [id: string]: boolean } = {};
+    const previewChanged = prevPreviewSigRef.current !== previewSignature;
+    const existingChanged = prevExistingSigRef.current !== existingSignature;
+
+    if (!previewChanged && !existingChanged) return;
+
+    setOverwriteToggles(prev => {
+      const computed: { [id: string]: boolean } = { ...prev };
+
+      // Popola toggle per elementi con id o duplicati (in base a uniqueKey)
       preview.forEach(item => {
-        // Se il record ha un ID, significa che è un record esistente
-        if (item.id) {
-          toggles[String(item.id)] = true;
-        } 
-        // Altrimenti, verifica usando la chiave univoca
-        else if (item[uniqueKey] && existingKeys.has(String(item[uniqueKey]))) {
-          // Trova l'ID del record esistente
-          const existingItem = existing.find(e => String(e[uniqueKey]) === String(item[uniqueKey]));
-          if (existingItem) {
-            toggles[String(existingItem.id)] = true;
+        if (item && (item as any).id) {
+          const idStr = String((item as any).id);
+          if (!(idStr in computed)) computed[idStr] = true;
+          return;
+        }
+        const key = item?.[uniqueKey];
+        if (key && existingKeys.has(norm(key))) {
+          const existingItem = existing.find(e => norm(e[uniqueKey]) === norm(key));
+          const exId = existingItem && (existingItem as any).id ? String((existingItem as any).id) : undefined;
+          if (exId && !(exId in computed)) {
+            computed[exId] = true;
           }
         }
       });
-      setOverwriteToggles(toggles);
-      setInitialized(true);
+
+      // Evita aggiornamenti di stato se non ci sono variazioni reali
+      if (togglesShallowEqual(prev, computed)) return prev;
+      return computed;
+    });
+
+    prevPreviewSigRef.current = previewSignature;
+    prevExistingSigRef.current = existingSignature;
+  // Limita le dipendenze ai soli signature per evitare re-trigger inutili
+  }, [previewSignature, existingSignature]);
+
+  // Elenco aziende filtrato per ricerca
+  const filteredCompanies = useMemo(() => {
+    const term = searchTerm.toLowerCase().trim();
+    if (!term) return availableCompanies;
+    return availableCompanies.filter(c =>
+      (c.ragioneSociale || c.name || '').toLowerCase().includes(term)
+    );
+  }, [availableCompanies, searchTerm]);
+
+  // Selezione azienda dal dropdown e applicazione alle righe selezionate o a tutte
+  const handleCompanySelect = (companyId: string) => {
+    setSelectedCompanyId(companyId);
+    setIsCompanyDropdownOpen(false);
+
+    if (onCompanyChange) {
+      const targetRowIds = (selectedRows && selectedRows.size > 0)
+        ? Array.from(selectedRows).map(i => String(i))
+        : preview.map((_, i) => String(i));
+      onCompanyChange(targetRowIds, companyId);
     }
-  }, [preview, existingKeys, uniqueKey, initialized, existing]);
+  };
+
+  // Imposta i toggle predefiniti per i duplicati all'inizializzazione, solo una volta
+  // (rimosso effetto obsoleto basato su "initialized")
+  // useEffect(() => {
+  //   if (!initialized) {
+  //     const toggles: { [id: string]: boolean } = {};
+  //     preview.forEach(item => {
+  //       if (item.id) {
+  //         toggles[String(item.id)] = true;
+  //       } else if (item[uniqueKey] && existingKeys.has(norm(item[uniqueKey]))) {
+  //         const existingItem = existing.find(e => norm(e[uniqueKey]) === norm(item[uniqueKey]));
+  //         if (existingItem) {
+  //           const exId = (existingItem as any).id;
+  //           if (exId) toggles[String(exId)] = true;
+  //         }
+  //       }
+  //     });
+  //     setOverwriteToggles(toggles);
+  //     setInitialized(true);
+  //   }
+  // }, [preview, existingKeys, uniqueKey, initialized, existing]);
 
   // Effetto separato per notificare i cambiamenti
   useEffect(() => {
-    if (onOverwriteChange) {
-      const selectedIds = Object.keys(overwriteToggles).filter(key => overwriteToggles[key]);
-      onOverwriteChange(selectedIds);
-    }
+    if (!onOverwriteChange) return;
+    const selectedIds = Object.keys(overwriteToggles).filter(key => overwriteToggles[key]);
+    // Evita notifiche duplicate quando non ci sono cambiamenti reali
+    if (arraysEqual(selectedIds, lastReportedIdsRef.current)) return;
+    lastReportedIdsRef.current = selectedIds;
+    onOverwriteChange(selectedIds);
   }, [overwriteToggles, onOverwriteChange]);
   
   // Gestione del click all'esterno del dropdown
@@ -146,46 +236,7 @@ export default function ImportPreviewTable<T extends Record<string, any>>({
 
   // Gestione selezione righe per l'import
   const handleRowSelectionToggle = (rowIndex: number) => {
-    if (!onRowSelectionChange) return;
-    
-    const newSelectedRows = new Set(selectedRows);
-    const item = preview[rowIndex];
-    
-    if (newSelectedRows.has(rowIndex)) {
-      // Deseleziona la riga per l'importazione
-      newSelectedRows.delete(rowIndex);
-      
-      // Se la riga è un duplicato, deseleziona anche dalla sovrascrittura
-      if (item && item[uniqueKey] && existingKeys.has(String(item[uniqueKey]).toLowerCase().trim())) {
-        const existingItem = existing.find(e => 
-          String(e[uniqueKey]).toLowerCase().trim() === String(item[uniqueKey]).toLowerCase().trim()
-        );
-        if (existingItem && existingItem.id) {
-          setOverwriteToggles(prev => ({
-            ...prev,
-            [String(existingItem.id)]: false
-          }));
-        }
-      }
-    } else {
-      // Seleziona la riga per l'importazione
-      newSelectedRows.add(rowIndex);
-      
-      // Se la riga è un duplicato, seleziona anche per la sovrascrittura
-      if (item && item[uniqueKey] && existingKeys.has(String(item[uniqueKey]).toLowerCase().trim())) {
-        const existingItem = existing.find(e => 
-          String(e[uniqueKey]).toLowerCase().trim() === String(item[uniqueKey]).toLowerCase().trim()
-        );
-        if (existingItem && existingItem.id) {
-          setOverwriteToggles(prev => ({
-            ...prev,
-            [String(existingItem.id)]: true
-          }));
-        }
-      }
-    }
-    
-    onRowSelectionChange(newSelectedRows);
+    // ... existing code ...
   };
 
   const handleSelectAllRows = () => {
@@ -200,12 +251,13 @@ export default function ImportPreviewTable<T extends Record<string, any>>({
       const noToggles: { [id: string]: boolean } = {};
       preview.forEach(item => {
         const key = item[uniqueKey];
-        if (key && existingKeys.has(String(key).toLowerCase().trim())) {
+        if (key && existingKeys.has(norm(key))) {
+          // Trova l'elemento esistente corrispondente per ottenere l'ID corretto
           const existingItem = existing.find(e => 
-            String(e[uniqueKey]).toLowerCase().trim() === String(key).toLowerCase().trim()
+            norm(e[uniqueKey]) === norm(key)
           );
-          if (existingItem && existingItem.id) {
-            noToggles[String(existingItem.id)] = false;
+          if (existingItem && (existingItem as any).id) {
+            noToggles[String((existingItem as any).id)] = false;
           }
         }
       });
@@ -218,12 +270,12 @@ export default function ImportPreviewTable<T extends Record<string, any>>({
       const allToggles: { [id: string]: boolean } = { ...overwriteToggles };
       preview.forEach(item => {
         const key = item[uniqueKey];
-        if (key && existingKeys.has(String(key).toLowerCase().trim())) {
+        if (key && existingKeys.has(norm(key))) {
           const existingItem = existing.find(e => 
-            String(e[uniqueKey]).toLowerCase().trim() === String(key).toLowerCase().trim()
+            norm(e[uniqueKey]) === norm(key)
           );
-          if (existingItem && existingItem.id) {
-            allToggles[String(existingItem.id)] = true;
+          if (existingItem && (existingItem as any).id) {
+            allToggles[String((existingItem as any).id)] = true;
           }
         }
       });
@@ -272,7 +324,7 @@ export default function ImportPreviewTable<T extends Record<string, any>>({
         if (existingItem) {
           const rowIndex = preview.findIndex(item => 
             item[uniqueKey] && 
-            String(item[uniqueKey]).toLowerCase().trim() === String(existingItem[uniqueKey]).toLowerCase().trim()
+            norm(item[uniqueKey]) === norm(existingItem[uniqueKey])
           );
           
           if (rowIndex !== -1) {
@@ -300,10 +352,10 @@ export default function ImportPreviewTable<T extends Record<string, any>>({
     // Assicurati che tutti gli ID presenti in existingKeys abbiano un toggle
     preview.forEach(item => {
       const key = item[uniqueKey];
-      if (key && existingKeys.has(String(key).toLowerCase().trim())) {
+      if (key && existingKeys.has(norm(key))) {
         // Trova l'elemento esistente corrispondente per ottenere l'ID corretto
         const existingItem = existing.find(e => 
-          String(e[uniqueKey]).toLowerCase().trim() === String(key).toLowerCase().trim()
+          norm(e[uniqueKey]) === norm(key)
         );
         if (existingItem && existingItem.id) {
           allToggles[String(existingItem.id)] = true;
@@ -328,10 +380,10 @@ export default function ImportPreviewTable<T extends Record<string, any>>({
     // Assicurati che tutti gli ID presenti in existingKeys abbiano un toggle
     preview.forEach(item => {
       const key = item[uniqueKey];
-      if (key && existingKeys.has(String(key).toLowerCase().trim())) {
+      if (key && existingKeys.has(norm(key))) {
         // Trova l'elemento esistente corrispondente per ottenere l'ID corretto
         const existingItem = existing.find(e => 
-          String(e[uniqueKey]).toLowerCase().trim() === String(key).toLowerCase().trim()
+          norm(e[uniqueKey]) === norm(key)
         );
         if (existingItem && existingItem.id) {
           noToggles[String(existingItem.id)] = false;
@@ -347,32 +399,8 @@ export default function ImportPreviewTable<T extends Record<string, any>>({
     }
   };
 
-  // Gestore per il cambio dell'azienda per le righe selezionate
-  const handleCompanySelect = (companyId: string) => {
-    setSelectedCompanyId(companyId);
-    setIsCompanyDropdownOpen(false);
-    
-    if (onCompanyChange) {
-      // Se ci sono righe selezionate tramite checkbox, applica solo a quelle
-      if (selectedRows.size > 0) {
-        // Passa gli indici delle righe selezionate come stringhe
-        const selectedRowIndices = Array.from(selectedRows).map(index => String(index));
-        onCompanyChange(selectedRowIndices, companyId);
-      } else {
-        // Se non ci sono righe selezionate tramite checkbox, applica a tutte le righe
-        const allRowIndices = Array.from({ length: preview.length }, (_, index) => String(index));
-        onCompanyChange(allRowIndices, companyId);
-      }
-    }
-  };
-
-  // Filtra le aziende in base al termine di ricerca
-  const filteredCompanies = availableCompanies.filter(company => 
-    (company.ragioneSociale || company.name || '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
   // Controlla se tutte le righe duplicate sono selezionate
-  const duplicateCount = preview.filter(item => item[uniqueKey] && existingKeys.has(String(item[uniqueKey]))).length;
+  const duplicateCount = preview.filter(item => item[uniqueKey] && existingKeys.has(norm(item[uniqueKey]))).length;
   const selectedCount = selectedRows.size;
   const areAllDuplicatesSelected = duplicateCount > 0 && selectedCount === duplicateCount;
   
@@ -403,14 +431,68 @@ export default function ImportPreviewTable<T extends Record<string, any>>({
     }
   };
 
+  // Formattazione e normalizzazione booleana
+  const normalizeBoolean = (value: unknown): string => {
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'boolean') return value ? 'true' : 'false';
+    const s = String(value).trim().toLowerCase();
+    if (['true', '1', 'yes', 'si', 'sì', 'y'].includes(s)) return 'true';
+    if (['false', '0', 'no', 'n'].includes(s)) return 'false';
+    return '';
+  };
+
+  const formatBooleanForDisplay = (value: unknown): string => {
+    const n = normalizeBoolean(value);
+    if (n === 'true') return 'Sì';
+    if (n === 'false') return 'No';
+    return '';
+  };
+
   // Trova il valore corrispondente nel database tramite mappatura dei campi
-  const getDbValue = (existingItem: Record<string, any>, csvKey: string): string => {
+  const getDbValue = (existingItem: Record<string, any>, csvKey: string, currentRow?: Record<string, any>): string => {
     // Rimuovi l'indice dalla chiave se presente (es. "postalCode-0" -> "postalCode")
     const originalKey = csvKey.replace(/-\d+$/, '');
-    
+
+    // Gestione specifica per campi Sede Aziendale: confronta contro existingItem.sites[]
+    if (
+      ['siteName', 'siteIndirizzo', 'siteCitta', 'siteProvincia', 'siteCap'].includes(originalKey) &&
+      existingItem && Array.isArray((existingItem as any).sites)
+    ) {
+      const sites: any[] = (existingItem as any).sites || [];
+      const targetNameRaw = (currentRow?.siteName ?? currentRow?.siteCitta ?? '').toString();
+      const targetAddrRaw = (currentRow?.siteIndirizzo ?? '').toString();
+
+      let matchedSite: any | undefined;
+      if (targetNameRaw) {
+        const targetName = norm(targetNameRaw);
+        matchedSite = sites.find(s => norm(s?.siteName || s?.name || '') === targetName);
+      }
+      if (!matchedSite && targetAddrRaw) {
+        const targetAddr = norm(targetAddrRaw);
+        matchedSite = sites.find(s => norm(s?.siteIndirizzo || s?.address || s?.indirizzo || '') === targetAddr);
+      }
+
+      if (matchedSite) {
+        switch (originalKey) {
+          case 'siteName':
+            return String(matchedSite.siteName || matchedSite.name || '');
+          case 'siteIndirizzo':
+            return String(matchedSite.siteIndirizzo || matchedSite.address || matchedSite.indirizzo || '');
+          case 'siteCitta':
+            return String(matchedSite.siteCitta || matchedSite.city || matchedSite.citta || '');
+          case 'siteProvincia':
+            return String(matchedSite.siteProvincia || matchedSite.province || matchedSite.provincia || '');
+          case 'siteCap':
+            return String(matchedSite.siteCap || matchedSite.cap || matchedSite.zip || '');
+        }
+      }
+      // Se non c'è match di sito, non mostriamo valore DB per questi campi
+      return '';
+    }
+
     // Ottieni possibili nomi di campi nel database per questa chiave CSV
     const possibleKeys = fieldMappings[originalKey] || [originalKey];
-    
+
     // Prova ogni possibile chiave nel database
     for (const dbKey of possibleKeys) {
       if (existingItem[dbKey] !== undefined && existingItem[dbKey] !== null) {
@@ -457,7 +539,7 @@ export default function ImportPreviewTable<T extends Record<string, any>>({
     // Oppure se ha il flag _isExisting impostato da EmployeeImport
     const isExisting = item.id !== undefined || 
       item._isExisting === true ||
-      (item[uniqueKey] && existingKeys.has(String(item[uniqueKey]).toLowerCase().trim())) ||
+      (item[uniqueKey] && existingKeys.has(norm(item[uniqueKey]))) ||
       (conflict && conflict.type === 'duplicate');
     
 
@@ -467,7 +549,7 @@ export default function ImportPreviewTable<T extends Record<string, any>>({
       // Altrimenti, troviamo l'ID corrispondente nel dataset esistente
       if (item[uniqueKey]) {
         const existingItem = existing.find(e => 
-          String(e[uniqueKey]).toLowerCase().trim() === String(item[uniqueKey]).toLowerCase().trim()
+          norm(e[uniqueKey]) === norm(item[uniqueKey])
         );
         return existingItem?.id;
       }
@@ -571,21 +653,19 @@ export default function ImportPreviewTable<T extends Record<string, any>>({
         {/* Indicatore di stato compatto */}
         <div className="flex items-center justify-center">
           {hasErrors ? (
-            <div className="flex items-center text-red-600 bg-red-50 px-2 py-1 rounded-md border border-red-200" title={errors.join(', ')}>
+            <div className="flex items-center text-red-600 bg-red-50 px-2 py-0.5 rounded-full border border-red-200" title={errors.join(', ')}>
               <AlertCircle size={12} className="mr-1" />
-              <span className="text-xs font-medium">
-                {hasFiscalCodeError ? '❌ CF Invalido' : '❌ Errore'}
-              </span>
+              <span className="text-xs font-medium">Errore</span>
             </div>
           ) : isExisting ? (
-            <div className="flex items-center text-blue-600 bg-blue-50 px-2 py-1 rounded-md border border-blue-200">
+            <div className="flex items-center text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
               <CheckCircle size={12} className="mr-1" />
-              <span className="text-xs font-medium">🔄 Esistente</span>
+              <span className="text-xs font-medium">Agg.</span>
             </div>
           ) : (
-            <div className="flex items-center text-green-600 bg-green-50 px-2 py-1 rounded-md border border-green-200">
+            <div className="flex items-center text-green-600 bg-green-50 px-2 py-0.5 rounded-full border border-green-200">
               <CheckCircle size={12} className="mr-1" />
-              <span className="text-xs font-medium">✨ Nuovo</span>
+              <span className="text-xs font-medium">Nuovo</span>
             </div>
           )}
         </div>
@@ -754,10 +834,10 @@ export default function ImportPreviewTable<T extends Record<string, any>>({
             {preview.map((item, idx) => {
               // Trova eventuale record esistente corrispondente
               const key = item[uniqueKey];
-              const isExisting = key && existingKeys.has(String(key));
+              const isExisting = key && existingKeys.has(norm(key));
               const existingItem = isExisting 
-                ? existing.find(e => String(e[uniqueKey]) === String(key)) 
-                : null;
+              ? existing.find(e => norm(e[uniqueKey]) === norm(key)) 
+              : null;
                 
               // Ottieni eventuali errori per questa riga
               const errors = rowErrors[idx] || [];
@@ -787,31 +867,56 @@ export default function ImportPreviewTable<T extends Record<string, any>>({
                     
                     if (isExisting && existingItem) {
                       // Normalizza i valori per il confronto
-                      let newValue = String(item[originalKey] ?? '').trim();
-                      
+                      const newValueRaw: any = (item as any)[originalKey];
+                      let newValueForCompare = '';
+
                       // Formattazione speciale per le date nel confronto
-                      if ((originalKey === 'data_nascita' || originalKey === 'birthDate') && newValue) {
-                        newValue = formatDateForComparison(newValue);
+                      if ((originalKey === 'data_nascita' || originalKey === 'birthDate') && newValueRaw) {
+                        newValueForCompare = formatDateForComparison(String(newValueRaw));
+                      } else {
+                        // Gestione booleana (es. isActive)
+                        const nb = normalizeBoolean(newValueRaw);
+                        newValueForCompare = nb || String(newValueRaw ?? '').trim();
                       }
                       
-                      existingValue = getDbValue(existingItem, originalKey).trim();
+                      const dbRaw = getDbValue(existingItem, originalKey, item as unknown as Record<string, any>);
+                      // Per confronto DB applica la stessa normalizzazione
+                      let existingValueForCompare = '';
+                      if ((originalKey === 'data_nascita' || originalKey === 'birthDate') && dbRaw) {
+                        existingValueForCompare = formatDateForComparison(dbRaw);
+                      } else {
+                        const nbDb = normalizeBoolean(dbRaw);
+                        existingValueForCompare = nbDb || String(dbRaw ?? '').trim();
+                      }
                       
-                      // Evidenzia le differenze in tutti i casi:
-                      // - Nuovo valore diverso da quello esistente (anche se vuoto)
-                      // - Valore esistente diverso da quello nuovo (anche se vuoto)
-                      isDifferent = newValue !== existingValue;
+                      existingValue = String(dbRaw ?? '').trim();
+                      // Evidenzia differenze
+                      isDifferent = newValueForCompare !== existingValueForCompare;
                     }
                     
-                    const value = item[originalKey];
+                    const value = (item as any)[originalKey];
                     let displayValue = '';
                     
                     // Formattazione speciale per la data di nascita
                     if ((originalKey === 'data_nascita' || originalKey === 'birthDate') && value) {
-                      displayValue = formatDateForComparison(value);
+                      displayValue = formatDateForComparison(String(value));
+                    } else if (normalizeBoolean(value)) {
+                      // Formattazione booleana leggibile
+                      displayValue = formatBooleanForDisplay(value);
                     } else {
                       displayValue = value !== undefined && value !== null 
                         ? String(value) 
                         : '';
+                    }
+
+                    // Valore DB formattato per tooltip (applica stessa logica)
+                    let existingValueDisplay = existingValue;
+                    if (existingValue) {
+                      if ((originalKey === 'data_nascita' || originalKey === 'birthDate')) {
+                        existingValueDisplay = formatDateForComparison(existingValue);
+                      } else if (normalizeBoolean(existingValue)) {
+                        existingValueDisplay = formatBooleanForDisplay(existingValue);
+                      }
                     }
                     
                     // Genera una chiave unica per la cella che combina indice riga e chiave colonna
@@ -831,7 +936,7 @@ export default function ImportPreviewTable<T extends Record<string, any>>({
                           {isDifferent && existingItem && (
                             <div className="flex items-center gap-1 mt-1 text-xs text-gray-500 truncate">
                               <span className="inline-block w-1.5 h-1.5 bg-blue-400 rounded-full"></span> 
-                              DB: {existingValue || "(vuoto)"}
+                              DB: {existingValueDisplay || "(vuoto)"}
                             </div>
                           )}
                         </div>

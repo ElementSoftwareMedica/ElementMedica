@@ -7,6 +7,7 @@ import express from 'express';
 import { authenticate } from '../../../auth/middleware.js';
 import logger from '../../../utils/logger.js';
 import prisma from '../../../config/prisma-optimization.js';
+import authService from '../../../services/authService.js'
 
 const router = express.Router();
 
@@ -170,6 +171,36 @@ router.get('/test-permissions-direct/:personId', async (req, res) => {
   } catch (error) {
     console.error('🔍 [TEST DIRECT] Error:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/debug/find-person', async (req, res) => {
+  try {
+    const { identifier } = req.query;
+    if (!identifier) {
+      return res.status(400).json({ error: 'Missing identifier' });
+    }
+    const person = await authService.findPersonForLogin(String(identifier));
+    if (!person) {
+      return res.status(404).json({ error: 'Person not found', identifier });
+    }
+    res.json({
+      success: true,
+      identifier,
+      person: {
+        id: person.id,
+        email: person.email,
+        username: person.username,
+        status: person.status,
+        deletedAt: person.deletedAt,
+        tenantId: person.tenantId,
+        hasPassword: !!person.password,
+        passwordSample: person.password ? String(person.password).slice(0, 10) : null
+      }
+    });
+  } catch (error) {
+    logger.error('Debug debug/find-person failed', { error: error.message, stack: error.stack });
+    res.status(500).json({ error: 'Internal error', message: error.message });
   }
 });
 

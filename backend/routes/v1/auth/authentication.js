@@ -6,22 +6,22 @@
 import express from 'express';
 import { body, validationResult } from 'express-validator';
 import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
 import rateLimit from 'express-rate-limit';
 import { authenticate } from '../../../auth/middleware.js';
 import authService from '../../../services/authService.js';
 import logger from '../../../utils/logger.js';
 import prisma from '../../../config/prisma-optimization.js';
+import { JWTService } from '../../../auth/jwt.js';
 
 const router = express.Router();
 
 // Rate limiting for auth endpoints
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 200, // 200 attempts per window (increased for better user experience)
+  max: 5, // SECURITY: Reduced from 200 to 5 attempts (brute force protection)
   message: {
     error: 'Too many authentication attempts',
-    message: 'Please try again later'
+    message: 'Please try again in 15 minutes'
   },
   standardHeaders: true,
   legacyHeaders: false,
@@ -107,51 +107,12 @@ router.post('/login',
 
       const person = credentialsResult.person;
 
-      // Generate tokens using AuthService with retry on unique constraint
-      let tokens;
-      let saveOk = false;
-      let lastError = null;
-      for (let attempt = 1; attempt <= 3; attempt++) {
-        try {
-          tokens = authService.generateTokens(person, remember_me);
-
-          // Store refresh token (compute expires each attempt to keep coherence)
-          const expiresAt = new Date(Date.now() + (remember_me ? 30 : 7) * 24 * 60 * 60 * 1000);
-          await authService.saveRefreshToken(
-            tokens.refreshToken,
-            person.id,
-            expiresAt,
-            req.get('User-Agent'),
-            req.ip,
-            person.tenantId
-          );
-          saveOk = true;
-          break;
-        } catch (e) {
-          lastError = e;
-          // Prisma unique constraint error code is P2002
-          const isUniqueViolation = e && (e.code === 'P2002' || (e.message && e.message.includes('Unique constraint failed') && e.message.includes('token')));
-          if (isUniqueViolation) {
-            logger.warn('Duplicate refresh token detected, regenerating (retry attempt)', {
-              attempt,
-              personId: person.id
-            });
-            continue; // retry generating tokens
-          }
-          throw e; // rethrow other errors immediately
-        }
-      }
-
-      if (!saveOk) {
-        logger.error('Failed to persist refresh token after retries', {
-          personId: person.id,
-          error: lastError ? lastError.message : 'unknown'
-        });
-        return res.status(500).json({
-          error: 'Internal server error',
-          message: 'Unable to complete login, please try again'
-        });
-      }
+      // Genera e salva token usando il servizio centralizzato (gestisce anche il DB)
+      const { accessToken, refreshToken, expiresIn } = await JWTService.generateTokenPair(
+        person,
+        { userAgent: req.get('User-Agent'), ip: req.ip },
+        { rememberMe: !!remember_me }
+      );
 
       // Clean up existing sessions for this person to avoid conflicts
       await prisma.personSession.deleteMany({
@@ -162,13 +123,11 @@ router.post('/login',
       });
 
       // Create new session
-      // Calculate session expiration based on token expiry (1h default, 7d if remember_me)
       const sessionExpiresAt = new Date(Date.now() + (remember_me ? 7 * 24 * 60 * 60 * 1000 : 60 * 60 * 1000));
-      
       await prisma.personSession.create({
         data: {
           personId: person.id,
-          sessionToken: tokens.accessToken,
+          sessionToken: accessToken,
           isActive: true,
           lastActivityAt: new Date(),
           expiresAt: sessionExpiresAt,
@@ -190,20 +149,44 @@ router.post('/login',
         tenantId: person.tenantId
       });
 
-      // Get user roles for the response
       const userRoles = authService.getPersonRoles(person);
-      
-      // Determine primary role for frontend compatibility
       let primaryRole = 'User';
-      if (userRoles.includes('SUPER_ADMIN') || userRoles.includes('ADMIN')) {
-        primaryRole = 'Admin';
-      } else if (userRoles.includes('COMPANY_ADMIN')) {
-        primaryRole = 'Administrator';
-      } else if (userRoles.includes('MANAGER')) {
-        primaryRole = 'Manager';
-      } else if (userRoles.includes('EMPLOYEE')) {
-        primaryRole = 'Employee';
-      }
+      if (userRoles.includes('SUPER_ADMIN') || userRoles.includes('ADMIN')) primaryRole = 'Admin';
+      else if (userRoles.includes('COMPANY_ADMIN')) primaryRole = 'Administrator';
+      else if (userRoles.includes('MANAGER')) primaryRole = 'Manager';
+      else if (userRoles.includes('EMPLOYEE')) primaryRole = 'Employee';
+
+      // Calcola expires_in (in secondi) coerente con remember_me e con eventuali stringhe tipo '7d'
+      const expiresInSeconds = (() => {
+        if (typeof expiresIn === 'number') return expiresIn;
+        const s = String(expiresIn).trim();
+        const m = s.match(/^(\d+)\s*([smhd])$/i);
+        if (m) {
+          const value = parseInt(m[1], 10);
+          const unit = m[2].toLowerCase();
+          const mult = unit === 's' ? 1 : unit === 'm' ? 60 : unit === 'h' ? 3600 : unit === 'd' ? 86400 : 1;
+          return value * mult;
+        }
+        // Fallback coerente con la policy v1: 1h default, 7d se remember_me
+        return remember_me ? 7 * 24 * 60 * 60 : 60 * 60;
+      })();
+
+      // Imposta cookie HttpOnly per compatibilità con authenticateTest
+      const isProd = process.env.NODE_ENV === 'production';
+      res.cookie('accessToken', accessToken, {
+        httpOnly: true,
+        secure: isProd,
+        sameSite: isProd ? 'none' : 'lax',
+        maxAge: expiresInSeconds * 1000,
+        path: '/'
+      });
+      res.cookie('refreshToken', refreshToken, {
+        httpOnly: true,
+        secure: isProd,
+        sameSite: isProd ? 'none' : 'lax',
+        maxAge: (remember_me ? 30 : 7) * 24 * 60 * 60 * 1000,
+        path: '/'
+      });
 
       res.json({
         success: true,
@@ -213,20 +196,17 @@ router.post('/login',
           firstName: person.firstName,
           lastName: person.lastName,
           globalRole: person.globalRole,
-          role: primaryRole, // Add mapped role for frontend
-          roles: userRoles, // Add roles array
+          role: primaryRole,
+          roles: userRoles,
           status: person.status,
           companyId: person.companyId,
           tenantId: person.tenantId,
-          company: person.company ? {
-            id: person.company.id,
-            name: person.company.name
-          } : null
+          company: person.company ? { id: person.company.id, name: person.company.name } : null
         },
         tokens: {
-          access_token: tokens.accessToken,
-          refresh_token: tokens.refreshToken,
-          expires_in: tokens.expiresIn,
+          access_token: accessToken,
+          refresh_token: refreshToken,
+          expires_in: expiresInSeconds,
           token_type: 'Bearer'
         }
       });
@@ -331,42 +311,14 @@ router.post('/register',
         email: person.email
       });
 
-      // Generate tokens for immediate login
-      const tokenPayload = {
-        personId: person.id,
-        email: person.email,
-        companyId: person.companyId,
-        roles: ['person'],
-        permissions: []
-      };
-
-      const accessToken = jwt.sign(
-        tokenPayload,
-        process.env.JWT_SECRET,
-        { expiresIn: '1h' }
+      // Genera e salva i token in modo centralizzato tramite JWTService
+      const { accessToken, refreshToken, expiresIn, tokenType } = await JWTService.generateTokenPair(
+        person,
+        { userAgent: req.get('User-Agent') || 'Unknown', ip: req.ip || '0.0.0.0' },
+        { rememberMe: false }
       );
 
-      const refreshToken = jwt.sign(
-        { personId: person.id },
-        process.env.JWT_REFRESH_SECRET,
-        { expiresIn: '7d' }
-      );
-
-      // Store refresh token
-      await prisma.refreshToken.create({
-        data: {
-          token: refreshToken,
-          personId: person.id,
-          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-          deviceInfo: {
-            userAgent: req.get('User-Agent') || 'Unknown',
-            ipAddress: req.ip || '0.0.0.0'
-          },
-          tenantId: person.tenantId
-        }
-      });
-
-      res.status(201).json({
+      return res.status(201).json({
         success: true,
         user: {
           id: person.id,
@@ -383,7 +335,7 @@ router.post('/register',
         tokens: {
           access_token: accessToken,
           refresh_token: refreshToken,
-          expires_in: 60 * 60, // 1 hour in seconds
+          expires_in: expiresIn,
           token_type: 'Bearer'
         }
       });
@@ -421,56 +373,37 @@ router.post('/refresh', async (req, res) => {
       });
     }
 
-    // Verify refresh token
-    const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
-    
-    // Check if refresh token exists and is not revoked
-    const storedToken = await prisma.refreshToken.findFirst({
-      where: {
-        token: refreshToken,
-        personId: decoded.personId,
-        revokedAt: null,
-        expiresAt: {
-          gt: new Date()
-        }
-      },
-      include: {
-        person: {
-          include: {
-            company: true
-          }
-        }
-      }
-    });
+    // Centralizza su JWTService: verifica refresh token, controlla DB e genera nuovo access token
+    const { accessToken, expiresIn, tokenType } = await JWTService.refreshAccessToken(refreshToken);
 
-    if (!storedToken) {
-      return res.status(401).json({
-        error: 'Invalid refresh token',
-        message: 'Refresh token is invalid or expired'
-      });
+    // Converti expiresIn (stringa tipo '15m', '1h', '7d') in secondi per compatibilità di risposta
+    let expiresInSeconds = 60 * 60; // default fallback 1h
+    if (typeof expiresIn === 'string') {
+      const match = expiresIn.match(/^(\d+)([smhd])$/);
+      if (match) {
+        const val = parseInt(match[1], 10);
+        const unit = match[2];
+        const multipliers = { s: 1, m: 60, h: 3600, d: 86400 };
+        expiresInSeconds = val * (multipliers[unit] || 3600);
+      }
+    } else if (typeof expiresIn === 'number') {
+      expiresInSeconds = expiresIn;
     }
 
-    const person = storedToken.person;
-
-    // Generate new access token
-    const tokenPayload = {
-      personId: person.id,
-      email: person.email,
-      companyId: person.companyId,
-      roles: [person.role],
-      permissions: []
-    };
-
-    const accessToken = jwt.sign(
-      tokenPayload,
-      process.env.JWT_SECRET,
-      { expiresIn: '1h' }
-    );
+    // Aggiorna cookie accessToken per compatibilità con authenticateTest
+    const isProd = process.env.NODE_ENV === 'production';
+    res.cookie('accessToken', accessToken, {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: isProd ? 'none' : 'lax',
+      maxAge: expiresInSeconds * 1000,
+      path: '/'
+    });
 
     res.json({
       access_token: accessToken,
-      expires_in: 60 * 60, // 1 hour in seconds
-      token_type: 'Bearer'
+      expires_in: expiresInSeconds,
+      token_type: tokenType || 'Bearer'
     });
   } catch (error) {
     logger.error('Token refresh error', {
@@ -495,49 +428,23 @@ router.post('/refresh', async (req, res) => {
  */
 router.post('/logout', authenticate(), async (req, res) => {
   try {
-    const refreshToken = req.headers['x-refresh-token'] || req.body.refresh_token;
-    
+    // Estrai refresh token da header o body per il logout
+    const refreshToken = req.headers['x-refresh-token'] || req.body.refresh_token || req.body?.refreshToken;
+    // Se viene fornito un refresh token, revoca quella sessione; altrimenti revoca tutte le sessioni della persona
     if (refreshToken) {
-      // Revoke specific refresh token
-      await prisma.refreshToken.updateMany({
-        where: {
-          token: refreshToken,
-          personId: req.person.id
-        },
-        data: {
-          revokedAt: new Date()
-        }
-      });
+      await JWTService.revokeSession(refreshToken);
     } else {
-      // Revoke all refresh tokens for person
-      await prisma.refreshToken.updateMany({
-        where: {
-          personId: req.person.id,
-          revokedAt: null
-        },
-        data: {
-          revokedAt: new Date()
-        }
-      });
-    }
-
-    // Disattiva tutte le sessioni attive per aggiornare lo stato online
-    await prisma.personSession.updateMany({
-      where: {
-        personId: req.person.id,
-        isActive: true
-      },
-      data: {
-        isActive: false
+      const personId = req.person?.id || req.person?.personId;
+      if (personId) {
+        await JWTService.revokeAllPersonSessions(personId);
       }
-    });
-
-    logger.info('Person logged out successfully', {
-      personId: req.person.id,
-      email: req.person.email
-    });
-
-    res.json({
+    }
+    
+    // Pulisci cookie
+    res.clearCookie('accessToken', { path: '/' });
+    res.clearCookie('refreshToken', { path: '/' });
+    
+    return res.json({
       success: true,
       message: 'Logged out successfully'
     });

@@ -8,9 +8,10 @@ class PersonExport {
   /**
    * Esporta persone in formato CSV
    * @param {Object} filters - Filtri per l'esportazione
+   * @param {Object} options - Opzioni aggiuntive (es. { view, allowedFields })
    * @returns {Promise<string>} Contenuto CSV
    */
-  static async exportToCSV(filters = {}) {
+  static async exportToCSV(filters = {}, options = {}) {
     try {
       const where = this.buildWhereClause(filters);
       
@@ -44,7 +45,7 @@ class PersonExport {
         isOnline: person.personSessions && person.personSessions.length > 0
       }));
       
-      return this.generateCSVContent(personsWithOnlineStatus);
+      return this.generateCSVContent(personsWithOnlineStatus, options);
     } catch (error) {
       logger.error('Error exporting persons to CSV:', { error: error.message, filters });
       throw error;
@@ -54,9 +55,10 @@ class PersonExport {
   /**
    * Esporta persone in formato JSON
    * @param {Object} filters - Filtri per l'esportazione
+   * @param {Object} options - Opzioni aggiuntive (es. { view, allowedFields })
    * @returns {Promise<Object>} Dati JSON
    */
-  static async exportToJSON(filters = {}) {
+  static async exportToJSON(filters = {}, options = {}) {
     try {
       const where = this.buildWhereClause(filters);
       
@@ -96,11 +98,19 @@ class PersonExport {
         isOnline: person.personSessions && person.personSessions.length > 0
       }));
 
+      // Applica filtro campi consentiti, se specificato
+      const { allowedFields } = options || {};
+      const data = Array.isArray(cleanedPersons)
+        ? cleanedPersons.map(p => this.filterPersonFields(p, allowedFields))
+        : [];
+
       return {
         exportDate: new Date(),
-        totalRecords: cleanedPersons.length,
+        totalRecords: data.length,
         filters,
-        data: cleanedPersons
+        view: options?.view || 'person',
+        fields: Array.isArray(allowedFields) ? allowedFields : ['*'],
+        data
       };
     } catch (error) {
       logger.error('Error exporting persons to JSON:', { error: error.message, filters });
@@ -111,12 +121,13 @@ class PersonExport {
   /**
    * Esporta persone in formato Excel (XLSX)
    * @param {Object} filters - Filtri per l'esportazione
+   * @param {Object} options - Opzioni aggiuntive (es. { view, allowedFields })
    * @returns {Promise<Buffer>} Buffer del file Excel
    */
-  static async exportToExcel(filters = {}) {
+  static async exportToExcel(filters = {}, options = {}) {
     try {
       // Per ora restituiamo CSV, in futuro si può implementare XLSX
-      const csvContent = await this.exportToCSV(filters);
+      const csvContent = await this.exportToCSV(filters, options);
       
       // Qui si potrebbe usare una libreria come 'xlsx' per generare un vero file Excel
       // Per ora convertiamo il CSV in un formato compatibile
@@ -138,9 +149,19 @@ class PersonExport {
     };
     
     if (filters.roleType) {
+      const trainerFamily = ['TRAINER', 'SENIOR_TRAINER', 'TRAINER_COORDINATOR', 'EXTERNAL_TRAINER'];
+      let roleCondition;
+      if (Array.isArray(filters.roleType)) {
+        roleCondition = { in: filters.roleType };
+      } else if (filters.roleType === 'TRAINER') {
+        roleCondition = { in: trainerFamily };
+      } else {
+        roleCondition = filters.roleType;
+      }
+
       where.personRoles = {
         some: {
-          roleType: Array.isArray(filters.roleType) ? { in: filters.roleType } : filters.roleType,
+          roleType: roleCondition,
           isActive: true
         }
       };
@@ -195,50 +216,66 @@ class PersonExport {
   /**
    * Genera il contenuto CSV
    * @param {Array} persons - Array di persone
+   * @param {Object} options - Opzioni aggiuntive (es. { allowedFields })
    * @returns {string} Contenuto CSV
    */
-  static generateCSVContent(persons) {
-    const headers = [
-      'ID',
-      'Nome',
-      'Cognome', 
-      'Email',
-      'Username',
-      'Telefono',
-      'Ruolo Principale',
-      'Tutti i Ruoli',
-      'Azienda',
-      'Tenant',
-      'Stato',
-      'Online',
-      'Ultimo Login',
-      'Data Creazione',
-      'Data Aggiornamento'
+  static generateCSVContent(persons, options = {}) {
+    const allowedFields = Array.isArray(options.allowedFields) ? options.allowedFields : ['*'];
+
+    // Definizione colonne con mapping e chiave di autorizzazione
+    const columnDefs = [
+      { header: 'ID', key: 'id', accessor: (p) => p.id },
+      { header: 'Nome', key: 'firstName', accessor: (p) => p.firstName || '' },
+      { header: 'Cognome', key: 'lastName', accessor: (p) => p.lastName || '' },
+      { header: 'Email', key: 'email', accessor: (p) => p.email || '' },
+      { header: 'Username', key: 'username', accessor: (p) => p.username || '' },
+      { header: 'Telefono', key: 'phone', accessor: (p) => p.phone || '' },
+      { header: 'Ruolo Principale', key: 'personRoles', accessor: (p) => p.personRoles?.[0]?.roleType || '' },
+      { header: 'Tutti i Ruoli', key: 'personRoles', accessor: (p) => p.personRoles?.map(role => role.roleType).join('; ') || '' },
+      { header: "Azienda", key: 'company', accessor: (p) => p.company?.name || '' },
+      { header: 'Tenant', key: 'tenant', accessor: (p) => p.tenant?.name || '' },
+      { header: 'Stato', key: 'status', accessor: (p) => p.status === 'ACTIVE' ? 'Attivo' : 'Inattivo' },
+      { header: 'Online', key: 'isOnline', accessor: (p) => p.isOnline ? 'Sì' : 'No' },
+      { header: 'Ultimo Login', key: 'lastLogin', accessor: (p) => p.lastLogin ? new Date(p.lastLogin).toLocaleString('it-IT') : '' },
+      { header: 'Data Creazione', key: 'createdAt', accessor: (p) => p.createdAt ? new Date(p.createdAt).toLocaleString('it-IT') : '' },
+      { header: 'Data Aggiornamento', key: 'updatedAt', accessor: (p) => p.updatedAt ? new Date(p.updatedAt).toLocaleString('it-IT') : '' }
     ];
-    
-    const rows = persons.map(person => [
-      person.id,
-      person.firstName || '',
-      person.lastName || '',
-      person.email || '',
-      person.username || '',
-      person.phone || '',
-      person.personRoles?.[0]?.roleType || '',
-      person.personRoles?.map(role => role.roleType).join('; ') || '',
-      person.company?.name || '',
-      person.tenant?.name || '',
-      person.status === 'ACTIVE' ? 'Attivo' : 'Inattivo',
-      person.isOnline ? 'Sì' : 'No',
-      person.lastLogin ? new Date(person.lastLogin).toLocaleString('it-IT') : '',
-      person.createdAt ? new Date(person.createdAt).toLocaleString('it-IT') : '',
-      person.updatedAt ? new Date(person.updatedAt).toLocaleString('it-IT') : ''
-    ]);
-    
+
+    const includeAll = allowedFields.includes('*');
+    const selectedColumns = includeAll
+      ? columnDefs
+      : columnDefs.filter(col => allowedFields.includes(col.key));
+
+    // Se non c'è nessuna colonna selezionata, per evitare CSV vuoto, usa almeno l'ID
+    const effectiveColumns = selectedColumns.length > 0 ? selectedColumns : columnDefs.filter(c => c.key === 'id');
+
+    const headers = effectiveColumns.map(c => c.header);
+    const rows = persons.map(person => effectiveColumns.map(c => c.accessor(person)));
+
     const csvContent = [headers, ...rows]
       .map(row => row.map(field => `"${String(field).replace(/"/g, '""')}"`).join(','))
       .join('\n');
     
     return csvContent;
+  }
+
+  /**
+   * Helper: filtra i campi di una persona in base ai campi consentiti
+   * @param {Object} person
+   * @param {Array<string>} allowedFields
+   * @returns {Object}
+   */
+  static filterPersonFields(person, allowedFields) {
+    if (!Array.isArray(allowedFields) || allowedFields.includes('*')) {
+      return person;
+    }
+    const filtered = {};
+    for (const key of allowedFields) {
+      if (key in person) {
+        filtered[key] = person[key];
+      }
+    }
+    return filtered;
   }
 
   /**

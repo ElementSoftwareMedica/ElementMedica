@@ -65,23 +65,20 @@ const CompanyDetails: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
-  const [companySites, setCompanySites] = useState<any[]>([]);
+  // const [companySites, setCompanySites] = useState<any[]>([]);
 
   useEffect(() => {
     async function fetchData() {
       setLoading(true);
       try {
-        const [companyData, sitesResponse] = await Promise.all([
-        apiGet(`/api/v1/companies/${id}`),
-        apiGet(`/api/v1/company-sites/company/${id}`) as Promise<CompanySitesResponse>
-      ]);
-      setCompany(companyData);
-      setCompanySites(Array.isArray(sitesResponse?.sites) ? sitesResponse.sites : []);
+        const companyData = await apiGet(`/api/v1/companies/${id}`);
+        setCompany(companyData);
+        // setCompanySites([...]) // Removed: CompanySites handles its own fetch
       } catch (err) {
         console.error('Error fetching company data:', err);
         setError(getLoadingErrorMessage('companies', err));
         setCompany(null);
-        setCompanySites([]);
+        // setCompanySites([]); // Removed: CompanySites handles its own state
       } finally {
         setLoading(false);
       }

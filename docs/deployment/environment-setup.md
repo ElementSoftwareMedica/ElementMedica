@@ -191,10 +191,17 @@ PROXY_BASE_URL="http://localhost:4003"
 # CONFIGURAZIONE JWT E AUTENTICAZIONE
 # ===========================================
 JWT_SECRET="your-super-secret-jwt-key-minimum-32-characters-long"
-JWT_EXPIRES_IN="24h"
-REFRESH_TOKEN_SECRET="your-refresh-token-secret-different-from-jwt"
-REFRESH_TOKEN_EXPIRES_IN="7d"
-SESSION_TIMEOUT="30m"
+JWT_EXPIRES_IN="15m"
+JWT_REFRESH_SECRET="your-refresh-token-secret-different-from-jwt"
+JWT_REFRESH_EXPIRES_IN="7d"
+SESSION_TIMEOUT_MINUTES="60"
+EXTENDED_SESSION_TIMEOUT_HOURS="720"
+
+# Nota: Il Proxy non usa né richiede variabili JWT; la generazione/verifica dei token avviene esclusivamente sull'API Server tramite JWTService. Entrambe le variabili JWT_SECRET e JWT_REFRESH_SECRET sono OBBLIGATORIE (nessun fallback): se assenti, l'API Server non si avvia.
+
+# Valori consigliati di scadenza (override possibili per ambienti particolari):
+# - Access token: JWT_EXPIRES_IN = 15m (default); il login v1 restituisce expires_in in secondi (3600 o 604800 se remember_me=true)
+# - Refresh token: JWT_REFRESH_EXPIRES_IN = 7d (default), 30d con remember_me
 
 # ===========================================
 # CONFIGURAZIONE OAUTH
@@ -232,7 +239,8 @@ LOG_DATE_PATTERN="YYYY-MM-DD"
 # ===========================================
 # CONFIGURAZIONE SICUREZZA
 # ===========================================
-CORS_ORIGIN="http://localhost:3000,http://localhost:4003"
+CORS_ORIGIN="http://localhost:5173,http://localhost:4003"
+ACCESS_CONTROL_ALLOW_HEADERS="Content-Type, Authorization, X-Refresh-Token, x-refresh-token"
 RATE_LIMIT_WINDOW_MS=900000
 RATE_LIMIT_MAX_REQUESTS=100
 CSRF_SECRET="your-csrf-secret-key"
@@ -240,32 +248,16 @@ CSRF_SECRET="your-csrf-secret-key"
 # ===========================================
 # CONFIGURAZIONE FILE E UPLOAD
 # ===========================================
+```
+
+### Requisiti JWT (API Server)
+- JWT centralizzati via JWTService (generazione/verifica)
+- Nessun fallback per `JWT_SECRET` e `JWT_REFRESH_SECRET`: se mancanti, l'API non si avvia
+- Il Proxy non richiede variabili `JWT_*`
 UPLOAD_MAX_SIZE="10mb"
 UPLOAD_ALLOWED_TYPES="image/jpeg,image/png,application/pdf,text/csv"
 UPLOAD_TEMP_DIR="./uploads/temp"
 STORAGE_DIR="./storage"
-
-# ===========================================
-# CONFIGURAZIONE EMAIL (se necessario)
-# ===========================================
-SMTP_HOST="smtp.example.com"
-SMTP_PORT="587"
-SMTP_SECURE="false"
-SMTP_USER="noreply@company.com"
-SMTP_PASS="smtp-password"
-
-# ===========================================
-# CONFIGURAZIONE MONITORING
-# ===========================================
-HEALTH_CHECK_INTERVAL="30000"
-METRICS_ENABLED="true"
-METRICS_PORT="9090"
-
-# ===========================================
-# CREDENZIALI TEST (SOLO SVILUPPO)
-# ===========================================
-TEST_USER_EMAIL="admin@example.com"
-TEST_USER_PASSWORD="Admin123!"
 ```
 
 ### File .env per Sviluppo

@@ -11,7 +11,7 @@ export interface GenericImportProps<T> {
   /** Campo univoco per identificare un'entità esistente */
   uniqueField: keyof T | string;
   /** Funzione di callback per l'importazione */
-  onImport: (data: T[], overwriteIds?: string[], selectedRowIndices?: Set<number>) => Promise<void>;
+  onImport: (data: T[], overwriteIds?: string[], selectedRowIndices?: Set<number>) => Promise<any>;
   /** Funzione di callback per la chiusura */
   onClose: () => void;
   /** Array di entità esistenti */
@@ -48,6 +48,8 @@ export interface GenericImportProps<T> {
   conflicts?: { [rowIdx: number]: any };
   /** Callback per aggiornare la risoluzione di un conflitto */
   onConflictResolutionChange?: (rowIdx: number, resolution: any) => void;
+  /** Funzione di normalizzazione per il confronto del campo univoco */
+  normalizeKey?: (value: string | null | undefined) => string;
 }
 
 /**
@@ -305,7 +307,8 @@ export default function GenericImport<T extends Record<string, any>>({
   initialPreviewData,
   requiredFields = [],
   conflicts,
-  onConflictResolutionChange
+  onConflictResolutionChange,
+  normalizeKey,
 }: GenericImportProps<T>) {
   const defaultTitle = `Importa ${entityType && typeof entityType === 'string' ? entityType.charAt(0).toUpperCase() + entityType.slice(1) : 'Elementi'}`;
   const defaultSubtitle = `Carica un file CSV con i dati dei ${entityType || 'elementi'} da importare`;
@@ -318,6 +321,8 @@ export default function GenericImport<T extends Record<string, any>>({
   const [error, setError] = useState<string>('');
   const [rowErrors, setRowErrors] = useState<{ [rowIdx: number]: string[] }>({});
   const [validationErrors, setValidationErrors] = useState<{ [rowIdx: number]: string[] }>({});
+  // Normalizzatore chiave univoca (personalizzabile via prop)
+  const norm = useMemo(() => normalizeKey || normalizeString, [normalizeKey]);
 
   // Aggiorna previewData quando initialPreviewData cambia
   useEffect(() => {
@@ -422,12 +427,12 @@ export default function GenericImport<T extends Record<string, any>>({
       if (!entity[String(uniqueField)]) return entity;
       
       // Normalizza il valore del campo univoco per il confronto
-      const normalizedValue = normalizeString(entity[String(uniqueField)]);
+      const normalizedValue = norm(entity[String(uniqueField)]);
       
       // Trova l'entità esistente con lo stesso valore normalizzato per il campo univoco
       const existingEntity = existingEntities.find(existing => {
         const existingValue = existing[uniqueField];
-        const existingNormalizedValue = normalizeString(existingValue as string | null | undefined);
+        const existingNormalizedValue = norm(existingValue as any);
         const matchFound = existingNormalizedValue === normalizedValue;
         
         return matchFound;
@@ -446,7 +451,7 @@ export default function GenericImport<T extends Record<string, any>>({
   };
 
   // Validazione delle righe
-  const validateRows = (rows: any[]): { [rowIdx: number]: string[] } => {
+  const validateRows = useCallback((rows: any[]): { [rowIdx: number]: string[] } => {
     const errors: { [rowIdx: number]: string[] } = {};
     
     rows.forEach((row, idx) => {
@@ -524,7 +529,7 @@ export default function GenericImport<T extends Record<string, any>>({
     });
     
     return errors;
-  };
+  }, [entityType, customValidation]);
 
   // Toggle per gestire le righe selezionate per la sovrascrittura
   const handleToggleOverwrite = (rowId: string) => {
@@ -588,7 +593,7 @@ export default function GenericImport<T extends Record<string, any>>({
           existingEntities
             .filter(entity => entity[uniqueField as keyof T] !== undefined && entity[uniqueField as keyof T] !== null)
             .map(entity => [
-              String(entity[uniqueField as keyof T]).toLowerCase().trim(),
+              norm(entity[uniqueField as keyof T] as any),
               entity
             ])
         );
@@ -639,7 +644,7 @@ export default function GenericImport<T extends Record<string, any>>({
           const uniqueValue = cleanData[uniqueFieldStr];
           
           if (uniqueValue !== undefined && uniqueValue !== null && uniqueValue !== '') {
-            const uniqueValueNormalized = String(uniqueValue).toLowerCase().trim();
+            const uniqueValueNormalized = norm(uniqueValue as any);
             existingEntity = existingEntitiesMap.get(uniqueValueNormalized);
             
             if (existingEntity) {
@@ -734,6 +739,8 @@ export default function GenericImport<T extends Record<string, any>>({
       // Passa i conflitti e la funzione di risoluzione
       conflicts={conflicts}
       onConflictResolutionChange={onConflictResolutionChange}
+      // Normalizzazione della chiave unica per confronti duplicati coerenti
+      normalizeKey={norm}
     />
   );
 } 

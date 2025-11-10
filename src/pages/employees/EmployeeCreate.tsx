@@ -101,6 +101,7 @@ const EmployeeCreate: React.FC = () => {
         companies={companies}
         onSuccess={handleSuccess}
         onClose={handleClose}
+        roleType="EMPLOYEE"
       />
     </div>
   );

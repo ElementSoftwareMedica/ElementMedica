@@ -10,6 +10,10 @@ export const CSV_HEADER_MAP = {
   'email': 'email',
   'telefono': 'phone',
   'codice_fiscale': 'taxCode',
+  // Alias aggiuntivi italiani per codice fiscale
+  'codiceFiscale': 'taxCode',
+  'CF': 'taxCode',
+  'cf': 'taxCode',
   'data_nascita': 'birthDate',
   'indirizzo': 'residenceAddress',
   'citta': 'city',
@@ -74,6 +78,11 @@ export const CSV_HEADER_MAP = {
   'phone': 'phone',
   'taxcode': 'taxCode',
   'tax_code': 'taxCode',
+  // Alias aggiuntivi inglesi per codice fiscale
+  'fiscalcode': 'taxCode',
+  'fiscal_code': 'taxCode',
+  'fiscalCode': 'taxCode',
+  'Fiscal Code': 'taxCode',
   'birthdate': 'birthDate',
   'birth_date': 'birthDate',
   'address': 'residenceAddress',
@@ -188,3 +197,10 @@ export const PREVIEW_COLUMNS = [
     width: 100
   }
 ];
+
+export const normalizeTaxCode = (value: unknown): string => {
+  return String(value ?? '')
+    .toUpperCase()
+    .replace(/\s+/g, '') // rimuove tutti gli spazi interni ed esterni
+    .replace(/[^A-Z0-9]/g, ''); // conserva solo alfanumerici
+};

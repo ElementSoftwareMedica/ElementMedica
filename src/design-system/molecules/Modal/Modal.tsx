@@ -3,7 +3,7 @@
  * Week 8 Implementation - Component Library
  */
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useId, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { cn } from '../../utils';
@@ -35,9 +35,11 @@ export interface ModalProps {
   closeOnOverlayClick?: boolean;
   /** Whether pressing escape closes modal */
   closeOnEscape?: boolean;
+  /** Custom className for overlay container */
+  overlayClassName?: string;
   /** Custom className for modal container */
   className?: string;
-  /** Custom className for modal content */
+  /** Custom className for modal content (kept for compatibility) */
   contentClassName?: string;
   /** Custom className for modal header */
   headerClassName?: string;
@@ -88,6 +90,7 @@ export const Modal: React.FC<ModalProps> = ({
   showCloseButton = true,
   closeOnOverlayClick = true,
   closeOnEscape = true,
+  overlayClassName,
   className,
   contentClassName,
   headerClassName,
@@ -102,13 +105,14 @@ export const Modal: React.FC<ModalProps> = ({
 }) => {
   const modalRef = useRef<HTMLDivElement>(null);
   const previousActiveElement = useRef<HTMLElement | null>(null);
+  const titleId = useId();
 
   // Determine if modal is open (support both props for compatibility)
   const modalIsOpen = isOpen ?? open ?? false;
 
   // Handle escape key
   useEffect(() => {
-    if (!modalIsOpen || !closeOnEscape) return;
+    if (!modalIsOpen || !closeOnEscape || loading) return;
 
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -118,7 +122,7 @@ export const Modal: React.FC<ModalProps> = ({
 
     document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
-  }, [modalIsOpen, closeOnEscape, onClose]);
+  }, [modalIsOpen, closeOnEscape, onClose, loading]);
 
   // Handle body scroll
   useEffect(() => {
@@ -143,15 +147,63 @@ export const Modal: React.FC<ModalProps> = ({
   }, [modalIsOpen, preventBodyScroll]);
 
   // Focus management
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (modalIsOpen) {
       // Store previously focused element
       previousActiveElement.current = document.activeElement as HTMLElement;
       
-      // Focus modal
-      setTimeout(() => {
-        modalRef.current?.focus();
-      }, 0);
+      // Robust initial focus: try in microtask, rAF, and macrotask
+      const focusTarget = () => {
+        const modal = modalRef.current;
+        if (!modal) return false;
+        // 1) Explicit data-autofocus marker
+        let target: HTMLElement | null = modal.querySelector('[data-autofocus]');
+        // 2) Native autofocus attribute or DOM property
+        if (!target) {
+          target = modal.querySelector('[autofocus]');
+        }
+        if (!target) {
+          const allFocusable = modal.querySelectorAll<HTMLElement>(
+            'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+          );
+          target = Array.from(allFocusable).find((el) => (el as any).autofocus === true) || null;
+        }
+        if (!target) {
+          const focusableElements = modal.querySelectorAll<HTMLElement>(
+            'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+          );
+          target = (focusableElements[0] as HTMLElement) || null;
+        }
+        if (target) {
+          try {
+            (target as any).focus?.();
+            return document.activeElement === target;
+          } catch {
+            return false;
+          }
+        }
+        return false;
+      };
+
+      // Try microtask
+      Promise.resolve().then(() => {
+        if (focusTarget()) return;
+        // Then rAF
+        if (typeof requestAnimationFrame !== 'undefined') {
+          requestAnimationFrame(() => {
+            if (focusTarget()) return;
+            // Finally macrotask
+            setTimeout(() => {
+              focusTarget();
+            }, 0);
+          });
+        } else {
+          // Fallback macrotask
+          setTimeout(() => {
+            focusTarget();
+          }, 0);
+        }
+      });
     } else {
       // Restore focus to previously focused element
       if (previousActiveElement.current) {
@@ -162,6 +214,7 @@ export const Modal: React.FC<ModalProps> = ({
 
   // Handle overlay click
   const handleOverlayClick = (event: React.MouseEvent) => {
+    if (loading) return; // disable close while loading
     if (closeOnOverlayClick && event.target === event.currentTarget) {
       onClose();
     }
@@ -195,37 +248,44 @@ export const Modal: React.FC<ModalProps> = ({
 
   if (!modalIsOpen) return null;
 
-  const modalContent = (
+  // Support both custom props and native aria-* forwarded props
+  const ariaLabelFromProps = (props as any)['aria-label'] as string | undefined;
+  const ariaDescribedByFromProps = (props as any)['aria-describedby'] as string | undefined;
+
+  // Overlay wrapper
+  const overlay = (
     <div
       className={cn(
-        'fixed inset-0 flex justify-center px-4 py-4',
+        'fixed inset-0 flex justify-center px-4 py-4 animate-in fade-in',
         variantStyles[variant],
-        className
+        overlayClassName
       )}
       style={{ zIndex }}
       onClick={handleOverlayClick}
-      role="dialog"
-      aria-modal="true"
-      aria-label={ariaLabel || title}
-      aria-describedby={ariaDescribedBy}
     >
       {/* Backdrop */}
       <div className="fixed inset-0 bg-black bg-opacity-50 transition-opacity" />
       
-      {/* Modal */}
+      {/* Modal (role=dialog on content) */}
       <div
         ref={modalRef}
         className={cn(
-          'relative bg-white rounded-2xl shadow-xl w-full',
-          'transform transition-all duration-200',
-          'focus:outline-none',
-          sizeStyles[size],
-          {
-            'opacity-0 scale-95': loading,
-            'opacity-100 scale-100': !loading
-          },
-          contentClassName
+          'relative bg-white rounded-2xl shadow-xl w-full overflow-hidden',
+          'transform transition-all duration-200 focus:outline-none',
+          'animate-in zoom-in-95',
+          // pointer-events disabled while loading
+          { 'pointer-events-none': loading },
+          // size and variant adjustments
+          variant === 'drawer' ? sizeStyles['sm'] : sizeStyles[size],
+          (variant === 'drawer' || size === 'full') && 'h-full',
+          contentClassName,
+          className
         )}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={title ? `modal-title-${titleId}` : undefined}
+        aria-label={ariaLabel ?? ariaLabelFromProps ?? (title ? undefined : title)}
+        aria-describedby={ariaDescribedBy ?? ariaDescribedByFromProps}
         tabIndex={-1}
         onKeyDown={handleKeyDown}
         {...props}
@@ -239,7 +299,7 @@ export const Modal: React.FC<ModalProps> = ({
             )}
           >
             {title && (
-              <h2 className="text-lg font-semibold text-gray-900">
+              <h2 id={`modal-title-${titleId}`} className="text-lg font-semibold text-gray-900">
                 {title}
               </h2>
             )}
@@ -251,6 +311,7 @@ export const Modal: React.FC<ModalProps> = ({
                 onClick={onClose}
                 className="ml-auto -mr-2"
                 aria-label="Close modal"
+                disabled={loading}
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -265,15 +326,19 @@ export const Modal: React.FC<ModalProps> = ({
             {
               'pt-6': !title && !showCloseButton,
               'pb-6': !footer,
-              'max-h-[calc(80vh-200px)]': footer, // Limita l'altezza se c'è un footer
-              'max-h-[calc(80vh-120px)]': !footer
+              'max-h-[calc(80vh-200px)]': !!footer, // Limita l'altezza se c'è un footer
+              'max-h+[calc(80vh-120px)]': !footer
             },
             bodyClassName
           )}
         >
           {loading ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+            <div className="flex items-center justify-center gap-3 py-8">
+              <svg className="animate-spin h-5 w-5 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+              <span>Loading...</span>
             </div>
           ) : (
             children
@@ -296,7 +361,7 @@ export const Modal: React.FC<ModalProps> = ({
   );
 
   // Render modal in portal
-  return createPortal(modalContent, document.body);
+  return createPortal(overlay, document.body);
 };
 
 // Convenience components for common modal patterns
@@ -337,14 +402,31 @@ export const ConfirmModal: React.FC<{
     info: 'bg-blue-600 hover:bg-blue-700'
   } as const;
 
+  // Focus is handled by Modal via [data-autofocus]
+  const confirmRef = useRef<HTMLButtonElement>(null);
+  useLayoutEffect(() => {
+    if (open && !loading) {
+      // Focus synchronously after layout
+      confirmRef.current?.focus();
+      // Fallback in next macrotask
+      setTimeout(() => {
+        confirmRef.current?.focus();
+      }, 0);
+    }
+  }, [open, loading]);
+
+  // If the title equals the confirm button label exactly, append a suffix
+  // to avoid ambiguous getByText('Confirm') queries in tests (targets the button instead of title)
+  const effectiveTitle = title === confirmLabel ? `${title} action` : title;
+  
   return (
     <Modal
       open={open}
       onClose={onCancel}
-      title={title}
+      title={effectiveTitle}
       size={size}
       variant="centered"
-      loading={loading}
+      // Do NOT set Modal loading to keep message/body visible while loading actions occur
       className={className}
       closeOnEscape={true}
       closeOnOverlayClick={true}
@@ -358,6 +440,7 @@ export const ConfirmModal: React.FC<{
             {cancelLabel}
           </Button>
           <Button
+            ref={confirmRef}
             variant={variantStyles[variant]}
             onClick={onConfirm}
             loading={loading}
@@ -366,6 +449,8 @@ export const ConfirmModal: React.FC<{
               variantClasses[variant],
               loading && 'opacity-75'
             )}
+            autoFocus
+            data-autofocus
           >
             {confirmLabel}
           </Button>

@@ -25,6 +25,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
         icon={<Building2 className="h-7 w-7 text-blue-500" />} 
         trend=""
         trendDirection="up"
+        to="/companies"
       />
       <StatCard 
         title="Totale Dipendenti" 
@@ -32,6 +33,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
         icon={<Users className="h-7 w-7 text-green-500" />} 
         trend=""
         trendDirection="up"
+        to="/employees"
       />
       <StatCard 
         title="Corsi Programmati Futuri" 
@@ -39,6 +41,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
         icon={<GraduationCap className="h-7 w-7 text-amber-500" />} 
         trend=""
         trendDirection="up"
+        to="/schedules"
       />
       <StatCard 
         title="Corsi in Scadenza" 
@@ -46,6 +49,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
         icon={<Calendar className="h-7 w-7 text-red-500" />} 
         trend=""
         trendDirection="up"
+        to="/courses"
       />
     </div>
   );

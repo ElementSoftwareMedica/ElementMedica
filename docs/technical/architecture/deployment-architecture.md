@@ -137,7 +137,7 @@ graph TD
             MS["Main Server<br/>:3001"]
             AS["API Server<br/>:4001"]
             DS["Docs Server<br/>:4002"]
-            PS["Proxy Server<br/>:8888"]
+            PS["Proxy Server<br/>:4003"]
         end
         
         subgraph "Data"
@@ -274,9 +274,9 @@ services:
       dockerfile: Dockerfile.proxy
     environment:
       - NODE_ENV=staging
-      - PORT=8888
+      - PORT=4003
     ports:
-      - "8888:8888"
+      - "4003:4003"
     depends_on:
       - api
       - docs
@@ -616,7 +616,7 @@ module.exports = {
       exec_mode: 'cluster',
       env: {
         NODE_ENV: 'production',
-        PORT: 8888
+        PORT: 4003
       },
       error_file: './logs/proxy-error.log',
       out_file: './logs/proxy-out.log',

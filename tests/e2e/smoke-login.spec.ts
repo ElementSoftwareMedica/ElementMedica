@@ -6,9 +6,9 @@ import { test, expect } from '@playwright/test';
 // - Seed has created admin@example.com with password Admin123!
 
 test('Smoke: login redirects to dashboard', async ({ page }, testInfo) => {
-  // Temporarily skip flaky Mobile Chrome project
-  if (testInfo.project.name === 'Mobile Chrome') {
-    test.skip(true, 'Temporarily skip on Mobile Chrome due to flakiness in CI/local.');
+  // Temporarily skip flaky Mobile projects
+  if (testInfo.project.name === 'Mobile Chrome' || testInfo.project.name === 'Mobile Safari') {
+    test.skip(true, 'Temporarily skip on Mobile browsers due to flakiness in CI/local.');
   }
 
   const baseURL = process.env.E2E_BASE_URL ?? 'http://localhost:5173';

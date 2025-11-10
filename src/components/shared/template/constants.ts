@@ -13,7 +13,7 @@ export const FILE_FORMATS = [
 ];
 
 export const ENTITY_FIELDS = {
-  'scheduled-courses': [
+  'schedules': [
     { desc: 'Nome corso', placeholder: 'corso_nome' },
     { desc: 'Docente principale', placeholder: 'docente_nome' },
     { desc: 'Co-relatore/i', placeholder: 'co_relatori' },
@@ -104,7 +104,7 @@ export const ENTITY_FIELDS = {
 };
 
 export const ENTITY_LABELS = {
-  'scheduled-courses': 'Corsi Programmati',
+  'schedules': 'Corsi Programmati',
   'courses': 'Corsi',
   'trainers': 'Formatori',
   'employees': 'Dipendenti',
@@ -112,7 +112,7 @@ export const ENTITY_LABELS = {
 };
 
 export const PLACEHOLDER_GROUPS = {
-  'scheduled-courses': [
+  'schedules': [
     '{{corso_nome}}', '{{data_1}}', '{{data_2}}', '{{data_generazione_template}}',
     '{{sessioni}}',
     '{{sessione_1_data}}', '{{sessione_1_orario_inizio}}', '{{sessione_1_orario_fine}}',

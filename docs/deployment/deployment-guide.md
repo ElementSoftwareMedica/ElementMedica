@@ -69,8 +69,9 @@ PROXY_SERVER_PORT=4003
 
 # JWT Configuration
 JWT_SECRET="your-super-secret-jwt-key-here"
-JWT_EXPIRES_IN="24h"
-REFRESH_TOKEN_EXPIRES_IN="7d"
+JWT_EXPIRES_IN="15m"
+JWT_REFRESH_SECRET="your-refresh-token-secret-different-from-jwt"
+JWT_REFRESH_EXPIRES_IN="7d"
 
 # OAuth Configuration
 OAUTH_CLIENT_ID="your-oauth-client-id"
@@ -394,7 +395,7 @@ npx prisma db pull
 #### Errori CORS
 ```bash
 # Verifica configurazione proxy
-curl -H "Origin: http://localhost:3000" \
+curl -H "Origin: http://localhost:5173" \
      -H "Access-Control-Request-Method: GET" \
      -H "Access-Control-Request-Headers: X-Requested-With" \
      -X OPTIONS \
@@ -465,3 +466,18 @@ find backups/ -name "*.tar.gz" -mtime +30 -delete
 ---
 
 **⚠️ Importante**: Questa guida deve essere seguita rigorosamente. Ogni deviazione dalle procedure può compromettere la stabilità del sistema. Per interventi sui server, richiedere sempre autorizzazione al proprietario del progetto.
+
+## Aggiornamento 2025-09-08 — Post-deploy RBAC Corsi (verifiche rapide)
+
+Obiettivo: assicurare che i permessi courses:* siano effettivamente disponibili per ADMIN e che l’update corso non produca 403 né logout/reset del contesto.
+
+Checklist (porte fisse: API 4001, Proxy 4003, Frontend 5173):
+- Health check: verificare risposte 200 su /health dei server API e Proxy.
+- Login e verifica: utilizzare le credenziali di test standard per ottenere una sessione, poi chiamare /api/v1/auth/verify dal Proxy e controllare che nel payload compaiano i permessi courses:read/create/edit/update/delete per ADMIN.
+- Rotta di update: eseguire un PUT /api/v1/courses/:id con ADMIN e verificare esito 200 e persistenza dei campi (riskLevel, courseType, ecc.).
+- Sicurezza/UX: durante l’update corso, nessun logout o reset del TenantContext; gli errori devono essere gestiti senza hard redirect.
+
+Note operative:
+- Non riavviare server né cambiare porte senza autorizzazione. In caso di anomalie, raccogliere log e segnalare.
+- Nessun bypass di permessi: l’allineamento RBAC è stato implementato a livello di mappature e verify; se persistono 403, verificare popolamento di req.person.permissions e coerenza token.
+- Configurazioni via variabili d’ambiente (compatibili localhost/Hetzner con Supabase); evitare hard-coding.

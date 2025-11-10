@@ -282,7 +282,7 @@ Legenda Stati:
    │ ☐ Consenso condivisione con terze parti                    │
    │                                                             │
    │ 📅 Data Retention: [10 anni ▼]                            │
-   │ 🏷️ Settore: [Tecnologia ▼]                                │
+   │ 🷚 Settore: [Tecnologia ▼]                                │
    │ 👥 Numero Dipendenti: [50___]                              │
    │                                                             │
    │ [Annulla] [Crea Azienda]                                   │
@@ -362,7 +362,7 @@ Legenda Stati:
 │ 📊 Grafici Utilizzo (Ultimi 30 giorni)                     │
 │ ┌─────────────────────────────────────────────────────────┐ │
 │ │ Upload Giornalieri                                      │ │
-│ │     ▁▃▅▇█▅▃▁▃▅▇█▅▃▁▃▅▇█▅▃▁▃▅▇█▅▃▁▃▅▇█                │ │
+│ │      ▃▅▇█▅▃ ▃▅▇█▅▃ ▃▅▇█▅▃ ▃▅▇█▅▃ ▃▅▇█                │ │
 │ │ Gen 1    Gen 10    Gen 20    Gen 30                    │ │
 │ └─────────────────────────────────────────────────────────┘ │
 │                                                             │
@@ -418,7 +418,7 @@ Legenda Stati:
 │ Porta: [587___]                                            │
 │ Sicurezza: [TLS ▼]                                         │
 │ Username: [noreply@yourdomain.com]                          │
-│ Password: [••••••••••••••••••••] [👁️]                     │
+│ Password: [••••••••••••••••••••••••••] [👁️]                     │
 │                                                             │
 │ 📬 Impostazioni Invio                                      │
 │ Email Mittente: [noreply@yourdomain.com]                   │
@@ -915,3 +915,34 @@ psql -d document_system -c "VACUUM ANALYZE;"
 ---
 
 *Questo manuale è aggiornato alla versione 1.0 del sistema. Per la versione più recente, consulta la documentazione online.*
+
+### 📚 Corsi — Import Bulk (Nota Amministratore)
+- Endpoint backend: POST /courses/bulk-import (documentato in <mcfile name="api-reference.md" path="/Users/matteo.michielon/project 2.0/docs/technical/api/api-reference.md"></mcfile>)
+- Pre-check duplicati su `code` (normalizzato) con report dettagliato (in payload / presenti in DB)
+- Inserimento con createMany skipDuplicates: non sovrascrive record esistenti
+- UI mostra toast riepilogativo post-import per facilitare QA
+
+Best practice:
+- Verificare i duplicati segnalati prima di tentare re-import
+- Non forzare overwrite tramite strumenti non previsti (divieto bypass)
+- Validare permessi courses:write/manage per gli operatori che eseguono l’import
+// ... existing content ...
+
+## Import Corsi — Duplicati e Report
+
+- Il campo chiave è `code` (univoco per tenant). Se il CSV contiene duplicati o conflitti con il database:
+  - La UI mostra un riepilogo (toast) con conteggi: inviati, validi, creati, saltati e anteprima dei codici duplicati.
+  - L’import non si blocca: i record validi vengono comunque creati/aggiornati, quelli duplicati vengono segnalati.
+  - In caso di necessità, è possibile selezionare l’overwrite per aggiornare i record esistenti (se abilitato dalla policy).
+- Requisiti di sicurezza:
+  - Autenticazione obbligatoria e permesso `courses:create`.
+  - Il tenantId è determinato dalla sessione corrente; eventuali colonne `tenantId` nel CSV sono ignorate dall’API.
+- Suggerimenti:
+  - Normalizzare `riskLevel` (ALTO/MEDIO/BASSO) e `courseType` (PRIMO_CORSO/AGGIORNAMENTO) prima dell’upload.
+  - Verificare il report `duplicates` (inPayload/inDatabase) restituito dall’API POST /courses/bulk-import.
+
+## Permessi e Aggiornamento Corsi
+
+- Il ruolo ADMIN dispone dei permessi courses:read/create/edit/update/delete.
+- L’endpoint PUT /api/v1/courses/:id richiede `courses:update`.
+- In caso di 403, verificare lo stato sessione su /api/v1/auth/verify e contattare il supporto con il log dell’errore (senza includere credenziali).

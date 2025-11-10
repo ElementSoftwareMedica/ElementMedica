@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { apiGet } from '../services/api';
 import { getLoadingErrorMessage } from '../utils/errorUtils';
 
@@ -6,6 +6,8 @@ interface UseGDPREntityDataProps {
   apiEndpoint: string;
   entityNamePlural: string;
   entityDisplayNamePlural: string;
+  // Parametri di query statici da aggiungere sempre alle richieste (es. roleType)
+  staticQueryParams?: Record<string, string | number | boolean>;
 }
 
 interface UseGDPREntityDataReturn<T> {
@@ -19,11 +21,18 @@ interface UseGDPREntityDataReturn<T> {
 export function useGDPREntityData<T = unknown>({
   apiEndpoint,
   entityNamePlural,
-  entityDisplayNamePlural
+  entityDisplayNamePlural,
+  staticQueryParams
 }: UseGDPREntityDataProps): UseGDPREntityDataReturn<T> {
   const [entities, setEntities] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Use ref for staticQueryParams to avoid recreating loadEntities
+  const staticQueryParamsRef = useRef(staticQueryParams);
+  useEffect(() => {
+    staticQueryParamsRef.current = staticQueryParams;
+  }, [staticQueryParams]);
 
   const loadEntities = useCallback(async () => {
     try {
@@ -39,6 +48,15 @@ export function useGDPREntityData<T = unknown>({
         params.append('limit', '50');
         params.append('sortBy', 'lastLogin');
         params.append('sortOrder', 'desc');
+        
+        // Applica eventuali query param statici (es. roleType)
+        if (staticQueryParamsRef.current) {
+          Object.entries(staticQueryParamsRef.current).forEach(([key, value]) => {
+            if (value !== undefined && value !== null) {
+              params.append(key, String(value));
+            }
+          });
+        }
         
         apiUrl = `${apiEndpoint}?${params.toString()}`;
       }

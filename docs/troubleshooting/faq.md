@@ -177,9 +177,9 @@ WHERE email = 'admin@example.com';
 5. **Server Issues**
    ```bash
    # Verifica health dei server
-   curl http://localhost:3000/health
-   curl http://localhost:3001/health
-   curl http://localhost:3002/health
+   curl http://localhost:4003/health
+   curl http://localhost:4001/health
+   curl http://localhost:4002/health
    ```
 
 6. **Database Connectivity**
@@ -830,3 +830,11 @@ Allegati:
 ---
 
 *Questa FAQ è aggiornata alla versione 1.0 del sistema. Per domande non coperte, contatta il supporto tecnico.*
+
+### Autenticazione/JWT
+
+**D: Devo configurare JWT_SECRET sul Proxy?**  
+R: No. Il Proxy non firma token e non necessita di variabili JWT. I secret vanno configurati solo sull'API Server.
+
+**D: Come devo inviare il refresh token?**  
+R: L'endpoint `/auth/refresh` accetta il token sia via header `X-Refresh-Token` sia nel body come `refresh_token`.

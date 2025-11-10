@@ -40,7 +40,9 @@ Questa guida fornisce istruzioni complete per il monitoraggio del sistema unific
 
 ### 1. Health Check Endpoints
 
-Ogni server deve implementare endpoint di health check:
+Ogni server deve implementare endpoint di health check.
+
+Nota operativa: la validazione dei token è centralizzata in JWTService; il Proxy non firma token e non richiede variabili JWT. L'API Server deve avere JWT_SECRET e JWT_REFRESH_SECRET impostati correttamente.
 
 #### API Server (4001)
 ```javascript
@@ -50,9 +52,14 @@ app.get('/api/health', async (req, res) => {
     // Test database connection
     await prisma.$queryRaw`SELECT 1`;
     
-    // Test JWT secret
-    const testToken = jwt.sign({ test: true }, process.env.JWT_SECRET, { expiresIn: '1s' });
-    jwt.verify(testToken, process.env.JWT_SECRET);
+    // Test configurazione JWT centralizzata (senza firmare token in linea)
+    const jwtConfigured = (typeof JWTService?.validateConfig === 'function')
+      ? JWTService.validateConfig()
+      : Boolean(process.env.JWT_SECRET && process.env.JWT_REFRESH_SECRET);
+    
+    if (!jwtConfigured) {
+      throw new Error('JWT non configurato correttamente');
+    }
     
     res.json({
       status: 'healthy',

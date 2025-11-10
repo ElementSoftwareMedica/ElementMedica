@@ -4,7 +4,6 @@
  */
 
 import { JWTService } from './jwt.js';
-import jwt from 'jsonwebtoken';
 import prisma from '../config/prisma-optimization.js';
 
 /**
@@ -45,35 +44,15 @@ export function authenticateSimple(options = {}) {
                 });
             }
             
-            // Verify JWT token
+            // Verify JWT token esclusivamente via JWTService
             let decoded;
-            
             try {
                 decoded = JWTService.verifyAccessToken(token);
             } catch (jwtError) {
-                // Fallback to direct jwt verification
-                const secretsToTry = [
-                    process.env.JWT_SECRET,
-                    'your-super-secret-jwt-key-change-this-in-production',
-                    'super-secret-jwt-key-for-development-change-in-production-2024'
-                ].filter(Boolean);
-                
-                let lastError = jwtError;
-                for (const secret of secretsToTry) {
-                    try {
-                        decoded = jwt.verify(token, secret, {
-                            issuer: 'training-platform',
-                            audience: 'training-platform-users'
-                        });
-                        break;
-                    } catch (fallbackError) {
-                        lastError = fallbackError;
-                    }
-                }
-                
-                if (!decoded) {
-                    throw lastError;
-                }
+                return res.status(401).json({
+                    error: 'Authentication failed',
+                    code: 'AUTH_TOKEN_INVALID'
+                });
             }
             
             // Simple person lookup

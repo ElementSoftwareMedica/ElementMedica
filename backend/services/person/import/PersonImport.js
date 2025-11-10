@@ -11,7 +11,7 @@ import PersonImportService from '../PersonImportService.js';
 class PersonImport {
   /**
    * Importa persone da dati JSON
-   * @param {Array} personsData - Array di dati delle persone
+   * @param {Array|Object} personsData - Dati delle persone (array o singolo oggetto)
    * @param {Object} options - Opzioni di importazione
    * @returns {Promise<Object>} Risultato dell'importazione
    */
@@ -26,6 +26,11 @@ class PersonImport {
       overwriteIds = []
     } = options;
 
+    // Normalizza input: accetta anche un singolo oggetto persona
+    const dataArray = Array.isArray(personsData)
+      ? personsData
+      : (personsData && typeof personsData === 'object' ? [personsData] : []);
+
     const results = {
       imported: 0,
       updated: 0,
@@ -34,7 +39,11 @@ class PersonImport {
     };
 
     try {
-      for (const personData of personsData) {
+      if (dataArray.length === 0) {
+        return { ...results, errors: [{ error: 'Invalid payload: persons must be a non-empty array' }] };
+      }
+
+      for (const personData of dataArray) {
         try {
           // Validazione dei dati se richiesta
           if (validateData) {
@@ -60,25 +69,15 @@ class PersonImport {
 
           if (existingPersonResult) {
             const { person: existingPerson, isSoftDeleted } = existingPersonResult;
-            
-            // Controlla se l'ID è nella lista degli overwrite
             const shouldOverwrite = overwriteIds.includes(existingPerson.id);
-            
             if (isSoftDeleted) {
-              // Persona soft-deleted: riattiva e aggiorna
-              // Prima riattiva la persona
               await PersonCore.restorePerson(existingPerson.id);
-              
-              // Poi aggiorna i dati se necessario
               const { role, roleType, companyId, tenantId, _companyId, _id, fiscalCode, ...personDataOnly } = normalizedData;
               if (Object.keys(personDataOnly).length > 0) {
                 await PersonCore.updatePerson(existingPerson.id, personDataOnly);
               }
-              
               results.updated++;
             } else if (shouldOverwrite || updateExisting) {
-              // Persona attiva: aggiorna se richiesto
-              // Rimuovi i campi che non dovrebbero essere aggiornati direttamente
               const { role, roleType, companyId, tenantId, _companyId, _id, fiscalCode, ...personDataOnly } = normalizedData;
               await PersonCore.updatePerson(existingPerson.id, personDataOnly);
               results.updated++;
@@ -89,36 +88,22 @@ class PersonImport {
                 data: personData,
                 error: `Person already exists: ${existingPerson.firstName} ${existingPerson.lastName} (${existingPerson.taxCode || existingPerson.email})`
               });
-              continue;  // Salta alla prossima persona senza tentare di crearla
-            }
-          } else {
-            // Estrai i parametri separati dai dati della persona
-            const { role, roleType, companyId, tenantId, _companyId, _id, fiscalCode, ...personDataOnly } = normalizedData;
-            
-            // Usa role o roleType come fallback
-            const finalRole = role || roleType || defaultRole;
-            
-            // Usa _companyId se presente (UUID corretto), altrimenti companyId
-            const finalCompanyId = _companyId || companyId || defaultCompanyId;
-            
-            // Assicurati che tenantId non sia null
-            const finalTenantId = tenantId || defaultTenantId;
-            if (!finalTenantId) {
-              results.errors.push({
-                data: personData,
-                error: 'tenantId is required but not provided'
-              });
               continue;
             }
-            
+          } else {
+            const { role, roleType, companyId, tenantId, _companyId, _id, fiscalCode, ...personDataOnly } = normalizedData;
+            const finalRole = role || roleType || defaultRole;
+            const finalCompanyId = _companyId || companyId || defaultCompanyId;
+            const finalTenantId = tenantId || defaultTenantId;
+            if (!finalTenantId) {
+              results.errors.push({ data: personData, error: 'tenantId is required but not provided' });
+              continue;
+            }
             await PersonCore.createPerson(personDataOnly, finalRole, finalCompanyId, finalTenantId);
             results.imported++;
           }
         } catch (error) {
-          results.errors.push({
-            data: personData,
-            error: error.message
-          });
+          results.errors.push({ data: personData, error: error.message });
         }
       }
 

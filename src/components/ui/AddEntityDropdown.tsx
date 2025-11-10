@@ -22,7 +22,7 @@ export interface AddEntityDropdownProps {
   menuClassName?: string;
   /** Icona iniziale (default: Plus) */
   icon?: React.ReactNode;
-  /** Variante del pulsante */
+  /** Variante del pulsone */
   variant?: 'primary' | 'secondary' | 'outline';
 }
 
@@ -65,7 +65,9 @@ const AddEntityDropdown: React.FC<AddEntityDropdownProps> = ({
     <div className="relative inline-block" ref={dropdownRef}>
       <button
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => {
+          setIsOpen(!isOpen);
+        }}
         className={cn(
           'inline-flex items-center justify-between rounded-full py-2 px-4 text-sm font-medium',
           'transition duration-200 ease-in-out',
@@ -90,7 +92,10 @@ const AddEntityDropdown: React.FC<AddEntityDropdownProps> = ({
             menuClassName
           )}
         >
-          <div className="py-1" role="menu" aria-orientation="vertical">
+          <div className="py-1 max-h-72 overflow-auto" role="menu" aria-orientation="vertical">
+            {options.length === 0 && (
+              <div className="px-4 py-2 text-sm text-gray-500">Nessuna opzione</div>
+            )}
             {options.map((option, index) => (
               <button
                 key={index}

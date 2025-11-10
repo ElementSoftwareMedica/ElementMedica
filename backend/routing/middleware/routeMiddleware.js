@@ -20,8 +20,20 @@ function createLegacyRedirectMiddleware(routerMap, logger) {
     const legacyRoutes = RouterMapUtils.getLegacyRoutes();
     
     for (const [legacyPath, redirectConfig] of Object.entries(legacyRoutes)) {
+      // Nuovo: considera SOLO regole con redirect esplicito (stringa)
+      const hasExplicitRedirect = typeof redirectConfig === 'string' || (redirectConfig && typeof redirectConfig.redirect === 'string');
+      if (!hasExplicitRedirect) {
+        // Questa voce è una regola proxy (target/pathRewrite) o non ha redirect: non gestirla qui
+        continue;
+      }
+
       if (matchLegacyRoute(path, legacyPath, method, redirectConfig)) {
         const redirectTarget = resolveLegacyRedirect(path, legacyPath, redirectConfig);
+        
+        // Se per qualche motivo non otteniamo una stringa, salta questa regola
+        if (typeof redirectTarget !== 'string') {
+          continue;
+        }
         
         // Log redirect
         if (logger) {
@@ -32,23 +44,19 @@ function createLegacyRedirectMiddleware(routerMap, logger) {
           }, req.requestId);
         }
         
-        // Per metodi che possono avere un body, fai un redirect interno
-        // invece di un redirect HTTP per preservare il body
-        if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
-          // Modifica l'URL della richiesta per il redirect interno
+        // Forza rewrite interno per tutte le redirect verso percorsi API, per evitare 302 e preservare il body
+        const isApiPath = redirectTarget.startsWith('/api/');
+        const methodHasBody = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
+        if (isApiPath || methodHasBody) {
+          // Redirect interno
           req.url = redirectTarget;
-          // Non modificare req.path direttamente (è read-only)
-          // req.path verrà aggiornato automaticamente da Express quando si modifica req.url
-          
-          // Aggiungi header per tracciare il redirect
           req.headers['x-legacy-redirect'] = 'true';
           req.headers['x-original-path'] = path;
-          
           return next();
-        } else {
-          // Per GET e altri metodi senza body, usa redirect HTTP normale
-          return res.redirect(302, redirectTarget);
         }
+        
+        // Per GET (o metodi senza body) verso percorsi non-API, usa redirect HTTP 302 (comportamento legacy per /login, ecc.)
+        return res.redirect(302, redirectTarget);
       }
     }
     
@@ -84,7 +92,12 @@ function matchLegacyRoute(path, legacyPath, method, redirectConfig) {
  * Risolve il target di redirect per route legacy
  */
 function resolveLegacyRedirect(path, legacyPath, redirectConfig) {
-  let target = redirectConfig.redirect || redirectConfig;
+  let target = (redirectConfig && redirectConfig.redirect) || redirectConfig;
+  
+  // Guardrail: se non è una stringa, non possiamo risolvere il redirect
+  if (typeof target !== 'string') {
+    return target; // il chiamante si occuperà di verificare il tipo
+  }
   
   // Gestione wildcard nel redirect
   if (legacyPath.includes('*') && target.includes('*')) {
@@ -335,9 +348,11 @@ function createDynamicCorsMiddleware(routerMap) {
     
       // Headers
       if (appliedConfig.headers) {
-        res.header('Access-Control-Allow-Headers', appliedConfig.headers.join(', '));
+        const extraHeaders = ['X-Refresh-Token', 'x-refresh-token'];
+        const mergedHeaders = Array.from(new Set([...(appliedConfig.headers || []), ...extraHeaders]));
+        res.header('Access-Control-Allow-Headers', mergedHeaders.join(', '));
       } else {
-        res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin, X-API-Version, X-Tenant-ID, x-tenant-id, cache-control, pragma, expires');
+        res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin, X-API-Version, X-Tenant-ID, x-tenant-id, cache-control, pragma, expires, X-Refresh-Token, x-refresh-token');
       }
     
       // Preflight
@@ -357,7 +372,7 @@ function createDynamicCorsMiddleware(routerMap) {
       }
       res.header('Access-Control-Allow-Credentials', 'true');
       res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-      res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin, X-API-Version, X-Tenant-ID, x-tenant-id, cache-control, pragma, expires');
+      res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin, X-API-Version, X-Tenant-ID, x-tenant-id, cache-control, pragma, expires, X-Refresh-Token, x-refresh-token');
     
       if (req.method === 'OPTIONS') {
         return res.status(200).end();

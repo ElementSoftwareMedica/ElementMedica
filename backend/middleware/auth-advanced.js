@@ -3,9 +3,9 @@
  * Enhanced JWT authentication with refresh tokens, session management, and security features
  */
 
-import jwt from 'jsonwebtoken';
+// import jwt from 'jsonwebtoken'; // rimosso: non più utilizzato
 import prisma from '../config/prisma-optimization.js';
-import { AdvancedJWTService } from '../auth/jwt-advanced.js';
+import { JWTService } from '../auth/jwt.js';
 import logger from '../utils/logger.js';
 import rateLimit from 'express-rate-limit';
 import { RBACService } from './rbac.js';
@@ -31,7 +31,7 @@ export async function authenticateAdvanced(req, res, next) {
         // Verify and decode token
         let decoded;
         try {
-            decoded = await AdvancedJWTService.verifyAccessToken(token);
+            decoded = await JWTService.verifyAccessToken(token);
         } catch (tokenError) {
             return res.status(401).json({
                 error: 'Invalid token',
@@ -39,7 +39,54 @@ export async function authenticateAdvanced(req, res, next) {
             });
         }
         
-        const { personId, sessionId } = decoded;
+        const { personId, sessionId } = decoded || {};
+        
+        // Se non c'è sessionId nel token, fallback: carica direttamente la persona e prosegui
+        if (!sessionId) {
+            const person = await prisma.person.findUnique({
+                where: { id: personId },
+                include: {
+                    personRoles: {
+                        where: { isActive: true },
+                        include: { permissions: true }
+                    }
+                }
+            });
+
+            if (!person || person.status !== 'ACTIVE') {
+                return res.status(401).json({
+                    error: 'Person account inactive',
+                    code: 'AUTH_PERSON_INACTIVE'
+                });
+            }
+
+            const permissions = await RBACService.getPersonPermissions(personId);
+            const roles = person.personRoles.map(pr => pr.roleType);
+
+            req.person = {
+                id: person.id,
+                personId: person.id,
+                email: person.email,
+                firstName: person.firstName,
+                lastName: person.lastName,
+                companyId: person.companyId,
+                tenantId: person.tenantId,
+                roles,
+                permissions,
+                sessionId: null,
+                lastLogin: person.lastLogin
+            };
+
+            logger.info('Person authenticated (no sessionId in token)', {
+                component: 'auth-advanced',
+                action: 'authenticate',
+                personId: person.id,
+                ip: req.ip,
+                userAgent: req.get('User-Agent'),
+                path: req.path
+            });
+            return next();
+        }
         
         // Check if session is still active
         const session = await prisma.personSession.findUnique({
@@ -155,13 +202,45 @@ export async function optionalAuth(req, res, next) {
         const token = authHeader.substring(7);
         let decoded;
         try {
-            decoded = await AdvancedJWTService.verifyAccessToken(token);
+            decoded = await JWTService.verifyAccessToken(token);
         } catch (tokenError) {
             return next();
         }
         
         if (decoded) {
             const { personId, sessionId } = decoded;
+
+            // fallback: se manca sessionId, carica persona e prosegui
+            if (!sessionId) {
+                const person = await prisma.person.findUnique({
+                    where: { id: personId },
+                    include: {
+                        personRoles: {
+                            where: { isActive: true },
+                            include: { permissions: true }
+                        }
+                    }
+                });
+
+                if (person && person.status === 'ACTIVE') {
+                    const permissions = await RBACService.getPersonPermissions(personId);
+                    const roles = person.personRoles.map(pr => pr.roleType);
+                    req.person = {
+                        id: person.id,
+                        personId: person.id,
+                        email: person.email,
+                        firstName: person.firstName,
+                        lastName: person.lastName,
+                        companyId: person.companyId,
+                        tenantId: person.tenantId,
+                        roles,
+                        permissions,
+                        sessionId: null,
+                        lastLogin: person.lastLogin
+                    };
+                }
+                return next();
+            }
             
             const session = await prisma.personSession.findUnique({
                 where: { id: sessionId },
@@ -258,10 +337,8 @@ export function sessionTimeout(timeoutMinutes = 30) {
                 logger.info('Session timed out', {
                     component: 'auth-advanced',
                     action: 'sessionTimeout',
-                    personId: req.person.id,
                     sessionId: session.id,
-                    lastActivity: lastActivity,
-                    timeoutMinutes
+                    personId: session.personId
                 });
                 
                 return res.status(401).json({
@@ -271,15 +348,12 @@ export function sessionTimeout(timeoutMinutes = 30) {
             }
             
             next();
-            
         } catch (error) {
             logger.error('Session timeout check failed', {
-            component: 'auth-advanced',
-            action: 'sessionTimeout',
-            error: error.message,
-            personId: req.person?.id
-        });
-            
+                component: 'auth-advanced',
+                action: 'sessionTimeout',
+                error: error.message
+            });
             next();
         }
     };

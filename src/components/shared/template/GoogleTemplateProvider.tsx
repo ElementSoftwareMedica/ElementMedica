@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FileEdit, AlertTriangle, Check } from 'lucide-react';
 import { Button } from '../../../design-system/atoms/Button';
 import googleApiClient from '../../../services/googleApiClient';
 
 interface GoogleTemplateProviderProps {
   documentType: string;
+  initialTemplateUrl?: string;
   onTemplateSelected?: (templateUrl: string, templateId: string) => void;
   className?: string;
 }
@@ -20,13 +21,22 @@ interface GoogleTemplateProviderProps {
  */
 const GoogleTemplateProvider: React.FC<GoogleTemplateProviderProps> = ({
   documentType,
+  initialTemplateUrl = '',
   onTemplateSelected,
   className = '',
 }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [templateUrl, setTemplateUrl] = useState<string>('');
+  const [templateUrl, setTemplateUrl] = useState<string>(initialTemplateUrl);
   const [success, setSuccess] = useState(false);
+  
+  // Update templateUrl when initialTemplateUrl changes
+  useEffect(() => {
+    if (initialTemplateUrl) {
+      setTemplateUrl(initialTemplateUrl);
+      setSuccess(true);
+    }
+  }, [initialTemplateUrl]);
   
   // Get the default template for this document type
   const getDefaultTemplate = async () => {

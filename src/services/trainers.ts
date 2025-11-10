@@ -46,9 +46,6 @@ export class TrainersService {
   static async getTrainers(filters: TrainersFilters = {}): Promise<Trainer[]> {
     const params = new URLSearchParams();
     
-    // Forza il roleType a TRAINER
-    params.append('roleType', 'TRAINER');
-    
     // Imposta ordinamento di default per nome
     const sortBy = filters.sortBy || 'firstName';
     const sortOrder = filters.sortOrder || 'asc';
@@ -56,25 +53,85 @@ export class TrainersService {
     params.append('sortBy', sortBy);
     params.append('sortOrder', sortOrder);
     
-    if (filters.isActive !== undefined) params.append('isActive', filters.isActive.toString());
+    params.set('isActive', typeof filters.isActive === 'boolean' ? String(filters.isActive) : 'true');
     if (filters.companyId) params.append('companyId', filters.companyId.toString());
     if (filters.search) params.append('search', filters.search);
     if (filters.page) params.append('page', filters.page.toString());
     if (filters.limit) params.append('limit', filters.limit.toString());
     if (filters.specialization) params.append('specialization', filters.specialization);
-    if (filters.specialty) params.append('specialty', filters.specialty);
-    if (filters.certification) params.append('certification', filters.certification);
     if (filters.status) params.append('status', filters.status);
     
-    const response = await apiGet(`/api/v1/persons?${params.toString()}`) as PersonsResponse;
+    // Endpoint unificato persons con filtro roleType=TRAINER
+    const resp = await apiGet<any>(`/api/v1/persons?roleType=TRAINER&${params.toString()}`);
+    const persons: Person[] = Array.isArray(resp?.data)
+      ? resp.data
+      : (Array.isArray(resp?.persons) ? resp.persons : (Array.isArray(resp) ? resp : []));
     
-    // Trasforma i dati per includere i campi specifici dei trainer
-    const trainers = response.persons.map((person: Person) => ({
-      ...person,
-      specialties: (person as PersonWithTrainerFields).specialties || [],
-      certifications: (person as PersonWithTrainerFields).certifications || [],
-      status: person.isActive ? 'ACTIVE' : 'INACTIVE' as 'ACTIVE' | 'INACTIVE'
-    }));
+    // 🔍 DEBUG: Verifica struttura dati backend
+    if (process.env.NODE_ENV === 'development' && persons.length > 0) {
+      const sample = persons[0] as any;
+      console.debug('[TrainersService] 🔍 Backend response structure:', {
+        totalPersons: persons.length,
+        samplePerson: {
+          id: sample.id,
+          name: `${sample.firstName} ${sample.lastName}`,
+          certifications: sample.certifications,
+          certificationsType: typeof sample.certifications,
+          certificationsIsArray: Array.isArray(sample.certifications),
+          specialties: sample.specialties,
+          specialtiesType: typeof sample.specialties,
+          rawKeys: Object.keys(sample).filter(k => k.toLowerCase().includes('cert') || k.toLowerCase().includes('spec'))
+        }
+      });
+    }
+    
+    const trainers: Trainer[] = persons.map((person: any) => {
+      // Gestisci certifications come stringa CSV o array
+      let certs: string[] = [];
+      if (Array.isArray(person?.certifications)) {
+        certs = person.certifications;
+      } else if (typeof person?.certifications === 'string' && person.certifications.trim()) {
+        certs = person.certifications.split(',').map((c: string) => c.trim()).filter(Boolean);
+      }
+      
+      // Gestisci specialties come stringa CSV o array
+      let specs: string[] = [];
+      if (Array.isArray(person?.specialties)) {
+        specs = person.specialties;
+      } else if (typeof person?.specialties === 'string' && person.specialties.trim()) {
+        specs = person.specialties.split(',').map((s: string) => s.trim()).filter(Boolean);
+      }
+      
+      // 🔍 DEBUG: Verifica mapping finale
+      if (process.env.NODE_ENV === 'development') {
+        const trainer = {
+          ...person,
+          certifications: certs,
+          specialties: specs,
+          status: person.isActive ? 'ACTIVE' : 'INACTIVE' as 'ACTIVE' | 'INACTIVE'
+        };
+        
+        // Log solo per il primo trainer per debug
+        if (person.id === persons[0].id) {
+          console.debug('[TrainersService] 🔍 Mapped trainer:', {
+            id: trainer.id,
+            name: `${trainer.firstName} ${trainer.lastName}`,
+            originalCerts: person.certifications,
+            mappedCerts: trainer.certifications,
+            hasCertsField: 'certifications' in trainer
+          });
+        }
+        
+        return trainer;
+      }
+      
+      return {
+        ...person,
+        certifications: certs,
+        specialties: specs,
+        status: person.isActive ? 'ACTIVE' : 'INACTIVE' as 'ACTIVE' | 'INACTIVE'
+      };
+    });
     
     return trainers;
   }
@@ -83,11 +140,12 @@ export class TrainersService {
    * Ottiene un formatore specifico per ID
    */
   static async getTrainerById(id: string): Promise<Trainer> {
-    const response = await apiGet(`/api/v1/persons/${id}`) as Person;
+    const resp = await apiGet<any>(`/api/v1/persons/${id}`);
+    const response: any = resp?.data ?? resp;
     return {
       ...response,
-      specialties: (response as PersonWithTrainerFields).specialties || [],
-      certifications: (response as PersonWithTrainerFields).certifications || [],
+      specialties: Array.isArray(response?.specialties) ? response.specialties : [],
+      certifications: Array.isArray(response?.certifications) ? response.certifications : [],
       status: response.isActive ? 'ACTIVE' : 'INACTIVE'
     };
   }
@@ -96,35 +154,103 @@ export class TrainersService {
    * Crea un nuovo formatore
    */
   static async createTrainer(trainerData: CreateTrainerDTO): Promise<Trainer> {
-    const personData = {
-      ...trainerData,
-      roleType: 'TRAINER',
-      isActive: trainerData.status === 'ACTIVE'
-    };
-    
-    const response = await apiPost('/api/v1/persons', personData) as Person;
-    return {
-      ...response,
-      specialties: (response as PersonWithTrainerFields).specialties || [],
-      certifications: (response as PersonWithTrainerFields).certifications || [],
-      status: response.isActive ? 'ACTIVE' : 'INACTIVE'
-    };
+    try {
+      const { status, ...rest } = trainerData as any;
+      
+      // Pulisci i dati rimuovendo campi vuoti che potrebbero causare problemi
+      const cleanedData: any = {};
+      Object.keys(rest).forEach(key => {
+        const value = rest[key];
+        // Mantieni solo valori non vuoti, eccetto per array e boolean
+        if (value !== '' && value !== null && value !== undefined) {
+          cleanedData[key] = value;
+        } else if (Array.isArray(value)) {
+          cleanedData[key] = value; // Mantieni array vuoti
+        } else if (typeof value === 'boolean') {
+          cleanedData[key] = value; // Mantieni boolean
+        }
+      });
+      
+      // Converti date da stringa a ISO string per Prisma
+      if (cleanedData.birthDate && typeof cleanedData.birthDate === 'string') {
+        try {
+          const dateStr = cleanedData.birthDate.trim();
+          if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            // Formato YYYY-MM-DD: converti a ISO string
+            cleanedData.birthDate = new Date(dateStr + 'T00:00:00.000Z').toISOString();
+          } else {
+            // Altri formati: usa costruttore Date standard
+            const date = new Date(dateStr);
+            if (!isNaN(date.getTime())) {
+              cleanedData.birthDate = date.toISOString();
+            } else {
+              delete cleanedData.birthDate; // Rimuovi se non valida
+            }
+          }
+        } catch (error) {
+          delete cleanedData.birthDate; // Rimuovi se errore
+        }
+      }
+      
+      if (cleanedData.hiredDate && typeof cleanedData.hiredDate === 'string') {
+        try {
+          const dateStr = cleanedData.hiredDate.trim();
+          if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            cleanedData.hiredDate = new Date(dateStr + 'T00:00:00.000Z').toISOString();
+          } else {
+            const date = new Date(dateStr);
+            if (!isNaN(date.getTime())) {
+              cleanedData.hiredDate = date.toISOString();
+            } else {
+              delete cleanedData.hiredDate;
+            }
+          }
+        } catch (error) {
+          delete cleanedData.hiredDate;
+        }
+      }
+      
+      const personData: any = {
+        ...cleanedData,
+        roleType: 'TRAINER',
+        isActive: status === 'ACTIVE'
+      };
+      
+      // Assicurati che firstName e lastName siano presenti
+      if (!personData.firstName || !personData.lastName) {
+        throw new Error('Nome e cognome sono obbligatori per creare un formatore');
+      }
+      
+      const resp = await apiPost<any>('/api/v1/persons', personData);
+      const response: any = resp?.data ?? resp;
+      return {
+        ...response,
+        specialties: Array.isArray(response?.specialties) ? response.specialties : [],
+        certifications: Array.isArray(response?.certifications) ? response.certifications : [],
+        status: response.isActive ? 'ACTIVE' : 'INACTIVE'
+      };
+    } catch (error) {
+      console.error('Error creating trainer:', error);
+      throw error;
+    }
   }
 
   /**
    * Aggiorna un formatore esistente
    */
   static async updateTrainer(id: string, trainerData: UpdateTrainerDTO): Promise<Trainer> {
-    const personData = {
-      ...trainerData,
-      isActive: trainerData.status === 'ACTIVE'
+    const { status, ...rest } = trainerData as any;
+    const personData: any = {
+      ...rest,
+      isActive: status === 'ACTIVE'
     };
     
-    const response = await apiPut(`/api/v1/persons/${id}`, personData) as Person;
+    const resp = await apiPut<any>(`/api/v1/persons/${id}`, personData);
+    const response: any = resp?.data ?? resp;
     return {
       ...response,
-      specialties: (response as PersonWithTrainerFields).specialties || [],
-      certifications: (response as PersonWithTrainerFields).certifications || [],
+      specialties: Array.isArray(response?.specialties) ? response.specialties : [],
+      certifications: Array.isArray(response?.certifications) ? response.certifications : [],
       status: response.isActive ? 'ACTIVE' : 'INACTIVE'
     };
   }
@@ -175,17 +301,13 @@ export class TrainersService {
   static async exportTrainers(filters: TrainersFilters = {}): Promise<Blob> {
     const params = new URLSearchParams();
     
-    params.append('roleType', 'TRAINER');
-    
     if (filters.isActive !== undefined) params.append('isActive', filters.isActive.toString());
     if (filters.companyId) params.append('companyId', filters.companyId.toString());
     if (filters.search) params.append('search', filters.search);
     if (filters.specialization) params.append('specialization', filters.specialization);
-    if (filters.specialty) params.append('specialty', filters.specialty);
-    if (filters.certification) params.append('certification', filters.certification);
     if (filters.status) params.append('status', filters.status);
     
-    const response = await apiGet(`/api/v1/persons/export?${params.toString()}`, {
+    const response = await apiGet(`/api/v1/persons/export?view=trainer&${params.toString()}`, {
       responseType: 'blob'
     }) as Blob;
     return response;

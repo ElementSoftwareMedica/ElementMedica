@@ -149,7 +149,11 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         )}
         
         {children && (
-          <span className={leftIcon || rightIcon ? "flex-1 min-w-0" : "truncate"}>{children}</span>
+          leftIcon || rightIcon ? (
+            <span className="flex-1 min-w-0">{children}</span>
+          ) : (
+            <>{children}</>
+          )
         )}
         
         {!loading && rightIcon && (

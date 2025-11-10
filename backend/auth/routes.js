@@ -191,7 +191,8 @@ router.post('/login',
                 httpOnly: true,
                 secure: process.env.NODE_ENV === 'production',
                 sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax', // lax in development for cross-port requests
-                maxAge: rememberMe ? 7 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000 // 7 days or 1 day
+                maxAge: rememberMe ? 7 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000, // 7 days or 1 day
+                path: '/' // ensure cookies are sent on non-/api paths (e.g., /courses/bulk-import)
             };
 
             res.cookie('accessToken', tokens.accessToken, {
@@ -344,7 +345,8 @@ router.post('/refresh',
                 httpOnly: true,
                 secure: process.env.NODE_ENV === 'production',
                 sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax', // lax in development for cross-port requests
-                maxAge: 15 * 60 * 1000 // 15 minutes
+                maxAge: 15 * 60 * 1000, // 15 minutes
+                path: '/' // align cookie path with login
             });
 
             res.json({
@@ -362,9 +364,9 @@ router.post('/refresh',
         });
             
             // Clear invalid cookies
-            res.clearCookie('accessToken');
-            res.clearCookie('refreshToken');
-            res.clearCookie('sessionToken');
+            res.clearCookie('accessToken', { path: '/' });
+            res.clearCookie('refreshToken', { path: '/' });
+            res.clearCookie('sessionToken', { path: '/' });
             
             res.status(401).json({
                 error: 'Token refresh failed',

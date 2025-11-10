@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { X, AlertTriangle } from 'lucide-react';
+import type { CompanyData } from './company-import/types';
 
-interface CompanyImportData {
+export interface CompanyImportData {
   ragioneSociale: string;
   piva?: string;
   codiceFiscale?: string;
@@ -11,10 +12,10 @@ interface CompanyImportData {
   [key: string]: unknown;
 }
 
-interface CompanyConflict {
+export interface CompanyConflict {
   index: number;
   error: string;
-  data: CompanyImportData;
+  data: CompanyData;
   existingCompany?: {
     id: string;
     ragioneSociale: string;
@@ -23,14 +24,14 @@ interface CompanyConflict {
   };
 }
 
-interface CompanyImportConflictModalProps {
+export interface CompanyImportConflictModalProps {
   isOpen: boolean;
   onClose: () => void;
   conflicts: CompanyConflict[];
   onResolve: (resolutions: ConflictResolution[]) => void;
 }
 
-interface ConflictResolution {
+export interface ConflictResolution {
   index: number;
   action: 'skip' | 'overwrite';
   companyId?: string;

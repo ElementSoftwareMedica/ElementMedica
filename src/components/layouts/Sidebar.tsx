@@ -272,10 +272,10 @@ const Sidebar: React.FC<SidebarProps> = ({ open, setOpen }) => {
               {((userRole === 'Admin' || userRole === 'Administrator') || hasPermission('courses', 'read')) && (
                 <li className="mb-1 last:mb-0">
                   <NavLink
-                    to="/scheduled-courses"
+                    to="/schedules"
                     className={({ isActive }) =>
                       `block transition duration-150 truncate ${
-                        isActive || pathname.includes('/scheduled-courses')
+                        isActive || pathname.includes('/schedules')
                           ? 'text-primary-600 font-medium'
                           : 'text-gray-600 hover:text-gray-900'
                       }`
@@ -283,7 +283,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, setOpen }) => {
                   >
                     <div className="flex items-center p-2 rounded-xl hover:bg-gray-100">
                       <Calendar className="shrink-0 h-5 w-5 mr-3" />
-                      <span className="text-sm">Scheduled Courses</span>
+                      <span className="text-sm">Schedules</span>
                     </div>
                   </NavLink>
                 </li>

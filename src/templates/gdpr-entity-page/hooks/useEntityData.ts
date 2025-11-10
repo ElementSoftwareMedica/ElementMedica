@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { apiGet } from '../../../services/api';
 import { getLoadingErrorMessage } from '../../../utils/errorUtils';
 import { useToast } from '../../../hooks/useToast';
@@ -30,6 +30,12 @@ export const useEntityData = <T extends Record<string, any>>({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { showToast } = useToast();
+  
+  // Use ref to avoid recreating loadEntities on every showToast change
+  const showToastRef = useRef(showToast);
+  useEffect(() => {
+    showToastRef.current = showToast;
+  }, [showToast]);
 
   // Costruisce l'URL dell'API con parametri specifici per le persone
   const buildApiUrl = useCallback((endpoint: string): string => {
@@ -85,21 +91,21 @@ export const useEntityData = <T extends Record<string, any>>({
       setError(errorMessage);
       setEntities([]);
       
-      showToast({
+      showToastRef.current({
         message: `Errore durante il caricamento dei ${entityDisplayNamePlural.toLowerCase()}: ${err instanceof Error ? err.message : 'Errore sconosciuto'}`,
         type: 'error'
       });
     } finally {
       setLoading(false);
     }
-  }, [apiEndpoint, entityNamePlural, entityDisplayNamePlural, buildApiUrl, processApiResponse, showToast]);
+  }, [apiEndpoint, entityNamePlural, entityDisplayNamePlural, buildApiUrl, processApiResponse]);
 
   // Refresh dati (alias per loadEntities)
   const refreshData = useCallback(async (): Promise<void> => {
     await loadEntities();
   }, [loadEntities]);
 
-  // Caricamento iniziale
+  // Caricamento iniziale - solo loadEntities come dipendenza
   useEffect(() => {
     loadEntities();
   }, [loadEntities]);

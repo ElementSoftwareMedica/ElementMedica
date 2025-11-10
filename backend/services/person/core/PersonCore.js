@@ -99,6 +99,50 @@ class PersonCore {
         personData.email = personData.email.toLowerCase().trim();
       }
       
+      // Converti birthDate da stringa a Date se necessario
+      if (personData.birthDate && typeof personData.birthDate === 'string') {
+        try {
+          // Supporta formati YYYY-MM-DD e ISO string
+          const dateStr = personData.birthDate.trim();
+          if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            // Formato YYYY-MM-DD: aggiungi orario per evitare problemi timezone
+            personData.birthDate = new Date(dateStr + 'T00:00:00.000Z');
+          } else {
+            // Altri formati: usa costruttore Date standard
+            personData.birthDate = new Date(dateStr);
+          }
+          
+          // Verifica che la data sia valida
+          if (isNaN(personData.birthDate.getTime())) {
+            logger.warn('Invalid birthDate provided, setting to null', { birthDate: data.birthDate });
+            personData.birthDate = null;
+          }
+        } catch (error) {
+          logger.warn('Error parsing birthDate, setting to null', { birthDate: data.birthDate, error: error.message });
+          personData.birthDate = null;
+        }
+      }
+      
+      // Converti hiredDate da stringa a Date se necessario
+      if (personData.hiredDate && typeof personData.hiredDate === 'string') {
+        try {
+          const dateStr = personData.hiredDate.trim();
+          if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            personData.hiredDate = new Date(dateStr + 'T00:00:00.000Z');
+          } else {
+            personData.hiredDate = new Date(dateStr);
+          }
+          
+          if (isNaN(personData.hiredDate.getTime())) {
+            logger.warn('Invalid hiredDate provided, setting to null', { hiredDate: data.hiredDate });
+            personData.hiredDate = null;
+          }
+        } catch (error) {
+          logger.warn('Error parsing hiredDate, setting to null', { hiredDate: data.hiredDate, error: error.message });
+          personData.hiredDate = null;
+        }
+      }
+      
       // Genera username automatico se non fornito
       if (!personData.username && personData.firstName && personData.lastName) {
         personData.username = await PersonUtils.generateUniqueUsername(
@@ -235,23 +279,42 @@ class PersonCore {
    */
   static async deleteMultiplePersons(personIds) {
     try {
+      // Normalizza input: rimuovi falsy, deduplica
+      const uniqueIds = Array.from(new Set((personIds || []).filter(Boolean)));
+
       const results = {
         deleted: 0,
         errors: []
       };
-      
-      for (const personId of personIds) {
-        try {
-          await this.deletePerson(personId);
-          results.deleted++;
-        } catch (error) {
-          results.errors.push({
-            personId,
-            error: error.message
-          });
-        }
+
+      if (uniqueIds.length === 0) {
+        return results;
       }
-      
+
+      // Recupera gli ID effettivamente esistenti per evitare errori Prisma
+      const existing = await prisma.person.findMany({
+        where: { id: { in: uniqueIds } },
+        select: { id: true }
+      });
+      const existingIds = existing.map(p => p.id);
+
+      // Esegui soft delete in blocco sugli ID trovati
+      const updateResult = await prisma.person.updateMany({
+        where: { id: { in: existingIds } },
+        data: {
+          deletedAt: new Date(),
+          status: 'INACTIVE'
+        }
+      });
+
+      results.deleted = updateResult.count || 0;
+
+      // Segnala come errore gli ID non trovati
+      const missingIds = uniqueIds.filter(id => !existingIds.includes(id));
+      for (const missingId of missingIds) {
+        results.errors.push({ personId: missingId, error: 'Person not found' });
+      }
+
       return results;
     } catch (error) {
       logger.error('Error deleting multiple persons:', { error: error.message, personIds });
@@ -440,7 +503,9 @@ class PersonCore {
    * @returns {Promise<Array>} Array di formatori
    */
   static async getTrainers(filters = {}) {
-    return this.getPersonsByRole('TRAINER', filters);
+    // Allinea alla famiglia di ruoli trainer usata nella paginazione
+    const trainerRoleTypes = ['TRAINER', 'SENIOR_TRAINER', 'TRAINER_COORDINATOR', 'EXTERNAL_TRAINER'];
+    return this.getPersonsByRole(trainerRoleTypes, filters);
   }
 
   /**
@@ -500,16 +565,40 @@ class PersonCore {
 
       // Filtro per ruolo
       if (roleType) {
+        const trainerFamily = ['TRAINER', 'SENIOR_TRAINER', 'TRAINER_COORDINATOR', 'EXTERNAL_TRAINER'];
+        // Famiglia dei ruoli "employee" (coerente con getEmployees)
+        const employeeFamily = [
+          'COMPANY_ADMIN', 'HR_MANAGER', 'MANAGER', 'DEPARTMENT_HEAD',
+          'TRAINER_COORDINATOR', 'SENIOR_TRAINER', 'TRAINER', 'EXTERNAL_TRAINER',
+          'EMPLOYEE', 'COMPANY_MANAGER', 'TRAINING_ADMIN', 'CLINIC_ADMIN',
+          'VIEWER', 'OPERATOR', 'COORDINATOR', 'SUPERVISOR', 'GUEST',
+          'CONSULTANT', 'AUDITOR'
+        ];
+        let roleCondition;
+        if (Array.isArray(roleType)) {
+          roleCondition = { in: roleType };
+        } else if (roleType === 'TRAINER') {
+          // Interpreta 'TRAINER' come famiglia dei ruoli trainer per la vista formatori
+          roleCondition = { in: trainerFamily };
+        } else if (roleType === 'EMPLOYEE') {
+          // Interpreta 'EMPLOYEE' come famiglia dei ruoli dipendenti per la vista employees
+          roleCondition = { in: employeeFamily };
+        } else {
+          roleCondition = roleType;
+        }
+
         where.personRoles = {
           some: {
-            roleType,
-            isActive: true
+            roleType: roleCondition,
+            // Se isActive è specificato, applicalo al ruolo; altrimenti default true
+            isActive: (typeof isActive !== 'undefined') ? !!isActive : true
           }
         };
       }
 
       // Filtro per stato attivo
-      if (isActive !== undefined) {
+      if (typeof isActive !== 'undefined' && !roleType) {
+        // Applica il filtro sullo status della persona SOLO quando non filtriamo per ruolo
         where.status = isActive ? 'ACTIVE' : 'INACTIVE';
       }
 
@@ -542,7 +631,10 @@ class PersonCore {
       const [persons, total] = await Promise.all([
         prisma.person.findMany({
           where,
-          include: this.getDefaultInclude(),
+          include: {
+            ...this.getDefaultInclude(),
+            // Include tutti i campi del Person model, inclusi certifications e specialties
+          },
           orderBy,
           skip,
           take: parseInt(limit)

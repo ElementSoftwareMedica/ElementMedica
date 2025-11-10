@@ -107,10 +107,48 @@ const getEntityColumns = (): DataTableColumn<EntityType>[] => [
 ### ✅ Completate
 - **Companies** - Pagina di riferimento
 - **Courses** - Migrata al template unificato
+- **Templates** - Sistema template management (Phase 4)
+- **Documents** - Gestione documenti generati (Phase 4)
+- **Lettere Incarico** - Integrazione template system (Phase 5.1)
 
 ### 🔄 In Migrazione
 - **Employees** - Parzialmente migrata
 - **Schedules** - Da migrare
+
+## 🎯 Document Types Integration (Phase 5)
+
+### Phase 5.1: Lettere Incarico ✅ COMPLETE
+**API Routes**: `/api/v1/lettere-incarico/*`
+- GET / - List lettere con filtri (scheduleId, trainerId)
+- GET /:id - Get singola lettera
+- POST /generate - Genera lettera da template
+- POST /generate-batch - Batch generation per trainers
+- DELETE /:id - Soft delete
+- GET /:id/download - Download PDF
+
+**Frontend Components**:
+- `GenerateLetterDialog.tsx` - Dialog generazione lettere
+- `ScheduleLettersCard.tsx` - Card gestione lettere in schedule
+- `lettereIncaricoService.ts` - Service layer
+
+**Default Template**: 25 markers (tenant.*, trainer.*, course.*, schedule.*, document.*, current.*)
+
+**Conformità**:
+- ✅ Tenant isolation (tenantId)
+- ✅ Soft delete (deletedAt)
+- ✅ Authentication & Authorization
+- ✅ Audit logging
+- ✅ Progressive numbering (numeroProgressivo/annoProgressivo)
+
+### Phase 5.2: Registri Presenze 🔄 PLANNED
+- Template landscape per tabelle presenze
+- API routes per registri
+- UI per tracking sessioni
+
+### Phase 5.3: Attestati 🔄 PLANNED
+- Migrazione attestati esistenti
+- Batch generation
+- Email delivery integration
 
 ## 🔧 Troubleshooting
 

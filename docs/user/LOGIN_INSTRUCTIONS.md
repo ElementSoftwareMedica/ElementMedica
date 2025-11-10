@@ -159,3 +159,9 @@ Per qualsiasi problema o modifica al sistema:
 2. **Richiedere autorizzazione** prima di interventi sui server
 3. **Utilizzare credenziali test** standard per validazione
 4. **Effettuare backup** prima di modifiche critiche
+
+## Note operative (JWT)
+- Token firmati e verificati esclusivamente dall'API Server tramite JWTService.
+- Il Proxy non firma token e non richiede variabili JWT.
+- Refresh token: può essere inviato via header `X-Refresh-Token` oppure nel body come `refresh_token`.
+- CORS: includere `X-Refresh-Token`/`x-refresh-token` negli header consentiti.

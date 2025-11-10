@@ -109,47 +109,11 @@ export async function getOne<T>(endpoint: string, id: string | number, config?: 
 export async function create<T, D = Partial<T>>(endpoint: string, data: D, config?: any): Promise<T> {
   console.log(`Creating ${endpoint} with data:`, JSON.stringify(data).substring(0, 100) + '...');
   
-  // Special handling for schedules endpoint which is inconsistent across servers
+  // Standardizzazione endpoint schedules su API v1 tramite proxy
   if (endpoint === 'schedules') {
-    // Try possible endpoints in order until one works
-    const possibleEndpoints = [
-      '/schedules',                       // Direct endpoint via Vite proxy
-      'http://localhost:4003/schedules',  // Fixed server direct 
-      '/api/schedules',                   // With API prefix via Vite proxy
-      'http://localhost:4003/api/schedules', // Fixed server with API prefix
-      'http://127.0.0.1:4003/schedules',  // Alternative localhost notation
-    ];
-    
-    let lastError = null;
-    const allErrors: any[] = [];
-    
-    // Try each endpoint until one works
-    for (const url of possibleEndpoints) {
-      try {
-        console.log(`[DEBUG] Trying endpoint: ${url} with payload:`, JSON.stringify(data));
-        const response = await directApiClient.post<T>(url, data, config);
-        console.log(`Success with endpoint: ${url}`);
-        return response.data;
-      } catch (err: any) {
-        // More detailed error logging
-        console.warn(`Failed with endpoint: ${url}`);
-        console.error('Error details:', {
-          message: err.message,
-          response: err.response ? {
-            status: err.response.status,
-            data: err.response.data,
-            headers: err.response.headers
-          } : 'No response object',
-          request: err.request ? 'Request object exists' : 'No request object'
-        });
-        lastError = err;
-        allErrors.push({url, error: err.message, status: err.response?.status, data: err.response?.data});
-      }
-    }
-    
-    // If all endpoints failed, throw the last error with more context
-    console.error('All schedule creation endpoints failed', JSON.stringify(allErrors));
-    throw lastError;
+    const url = '/api/v1/schedules';
+    const response = await apiClient.post<T>(url, data, config);
+    return response.data;
   }
   
   // Normal handling for other endpoints
@@ -165,35 +129,11 @@ export async function update<T, D = Partial<T>>(
 ): Promise<T> {
   console.log(`Updating ${endpoint}/${id} with data:`, JSON.stringify(data).substring(0, 100) + '...');
   
-  // Special handling for schedules endpoint which is inconsistent across servers
+  // Standardizzazione endpoint schedules su API v1 tramite proxy
   if (endpoint === 'schedules') {
-    // Try possible endpoints in order until one works
-    const possibleEndpoints = [
-      `/schedules/${id}`,                       // Direct endpoint via Vite proxy
-      `http://localhost:4003/schedules/${id}`,  // Fixed server direct 
-      `/api/schedules/${id}`,                   // With API prefix via Vite proxy
-      `http://localhost:4003/api/schedules/${id}`, // Fixed server with API prefix
-      `http://127.0.0.1:4003/schedules/${id}`,  // Alternative localhost notation
-    ];
-    
-    let lastError = null;
-    
-    // Try each endpoint until one works
-    for (const url of possibleEndpoints) {
-      try {
-        console.log(`Trying endpoint: ${url}...`);
-        const response = await directApiClient.put<T>(url, data, config);
-        console.log(`Success with endpoint: ${url}`);
-        return response.data;
-      } catch (err) {
-        console.warn(`Failed with endpoint: ${url}`, err);
-        lastError = err;
-      }
-    }
-    
-    // If all endpoints failed, throw the last error
-    console.error('All schedule update endpoints failed');
-    throw lastError as any;
+    const url = `/api/v1/schedules/${id}`;
+    const response = await apiClient.put<T>(url, data, config);
+    return response.data;
   }
   
   // Normal handling for other endpoints
@@ -204,35 +144,11 @@ export async function update<T, D = Partial<T>>(
 export async function remove(endpoint: string, id: string | number, config?: any): Promise<void> {
   console.log(`Deleting ${endpoint}/${id}`);
   
-  // Special handling for schedules endpoint which is inconsistent across servers
+  // Standardizzazione endpoint schedules su API v1 tramite proxy
   if (endpoint === 'schedules') {
-    // Try possible endpoints in order until one works
-    const possibleEndpoints = [
-      `/schedules/${id}`,                       // Direct endpoint via Vite proxy
-      `http://localhost:4003/schedules/${id}`,  // Fixed server direct 
-      `/api/schedules/${id}`,                   // With API prefix via Vite proxy
-      `http://localhost:4003/api/schedules/${id}`, // Fixed server with API prefix
-      `http://127.0.0.1:4003/schedules/${id}`,  // Alternative localhost notation
-    ];
-    
-    let lastError = null;
-    
-    // Try each endpoint until one works
-    for (const url of possibleEndpoints) {
-      try {
-        console.log(`Trying to delete from endpoint: ${url}...`);
-        await directApiClient.delete(url, config);
-        console.log(`Successfully deleted from endpoint: ${url}`);
-        return;
-      } catch (err) {
-        console.warn(`Failed to delete from endpoint: ${url}`, err);
-        lastError = err;
-      }
-    }
-    
-    // If all endpoints failed, throw the last error
-    console.error('All schedule deletion endpoints failed');
-    throw lastError as any;
+    const url = `/api/v1/schedules/${id}`;
+    await apiClient.delete(url, config);
+    return;
   }
   
   // Normal handling for other endpoints

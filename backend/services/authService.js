@@ -1,8 +1,7 @@
 import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
 import logger from '../utils/logger.js';
 import prisma from '../config/prisma-optimization.js';
-import crypto from 'crypto';
+import { JWTService } from '../auth/jwt.js';
 
 class AuthService {
   /**
@@ -72,82 +71,31 @@ class AuthService {
   }
 
   /**
-   * Genera i token JWT per una persona
+   * Genera e PERSISTE i token JWT per una persona tramite JWTService
+   * - Usa esclusivamente JWTService per payload, firma e persistenza refresh token
+   * - Evita divergenze di durata: demanda a JWTService (env o rememberMe)
    */
-  generateTokens(person, rememberMe = false) {
+  async generateTokens(person, rememberMeOrOptions = false) {
     try {
-      const roles = person.personRoles.map(pr => pr.roleType);
-      
-      const tokenPayload = {
-        personId: person.id,
-        email: person.email,
-        username: person.username,
-        taxCode: person.taxCode,
-        companyId: person.companyId,
-        tenantId: person.tenantId,
-        roles
-      };
+      // Backward compat: accetta boolean oppure oggetto opzioni { rememberMe, extraClaims, deviceInfo }
+      let options = {};
+      if (typeof rememberMeOrOptions === 'boolean') {
+        options.rememberMe = rememberMeOrOptions;
+      } else if (rememberMeOrOptions && typeof rememberMeOrOptions === 'object') {
+        options = { ...rememberMeOrOptions };
+      }
 
-      const accessTokenExpiry = rememberMe ? '7d' : '1h';
-      const refreshTokenExpiry = rememberMe ? '30d' : '7d';
+      const deviceInfo = options.deviceInfo || {};
 
-      const jwtSecret = process.env.JWT_SECRET || 'super-secret-jwt-key-for-development-change-in-production-2024';
-      
-      const accessToken = jwt.sign(
-        tokenPayload,
-        jwtSecret,
-        { 
-          expiresIn: accessTokenExpiry,
-          issuer: 'training-platform',
-          audience: 'training-platform-users'
-        }
-      );
+      // Centralizza completamente su JWTService
+      const result = await JWTService.generateTokenPair(person, deviceInfo, {
+        rememberMe: !!options.rememberMe,
+        extraClaims: options.extraClaims
+      });
 
-      const jwtRefreshSecret = process.env.JWT_REFRESH_SECRET || 'super-secret-jwt-refresh-key-for-development-change-in-production-2024';
-      
-      // Aggiungi un identificatore univoco (jti) per evitare token identici generati nello stesso secondo
-      const jti = typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex');
-
-      const refreshToken = jwt.sign(
-        { personId: person.id, jti },
-        jwtRefreshSecret,
-        { 
-          expiresIn: refreshTokenExpiry,
-          issuer: 'training-platform',
-          audience: 'training-platform-users'
-        }
-      );
-
-      return {
-        accessToken,
-        refreshToken,
-        expiresIn: rememberMe ? 7 * 24 * 60 * 60 : 60 * 60 // seconds
-      };
+      return result;
     } catch (error) {
       logger.error('Error generating tokens:', { error: error.message });
-      throw error;
-    }
-  }
-
-  /**
-   * Salva il refresh token su DB
-   */
-  async saveRefreshToken(token, personId, expiresAt, userAgent, ipAddress, tenantId) {
-    try {
-      return await prisma.refreshToken.create({
-        data: {
-          token,
-          personId,
-          expiresAt,
-          deviceInfo: {
-            userAgent: userAgent || 'Unknown',
-            ipAddress: ipAddress || '0.0.0.0'
-          },
-          tenantId
-        }
-      });
-    } catch (error) {
-      logger.error('Error saving refresh token:', { error: error.message });
       throw error;
     }
   }

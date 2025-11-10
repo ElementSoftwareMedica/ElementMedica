@@ -308,11 +308,42 @@ class PublicCoursesController {
     try {
       const { courseTitle } = req.params;
 
-      const courses = await prisma.course.findMany({
+      // Normalizzazione robusta per confronti lato server
+      const normalize = (s = '') =>
+        s
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '') // rimuovi diacritici
+          .replace(/&/g, ' e ')
+          .replace(/[^a-z0-9]+/gi, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+
+      // Normalizza apostrofi/virgolette tipografici
+      const normalizeApostrophes = (s = '') => s
+        .replace(/[\u2018\u2019\u201B]/g, "'") // ‘ ’ ‛ → '
+        .replace(/[\u201C\u201D]/g, '"');      // “ ” → "
+
+      // Stopwords italiane per un matching più intelligente
+      const STOPWORDS = new Set([
+        'di','dei','degli','delle','della','del','dell','lo','la','le','gli','il','i','e','ed','da','un','una','uno',
+        'per','con','su','tra','fra','al','allo','alla','ai','agli','alle','dello','in','a','ad','dal','dai','dagli','dalle'
+      ]);
+      const tokenize = (s = '') => normalize(s).split(' ').filter(w => w && !STOPWORDS.has(w));
+      const tokenOverlap = (a, b) => {
+        const aSet = new Set(a);
+        const bSet = new Set(b);
+        let overlap = 0;
+        for (const t of aSet) if (bSet.has(t)) overlap++;
+        return overlap;
+      };
+
+      // 1) Match esatto case-insensitive
+      let courses = await prisma.course.findMany({
         where: {
-          title: courseTitle,
           isPublic: true,
-          deletedAt: null
+          deletedAt: null,
+          title: { equals: courseTitle, mode: 'insensitive' }
         },
         select: {
           id: true,
@@ -326,7 +357,7 @@ class PublicCoursesController {
           maxPeople: true,
           pricePerPerson: true,
           regulation: true,
-          renewalDuration: true,
+          practicalHours: true,
           validityYears: true,
           status: true,
           courseType: true,
@@ -365,6 +396,238 @@ class PublicCoursesController {
           { riskLevel: 'asc' }
         ]
       });
+
+      // 1.b) Match esatto con apostrofi normalizzati
+      if (courses.length === 0) {
+        const normalizedApos = normalizeApostrophes(courseTitle);
+        if (normalizedApos && normalizedApos !== courseTitle) {
+          courses = await prisma.course.findMany({
+            where: {
+              isPublic: true,
+              deletedAt: null,
+              title: { equals: normalizedApos, mode: 'insensitive' }
+            },
+            select: {
+              id: true,
+              title: true,
+              category: true,
+              description: true,
+              duration: true,
+              certifications: true,
+              code: true,
+              contents: true,
+              maxPeople: true,
+              pricePerPerson: true,
+              regulation: true,
+              practicalHours: true,
+              validityYears: true,
+              status: true,
+              courseType: true,
+              fullDescription: true,
+              image1Url: true,
+              image2Url: true,
+              riskLevel: true,
+              seoDescription: true,
+              seoTitle: true,
+              shortDescription: true,
+              slug: true,
+              subcategory: true,
+              schedules: {
+                where: { deletedAt: null },
+                select: {
+                  id: true,
+                  startDate: true,
+                  endDate: true,
+                  location: true,
+                  maxParticipants: true,
+                  status: true,
+                  trainer: { select: { id: true, firstName: true, lastName: true } }
+                }
+              }
+            },
+            orderBy: [ { courseType: 'asc' }, { riskLevel: 'asc' } ]
+          });
+        }
+      }
+
+      // 2) Match parziale case-insensitive
+      if (courses.length === 0) {
+        courses = await prisma.course.findMany({
+          where: {
+            isPublic: true,
+            deletedAt: null,
+            title: { contains: courseTitle, mode: 'insensitive' }
+          },
+          select: {
+            id: true,
+            title: true,
+            category: true,
+            description: true,
+            duration: true,
+            certifications: true,
+            code: true,
+            contents: true,
+            maxPeople: true,
+            pricePerPerson: true,
+            regulation: true,
+            practicalHours: true,
+            validityYears: true,
+            status: true,
+            courseType: true,
+            fullDescription: true,
+            image1Url: true,
+            image2Url: true,
+            riskLevel: true,
+            seoDescription: true,
+            seoTitle: true,
+            shortDescription: true,
+            slug: true,
+            subcategory: true,
+            schedules: {
+              where: {
+                deletedAt: null
+              },
+              select: {
+                id: true,
+                startDate: true,
+                endDate: true,
+                location: true,
+                maxParticipants: true,
+                status: true,
+                trainer: {
+                  select: {
+                    id: true,
+                    firstName: true,
+                    lastName: true
+                  }
+                }
+              }
+            }
+          },
+          orderBy: [
+            { courseType: 'asc' },
+            { riskLevel: 'asc' }
+          ]
+        });
+      }
+
+      // 2.b) Match parziale con apostrofi normalizzati
+      if (courses.length === 0) {
+        const normalizedApos = normalizeApostrophes(courseTitle);
+        if (normalizedApos && normalizedApos !== courseTitle) {
+          courses = await prisma.course.findMany({
+            where: {
+              isPublic: true,
+              deletedAt: null,
+              title: { contains: normalizedApos, mode: 'insensitive' }
+            },
+            select: {
+              id: true,
+              title: true,
+              category: true,
+              description: true,
+              duration: true,
+              certifications: true,
+              code: true,
+              contents: true,
+              maxPeople: true,
+              pricePerPerson: true,
+              regulation: true,
+              practicalHours: true,
+              validityYears: true,
+              status: true,
+              courseType: true,
+              fullDescription: true,
+              image1Url: true,
+              image2Url: true,
+              riskLevel: true,
+              seoDescription: true,
+              seoTitle: true,
+              shortDescription: true,
+              slug: true,
+              subcategory: true,
+              schedules: {
+                where: { deletedAt: null },
+                select: {
+                  id: true,
+                  startDate: true,
+                  endDate: true,
+                  location: true,
+                  maxParticipants: true,
+                  status: true,
+                  trainer: { select: { id: true, firstName: true, lastName: true } }
+                }
+              }
+            },
+            orderBy: [ { courseType: 'asc' }, { riskLevel: 'asc' } ]
+          });
+        }
+      }
+
+      // 3) Fallback: matching a token su tutti i corsi pubblici
+      if (courses.length === 0) {
+        const allPublic = await prisma.course.findMany({
+          where: { isPublic: true, deletedAt: null },
+          select: {
+            id: true,
+            title: true,
+            category: true,
+            description: true,
+            duration: true,
+            certifications: true,
+            code: true,
+            contents: true,
+            maxPeople: true,
+            pricePerPerson: true,
+            regulation: true,
+            practicalHours: true,
+            validityYears: true,
+            status: true,
+            courseType: true,
+            fullDescription: true,
+            image1Url: true,
+            image2Url: true,
+            riskLevel: true,
+            seoDescription: true,
+            seoTitle: true,
+            shortDescription: true,
+            slug: true,
+            subcategory: true,
+            schedules: {
+              where: { deletedAt: null },
+              select: {
+                id: true,
+                startDate: true,
+                endDate: true,
+                location: true,
+                maxParticipants: true,
+                status: true,
+                trainer: { select: { id: true, firstName: true, lastName: true } }
+              }
+            }
+          },
+          orderBy: [ { courseType: 'asc' }, { riskLevel: 'asc' } ]
+        });
+
+        const wantedTokens = tokenize(courseTitle);
+        let matched = allPublic.filter(c => {
+          const tokens = tokenize(c.title || '');
+          return wantedTokens.length > 0 && wantedTokens.every(tok => tokens.includes(tok));
+        });
+
+        if (matched.length === 0) {
+          // Se non c'è un match completo, prendi i migliori per overlap > 0
+          const scored = allPublic
+            .map(c => ({ c, score: tokenOverlap(wantedTokens, tokenize(c.title || '')) }))
+            .filter(x => x.score > 0)
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 20)
+            .map(x => x.c);
+          matched = scored;
+        }
+
+        courses = matched;
+      }
 
       if (courses.length === 0) {
         return res.status(404).json({
@@ -432,26 +695,27 @@ class PublicCoursesController {
   // GET /api/public/courses/titles/list
   async getCourseTitles(req, res) {
     try {
-      const titles = await prisma.course.findMany({
+      // Preleva tutti i titoli dei corsi pubblici (senza usare distinct per compatibilità Prisma)
+      const rows = await prisma.course.findMany({
         where: {
           isPublic: true,
-          deletedAt: null,
-          title: { not: null }
+          deletedAt: null
         },
-        select: {
-          title: true
-        },
-        distinct: ['title'],
-        orderBy: {
-          title: 'asc'
-        }
+        select: { title: true }
       });
 
-      const titleList = titles.map(course => course.title);
+      // Deduplica lato applicativo e rimuove null/vuoti, ordina alfabeticamente (locale it)
+      const titleList = Array.from(
+        new Set(
+          (rows || [])
+            .map(c => (typeof c.title === 'string' ? c.title.trim() : ''))
+            .filter(t => t)
+        )
+      ).sort((a, b) => a.localeCompare(b, 'it', { sensitivity: 'base' }));
 
       logger.info('Retrieved course titles list', { count: titleList.length });
 
-      res.json({
+      return res.json({
         success: true,
         data: titleList
       });

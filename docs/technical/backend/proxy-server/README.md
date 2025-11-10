@@ -104,6 +104,11 @@ DB_HEALTH_CHECK_ENABLED=true
 EXTERNAL_SERVICES_CHECK_ENABLED=true
 ```
 
+#### Nota JWT
+- Il Proxy non firma né verifica token JWT e non richiede variabili `JWT_*`.
+- La generazione e la verifica dei token sono centralizzate nell'API Server tramite JWTService.
+- Le variabili `JWT_SECRET` e `JWT_REFRESH_SECRET` sono OBBLIGATORIE solo sull'API Server (nessun fallback).
+
 ### Debug Logging
 
 Per abilitare il logging di debug specifico:
@@ -146,8 +151,8 @@ import { createSecureCorsMiddleware } from './middleware/cors.js';
 
 // CORS configurabile per ambiente
 const corsMiddleware = createSecureCorsMiddleware({
-  development: ['http://localhost:5173', 'http://localhost:3000'],
-  production: ['https://yourdomain.com']
+  development: ['http://localhost:5173'],
+  production: ['https://www.elementformazione.com']
 });
 ```
 

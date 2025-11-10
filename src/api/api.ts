@@ -8,7 +8,9 @@ export {
   apiDelete,
   apiDeleteWithPayload,
   apiUpload,
-  apiService
+  apiService,
+  invalidateCache,
+  clearCache
 } from '../services/api';
 
 // Export default per compatibilità

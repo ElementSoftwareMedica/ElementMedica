@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { 
   Calendar,
   Download,
@@ -9,14 +9,20 @@ import {
 import ScheduleCalendar, { ScheduleEvent } from '../../components/dashboard/ScheduleCalendar';
 import ScheduleEventModalLazy from '../../components/schedules/ScheduleEventModal.lazy';
 import EntityListLayout from '../../components/layouts/EntityListLayout';
-import ResizableTable from '../../components/shared/ResizableTable';
+import ResizableTable, { ResizableTableColumn } from '../../components/shared/ResizableTable';
 import { HeaderPanel } from '../../design-system/organisms/HeaderPanel';
 import { SearchBarControls } from '../../design-system/molecules/SearchBarControls';
 import { FilterPanel } from '../../design-system/organisms/FilterPanel';
 import { SearchBar } from '../../design-system/molecules/SearchBar';
 import { exportToCsv } from '../../utils/csvExport';
-import { apiGet, apiPost, apiPut, apiDelete } from '../../services/api';
-import { Company } from '../../types';
+import { apiGet } from '../../services/api';
+import { remove } from '../../services/apiClient';
+import { getTrainers } from '../../services/trainers';
+import { getCompanies } from '../../services/companies';
+import { getPersons } from '../../services/persons';
+import { getCourses } from '../../services/courses';
+import { Company, Person } from '../../types';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 
 interface Schedule {
   id: string;
@@ -54,13 +60,21 @@ interface Trainer {
   lastName: string;
 }
 
-interface Employee {
+// Riga dati per la tabella di ResizableTable
+interface DataRow {
   id: string;
-  firstName: string;
-  lastName: string;
-  companyId: string;
-  email?: string;
-  position?: string;
+  corso: string;
+  aziende: string;
+  formatore: string;
+  coFormatore: string;
+  partecipanti: number;
+  dataInizio: string;
+  dataFine: string;
+  sessioni: string;
+  modalità: string;
+  location: string;
+  selected: boolean;
+  _original: Schedule;
 }
 
 // Funzione helper per combinare data e ora in modo robusto
@@ -77,12 +91,13 @@ function combineDateAndTime(dateStr: string, timeStr: string) {
 }
 
 const SchedulesPage: React.FC = () => {
+  const loadingRef = useRef(false);
   
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [trainers, setTrainers] = useState<Trainer[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
-  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [persons, setPersons] = useState<Person[]>([]);
   const [view, setView] = useState<'table' | 'calendar'>(() => {
     return (localStorage.getItem('schedulesViewMode') as 'table' | 'calendar') || 'table';
   });
@@ -97,41 +112,178 @@ const SchedulesPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilters, setActiveFilters] = useState<Record<string, string>>({});
   const [activeSort, setActiveSort] = useState<{ field: string, direction: 'asc' | 'desc' } | undefined>(undefined);
-
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  
+  // ✅ FIX: Carica schedule esistente quando scheduleId è nell'URL
   useEffect(() => {
-    fetchData();
-    localStorage.setItem('schedulesViewMode', view);
-  }, [view]);
+    const openModal = searchParams.get('openModal');
+    const scheduleId = searchParams.get('scheduleId');
+    
+    if (openModal && scheduleId && !showForm) {
+      // Cerca lo schedule nei dati già caricati
+      const existingSchedule = schedules.find(s => s.id === scheduleId);
+      
+      if (existingSchedule) {
+        console.log('[SchedulesPage] 📝 Loading schedule for edit:', scheduleId, existingSchedule);
+        setEditingSchedule(existingSchedule);
+        setSelectedSlot(null);
+        setShowForm(true);
+      } else {
+        // Se non trovato nei dati locali, carica dal server
+        console.log('[SchedulesPage] 🔄 Schedule not found in local data, fetching from server...');
+        apiGet(`/api/v1/schedules/${scheduleId}`)
+          .then((data) => {
+            console.log('[SchedulesPage] ✅ Schedule loaded:', data);
+            setEditingSchedule(data);
+            setSelectedSlot(null);
+            setShowForm(true);
+          })
+          .catch((err) => {
+            console.error('[SchedulesPage] ❌ Failed to load schedule:', err);
+            setAlert({ type: 'error', message: 'Impossibile caricare il corso programmato' });
+          });
+      }
+    } else if (openModal && !scheduleId && !showForm) {
+      // Nuovo schedule
+      setEditingSchedule(null);
+      setSelectedSlot(null);
+      setShowForm(true);
+    }
+  }, [searchParams, showForm, schedules]);
 
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const [schedulesData, coursesData, trainersData, companiesData, employeesData] = await Promise.all([
-        apiGet('/schedules'),
-        apiGet('/courses'),
-        apiGet('/trainers'),
-        apiGet('/companies'),
-        apiGet('/persons')
-      ]);
-
-      setSchedules(schedulesData as Schedule[]);
-      setCourses(coursesData as Course[]);
-      setTrainers(trainersData as Trainer[]);
-      setCompanies(companiesData as Company[]);
-      setEmployees(employeesData as Employee[]);
-    } catch (error) {
-      console.error('Error fetching data:', error);
-    } finally {
-      setLoading(false);
+  // Rimuove il parametro openModal dalla URL per evitare riaperture automatiche del modal
+  const clearOpenModalParam = () => {
+    if (searchParams.get('openModal')) {
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete('openModal');
+      setSearchParams(newParams, { replace: true });
     }
   };
 
+  // Salva view preference
+  useEffect(() => {
+    localStorage.setItem('schedulesViewMode', view);
+  }, [view]);
+
+  const fetchData = useCallback(async () => {
+    // Evita chiamate multiple durante il loading usando ref
+    if (loadingRef.current) {
+      console.log('[SchedulesPage] ⏭️ Already loading, skipping fetchData');
+      return;
+    }
+    
+    loadingRef.current = true;
+    setLoading(true);
+    console.log('[SchedulesPage] 🔄 Fetching data... (loading=true)');
+    
+    try {
+      console.log('[SchedulesPage] ⏳ Calling Promise.all for schedules, courses, trainers, companies...');
+      
+      // ✅ FIX: Carica solo i dati essenziali nel Promise.all principale
+      // Persons viene caricato separatamente per evitare di bloccare il rendering
+      const [schedulesData, rawCourses, trainersData, companiesData] = await Promise.all([
+        apiGet('/api/v1/schedules').then(data => {
+          console.log('[SchedulesPage] ✅ Schedules API response received:', Array.isArray(data) ? `${data.length} items` : typeof data);
+          return data;
+        }),
+        getCourses().then(data => {
+          console.log('[SchedulesPage] ✅ Courses service response received:', Array.isArray(data) ? `${data.length} items` : typeof data);
+          return data;
+        }),
+        getTrainers().then(data => {
+          console.log('[SchedulesPage] ✅ Trainers service response received:', Array.isArray(data) ? `${data.length} items` : typeof data);
+          return data;
+        }),
+        getCompanies().then(data => {
+          console.log('[SchedulesPage] ✅ Companies service response received:', Array.isArray(data) ? `${data.length} items` : typeof data);
+          return data;
+        })
+      ]);
+      
+      console.log('[SchedulesPage] 🎉 Essential data loaded! Loading persons in background...');
+      
+      // ✅ Carica persons in background senza bloccare il rendering
+      getPersons({ limit: 1000, page: 1 })
+        .then(data => {
+          console.log('[SchedulesPage] ✅ Persons loaded in background:', (data as any)?.persons?.length || 0, 'persons');
+          const personsArray = (data as any)?.persons ?? data;
+          setPersons(personsArray as Person[]);
+        })
+        .catch(err => {
+          console.warn('[SchedulesPage] ⚠️ Persons loading failed (non-critical):', err);
+          setPersons([]);
+        });
+
+      console.log('[SchedulesPage] 📊 Essential data fetched:', {
+        schedulesCount: Array.isArray(schedulesData) ? schedulesData.length : 0,
+        schedulesType: typeof schedulesData,
+        schedulesIsArray: Array.isArray(schedulesData),
+        coursesCount: Array.isArray(rawCourses) ? rawCourses.length : 0,
+        trainersCount: Array.isArray(trainersData) ? trainersData.length : 0,
+        companiesCount: Array.isArray(companiesData) ? companiesData.length : 0,
+        sampleSchedule: Array.isArray(schedulesData) && schedulesData[0] ? schedulesData[0] : null
+      });
+
+      // Validazione robusta: assicurati che schedulesData sia un array
+      const validSchedules = Array.isArray(schedulesData) ? schedulesData : [];
+      
+      if (!Array.isArray(schedulesData)) {
+        console.error('[SchedulesPage] ⚠️ schedulesData is not an array:', schedulesData);
+      }
+
+      // Mappa i corsi del service unificato alla shape locale { id, name }
+      const coursesData: Course[] = (Array.isArray(rawCourses) ? rawCourses : []).map((c: any) => ({ 
+        id: c.id, 
+        name: c.title || c.name || 'N/A' 
+      }));
+
+      // ✅ Imposta i dati essenziali usando setState batch per evitare flickering
+      setSchedules(validSchedules as Schedule[]);
+      setCourses(coursesData);
+      setTrainers(Array.isArray(trainersData) ? trainersData as Trainer[] : []);
+      setCompanies(Array.isArray(companiesData) ? companiesData as Company[] : []);
+      // Persons viene impostato dal promise in background (vedi sopra)
+      
+      console.log('[SchedulesPage] ✅ States updated with valid data');
+    } catch (error) {
+      console.error('[SchedulesPage] ❌ Error fetching data:', error);
+      
+      // Imposta stati di default per evitare UI vuota o inconsistente
+      setSchedules([]);
+      setCourses([]);
+      setTrainers([]);
+      setCompanies([]);
+      setPersons([]);
+      
+      // Mostra alert solo se non è un errore di autenticazione temporaneo
+      if (error && typeof error === 'object' && 'response' in error) {
+        const responseError = error as { response?: { status?: number } };
+        if (responseError.response?.status !== 401 && responseError.response?.status !== 403) {
+          setAlert({ 
+            type: 'error', 
+            message: 'Errore durante il caricamento dei dati. Riprova.' 
+          });
+        }
+      }
+    } finally {
+      loadingRef.current = false;
+      setLoading(false);
+      console.log('[SchedulesPage] ✅ Loading complete (loading=false)');
+    }
+  }, []); // Nessuna dipendenza - usa ref per evitare loop
+
+  // ✅ FIX: Carica dati al mount e quando modal si chiude
+  useEffect(() => {
+    console.log('[SchedulesPage] 🎯 Component mounted or modal closed, fetching data...');
+    fetchData();
+  }, [fetchData, showForm]); // Reload when modal closes (showForm becomes false)
 
 
   const handleDelete = async (id: string) => {
     if (!confirm('Sei sicuro di voler eliminare questo programma?')) return;
     try {
-      await apiDelete(`/schedules/${id}`);
+      await remove('schedules', id);
       setAlert({ type: 'success', message: 'Corso eliminato con successo.' });
       await fetchData();
     } catch (error) {
@@ -145,7 +297,7 @@ const SchedulesPage: React.FC = () => {
     if (!confirm('Sei sicuro di voler eliminare i corsi selezionati?')) return;
     setLoading(true);
     try {
-      await Promise.all(selectedIds.map(id => apiDelete(`/schedules/${id}`)));
+      await Promise.all(selectedIds.map(id => remove('schedules', id)));
       setSelectedIds([]);
       setSelectionMode(false);
       setAlert({ type: 'success', message: 'Corsi eliminati con successo.' });
@@ -168,7 +320,7 @@ const SchedulesPage: React.FC = () => {
   };
 
   // Prepara i dati per la tabella
-  const data = schedules.map(schedule => {
+  const data: DataRow[] = schedules.map(schedule => {
     // Estrai i nomi delle aziende
     const companyNames = schedule.companies
       ?.map(c => c.company.ragioneSociale || c.company.name)
@@ -390,99 +542,48 @@ const SchedulesPage: React.FC = () => {
     exportToCsv(csvData, 'pianificazioni.csv');
   };
 
-  const columns = [
+  const columns: ResizableTableColumn<DataRow>[] = [
     {
-      id: 'select',
-      header: selectionMode ? (
-            <input
-              type="checkbox"
-              checked={selectAll}
-              onChange={handleSelectAll}
-          className="w-4 h-4"
-            />
-      ) : null,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      cell: (info: any) => selectionMode ? (
-            <input
-              type="checkbox"
-          checked={selectedIds.includes(info.row.original.id)}
-          onChange={() => handleSelect(info.row.original.id)}
-          className="w-4 h-4"
-            />
-      ) : null,
+      key: 'select',
+      label: '',
       width: 35,
       minWidth: 35,
-      maxWidth: 35,
+      renderHeader: () => selectionMode ? (
+        <input
+          type="checkbox"
+          checked={selectAll}
+          onChange={handleSelectAll}
+          className="w-4 h-4"
+        />
+      ) : null,
+      renderCell: (row) => selectionMode ? (
+        <input
+          type="checkbox"
+          checked={selectedIds.includes(row.id)}
+          onChange={() => handleSelect(row.id)}
+          className="w-4 h-4"
+        />
+      ) : null,
     },
+    { key: 'corso', label: 'Corso', width: 150, sortable: true },
+    { key: 'aziende', label: 'Aziende', width: 150, sortable: true },
+    { key: 'formatore', label: 'Formatore', width: 120, sortable: true },
+    { key: 'coFormatore', label: 'Co-Formatore', width: 120 },
+    { key: 'partecipanti', label: 'Partecipanti', width: 100 },
+    { key: 'dataInizio', label: 'Data Inizio', width: 100, sortable: true },
+    { key: 'dataFine', label: 'Data Fine', width: 100, sortable: true },
+    { key: 'sessioni', label: 'Sessioni', width: 150 },
+    { key: 'modalità', label: 'Modalità', width: 100 },
+    { key: 'location', label: 'Location', width: 120 },
     {
-      id: 'corso',
-      header: 'Corso',
-      accessorKey: 'corso',
-      width: 150,
-    },
-    { 
-      id: 'aziende',
-      header: 'Aziende',
-      accessorKey: 'aziende',
-      width: 150,
-    },
-    {
-      id: 'formatore',
-      header: 'Formatore',
-      accessorKey: 'formatore',
-      width: 120,
-    },
-    {
-      id: 'coFormatore',
-      header: 'Co-Formatore',
-      accessorKey: 'coFormatore',
-      width: 120,
-    },
-    {
-      id: 'partecipanti',
-      header: 'Partecipanti',
-      accessorKey: 'partecipanti',
-      width: 100,
-    },
-    { 
-      id: 'dataInizio',
-      header: 'Data Inizio',
-      accessorKey: 'dataInizio',
-      width: 100,
-    },
-    {
-      id: 'dataFine',
-      header: 'Data Fine',
-      accessorKey: 'dataFine',
-      width: 100,
-    },
-    {
-      id: 'sessioni',
-      header: 'Sessioni',
-      accessorKey: 'sessioni',
-      width: 150,
-    },
-    {
-      id: 'modalità',
-      header: 'Modalità',
-      accessorKey: 'modalità',
-      width: 100,
-    },
-    {
-      id: 'location',
-      header: 'Location',
-      accessorKey: 'location',
-      width: 120,
-    },
-    { 
-      id: 'actions',
-      header: 'Azioni',
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      cell: (info: any) => (
+      key: 'actions',
+      label: 'Azioni',
+      width: 80,
+      renderCell: (row) => (
         <div className="flex space-x-1">
           <button
             onClick={() => {
-              const schedule = info.row.original._original;
+              const schedule = row._original;
               setEditingSchedule(schedule);
               setShowForm(true);
             }}
@@ -492,7 +593,7 @@ const SchedulesPage: React.FC = () => {
             <Pencil size={16} />
           </button>
           <button
-            onClick={() => handleDelete(info.row.original.id)}
+            onClick={() => handleDelete(row.id)}
             className="p-1 text-red-600 hover:text-red-800"
             title="Elimina"
           >
@@ -500,7 +601,6 @@ const SchedulesPage: React.FC = () => {
           </button>
         </div>
       ),
-      width: 80,
     },
   ];
 
@@ -560,13 +660,13 @@ const SchedulesPage: React.FC = () => {
       
       <HeaderPanel
         entityType="programmazione"
-        entityGender="female"
+        entityGender="f"
         onAdd={() => {
           setEditingSchedule(null);
           setShowForm(true);
         }}
         onImport={() => {/* TODO: Implementare import */}}
-        onDownload={handleDownloadTemplate}
+        onDownloadTemplate={handleDownloadTemplate}
         viewMode={view}
         onViewModeChange={(newView) => setView(newView as 'table' | 'calendar')}
         viewModeOptions={[
@@ -588,7 +688,7 @@ const SchedulesPage: React.FC = () => {
     <EntityListLayout
       title="Pianificazioni"
       subtitle="Gestisci tutti i corsi pianificati"
-      searchFilterBar={<SearchFilterBar />}
+      headerContent={<SearchFilterBar />}
       loading={loading}
       error={null}
       alert={alert}
@@ -605,9 +705,14 @@ const SchedulesPage: React.FC = () => {
       onDeleteSelected={handleDeleteSelected}
           >
       {view === 'table' ? (
-        <ResizableTable
+        <ResizableTable<DataRow>
           columns={columns}
           data={filteredSchedules}
+          onRowClick={(row) => {
+            if (!selectionMode) {
+              navigate(`/schedules/${row.id}`);
+            }
+          }}
         />
       ) : (
         <ScheduleCalendar
@@ -634,12 +739,10 @@ const SchedulesPage: React.FC = () => {
           trainings={courses.map((c: Course & { title?: string }) => ({ ...c, title: c.title || c.name }))}
           trainers={trainers}
           companies={companies}
-          employees={employees}
-          existingEvent={editingSchedule ? {
-            ...editingSchedule,
-            trainingId: editingSchedule.course.id,
-            trainerId: editingSchedule.sessions?.[0]?.trainer?.id || '',
-            coTrainerId: editingSchedule.sessions?.[0]?.co_trainer?.id || '',
+          persons={persons}
+          existingEvent={editingSchedule ? ({
+            id: editingSchedule.id,
+            training_id: editingSchedule.course?.id || '',
             dates: editingSchedule.sessions?.map(sess => ({
               date: sess.date.split('T')[0],
               start: sess.start,
@@ -647,13 +750,15 @@ const SchedulesPage: React.FC = () => {
               trainerId: sess.trainer?.id || '',
               coTrainerId: sess.co_trainer?.id || '',
             })) || [],
-            location: editingSchedule.location,
-            maxParticipants: editingSchedule.maxParticipants,
-            notes: editingSchedule.notes,
-            deliveryMode: editingSchedule.deliveryMode,
-            companyIds: editingSchedule.companies?.map((c) => c.company.id) || [],
-            personIds: editingSchedule.enrollments?.map((e) => e.employee.id) || [],
-          } : undefined}
+            location: editingSchedule.location || '',
+            max_participants: editingSchedule.maxParticipants || 0,
+            notes: editingSchedule.notes || '',
+            delivery_mode: editingSchedule.deliveryMode?.toLowerCase().replace('_', '-') || '',
+            risk_level: (editingSchedule.course as any)?.riskLevel || '',
+            course_type: (editingSchedule.course as any)?.courseType || '',
+            company_ids: editingSchedule.companies?.map((c) => c.company.id) || [],
+            employee_ids: editingSchedule.enrollments?.map((e: any) => e.person?.id || e.employee?.id).filter(Boolean) || [],
+          }) : undefined}
           initialDate={
             selectedSlot
               ? selectedSlot.start.getFullYear() +
@@ -663,20 +768,22 @@ const SchedulesPage: React.FC = () => {
                 String(selectedSlot.start.getDate()).padStart(2, '0')
               : undefined
           }
-          initialTime={selectedSlot ? {
+          initialTime={selectedSlot ? ({
             start: selectedSlot.start.toTimeString().slice(0, 5),
             end: selectedSlot.end.toTimeString().slice(0, 5),
-          } : undefined}
+          }) : undefined}
           onClose={() => {
             setShowForm(false);
             setEditingSchedule(null);
             setSelectedSlot(null);
+            clearOpenModalParam();
           }}
           onSuccess={async () => {
             await fetchData();
             setShowForm(false);
             setEditingSchedule(null);
             setSelectedSlot(null);
+            clearOpenModalParam();
           }}
         />
       )}

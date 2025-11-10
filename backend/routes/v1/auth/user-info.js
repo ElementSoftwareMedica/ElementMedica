@@ -7,6 +7,7 @@ import express from 'express';
 import { authenticateTest } from '../../../auth/middleware-test.js';
 import prisma from '../../../config/prisma-optimization.js';
 import { logger } from '../../../utils/logger.js';
+import { RBACService } from '../../../middleware/rbac.js';
 
 const router = express.Router();
 
@@ -43,6 +44,9 @@ router.get('/me', authenticateTest, async (req, res) => {
       });
     }
 
+    // Get comprehensive permissions using RBACService (includes admin bypass)
+    const permissions = await RBACService.getPersonPermissions(person.id);
+    
     res.json({
       id: person.id,
       email: person.email,
@@ -59,9 +63,7 @@ router.get('/me', authenticateTest, async (req, res) => {
         name: person.company.name
       } : null,
       roles: person.personRoles.map(pr => pr.roleType),
-      permissions: person.personRoles.flatMap(pr => 
-        pr.permissions.map(p => p.permission)
-      )
+      permissions: permissions
     });
   } catch (error) {
     logger.error('Get person error', {
@@ -206,6 +208,7 @@ router.get('/verify', authenticateTest, async (req, res) => {
       permissionMap['courses:read'] = true;
       permissionMap['courses:create'] = true;
       permissionMap['courses:edit'] = true;
+      permissionMap['courses:update'] = true;
       permissionMap['courses:delete'] = true;
       permissionMap['courses:manage'] = true;
       
@@ -247,6 +250,28 @@ router.get('/verify', authenticateTest, async (req, res) => {
       permissionMap['gdpr:export'] = true;
       permissionMap['gdpr:delete'] = true;
       permissionMap['gdpr:manage'] = true;
+      
+      // Templates permissions (training document templates)
+      permissionMap['templates:view'] = true;
+      permissionMap['templates:read'] = true;
+      permissionMap['templates:create'] = true;
+      permissionMap['templates:edit'] = true;
+      permissionMap['templates:update'] = true;
+      permissionMap['templates:delete'] = true;
+      permissionMap['templates:manage'] = true;
+      permissionMap['templates:duplicate'] = true;
+      
+      // Template uppercase format (for middleware compatibility)
+      permissionMap['VIEW_TEMPLATES'] = true;
+      permissionMap['CREATE_TEMPLATES'] = true;
+      permissionMap['EDIT_TEMPLATES'] = true;
+      permissionMap['DELETE_TEMPLATES'] = true;
+      permissionMap['MANAGE_TEMPLATES'] = true;
+      
+      // Google integration permissions
+      permissionMap['google:connect'] = true;
+      permissionMap['google:import'] = true;
+      permissionMap['google:manage'] = true;
       
       // Consents permissions
       permissionMap['consents:view'] = true;

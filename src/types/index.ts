@@ -1,3 +1,6 @@
+// Re-export template types
+export * from './templates';
+
 // Company types
 export interface Company {
   id: string;
@@ -28,6 +31,9 @@ export interface Company {
   createdAt?: Date;
   updatedAt?: Date;
   
+  // Relazione con le sedi aziendali (opzionale, popolata dagli endpoint che includono le sites)
+  sites?: CompanySite[];
+  
   // Legacy fields for backward compatibility (deprecated)
   name?: string;
   industry?: string;
@@ -46,6 +52,43 @@ export interface Company {
   province?: string;
   postalCode?: string;
   notes?: string;
+}
+
+// CompanySite types (condiviso tra componenti)
+export interface CompanySite {
+  id: string;
+  companyId: string;
+  siteName: string;
+  citta: string;
+  indirizzo: string;
+  cap: string;
+  provincia: string;
+  personaRiferimento?: string;
+  telefono?: string;
+  mail?: string;
+  dvr?: string;
+  rsppId?: string;
+  medicoCompetenteId?: string;
+  // Campi sopralluogo (opzionali, presenti in alcune risposte API)
+  ultimoSopralluogo?: string;
+  prossimoSopralluogo?: string;
+  valutazioneSopralluogo?: string;
+  sopralluogoEseguitoDa?: string;
+  // Relazioni opzionali risolte dal backend
+  rspp?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+  };
+  medicoCompetente?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+  };
+  createdAt: string;
+  updatedAt: string;
 }
 
 // Person types (unified User/Employee)
@@ -74,17 +117,8 @@ export interface Employee extends PersonData {
   // Kept for backward compatibility with existing code
 }
 
-// Course types
-export interface Course {
-  id: string;
-  title: string;
-  category: string;
-  description: string;
-  duration: string;
-  status: 'ACTIVE' | 'INACTIVE';
-  rating: number;
-  enrolled: number;
-}
+// Course types re-exported from './courses'
+// See src/types/courses.ts for the canonical Course interface
 
 // Medical record types
 export interface MedicalRecord {

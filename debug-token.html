@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>Debug Token Browser</title>
+    <style>
+        body {
+            font-family: monospace;
+            max-width: 900px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #1e1e1e;
+            color: #d4d4d4;
+        }
+        .container {
+            background: #252526;
+            border-radius: 8px;
+            padding: 30px;
+            border: 1px solid #3e3e42;
+        }
+        h1 {
+            color: #569cd6;
+            margin-bottom: 30px;
+        }
+        button {
+            background: #0e639c;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 14px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        button:hover {
+            background: #1177bb;
+        }
+        button.danger {
+            background: #d73a49;
+        }
+        button.danger:hover {
+            background: #cb2431;
+        }
+        .output {
+            background: #1e1e1e;
+            border: 1px solid #3e3e42;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 20px;
+            white-space: pre-wrap;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        .success { color: #4ec9b0; }
+        .error { color: #f48771; }
+        .warning { color: #dcdcaa; }
+        .info { color: #9cdcfe; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Debug Token Browser</h1>
+        
+        <button onclick="checkToken()">🔍 Verifica Token</button>
+        <button onclick="testAPI()">🌐 Test API Call</button>
+        <button onclick="showAll()">📦 Mostra Tutto localStorage</button>
+        <button class="danger" onclick="clearAll()">🧹 Clear Storage</button>
+        
+        <div id="output" class="output">Click su un pulsante per iniziare...</div>
+    </div>
+
+    <script>
+        const output = document.getElementById('output');
+
+        function log(message, type = 'info') {
+            const span = document.createElement('span');
+            span.className = type;
+            span.textContent = message + '\n';
+            output.appendChild(span);
+        }
+
+        function clear() {
+            output.textContent = '';
+        }
+
+        function checkToken() {
+            clear();
+            log('🔍 VERIFICA TOKEN\n', 'info');
+
+            // Apri finestra app
+            const appWindow = window.open('http://localhost:5173', 'app', 'width=1,height=1');
+            
+            setTimeout(() => {
+                try {
+                    const token = appWindow.localStorage.getItem('access_token');
+                    const refreshToken = appWindow.localStorage.getItem('refresh_token');
+                    const permsString = appWindow.localStorage.getItem('permissions');
+                    const userString = appWindow.localStorage.getItem('user');
+
+                    if (!token) {
+                        log('❌ NESSUN TOKEN TROVATO', 'error');
+                        log('\n👉 Fai login su http://localhost:5173', 'warning');
+                        appWindow.close();
+                        return;
+                    }
+
+                    log('✅ Token trovato: ' + token.substring(0, 50) + '...\n', 'success');
+                    log('✅ Refresh token: ' + (refreshToken ? refreshToken.substring(0, 30) + '...' : 'ASSENTE') + '\n', refreshToken ? 'success' : 'error');
+
+                    // Decodifica JWT
+                    try {
+                        const payload = JSON.parse(atob(token.split('.')[1]));
+                        const issued = new Date(payload.iat * 1000);
+                        const expires = new Date(payload.exp * 1000);
+                        const now = new Date();
+                        const minutesAgo = Math.round((now - issued) / 1000 / 60);
+                        const minutesLeft = Math.round((expires - now) / 1000 / 60);
+
+                        log('📅 Token emesso: ' + issued.toLocaleString('it-IT'), 'info');
+                        log('⏰ Token scade: ' + expires.toLocaleString('it-IT'), 'info');
+                        log('⏱️  Età: ' + minutesAgo + ' minuti fa', minutesAgo < 10 ? 'success' : 'warning');
+                        log('⏳ Valido ancora: ' + minutesLeft + ' minuti\n', minutesLeft > 60 ? 'success' : 'warning');
+
+                        if (minutesLeft < 0) {
+                            log('❌ TOKEN SCADUTO!', 'error');
+                            log('👉 Fai logout e re-login\n', 'warning');
+                        }
+
+                    } catch (e) {
+                        log('❌ Errore decodifica JWT: ' + e.message + '\n', 'error');
+                    }
+
+                    // Verifica user
+                    if (userString) {
+                        const user = JSON.parse(userString);
+                        log('👤 User: ' + user.email + ' (ID: ' + user.id + ')', 'info');
+                        log('🎭 Roles: ' + (user.roles || []).join(', ') + '\n', 'info');
+                    }
+
+                    // Conta permessi
+                    if (permsString) {
+                        const perms = JSON.parse(permsString);
+                        const allKeys = Object.keys(perms);
+                        const templateKeys = allKeys.filter(k => 
+                            k.includes('TEMPLATE') || k.includes('template') || k.includes('google')
+                        );
+
+                        log('🔑 Permessi totali: ' + allKeys.length, 'info');
+                        log('🎯 Permessi template/google: ' + templateKeys.length + '\n', templateKeys.length >= 20 ? 'success' : 'error');
+
+                        if (templateKeys.length < 20) {
+                            log('❌ PERMESSI INSUFFICIENTI!', 'error');
+                            log('Trovati solo: ' + templateKeys.join(', ') + '\n', 'error');
+                            log('👉 Il backend dovrebbe restituire 25 permessi', 'warning');
+                            log('👉 Fai logout e re-login\n', 'warning');
+                        } else {
+                            log('✅ PERMESSI OK', 'success');
+                            log('Lista completa:', 'info');
+                            templateKeys.forEach(k => log('  - ' + k, 'success'));
+                        }
+                    } else {
+                        log('❌ NESSUN PERMESSO IN localStorage', 'error');
+                        log('👉 Fai logout e re-login\n', 'warning');
+                    }
+
+                    appWindow.close();
+
+                } catch (error) {
+                    log('❌ Errore: ' + error.message, 'error');
+                    log('\n⚠️  Potrebbe essere un problema CORS', 'warning');
+                    log('👉 Apri DevTools (F12) su http://localhost:5173 e esegui:', 'info');
+                    log('\nconst token = localStorage.getItem("access_token");', 'info');
+                    log('console.log("Token:", token.substring(0, 50));', 'info');
+                    appWindow.close();
+                }
+            }, 1000);
+        }
+
+        function testAPI() {
+            clear();
+            log('🌐 TEST API CALL\n', 'info');
+
+            const appWindow = window.open('http://localhost:5173', 'app', 'width=1,height=1');
+            
+            setTimeout(async () => {
+                try {
+                    const token = appWindow.localStorage.getItem('access_token');
+                    
+                    if (!token) {
+                        log('❌ Nessun token - fai login prima', 'error');
+                        appWindow.close();
+                        return;
+                    }
+
+                    log('📡 Test 1: GET /api/v1/auth/me\n', 'info');
+                    
+                    try {
+                        const response1 = await fetch('http://localhost:5173/api/v1/auth/me', {
+                            headers: {
+                                'Authorization': 'Bearer ' + token
+                            }
+                        });
+                        
+                        log('Status: ' + response1.status + ' ' + response1.statusText, response1.ok ? 'success' : 'error');
+                        
+                        if (response1.ok) {
+                            const data = await response1.json();
+                            const templatePerms = Object.keys(data.permissions || {}).filter(k =>
+                                k.includes('TEMPLATE') || k.includes('template') || k.includes('google')
+                            ).length;
+                            log('✅ Risposta OK', 'success');
+                            log('Email: ' + data.email, 'info');
+                            log('Permessi template: ' + templatePerms + '\n', templatePerms >= 20 ? 'success' : 'error');
+                        } else {
+                            const text = await response1.text();
+                            log('❌ Errore: ' + text.substring(0, 200) + '\n', 'error');
+                        }
+                    } catch (err) {
+                        log('❌ Errore chiamata: ' + err.message + '\n', 'error');
+                    }
+
+                    log('📡 Test 2: GET /api/v1/google/status\n', 'info');
+                    
+                    try {
+                        const response2 = await fetch('http://localhost:5173/api/v1/google/status', {
+                            headers: {
+                                'Authorization': 'Bearer ' + token
+                            }
+                        });
+                        
+                        log('Status: ' + response2.status + ' ' + response2.statusText, response2.ok ? 'success' : 'error');
+                        
+                        if (response2.ok) {
+                            const data = await response2.json();
+                            log('✅ Risposta OK', 'success');
+                            log('Connected: ' + data.data.connected + '\n', 'info');
+                        } else {
+                            const text = await response2.text();
+                            log('❌ Errore: ' + text.substring(0, 200) + '\n', 'error');
+                        }
+                    } catch (err) {
+                        log('❌ Errore chiamata: ' + err.message + '\n', 'error');
+                    }
+
+                    log('📡 Test 3: GET /api/v1/templates\n', 'info');
+                    
+                    try {
+                        const response3 = await fetch('http://localhost:5173/api/v1/templates', {
+                            headers: {
+                                'Authorization': 'Bearer ' + token
+                            }
+                        });
+                        
+                        log('Status: ' + response3.status + ' ' + response3.statusText, response3.ok ? 'success' : 'error');
+                        
+                        if (response3.ok) {
+                            const data = await response3.json();
+                            log('✅ Risposta OK', 'success');
+                            log('Count: ' + (data.data || []).length, 'info');
+                        } else {
+                            const text = await response3.text();
+                            log('❌ Errore: ' + text.substring(0, 200), 'error');
+                        }
+                    } catch (err) {
+                        log('❌ Errore chiamata: ' + err.message, 'error');
+                    }
+
+                    appWindow.close();
+
+                } catch (error) {
+                    log('❌ Errore generale: ' + error.message, 'error');
+                    appWindow.close();
+                }
+            }, 1000);
+        }
+
+        function showAll() {
+            clear();
+            log('📦 TUTTI I DATI IN localStorage\n', 'info');
+
+            const appWindow = window.open('http://localhost:5173', 'app', 'width=1,height=1');
+            
+            setTimeout(() => {
+                try {
+                    const keys = Object.keys(appWindow.localStorage);
+                    log('Trovate ' + keys.length + ' chiavi:\n', 'info');
+
+                    keys.forEach(key => {
+                        const value = appWindow.localStorage.getItem(key);
+                        log('🔑 ' + key + ':', 'warning');
+                        
+                        if (key.includes('token')) {
+                            log('  ' + value.substring(0, 100) + '...', 'info');
+                        } else if (value.length > 200) {
+                            log('  ' + value.substring(0, 200) + '... (' + value.length + ' chars)', 'info');
+                        } else {
+                            log('  ' + value, 'info');
+                        }
+                        log('', 'info');
+                    });
+
+                    appWindow.close();
+
+                } catch (error) {
+                    log('❌ Errore: ' + error.message, 'error');
+                    appWindow.close();
+                }
+            }, 1000);
+        }
+
+        function clearAll() {
+            if (!confirm('Sei sicuro di voler cancellare tutto il localStorage?')) {
+                return;
+            }
+
+            clear();
+            log('🧹 PULIZIA localStorage\n', 'warning');
+
+            const appWindow = window.open('http://localhost:5173', 'app', 'width=1,height=1');
+            
+            setTimeout(() => {
+                try {
+                    const beforeCount = Object.keys(appWindow.localStorage).length;
+                    appWindow.localStorage.clear();
+                    appWindow.sessionStorage.clear();
+                    
+                    log('✅ localStorage pulito (' + beforeCount + ' keys rimosse)', 'success');
+                    log('✅ sessionStorage pulito', 'success');
+                    log('\n👉 Ricarica http://localhost:5173 e fai re-login', 'warning');
+
+                    appWindow.close();
+
+                } catch (error) {
+                    log('❌ Errore: ' + error.message, 'error');
+                    appWindow.close();
+                }
+            }, 1000);
+        }
+    </script>
+</body>
+</html>

@@ -129,8 +129,8 @@ export const PublicFooter: React.FC = () => {
                 <MapPin className="w-5 h-5 text-primary-400 mt-0.5 flex-shrink-0" />
                 <div>
                   <p className="text-gray-300">
-                    Via Roma 123<br />
-                    20100 Milano (MI)<br />
+                    Via Lanari, 14<br />
+                    35129 Padova (PD)<br />
                     Italia
                   </p>
                 </div>
@@ -138,26 +138,26 @@ export const PublicFooter: React.FC = () => {
               <div className="flex items-center space-x-3">
                 <Phone className="w-5 h-5 text-primary-400 flex-shrink-0" />
                 <a 
-                  href="tel:+391234567890" 
+                  href="tel: 351 318 1574" 
                   className="text-gray-300 hover:text-white transition-colors"
                 >
-                  +39 123 456 7890
+                  351 318 1574
                 </a>
               </div>
               <div className="flex items-center space-x-3">
                 <Mail className="w-5 h-5 text-primary-400 flex-shrink-0" />
                 <a 
-                  href="mailto:info@elementformazione.it" 
+                  href="mailto:info@elementformazione.com" 
                   className="text-gray-300 hover:text-white transition-colors"
                 >
-                  info@elementformazione.it
+                  info@elementformazione.com
                 </a>
               </div>
               <div className="flex items-start space-x-3">
                 <Clock className="w-5 h-5 text-primary-400 mt-0.5 flex-shrink-0" />
                 <div className="text-gray-300">
-                  <p>Lun - Ven: 9:00 - 18:00</p>
-                  <p>Sab: 9:00 - 13:00</p>
+                  <p>Lun - Ven: 8:00 - 19:00</p>
+                  <p>Sab: 8:00 - 13:00</p>
                 </div>
               </div>
             </div>

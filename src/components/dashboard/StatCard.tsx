@@ -1,5 +1,6 @@
 import React from 'react';
 import { TrendingUp, TrendingDown } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 interface StatCardProps {
   title: string;
@@ -8,6 +9,7 @@ interface StatCardProps {
   trend: string;
   trendDirection: 'up' | 'down';
   trendColor?: string;
+  to?: string; // optional navigation link
 }
 
 const StatCard: React.FC<StatCardProps> = ({ 
@@ -16,10 +18,11 @@ const StatCard: React.FC<StatCardProps> = ({
   icon, 
   trend, 
   trendDirection,
-  trendColor 
+  trendColor,
+  to
 }) => {
-  return (
-    <div className="bg-white rounded-2xl shadow p-6 transition-all duration-200 hover:shadow-md hover:translate-y-[-2px]">
+  const CardContent = (
+    <>
       <div className="flex justify-between items-start">
         <div>
           <p className="text-sm font-medium text-gray-500">{title}</p>
@@ -37,6 +40,24 @@ const StatCard: React.FC<StatCardProps> = ({
           {trend} from last month
         </span>
       </div>
+    </>
+  );
+
+  if (to) {
+    return (
+      <Link
+        to={to}
+        aria-label={`Vai a ${title}`}
+        className="bg-white rounded-2xl shadow p-6 transition-all duration-200 hover:shadow-md hover:translate-y-[-2px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 block cursor-pointer"
+      >
+        {CardContent}
+      </Link>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-2xl shadow p-6 transition-all duration-200 hover:shadow-md hover:translate-y-[-2px]">
+      {CardContent}
     </div>
   );
 };

@@ -8,7 +8,7 @@ import { extractBirthDateFromTaxCode } from './dateUtils';
 import { detectConflicts, ConflictInfo } from './conflictUtils';
 import { normalizePersonStatus } from './validationUtils';
 import { formatDateForAPI } from './dateUtils';
-import { CSV_HEADER_MAP, TITLE_CASE_FIELDS } from './constants';
+import { CSV_HEADER_MAP, TITLE_CASE_FIELDS, normalizeTaxCode } from './constants';
 import { PersonData } from '../../../types/import/personImportTypes';
 import { Company } from '../../../types';
 
@@ -38,11 +38,17 @@ export const processPersonImportFile = async (
   
   // Risolvi i nomi delle aziende in ID
   const finalData = processedData.map((person: PersonData) => {
-    // Normalizza il codice fiscale
-    if (person.taxCode) {
-      person.taxCode = person.taxCode.toUpperCase().trim();
+    // Normalizza il codice fiscale (con fallback alias)
+    const rawTaxCode = person.taxCode
+      ?? (person as any).codiceFiscale
+      ?? (person as any).fiscalCode
+      ?? (person as any).codice_fiscale
+      ?? (person as any).fiscal_code
+      ?? (person as any).cf;
+    if (rawTaxCode) {
+      person.taxCode = normalizeTaxCode(rawTaxCode);
     }
-    
+
     // Se c'è un codice fiscale ma non una data di nascita, prova a estrarla
     if (person.taxCode && !person.birthDate) {
       const extractedDate = extractBirthDateFromTaxCode(person.taxCode);
@@ -50,7 +56,7 @@ export const processPersonImportFile = async (
         person.birthDate = extractedDate;
       }
     }
-    
+
     if (person.companyName && typeof person.companyName === 'string') {
       const company = existingCompanies.find(c => 
         (c.ragioneSociale && c.ragioneSociale.toLowerCase().trim() === person.companyName!.toLowerCase().trim()) ||

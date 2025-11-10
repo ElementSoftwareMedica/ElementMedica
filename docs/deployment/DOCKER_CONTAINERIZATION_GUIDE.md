@@ -184,6 +184,7 @@ NODE_ENV=staging
 STAGING_DATABASE_URL=postgresql://user:pass@postgres:5432/staging_db
 STAGING_REDIS_URL=redis://redis:6379
 STAGING_JWT_SECRET=your_staging_jwt_secret
+STAGING_JWT_REFRESH_SECRET=your_staging_jwt_refresh_secret
 STAGING_API_URL=https://staging-api.yourdomain.com
 STAGING_DOCS_URL=https://staging-docs.yourdomain.com
 
@@ -192,6 +193,7 @@ NODE_ENV=production
 PROD_DATABASE_URL=postgresql://user:pass@postgres:5432/prod_db
 PROD_REDIS_URL=redis://redis:6379
 PROD_JWT_SECRET=your_production_jwt_secret
+PROD_JWT_REFRESH_SECRET=your_production_jwt_refresh_secret
 PROD_API_URL=https://api.yourdomain.com
 PROD_DOCS_URL=https://docs.yourdomain.com
 ```
@@ -454,7 +456,10 @@ docker inspect [container_name]
 
 ---
 
-**✅ CONCLUSIONE**: Il progetto è completamente containerizzabile e pronto per deployment Docker in qualsiasi ambiente. Tutti i Dockerfile, configurazioni e script necessari sono stati creati e testati.
+### Nota operativa - JWT
+- Impostare JWT_SECRET e JWT_REFRESH_SECRET esclusivamente nei container dell'API Server.
+- Non iniettare variabili JWT nel container del Proxy: il Proxy non firma token.
+- Assicurarsi che i segreti siano diversi tra ambienti (dev/staging/prod) e gestiti via secret manager/variabili CI/CD.
 
 **🚀 PROSSIMI PASSI**:
 1. Configurare le variabili d'ambiente per il tuo ambiente

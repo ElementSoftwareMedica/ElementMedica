@@ -127,14 +127,17 @@ export const PersonsPage: React.FC<PersonsPageProps> = ({
       )
     },
     {
-      key: 'title',
+      key: 'profile',
       label: 'Profilo Professionale',
       sortable: true,
-      renderCell: (person) => (
-        <span className="text-gray-900">
-          {person.title || 'N/A'}
-        </span>
-      )
+      renderCell: (person: Person) => {
+        const highestRole = getHighestRole(person);
+        return (
+          <span className="text-gray-900">
+            {highestRole ? getRoleDisplayName(highestRole.roleType) : 'N/A'}
+          </span>
+        );
+      }
     },
     {
       key: 'roles',
@@ -290,10 +293,10 @@ export const PersonsPage: React.FC<PersonsPageProps> = ({
         label: 'Stato',
         value: (person: Person) => {
           switch (person.status) {
-            case 'Active': return 'Attivo';
-            case 'Inactive': return 'Inattivo';
-            case 'Pending': return 'In attesa';
-            default: return person.status;
+            case 'ACTIVE': return 'Attivo';
+            case 'INACTIVE': return 'Inattivo';
+            case 'PENDING': return 'In attesa';
+            default: return person.status as string;
           }
         },
         icon: <Shield className="h-4 w-4" />
@@ -302,71 +305,130 @@ export const PersonsPage: React.FC<PersonsPageProps> = ({
   };
 
   // Headers CSV senza caratteri accentati per evitare errori di importazione
-  const csvHeaders = {
-    firstName: 'Nome',
-    lastName: 'Cognome',
-    email: 'Email',
-    phone: 'Telefono',
-    taxCode: 'Codice Fiscale',
-    birthDate: 'Data Nascita',
-    address: 'Indirizzo',
-    city: 'Citta',
-    province: 'Provincia',
-    postalCode: 'CAP',
-    roleType: 'Ruolo',
-    companyName: 'Azienda',
-    username: 'Username',
-    notes: 'Note',
-    status: 'Stato',
-    createdAt: 'Data Creazione',
-    // Campi aggiuntivi per compatibilita con PersonImport
-    title: 'Profilo Professionale',
-    hiredDate: 'Data Assunzione'
-  };
+  const csvHeaders = useMemo(() => {
+    const baseHeaders = {
+      firstName: 'Nome',
+      lastName: 'Cognome',
+      email: 'Email',
+      phone: 'Telefono',
+      taxCode: 'Codice Fiscale',
+      birthDate: 'Data Nascita',
+      address: 'Indirizzo',
+      city: 'Citta',
+      province: 'Provincia',
+      postalCode: 'CAP',
+      roleType: 'Ruolo',
+      companyName: 'Azienda',
+      username: 'Username',
+      notes: 'Note',
+      status: 'Stato',
+      createdAt: 'Data Creazione',
+      // Campi aggiuntivi per compatibilita con PersonImport
+      title: 'Profilo Professionale'
+    } as const;
+
+    if (filterType === 'employees') {
+      return { ...baseHeaders, hiredDate: 'Data Assunzione' };
+    }
+    if (filterType === 'trainers') {
+      return baseHeaders;
+    }
+    // all/custom: includi tutti i campi
+    return { ...baseHeaders, hiredDate: 'Data Assunzione' };
+  }, [filterType]);
 
   // Template CSV con dati di esempio - COMPLETO CON TUTTI I CAMPI
-  const csvTemplateData = [
-    {
-      firstName: 'Mario',
-      lastName: 'Rossi',
-      email: 'mario.rossi@esempio.com',
-      phone: '+39 123 456 7890',
-      taxCode: 'RSSMRA85M01H501Z',
-      birthDate: '1985-08-01',
-      address: 'Via Roma 123',
-      city: 'Milano',
-      province: 'MI',
-      postalCode: '20100',
-      roleType: 'EMPLOYEE',
-      companyName: 'Esempio Azienda S.r.l.',
-      username: 'mario.rossi',
-      notes: 'Dipendente esempio',
-      status: 'ACTIVE',
-      createdAt: '2024-01-01',
-      title: 'Sviluppatore Software',
-      hiredDate: '2024-01-15'
-    },
-    {
-      firstName: 'Anna',
-      lastName: 'Bianchi',
-      email: 'anna.bianchi@esempio.com',
-      phone: '+39 321 654 9870',
-      taxCode: 'BNCNNA90F41H501W',
-      birthDate: '1990-06-01',
-      address: 'Via Milano 456',
-      city: 'Roma',
-      province: 'RM',
-      postalCode: '00100',
-      roleType: 'TRAINER',
-      companyName: 'Formazione Plus S.r.l.',
-      username: 'anna.bianchi',
-      notes: 'Formatrice esperta',
-      status: 'ACTIVE',
-      createdAt: '2024-01-02',
-      title: 'Senior Trainer',
-      hiredDate: '2024-02-01'
+  const csvTemplateData = useMemo(() => {
+    if (filterType === 'employees') {
+      return [
+        {
+          firstName: 'Mario',
+          lastName: 'Rossi',
+          email: 'mario.rossi@esempio.com',
+          phone: '+39 123 456 7890',
+          taxCode: 'RSSMRA85M01H501Z',
+          birthDate: '1985-08-01',
+          address: 'Via Roma 123',
+          city: 'Milano',
+          province: 'MI',
+          postalCode: '20100',
+          roleType: 'EMPLOYEE',
+          companyName: 'Esempio Azienda S.r.l.',
+          username: 'mario.rossi',
+          notes: 'Dipendente esempio',
+          status: 'ACTIVE',
+          createdAt: '2024-01-01',
+          title: 'Sviluppatore Software',
+          hiredDate: '2024-01-15'
+        }
+      ];
     }
-  ];
+    if (filterType === 'trainers') {
+      return [
+        {
+          firstName: 'Anna',
+          lastName: 'Bianchi',
+          email: 'anna.bianchi@esempio.com',
+          phone: '+39 321 654 9870',
+          taxCode: 'BNCNNA90F41H501W',
+          birthDate: '1990-06-01',
+          address: 'Via Milano 456',
+          city: 'Roma',
+          province: 'RM',
+          postalCode: '00100',
+          roleType: 'TRAINER',
+          companyName: 'Formazione Plus S.r.l.',
+          username: 'anna.bianchi',
+          notes: 'Formatrice esperta',
+          status: 'ACTIVE',
+          createdAt: '2024-01-02',
+          title: 'Senior Trainer'
+        }
+      ];
+    }
+    // all/custom
+    return [
+      {
+        firstName: 'Mario',
+        lastName: 'Rossi',
+        email: 'mario.rossi@esempio.com',
+        phone: '+39 123 456 7890',
+        taxCode: 'RSSMRA85M01H501Z',
+        birthDate: '1985-08-01',
+        address: 'Via Roma 123',
+        city: 'Milano',
+        province: 'MI',
+        postalCode: '20100',
+        roleType: 'EMPLOYEE',
+        companyName: 'Esempio Azienda S.r.l.',
+        username: 'mario.rossi',
+        notes: 'Dipendente esempio',
+        status: 'ACTIVE',
+        createdAt: '2024-01-01',
+        title: 'Sviluppatore Software',
+        hiredDate: '2024-01-15'
+      },
+      {
+        firstName: 'Anna',
+        lastName: 'Bianchi',
+        email: 'anna.bianchi@esempio.com',
+        phone: '+39 321 654 9870',
+        taxCode: 'BNCNNA90F41H501W',
+        birthDate: '1990-06-01',
+        address: 'Via Milano 456',
+        city: 'Roma',
+        province: 'RM',
+        postalCode: '00100',
+        roleType: 'TRAINER',
+        companyName: 'Formazione Plus S.r.l.',
+        username: 'anna.bianchi',
+        notes: 'Formatrice esperta',
+        status: 'ACTIVE',
+        createdAt: '2024-01-02',
+        title: 'Senior Trainer'
+      }
+    ];
+  }, [filterType]);
 
   // Handlers
   const handleCreatePerson = () => {
@@ -404,33 +466,40 @@ export const PersonsPage: React.FC<PersonsPageProps> = ({
       return handleImportPersons(data);
     }
     
-    // Prima di aprire il modal, aggiorna i dati esistenti (inclusi soft-deleted per importazione)
+    // Apri SUBITO il modal per evitare la percezione di "doppio clic" e aggiorna i dati in background
+    setShowImportModal(true);
+
     try {
-      await refetchPersonsForImport();
-      await refetchPersons();
+      // Esegui i refetch in background senza bloccare l'apertura del modal
+      void refetchPersonsForImport();
+      void refetchPersons();
+      void refreshCompanies();
     } catch (error) {
       console.error('Errore durante l\'aggiornamento dei dati:', error);
     }
-    
-    // Altrimenti apri il modal
-    setShowImportModal(true);
   };
 
   const handleImportPersons = async (persons: any[], overwriteIds?: string[]) => {
     try {
-      const response = await apiPost('/api/v1/persons/import', {
-        persons,
-        overwriteIds
-      });
+      const response = await apiPost<{
+        imported: number;
+        errors: Array<{ row: number; error: string }>;
+        updated?: number;
+        skipped?: number;
+      }>(
+        '/api/v1/persons/import?mode=json',
+        {
+          persons,
+          overwriteIds
+        }
+      );
 
       showToast({
         type: 'success',
-        message: `Importazione completata: ${response.imported} persone importate con successo`
+        message: `Importazione completata: ${response.imported} persone importate con successo${response.updated ? `, ${response.updated} aggiornate` : ''}${response.skipped ? `, ${response.skipped} saltate` : ''}`
       });
 
       setShowImportModal(false);
-      
-      // Aggiorna i dati delle persone senza ricaricare la pagina
       await refetchPersons();
     } catch (error: any) {
       console.error('Errore durante l\'importazione:', error);
@@ -453,6 +522,13 @@ export const PersonsPage: React.FC<PersonsPageProps> = ({
     const mappedFilterType = filterType === 'custom' ? 'all' : filterType;
     const config = PersonGDPRConfigFactory.getConfigByFilterType(mappedFilterType);
     return config.permissions;
+  }, [filterType]);
+
+  // Query params statici per filtrare lato backend in base al tipo virtuale
+  const staticQueryParams = useMemo(() => {
+    if (filterType === 'employees') return { roleType: 'EMPLOYEE' } as const;
+    if (filterType === 'trainers') return { roleType: 'TRAINER' } as const;
+    return undefined;
   }, [filterType]);
 
   return (
@@ -505,6 +581,7 @@ export const PersonsPage: React.FC<PersonsPageProps> = ({
         enableColumnSelector={true}
         enableAdvancedFilters={true}
         defaultViewMode="table"
+        staticQueryParams={staticQueryParams}
       />
 
       {/* Modal di importazione */}

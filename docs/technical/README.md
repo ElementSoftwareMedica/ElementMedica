@@ -142,9 +142,9 @@ npx prisma db seed
 pm2 start ecosystem.config.js
 
 # 6. Verify health
-curl http://localhost:3000/health
-curl http://localhost:3001/health
-curl http://localhost:3002/health
+curl http://localhost:4003/health
+curl http://localhost:4001/health
+curl http://localhost:4002/health
 ```
 
 ### Test Credentials

@@ -101,6 +101,14 @@ router.get('/export',
   personController.exportPersons
 );
 
+// GET /api/persons/:id/fields-visibility - Visibilità campi per view e ruolo
+router.get('/:id/fields-visibility',
+  authenticateToken(),
+  requirePermission('persons:read'),
+  auditLog('VIEW_PERSON_FIELDS_VISIBILITY'),
+  personController.getPersonFieldsVisibility
+);
+
 // GET /api/persons/:id - Ottieni persona per ID
 router.get('/:id', 
   authenticateToken(),
@@ -168,12 +176,20 @@ router.post('/:id/reset-password',
   personController.resetPersonPassword
 );
 
-// POST /api/persons/import - Importa persone da CSV
+// POST /api/persons/import - Importa persone da CSV/JSON
 const csvUpload = createUploadConfig('spreadsheets');
+// Applica multer SOLO se multipart/form-data, altrimenti lascia passare JSON
+const applyCsvMulterIfMultipart = (req, res, next) => {
+  const ct = req.headers['content-type'] || '';
+  if (ct.includes('multipart/form-data')) {
+    return csvUpload.single('file')(req, res, next);
+  }
+  return next();
+};
 router.post('/import', 
   authenticateToken(),
   requirePermission('persons:create'),
-  csvUpload.single('file'),
+  applyCsvMulterIfMultipart,
   auditLog('IMPORT_PERSONS'),
   personController.importPersons
 );

@@ -1,5 +1,7 @@
 # WEEK 8 IMPLEMENTATION PLAN
 
+> Nota storica: questo documento riflette lo stato all'epoca (es. Proxy 8888, Frontend 3000). Oggi le porte sono fisse: API 4001, Proxy 4003, Frontend 5173. Per le istruzioni operative aggiornate fare riferimento a docs/technical/deployment/deployment-guide.md e docs/technical/architecture/.
+
 ## Component Library e Design System
 
 **Status:** ✅ COMPLETATO (Component Consolidation)  

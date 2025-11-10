@@ -39,7 +39,8 @@ export function checkPermission(permission) {
         personId: req.person.id,
         resource,
         action,
-        targetCompanyId: req.params.companyId || req.body.companyId || req.query.companyId
+        // Usa accesso sicuro: body e query possono non essere definiti prima dei parser
+        targetCompanyId: (req.params && req.params.companyId) || (req.body && req.body.companyId) || (req.query && req.query.companyId)
       });
 
       if (!permissionResult.allowed) {

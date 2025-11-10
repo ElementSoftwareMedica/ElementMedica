@@ -7,6 +7,7 @@ import React, { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import TiptapEditor from './components/editor/TiptapEditor';
 import { useTemplateEditor } from './hooks/useTemplateEditor';
+import { GoogleIntegrationPanel } from './components/google';
 import { Save, AlertCircle, CheckCircle } from 'lucide-react';
 
 const TemplateEditor: React.FC = () => {
@@ -120,7 +121,17 @@ const TemplateEditor: React.FC = () => {
           </div>
 
           {/* Sidebar Column */}
-          <div className="lg:col-span-1">
+          <div className="lg:col-span-1 space-y-6">
+            {/* Google Integration Panel */}
+            <GoogleIntegrationPanel
+              onTemplateImported={(templateData) => {
+                // Update editor content with imported data
+                updateContent(templateData.content);
+                alert(`Template "${templateData.name}" importato con successo!`);
+              }}
+            />
+
+            {/* Template Information Panel */}
             <div className="bg-white rounded-lg shadow-sm p-4">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Informazioni Template</h3>
               

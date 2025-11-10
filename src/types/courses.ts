@@ -9,13 +9,16 @@ export interface Course {
   updatedAt: string;
   code?: string;
   validityYears?: number; // Int in the Prisma schema
-  renewalDuration?: string;
+  practicalHours?: number;
   pricePerPerson?: number; // Float in the Prisma schema
   certifications?: string;
   maxPeople?: number; // Int in the Prisma schema
   regulation?: string;
   contents?: string;
   price?: number; // Float in the Prisma schema
+  // UI analytics (opzionali, usati in dashboard/dummyData)
+  rating?: number;
+  enrolled?: number;
   // Nuovi campi per frontend pubblico
   subcategory?: string;
   riskLevel?: 'ALTO' | 'MEDIO' | 'BASSO' | 'A' | 'B' | 'C';
@@ -28,6 +31,8 @@ export interface Course {
   seoTitle?: string;
   seoDescription?: string;
   slug?: string;
+  // Allineamento API: durata rinnovo deve essere stringa opzionale
+  renewalDuration?: string;
 }
 
 export interface CourseSchedule {

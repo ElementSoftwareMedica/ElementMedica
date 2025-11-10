@@ -347,7 +347,6 @@ export function configureCorsOptions(environment) {
   const allowedOrigins = {
     development: [
       'http://localhost:5173',
-      'http://localhost:3000',
       'http://127.0.0.1:5173'
     ],
     production: [
@@ -595,7 +594,7 @@ Error Response
 ```javascript
 const developmentConfig = {
   cors: {
-    origins: ['http://localhost:5173', 'http://localhost:3000'],
+    origins: ['http://localhost:5173'],
     credentials: true
   },
   rateLimit: {

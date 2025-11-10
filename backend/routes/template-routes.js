@@ -9,6 +9,7 @@
 import express from 'express';
 import { PrismaClient } from '@prisma/client';
 import middleware from '../auth/middleware.js';
+import { parseGoogleUrl, getGoogleFieldForUrl } from '../utils/google-url-parser.js';
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -27,7 +28,11 @@ const getAuthUser = (req) => ({
  * List all templates with filters
  * Query params: type, category, isActive, search, page, limit
  */
-router.get('/', authenticateToken(), requirePermission('read:templates'), async (req, res) => {
+/**
+ * GET /api/v1/templates
+ * List all templates with filtering and pagination
+ */
+router.get('/', authenticateToken(), requirePermission('VIEW_TEMPLATES'), async (req, res) => {
   try {
     const { tenantId, userId } = getAuthUser(req);
     const {
@@ -113,10 +118,57 @@ router.get('/', authenticateToken(), requirePermission('read:templates'), async 
 });
 
 /**
- * GET /api/templates/:id
- * Get single template with full details and version history
+ * GET /api/v1/templates/default/:type
+ * Get default template for a specific type
  */
-router.get('/:id', authenticateToken(), requirePermission('read:templates'), async (req, res) => {
+router.get('/default/:type', authenticateToken(), requirePermission('VIEW_TEMPLATES'), async (req, res) => {
+  try {
+    const { tenantId } = getAuthUser(req);
+    const { type } = req.params;
+
+    const template = await prisma.templateLink.findFirst({
+      where: {
+        type,
+        tenantId,
+        isDefault: true,
+        deletedAt: null
+      },
+      include: {
+        creator: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true
+          }
+        }
+      }
+    });
+
+    if (!template) {
+      return res.status(404).json({
+        success: false,
+        error: `No default template found for type ${type}`
+      });
+    }
+
+    res.json(template);
+  } catch (error) {
+    console.error('Error getting default template:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch default template',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/v1/templates/:id
+ * Get a single template by ID
+ * IMPORTANT: This route MUST come AFTER /default/:type to avoid route conflicts
+ */
+router.get('/:id', authenticateToken(), requirePermission('VIEW_TEMPLATES'), async (req, res) => {
   try {
     const { tenantId } = getAuthUser(req);
     const { id } = req.params;
@@ -135,12 +187,6 @@ router.get('/:id', authenticateToken(), requirePermission('read:templates'), asy
             firstName: true,
             lastName: true,
             email: true
-          }
-        },
-        company: {
-          select: {
-            id: true,
-            name: true
           }
         },
         ...(includeVersions === 'true' && {
@@ -193,7 +239,11 @@ router.get('/:id', authenticateToken(), requirePermission('read:templates'), asy
  * POST /api/templates
  * Create new template (auto-creates version 1)
  */
-router.post('/', authenticateToken(), requirePermission('read:templates'), requirePermission('templates:write'), async (req, res) => {
+/**
+ * POST /api/v1/templates
+ * Create a new template
+ */
+router.post('/', authenticateToken(), requirePermission('CREATE_TEMPLATES'), async (req, res) => {
   try {
     const { tenantId, userId } = getAuthUser(req);
     const {
@@ -213,7 +263,8 @@ router.post('/', authenticateToken(), requirePermission('read:templates'), requi
       category,
       tags = [],
       companyId,
-      isDefault = false
+      isDefault = false,
+      googleDocsUrl
     } = req.body;
 
     // Validate required fields
@@ -221,6 +272,68 @@ router.post('/', authenticateToken(), requirePermission('read:templates'), requi
       return res.status(400).json({
         success: false,
         error: 'Missing required fields: name, type'
+      });
+    }
+
+    // Validate fileFormat if provided
+    const validFormats = ['HTML', 'DOCX', 'GOOGLE_DOCS', 'GOOGLE_SLIDES'];
+    if (fileFormat && !validFormats.includes(fileFormat)) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid fileFormat. Expected one of: ${validFormats.join(', ')}`
+      });
+    }
+
+    // Extract Google Docs/Slides ID from URL if provided
+    let googleDocsId = null;
+    let googleSlidesId = null;
+    
+    if (googleDocsUrl) {
+      const parsed = parseGoogleUrl(googleDocsUrl);
+      
+      if (parsed) {
+        // Auto-assign to correct field based on URL type
+        if (parsed.type === 'docs') {
+          googleDocsId = parsed.id;
+        } else if (parsed.type === 'slides') {
+          googleSlidesId = parsed.id;
+        }
+        
+        // Log successful parsing
+        logger.info('Parsed Google URL', {
+          component: 'template-routes',
+          action: 'create',
+          type: parsed.type,
+          documentId: parsed.id
+        });
+      } else {
+        // Invalid URL format
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid Google Docs/Slides URL format. Expected format: https://docs.google.com/document/d/{id} or https://docs.google.com/presentation/d/{id}'
+        });
+      }
+    }
+
+    // If setting as default, unset other defaults for the same type
+    if (isDefault) {
+      await prisma.templateLink.updateMany({
+        where: {
+          type,
+          tenantId,
+          isDefault: true,
+          deletedAt: null
+        },
+        data: {
+          isDefault: false
+        }
+      });
+      
+      logger.info('Unset previous default templates', {
+        component: 'template-routes',
+        action: 'create',
+        type,
+        tenantId
       });
     }
 
@@ -249,6 +362,9 @@ router.post('/', authenticateToken(), requirePermission('read:templates'), requi
         companyId,
         createdBy: userId,
         url: '', // Will be generated after file creation if needed
+        googleDocsUrl: googleDocsUrl || null,
+        googleDocsId: googleDocsId,
+        googleSlidesId: googleSlidesId,
         // Create first version automatically
         versions: {
           create: {
@@ -297,7 +413,11 @@ router.post('/', authenticateToken(), requirePermission('read:templates'), requi
  * PUT /api/templates/:id
  * Update template (auto-increments version)
  */
-router.put('/:id', authenticateToken(), requirePermission('read:templates'), requirePermission('templates:write'), async (req, res) => {
+/**
+ * PUT /api/v1/templates/:id
+ * Update an existing template
+ */
+router.put('/:id', authenticateToken(), requirePermission('EDIT_TEMPLATES'), async (req, res) => {
   try {
     const { tenantId, userId } = getAuthUser(req);
     const { id } = req.params;
@@ -320,7 +440,8 @@ router.put('/:id', authenticateToken(), requirePermission('read:templates'), req
       isDefault,
       syncEnabled,
       autoSync,
-      changesSummary
+      changesSummary,
+      googleDocsUrl
     } = req.body;
 
     // Check if template exists and belongs to tenant
@@ -332,6 +453,76 @@ router.put('/:id', authenticateToken(), requirePermission('read:templates'), req
       return res.status(404).json({
         success: false,
         error: 'Template not found'
+      });
+    }
+
+    // Validate fileFormat if provided
+    const validFormats = ['HTML', 'DOCX', 'GOOGLE_DOCS', 'GOOGLE_SLIDES'];
+    if (fileFormat !== undefined && !validFormats.includes(fileFormat)) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid fileFormat. Expected one of: ${validFormats.join(', ')}`
+      });
+    }
+
+    // Extract Google Docs/Slides ID from URL if provided
+    let googleDocsId = existing.googleDocsId;
+    let googleSlidesId = existing.googleSlidesId;
+    
+    if (googleDocsUrl !== undefined) {
+      // Reset IDs
+      googleDocsId = null;
+      googleSlidesId = null;
+      
+      if (googleDocsUrl) {
+        const parsed = parseGoogleUrl(googleDocsUrl);
+        
+        if (parsed) {
+          // Auto-assign to correct field based on URL type
+          if (parsed.type === 'docs') {
+            googleDocsId = parsed.id;
+          } else if (parsed.type === 'slides') {
+            googleSlidesId = parsed.id;
+          }
+          
+          logger.info('Parsed Google URL during update', {
+            component: 'template-routes',
+            action: 'update',
+            templateId: id,
+            type: parsed.type,
+            documentId: parsed.id
+          });
+        } else {
+          // Invalid URL format
+          return res.status(400).json({
+            success: false,
+            error: 'Invalid Google Docs/Slides URL format. Expected format: https://docs.google.com/document/d/{id} or https://docs.google.com/presentation/d/{id}'
+          });
+        }
+      }
+    }
+
+    // If setting as default, unset other defaults for the same type
+    if (isDefault === true && !existing.isDefault) {
+      await prisma.templateLink.updateMany({
+        where: {
+          type: existing.type,
+          tenantId,
+          isDefault: true,
+          deletedAt: null,
+          id: { not: id } // Exclude current template
+        },
+        data: {
+          isDefault: false
+        }
+      });
+      
+      logger.info('Unset previous default templates', {
+        component: 'template-routes',
+        action: 'update',
+        type: existing.type,
+        tenantId,
+        templateId: id
       });
     }
 
@@ -369,6 +560,9 @@ router.put('/:id', authenticateToken(), requirePermission('read:templates'), req
         ...(isDefault !== undefined && { isDefault }),
         ...(syncEnabled !== undefined && { syncEnabled }),
         ...(autoSync !== undefined && { autoSync }),
+        ...(googleDocsUrl !== undefined && { googleDocsUrl: googleDocsUrl || null }),
+        ...(googleDocsUrl !== undefined && { googleDocsId }),
+        ...(googleDocsUrl !== undefined && { googleSlidesId }),
         ...(shouldCreateVersion && { version: newVersion }),
         // Create new version if content changed
         ...(shouldCreateVersion && {
@@ -426,10 +620,64 @@ router.put('/:id', authenticateToken(), requirePermission('read:templates'), req
 });
 
 /**
- * DELETE /api/templates/:id
- * Soft delete template
+ * PUT /api/v1/templates/:id/set-default
+ * Set a template as the default for its type
  */
-router.delete('/:id', authenticateToken(), requirePermission('read:templates'), requirePermission('templates:delete'), async (req, res) => {
+router.put('/:id/set-default', authenticateToken(), requirePermission('EDIT_TEMPLATES'), async (req, res) => {
+  try {
+    const { tenantId, userId } = getAuthUser(req);
+    const { id } = req.params;
+
+    // Get the template to find its type
+    const template = await prisma.templateLink.findFirst({
+      where: { id, tenantId, deletedAt: null }
+    });
+
+    if (!template) {
+      return res.status(404).json({
+        success: false,
+        error: 'Template not found'
+      });
+    }
+
+    // Transaction: Reset all defaults of same type, then set this one
+    await prisma.$transaction([
+      // Reset all defaults for this type and tenant
+      prisma.templateLink.updateMany({
+        where: {
+          type: template.type,
+          tenantId,
+          deletedAt: null
+        },
+        data: { isDefault: false }
+      }),
+      // Set this template as default
+      prisma.templateLink.update({
+        where: { id },
+        data: { isDefault: true }
+      })
+    ]);
+
+    res.json({
+      success: true,
+      message: `Template set as default for ${template.type} type`,
+      data: { id, type: template.type }
+    });
+  } catch (error) {
+    console.error('Error setting default template:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to set default template',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * DELETE /api/v1/templates/:id
+ * Soft delete a template
+ */
+router.delete('/:id', authenticateToken(), requirePermission('DELETE_TEMPLATES'), async (req, res) => {
   try {
     const { tenantId } = getAuthUser(req);
     const { id } = req.params;
@@ -480,7 +728,11 @@ router.delete('/:id', authenticateToken(), requirePermission('read:templates'), 
  * POST /api/templates/:id/duplicate
  * Duplicate template with new name
  */
-router.post('/:id/duplicate', authenticateToken(), requirePermission('read:templates'), requirePermission('templates:write'), async (req, res) => {
+/**
+ * POST /api/v1/templates/:id/duplicate
+ * Duplicate an existing template
+ */
+router.post('/:id/duplicate', authenticateToken(), requirePermission('CREATE_TEMPLATES'), async (req, res) => {
   try {
     const { tenantId, userId } = getAuthUser(req);
     const { id } = req.params;
@@ -580,7 +832,7 @@ router.post('/:id/duplicate', authenticateToken(), requirePermission('read:templ
  * GET /api/templates/:id/versions
  * Get all versions of a template
  */
-router.get('/:id/versions', authenticateToken(), requirePermission('read:templates'), async (req, res) => {
+router.get('/:id/versions', authenticateToken(), requirePermission('VIEW_TEMPLATES'), async (req, res) => {
   try {
     const { tenantId } = getAuthUser(req);
     const { id } = req.params;
@@ -620,7 +872,7 @@ router.get('/:id/versions', authenticateToken(), requirePermission('read:templat
  * POST /api/templates/:id/restore-version
  * Restore a specific version (creates new version with old content)
  */
-router.post('/:id/restore-version', authenticateToken(), requirePermission('read:templates'), requirePermission('templates:write'), async (req, res) => {
+router.post('/:id/restore-version', authenticateToken(), requirePermission('EDIT_TEMPLATES'), async (req, res) => {
   try {
     const { tenantId, userId } = getAuthUser(req);
     const { id } = req.params;

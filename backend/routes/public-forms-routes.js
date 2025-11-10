@@ -10,6 +10,7 @@ import {
   getPublicFormTemplates 
 } from '../controllers/publicFormsController.js';
 import { rateLimitMiddleware } from '../middleware/rateLimiting.js';
+import { csrfProtection } from '../config/security.js';
 
 const router = express.Router();
 
@@ -34,8 +35,10 @@ router.get('/:id',
 /**
  * POST /api/public/forms/:formTemplateId/submit
  * Invia una submission per un form pubblico
+ * SECURITY: CSRF protection + rate limiting (5 submissions/5min)
  */
 router.post('/:formTemplateId/submit', 
+  csrfProtection(), // CSRF protection
   rateLimitMiddleware('public-form-submit', { windowMs: 300000, max: 5 }), // 5 submissions ogni 5 minuti
   submitPublicForm
 );

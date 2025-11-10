@@ -100,8 +100,8 @@ describe('Document Management Tests', () => {
     // Create test person (admin)
     testUser = await prisma.person.create({
       data: {
-        username: 'admin',
-        email: 'admin@example.com',
+        username: `admin_${Date.now()}`,
+        email: `admin_${Date.now()}@example.com`,
         password: hashedPassword,
         firstName: 'Admin',
         lastName: 'User',

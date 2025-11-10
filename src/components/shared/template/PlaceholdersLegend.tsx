@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 // Definire i tipi di entità
-type EntityType = 'scheduled-courses' | 'courses' | 'trainers' | 'employees' | 'companies';
+type EntityType = 'schedules' | 'courses' | 'trainers' | 'employees' | 'companies';
 
 interface FieldDescription {
   desc: string;
@@ -25,7 +25,7 @@ export const PlaceholdersLegend: React.FC<PlaceholdersLegendProps> = ({
   attestatoPlaceholders,
   letteraPlaceholders
 }) => {
-  const [activeEntityTab, setActiveEntityTab] = useState<EntityType>('scheduled-courses');
+  const [activeEntityTab, setActiveEntityTab] = useState<EntityType>('schedules');
 
   return (
     <div className="mt-8">
@@ -67,7 +67,7 @@ export const PlaceholdersLegend: React.FC<PlaceholdersLegendProps> = ({
           </div>
         </div>
         
-        {activeEntityTab === 'scheduled-courses' && (
+        {activeEntityTab === 'schedules' && (
           <div className="mt-4 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
             <h4 className="font-medium mb-3 text-yellow-800">Placeholders specifici per attestati</h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -97,4 +97,4 @@ export const PlaceholdersLegend: React.FC<PlaceholdersLegendProps> = ({
       </div>
     </div>
   );
-}; 
+};

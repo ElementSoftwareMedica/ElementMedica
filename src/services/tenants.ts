@@ -54,14 +54,7 @@ const getErrorMessage = (error: unknown, fallback: string): string => {
 // API Functions
 export const getCurrentTenant = async (): Promise<Company> => {
   try {
-    // Log token availability for debugging
-    const token = localStorage.getItem('token');
-    console.log('🔍 getCurrentTenant: Token check:', {
-      hasToken: !!token,
-      tokenStart: token ? token.substring(0, 20) + '...' : 'NO_TOKEN',
-      timestamp: new Date().toISOString()
-    });
-    
+    // Rimosso utilizzo chiave legacy 'token' e log sensibili: gli header di auth sono gestiti dagli interceptor
     const response = await apiClient.get<TenantCurrentResponse>('/api/tenants/current');
     // L'endpoint restituisce { success: true, data: { tenant: {...} } }
     // Estraiamo il tenant dalla struttura annidata

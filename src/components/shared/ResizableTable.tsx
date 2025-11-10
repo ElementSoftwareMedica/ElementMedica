@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ChevronUp, ChevronDown } from 'lucide-react';
 // Removed unused imports: ArrowUpDown, GripHorizontal, saveTablePreferences
 import { cn } from '../../design-system/utils';
@@ -54,21 +54,50 @@ const ResizableTable = <T extends Record<string, unknown> & { id?: string | numb
   tableName = 'table',
   zebra = false,
 }: ResizableTableProps<T>) => {
+  // Utility helpers to prevent unnecessary state updates
+  const arraysShallowEqual = (a: string[] = [], b: string[] = []) => {
+    if (a === b) return true;
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (a[i] !== b[i]) return false;
+    }
+    return true;
+  };
+
+  const objectsShallowEqual = (a: Record<string, number> = {}, b: Record<string, number> = {}) => {
+    if (a === b) return true;
+    const aKeys = Object.keys(a);
+    const bKeys = Object.keys(b);
+    if (aKeys.length !== bKeys.length) return false;
+    for (const k of aKeys) {
+      if (a[k] !== b[k]) return false;
+    }
+    return true;
+  };
+
   // Attempt to load preferences from local storage first
-  const getInitialState = () => {
+  const initialState = useMemo(() => {
     if (typeof window === 'undefined') {
       return {
         loadedWidths: {},
         loadedHiddenColumns: [],
         loadedColumnOrder: {},
+      } as {
+        loadedWidths: Record<string, number>;
+        loadedHiddenColumns: string[];
+        loadedColumnOrder: Record<string, number>;
       };
     }
-    
+
     try {
       return {
         loadedWidths: JSON.parse(localStorage.getItem(`${tableName}-column-widths`) || '{}'),
         loadedHiddenColumns: JSON.parse(localStorage.getItem(`${tableName}-hidden-columns`) || '[]'),
         loadedColumnOrder: JSON.parse(localStorage.getItem(`${tableName}-column-order`) || '{}'),
+      } as {
+        loadedWidths: Record<string, number>;
+        loadedHiddenColumns: string[];
+        loadedColumnOrder: Record<string, number>;
       };
     } catch (e) {
       console.error("Error parsing localStorage:", e);
@@ -76,16 +105,19 @@ const ResizableTable = <T extends Record<string, unknown> & { id?: string | numb
         loadedWidths: {},
         loadedHiddenColumns: [],
         loadedColumnOrder: {},
+      } as {
+        loadedWidths: Record<string, number>;
+        loadedHiddenColumns: string[];
+        loadedColumnOrder: Record<string, number>;
       };
     }
-  };
+  }, [tableName]);
+  const { loadedWidths, loadedHiddenColumns, loadedColumnOrder } = initialState;
   
-  const { loadedWidths, loadedHiddenColumns, loadedColumnOrder } = getInitialState();
-  
-  // Set default widths from column definitions
-  const defaultWidths = Object.fromEntries(
-    columns.map((col) => [col.key, col.width || 120])
-  );
+  // Set default widths from column definitions (memoized to avoid changing on each render)
+  const defaultWidths = useMemo(() => (
+    Object.fromEntries(columns.map((col) => [col.key, col.width || 120]))
+  ), [columns]);
   
   // Initialize with saved data or defaults
   const [colWidths, setColWidths] = useState<Record<string, number>>({ 
@@ -93,6 +125,33 @@ const ResizableTable = <T extends Record<string, unknown> & { id?: string | numb
     ...loadedWidths,
     ...initialWidths 
   });
+
+  // Mantieni colWidths allineato quando cambia l'elenco delle colonne
+  useEffect(() => {
+    // Costruisci il prossimo stato mantenendo solo le colonne correnti
+    const keys = columns.map(c => c.key);
+    const next: Record<string, number> = {};
+    let changed = false;
+
+    for (const key of keys) {
+      const target = colWidths[key] ?? defaultWidths[key] ?? 120;
+      next[key] = target;
+      if (colWidths[key] !== target) changed = true;
+    }
+
+    // Se il numero di chiavi è diverso, significa che sono state aggiunte/rimosse colonne
+    if (Object.keys(colWidths).length !== keys.length) changed = true;
+
+    if (changed) {
+      setColWidths(next);
+    }
+  }, [columns, defaultWidths, colWidths]);
+
+  // Keep latest colWidths in a ref for event handlers
+  const colWidthsRef = useRef(colWidths);
+  useEffect(() => {
+    colWidthsRef.current = colWidths;
+  }, [colWidths]);
   
   const [localHiddenColumns, setLocalHiddenColumns] = useState<string[]>(
     hiddenColumns.length > 0 ? hiddenColumns : loadedHiddenColumns
@@ -160,7 +219,7 @@ const ResizableTable = <T extends Record<string, unknown> & { id?: string | numb
     // Set the active column being resized
     resizingCol.current = colKey;
     startX.current = e.clientX;
-    startWidth.current = colWidths[colKey] || columns.find(c => c.key === colKey)?.width || 120;
+    startWidth.current = colWidthsRef.current[colKey] || columns.find(c => c.key === colKey)?.width || 120;
     
     // Setup mouse move and mouse up handlers
     const handleMouseMove = (e: MouseEvent) => {
@@ -184,10 +243,12 @@ const ResizableTable = <T extends Record<string, unknown> & { id?: string | numb
     const handleMouseUp = () => {
       if (!resizingCol.current) return;
       
-      // Create a new widths object with the updated width
+      const currentCol = resizingCol.current;
+      const latest = colWidthsRef.current;
+      // Create a new widths object with the updated width from the latest state
       const updatedWidths = {
-        ...colWidths,
-        [resizingCol.current]: colWidths[resizingCol.current!] || defaultWidths[resizingCol.current!]
+        ...latest,
+        [currentCol]: latest[currentCol] ?? defaultWidths[currentCol]
       };
       
       // Save the new width to localStorage
@@ -248,25 +309,35 @@ const ResizableTable = <T extends Record<string, unknown> & { id?: string | numb
   // Apply column visibility changes from external sources
   useEffect(() => {
     if (hiddenColumns.length > 0) {
-      setLocalHiddenColumns(hiddenColumns);
+      setLocalHiddenColumns(prev => (arraysShallowEqual(prev, hiddenColumns) ? prev : hiddenColumns));
     }
   }, [hiddenColumns]);
   
   // Apply column order changes from external sources
   useEffect(() => {
     if (Object.keys(columnOrder).length > 0) {
-      setEffectiveColumnOrder(columnOrder);
+      setEffectiveColumnOrder(prev => (objectsShallowEqual(prev, columnOrder as Record<string, number>) ? prev : columnOrder));
     }
   }, [columnOrder]);
   
-  // Apply width changes from external sources
+  // Apply width changes from external sources (only if actually different)
   useEffect(() => {
     if (Object.keys(initialWidths).length > 0) {
-      setColWidths(prev => ({
-        ...prev,
-        ...initialWidths
-      }));
+      let hasDiff = false;
+      for (const k of Object.keys(initialWidths)) {
+        if (colWidths[k] !== initialWidths[k]!) {
+          hasDiff = true;
+          break;
+        }
+      }
+      if (hasDiff) {
+        setColWidths(prev => ({
+          ...prev,
+          ...initialWidths
+        }));
+      }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialWidths]);
   
   // Render table header cell with sorting and resizing
@@ -374,29 +445,8 @@ const ResizableTable = <T extends Record<string, unknown> & { id?: string | numb
   };
   
   // Utility function to reset column widths in localStorage
-  const resetColumnWidths = useCallback(() => {
-    const itemsToRemove = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.includes('-column-widths')) {
-        itemsToRemove.push(key);
-      }
-    }
-    
-    itemsToRemove.forEach(key => {
-      localStorage.removeItem(key);
-    });
-    
-    // Non ricaricare la pagina per evitare loop infiniti
-    // Reimpostare solo lo stato delle larghezze
-    setColWidths({...defaultWidths, ...initialWidths});
-  }, [defaultWidths, initialWidths]);
-  
-  // Esegui il reset una sola volta all'avvio per risolvere il problema
-  useEffect(() => {
-    resetColumnWidths();
-    // Importante: Il secondo parametro vuoto [] indica che l'effetto viene eseguito solo una volta
-  }, [resetColumnWidths]);
+  // Rimosso reset automatico delle larghezze: evita side-effect su mount che possono causare loop
+  // Se necessario, esporre un controllo esplicito fuori da questo componente per pulire le preferenze
   
   return (
     <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm" ref={tableContainerRef}>

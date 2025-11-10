@@ -21,29 +21,29 @@ router.get('/courses', [
   query('limit').optional().isInt({ min: 1, max: 50 }).toInt()
 ], publicCoursesController.getPublicCourses);
 
-// GET /api/public/courses/:slug - Retrieve details for a specific public course using its slug
-router.get('/courses/:slug', [
-  param('slug').isString().trim().notEmpty()
-], publicCoursesController.getPublicCourseBySlug);
-
-// GET /api/public/courses/categories/list - Retrieve a distinct list of available public course categories
-router.get('/courses/categories/list', publicCoursesController.getPublicCourseCategories);
-
 // GET /api/public/courses/stats - Retrieve statistics on public courses
 router.get('/courses/stats', publicCoursesController.getPublicCourseStats);
-
-// GET /api/public/courses/unified/:courseTitle - Retrieve unified course page for courses with same title
-router.get('/courses/unified/:courseTitle', [
-  param('courseTitle').isString().trim().notEmpty()
-], publicCoursesController.getUnifiedCourseByTitle);
-
-// GET /api/public/courses/titles/list - Retrieve list of course titles for unified navigation
-router.get('/courses/titles/list', publicCoursesController.getCourseTitles);
 
 // GET /api/public/courses/search - Search courses by term
 router.get('/courses/search', [
   query('q').isString().trim().isLength({ min: 2 }),
   query('limit').optional().isInt({ min: 1, max: 20 }).toInt()
 ], publicCoursesController.searchCourses);
+
+// GET /api/public/courses/categories/list - Retrieve a distinct list of available public course categories
+router.get('/courses/categories/list', publicCoursesController.getPublicCourseCategories);
+
+// GET /api/public/courses/titles/list - Retrieve list of course titles for unified navigation
+router.get('/courses/titles/list', publicCoursesController.getCourseTitles);
+
+// GET /api/public/courses/unified/:courseTitle - Retrieve unified course page for courses with same title
+router.get('/courses/unified/:courseTitle', [
+  param('courseTitle').isString().trim().notEmpty()
+], publicCoursesController.getUnifiedCourseByTitle);
+
+// GET /api/public/courses/:slug - Retrieve details for a specific public course using its slug
+router.get('/courses/:slug', [
+  param('slug').isString().trim().notEmpty()
+], publicCoursesController.getPublicCourseBySlug);
 
 export default router;

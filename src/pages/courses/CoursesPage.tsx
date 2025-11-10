@@ -15,7 +15,8 @@ import {
 } from 'lucide-react';
 import type { Course } from '../../types/courses';
 import CourseImport from '../../components/courses/CourseImport';
-import { apiPost } from '../../services/api';
+import { apiPost, apiGet } from '../../services/api';
+import { useToast } from '../../hooks/useToast';
 // Configurazione colonne per la tabella
 const getCoursesColumns = (): DataTableColumn<Course>[] => [
   {
@@ -50,6 +51,26 @@ const getCoursesColumns = (): DataTableColumn<Course>[] => [
       <div className="flex items-center gap-2">
         <Building className="h-4 w-4 text-gray-400" />
         <Badge variant="secondary">{course.category}</Badge>
+      </div>
+    )
+  },
+  {
+    key: 'riskLevel',
+    label: 'Livello rischio',
+    sortable: true,
+    renderCell: (course) => (
+      <div className="flex items-center gap-2">
+        <Badge variant="outline">{course.riskLevel || 'N/D'}</Badge>
+      </div>
+    )
+  },
+  {
+    key: 'courseType',
+    label: 'Tipo',
+    sortable: true,
+    renderCell: (course) => (
+      <div className="flex items-center gap-2">
+        <Badge variant="outline">{course.courseType === 'AGGIORNAMENTO' ? 'Aggiornamento' : course.courseType === 'PRIMO_CORSO' ? 'Primo Corso' : 'N/D'}</Badge>
       </div>
     )
   },
@@ -198,10 +219,12 @@ const csvTemplateData: Partial<Course>[] = [
     code: 'CORSO001',
     title: 'Esempio Corso di Sicurezza',
     category: 'Sicurezza',
+    riskLevel: 'BASSO',
+    courseType: 'PRIMO_CORSO',
     duration: 8,
     validityYears: 5,
     renewalDuration: '4',
-    pricePerPerson: 150.00,
+    pricePerPerson: 150.0,
     maxPeople: 20,
     certifications: 'ISO 45001',
     regulation: 'D.Lgs. 81/08',
@@ -215,6 +238,8 @@ const csvHeaders = [
   { key: 'title', label: 'Titolo' },
   { key: 'code', label: 'Codice' },
   { key: 'category', label: 'Categoria' },
+  { key: 'riskLevel', label: 'Livello Rischio' },
+  { key: 'courseType', label: 'Tipo Corso' },
   { key: 'duration', label: 'Durata (ore)' },
   { key: 'validityYears', label: 'Validità (anni)' },
   { key: 'renewalDuration', label: 'Durata rinnovo (ore)' },
@@ -229,6 +254,25 @@ const csvHeaders = [
 export default function CoursesPage(): JSX.Element {
   const [showImportModal, setShowImportModal] = useState(false);
   const [courses, setCourses] = useState<Course[]>([]);
+  const { showToast } = useToast();
+
+  // Carica i corsi esistenti per supportare la rilevazione duplicati nel modal di import
+  React.useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await apiGet<Course[]>('/courses');
+        if (mounted && Array.isArray(res)) {
+          setCourses(res);
+        }
+      } catch (e) {
+        console.error('Errore caricando corsi esistenti per import:', e);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   // Funzione per gestire l'import dei corsi
   const handleImportEntities = async (data: any[]) => {
@@ -240,14 +284,54 @@ export default function CoursesPage(): JSX.Element {
 
   const handleImportCourses = async (importedCourses: any[], overwriteIds?: string[]) => {
     try {
+      const tenantId = localStorage.getItem('tenantId') || localStorage.getItem('TENANT_ID') || undefined;
+
+      // Includi tenantId su ogni riga per compat con prisma.createMany che richiede tenantId nel data
+      const payloadCourses = (importedCourses || []).map((c) => ({
+        ...c,
+        ...(tenantId ? { tenantId } : {}),
+      }));
+
       // Invia i dati al backend
-      const response = await apiPost('/api/v1/courses/import', {
-        courses: importedCourses,
+      const response: any = await apiPost('/courses/bulk-import', {
+        tenantId, // anche top-level per massima compatibilità
+        courses: payloadCourses,
         overwriteIds: overwriteIds || []
       });
       
-      // Aggiorna la lista locale (il template si ricaricherà automaticamente)
-      console.log('Import completato:', response);
+      // Mostra riepilogo con eventuali duplicati
+      const totalSubmitted = response?.totalSubmitted ?? payloadCourses.length;
+      const validCourses = response?.validCourses ?? undefined;
+      const created = response?.created ?? undefined;
+      const skipped = response?.skipped ?? undefined;
+      const report = response?.report || response?.precheckReport || {};
+      const inPayload = Array.isArray(report?.duplicates?.inPayload) ? report.duplicates.inPayload : [];
+      const inDatabase = Array.isArray(report?.duplicates?.inDatabase) ? report.duplicates.inDatabase : [];
+      const codesPayload = inPayload.map((d: any) => d.code).filter(Boolean);
+      const codesDb = inDatabase.map((d: any) => d.code).filter(Boolean);
+
+      const hasDuplicates = (codesPayload.length + codesDb.length) > 0;
+      const codesPayloadPreview = codesPayload.slice(0, 3).join(', ');
+      const codesDbPreview = codesDb.slice(0, 3).join(', ');
+
+      const baseMsgParts: string[] = [];
+      baseMsgParts.push(`Inviati: ${totalSubmitted}`);
+      if (validCourses !== undefined) baseMsgParts.push(`Validi: ${validCourses}`);
+      if (created !== undefined) baseMsgParts.push(`Creati: ${created}`);
+      if (skipped !== undefined) baseMsgParts.push(`Saltati: ${skipped}`);
+
+      let message = `Import completato. ${baseMsgParts.join(' · ')}`;
+      if (hasDuplicates) {
+        const dupParts: string[] = [];
+        if (codesPayload.length) dupParts.push(`Duplicati nel file (${codesPayload.length}): ${codesPayloadPreview}${codesPayload.length > 3 ? '…' : ''}`);
+        if (codesDb.length) dupParts.push(`Duplicati a DB (${codesDb.length}): ${codesDbPreview}${codesDb.length > 3 ? '…' : ''}`);
+        message += ` — ${dupParts.join(' | ')}`;
+      }
+
+      showToast({
+        message,
+        type: hasDuplicates ? 'info' : 'success'
+      });
       
       // Chiudi il modal
       setShowImportModal(false);
@@ -268,7 +352,7 @@ export default function CoursesPage(): JSX.Element {
         writePermission="courses:write"
         deletePermission="courses:delete"
         exportPermission="courses:export"
-        apiEndpoint="/api/v1/courses"
+        apiEndpoint="/courses"
         columns={getCoursesColumns()}
         searchFields={['title', 'code', 'category', 'description', 'certifications', 'regulation', 'contents']}
         filterOptions={[
@@ -283,6 +367,26 @@ export default function CoursesPage(): JSX.Element {
               { value: 'Formazione generale', label: 'Formazione generale' },
               { value: 'Tecnico', label: 'Tecnico' },
               { value: 'Gestionale', label: 'Gestionale' }
+            ]
+          },
+          {
+            key: 'riskLevel',
+            label: 'Livello Rischio',
+            options: [
+              { value: 'ALTO', label: 'Alto' },
+              { value: 'MEDIO', label: 'Medio' },
+              { value: 'BASSO', label: 'Basso' },
+              { value: 'A', label: 'A' },
+              { value: 'B', label: 'B' },
+              { value: 'C', label: 'C' }
+            ]
+          },
+          {
+            key: 'courseType',
+            label: 'Tipo Corso',
+            options: [
+              { value: 'PRIMO_CORSO', label: 'Primo Corso' },
+              { value: 'AGGIORNAMENTO', label: 'Aggiornamento' }
             ]
           },
           {

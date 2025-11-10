@@ -16,6 +16,7 @@ interface CourseImportProps {
 
 // Definizione della mappatura dei campi CSV
 const csvHeaderMap: Record<string, string> = {
+  // Header "tecnici" legacy (compatibilità retroattiva)
   'Corso': 'title',
   'DurataCorso': 'duration',
   'AnniValidita': 'validityYears',
@@ -28,6 +29,26 @@ const csvHeaderMap: Record<string, string> = {
   'Codice': 'code',
   'Descrizione': 'description',
   'Categoria': 'category',
+  'LivelloRischio': 'riskLevel',
+  'TipoCorso': 'courseType',
+
+  // Header "umani" del template CSV esposto in UI (CoursesPage)
+  'Titolo': 'title',
+  'Livello Rischio': 'riskLevel',
+  'Tipo Corso': 'courseType',
+  'Durata (ore)': 'duration',
+  'Validità (anni)': 'validityYears',
+  'Durata rinnovo (ore)': 'renewalDuration',
+  'Prezzo per persona': 'pricePerPerson',
+  'Max partecipanti': 'maxPeople',
+  'Stato': 'status',
+
+  // Alias comuni aggiuntivi per robustezza
+  'Durata': 'duration',
+  'Validita (anni)': 'validityYears', // senza accent
+  'Validita': 'validityYears',
+  'Prezzo': 'pricePerPerson', // talvolta usato come abbreviazione in CSV manuali
+  'Max persone': 'maxPeople'
 };
 
 // Campi da formattare in title case
@@ -64,6 +85,28 @@ const normalizeNumericValue = (value: unknown): string => {
   return strValue;
 };
 
+// Helper per normalizzare riskLevel
+const normalizeRiskLevel = (value: unknown): Course['riskLevel'] | undefined => {
+  if (!value) return undefined;
+  const v = String(value).trim().toUpperCase();
+  if (['ALTO','MEDIO','BASSO','A','B','C'].includes(v)) return v as any;
+  // mapping comuni
+  if (['HIGH'].includes(v)) return 'ALTO';
+  if (['MID','MEDIUM'].includes(v)) return 'MEDIO';
+  if (['LOW'].includes(v)) return 'BASSO';
+  return undefined;
+};
+
+// Helper per normalizzare courseType
+const normalizeCourseType = (value: unknown): Course['courseType'] | undefined => {
+  if (!value) return undefined;
+  const v = String(value).trim().toUpperCase();
+  if (['PRIMO_CORSO','AGGIORNAMENTO'].includes(v)) return v as any;
+  if (['BASE','PRIMO','PRIMOCORSO','PRIMO CORSO'].includes(v)) return 'PRIMO_CORSO';
+  if (['UPDATE','AGG','AGG.','AGGIORNA','AGGIORNAMENTO CORSO'].includes(v)) return 'AGGIORNAMENTO';
+  return undefined;
+};
+
 // Validazione personalizzata per i corsi
 const validateCourse = (course: CourseImportData): string[] => {
   const errors: string[] = [];
@@ -74,6 +117,17 @@ const validateCourse = (course: CourseImportData): string[] => {
   
   if (!course.code || (typeof course.code === 'string' && course.code.trim() === '')) {
     errors.push('Il codice del corso è obbligatorio');
+  }
+
+  // Validazione opzionale ma con formato atteso
+  if (course.riskLevel) {
+    const n = normalizeRiskLevel(course.riskLevel);
+    if (!n) errors.push('Livello di rischio non valido (ammessi: ALTO, MEDIO, BASSO, A, B, C)');
+  }
+
+  if (course.courseType) {
+    const n = normalizeCourseType(course.courseType);
+    if (!n) errors.push('Tipo corso non valido (ammessi: PRIMO_CORSO/Base, AGGIORNAMENTO)');
   }
   
   // Verifica per i campi numerici
@@ -126,8 +180,16 @@ const CourseImport: React.FC<CourseImportProps> = ({
         return applyTitleCaseToFields({ ...course }, titleCaseFields);
       });
       
+      // Normalizza riskLevel e courseType
+      const dataWithEnums = formattedData.map(course => {
+        const withEnums = { ...course } as any;
+        if (withEnums.riskLevel) withEnums.riskLevel = normalizeRiskLevel(withEnums.riskLevel);
+        if (withEnums.courseType) withEnums.courseType = normalizeCourseType(withEnums.courseType);
+        return withEnums;
+      });
+      
       // Cerca corrispondenze con corsi esistenti tramite il codice (uniqueField)
-      const dataWithIds = formattedData.map(course => {
+      const dataWithIds = dataWithEnums.map(course => {
         // Se il corso ha un codice, cerca corrispondenze
         if (course.code && typeof course.code === 'string') {
           const normalizedCode = course.code.trim().toLowerCase();

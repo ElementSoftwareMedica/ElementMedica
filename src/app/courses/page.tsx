@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Course } from '@prisma/client';
-import { getCourses, deleteCourse } from '@/api/courses';
+import type { Course } from '@/types/courses';
+import { getCourses, deleteCourse } from '@/services/courses';
 import Link from 'next/link';
 import {
   Table,
@@ -67,7 +67,7 @@ export default function CoursesPage() {
             <TableRow key={course.id}>
               <TableCell>{course.title}</TableCell>
               <TableCell>{course.category}</TableCell>
-              <TableCell>{course.duration}</TableCell>
+              <TableCell>{(course as any).duration}</TableCell>
               <TableCell>{course.status}</TableCell>
               <TableCell>
                 <div className="flex gap-2">

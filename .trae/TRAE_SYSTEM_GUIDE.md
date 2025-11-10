@@ -1,3 +1,4 @@
+
 # 🤖 TRAE SYSTEM GUIDE - Sistema Unificato Person
 **Guida Schematica per Trae AI - Massimo 500 righe**
 
@@ -32,6 +33,11 @@ Frontend (5173) → Proxy Server (4003) → API Server (4001)
 - **Proxy Server**: 4003 (NON MODIFICARE MAI)
 - **Frontend**: 5173
 - **Documents**: 4002 (opzionale)
+
+### 4. Component Size Limits (NEW - Nov 2025)
+- ✅ **MAX 500 lines** per component/service/route file
+- ❌ **God Components VIETATI** (>500L = refactor obbligatorio)
+- ✅ Extract hooks, sub-components, utils when approaching limit
 
 ## 🔄 SISTEMA ROUTING AVANZATO (Progetto 19)
 
@@ -361,4 +367,116 @@ curl -w "@curl-format.txt" http://localhost:4003/api/v1/health
 
 ---
 
+## 🔐 SECURITY & GDPR (Analisi 32_pulizia-e-allineamento)
+
+### Security Verification Status ✅
+
+**Password Security**:
+- bcrypt salt 12 (verified in authService.js)
+- JWT with expiry and refresh tokens
+- Centralized via JWTService
+
+**GDPR Compliance**:
+- Password NOT included in data export ✅
+- Anonymization pattern correct: `deleted_{personId}@anonymized.local` ✅
+- Audit logging: GdprAuditLog, SecurityAuditLog, ActivityLog
+- Consent management implemented
+- Right to be forgotten with soft delete
+
+**Multi-Tenant Isolation**:
+- Service-level tenantId filtering (all services)
+- ⚠️ No database-level isolation (RLS policies recommended)
+
+### GDPR Checklist (Per Feature)
+- [ ] Consent required before data collection
+- [ ] Audit log for data access
+- [ ] Soft delete with deletedAt (no hard delete)
+- [ ] Anonymization for right to be forgotten
+- [ ] Data portability export implemented
+- [ ] No password/secrets in logs or exports
+
+---
+
+## 🐛 KNOWN ISSUES (Progetto 32)
+
+### High Priority (4)
+1. **Preventivo Dual Relations**: Direct + M2M pivot (standardize pattern)
+2. **PDF Browser Bottleneck**: Single puppeteer instance (implement pool)
+3. **Tenant Isolation**: Service-only, no DB-level (consider RLS)
+4. **Person Model Complexity**: 50+ fields, 30+ relations (vertical split?)
+
+### Dead Code (1)
+- `PersonServiceOptimized.js` (325 lines, zero imports) → DELETE
+
+### Potential Duplications (3)
+- googleDocsImporter + googleSlidesImporter
+- virtualEntityPermissions + advanced-permission
+- codici-sconto + preventivi-service
+
+**Ref**: `docs/10_project_managemnt/32_pulizia-e-allineamento/`
+
+---
+
+## 📖 QUICK REFERENCE
+
+### Critical Files
+- **Prisma Schema**: `backend/prisma/schema.prisma` (52 models, 1,972 lines)
+- **Auth Service**: `backend/services/authService.js` (bcrypt verified ✅)
+- **GDPR Service**: `backend/services/gdprService.js` (compliance verified ✅)
+- **Person Service**: `backend/services/person/PersonService.js` (modular architecture ✅)
+- **Routes**: `backend/routes/` (32+ files, RouterMap centralized)
+
+### Quality Scores (Analisi Completa Nov 2025)
+- **Prisma Schema**: 7.5/10
+- **Backend Services**: 8.1/10 (52/52 analyzed ✅)
+- **Backend Routes**: 8.5/10 (security audit complete ✅)
+- **Backend Middleware**: 8.7/10 (highest score ✅)
+- **Backend Overall**: 8.4/10 (excellent baseline)
+- **Frontend**: TBD (689 files inventoried, 8 God Components identified)
+- **Security**: 9/10 (excellent, GDPR compliant ✅)
+- **Overall Project**: 8.1/10 (solid foundation)
+
+### Known Issues (Nov 2025)
+**HIGH Priority (6 issues):**
+1. ⚠️ Public forms missing CSRF + rate limiting (SECURITY)
+2. ⚠️ Test routes in production (SECURITY)
+3. ⚠️ Preventivo dual relation pattern (ARCHITECTURE)
+4. ⚠️ PDF browser bottleneck (PERFORMANCE)
+5. ⚠️ 8 God Components >700 lines (MAINTAINABILITY)
+6. ⚠️ Roles domain complexity 3,100L (ARCHITECTURE)
+
+**Dead Code (DELETE immediately):**
+- `backend/services/PersonServiceOptimized.js` (325L, zero imports)
+- `backend/routes/template-routes.backup.js` (backup in production)
+
+**Consolidation Opportunities:**
+- Google importers (-300L): googleDocsImporter + googleSlidesImporter
+- Performance monitoring (-200L): 3 separate files
+- Permission services overlap: virtualEntityPermissions + advanced-permission
+- Frontend God Components: 13 files >600L (9,500L total)
+
+### Best Practices (From Analysis)
+**Backend - Modular Architecture (EXEMPLARY):**
+- `person/` folder: 14 files, 5,163L, facade pattern ✅
+- Structure: PersonService.js (facade) + core/, utils/, preferences/, stats/, export/, import/
+- **Follow this pattern** for new complex domains
+
+**Frontend - Component Size:**
+- ✅ Target: <500L per component
+- ⚠️ Warning: 500-700L (plan refactoring)
+- 🔴 Critical: >700L (refactor immediately)
+
+**Security Checklist:**
+- ✅ CSRF protection on public endpoints
+- ✅ Rate limiting on auth + public endpoints (5/5min login, 5/15min public)
+- ✅ Environment checks for test routes
+- ✅ Permission checks enabled (no debug comments)
+- ✅ Audit logging on sensitive operations
+- ✅ GDPR password exclusion in exports
+- ✅ Tenant isolation (verify tenantId in all queries)
+
+---
+
 **🤖 TRAE**: Usa questa guida per comprendere rapidamente il sistema, identificare problemi e implementare nuove funzionalità seguendo i pattern esistenti. Testa SEMPRE con le credenziali standard dopo ogni modifica.
+
+**⚠️ GDPR**: Rispetta SEMPRE le regole GDPR - no bypass, no shortcuts. Privacy by design è fondamentale.

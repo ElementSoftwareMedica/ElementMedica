@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { apiGet } from '../../../services/api';
 import { getLoadingErrorMessage } from '../../../utils/errorUtils';
 import { useToast } from '../../../hooks/useToast';
@@ -29,6 +29,12 @@ export function useGDPREntityData<T extends Record<string, unknown>>({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { showToast } = useToast();
+  
+  // Use ref to avoid recreating loadEntities on every showToast change
+  const showToastRef = useRef(showToast);
+  useEffect(() => {
+    showToastRef.current = showToast;
+  }, [showToast]);
 
   const loadEntities = useCallback(async () => {
     try {
@@ -74,19 +80,19 @@ export function useGDPREntityData<T extends Record<string, unknown>>({
         err
       ));
       setEntities([]);
-      showToast({
+      showToastRef.current({
         message: `Errore durante il caricamento dei ${entityDisplayNamePlural.toLowerCase()}: ${err instanceof Error ? err.message : 'Errore sconosciuto'}`,
         type: 'error'
       });
     } finally {
       setLoading(false);
     }
-  }, [apiEndpoint, entityNamePlural, entityDisplayNamePlural, showToast]);
+  }, [apiEndpoint, entityNamePlural, entityDisplayNamePlural]);
 
-  // Caricamento iniziale
+  // Caricamento iniziale - solo loadEntities come dipendenza
   useEffect(() => {
     loadEntities();
-  }, [loadEntities, apiEndpoint, entityNamePlural, entityDisplayNamePlural]);
+  }, [loadEntities]);
 
   return {
     entities,

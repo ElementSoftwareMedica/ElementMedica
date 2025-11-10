@@ -20,7 +20,9 @@ const PROXY_DEFAULTS = {
     proxyTimeout: 30000,
     headers: {
       'Connection': 'keep-alive'
-    }
+    },
+    xfwd: true,
+    preserveHeaderKeyCase: true
   },
   
   // Configurazione per servizi di documenti
@@ -32,7 +34,9 @@ const PROXY_DEFAULTS = {
     proxyTimeout: 60000,
     headers: {
       'Connection': 'keep-alive'
-    }
+    },
+    xfwd: true,
+    preserveHeaderKeyCase: true
   },
   
   // Configurazione per servizi di autenticazione
@@ -45,7 +49,9 @@ const PROXY_DEFAULTS = {
     headers: {
       'Connection': 'keep-alive',
       'Cache-Control': 'no-cache'
-    }
+    },
+    xfwd: true,
+    preserveHeaderKeyCase: true
   },
   
   // Configurazione per health checks
@@ -57,7 +63,9 @@ const PROXY_DEFAULTS = {
     proxyTimeout: 5000,
     headers: {
       'Connection': 'close' // Non mantenere connessione per health
-    }
+    },
+    xfwd: true,
+    preserveHeaderKeyCase: true
   }
 };
 
@@ -219,6 +227,28 @@ export function createCustomProxyMiddleware(serviceName, target, options = {}) {
       if (req.ip) {
         proxyReq.setHeader('X-Forwarded-For', req.ip);
       }
+
+      // Propaga esplicitamente header di auth, cookie e tenancy
+      try {
+        if (req.headers && req.headers.authorization) {
+          proxyReq.setHeader('Authorization', req.headers.authorization);
+        }
+        if (req.headers && req.headers.cookie) {
+          proxyReq.setHeader('Cookie', req.headers.cookie);
+        }
+        const tenantId = (req.headers && (req.headers['x-tenant-id'] || req.headers['X-Tenant-ID'])) || null;
+        if (tenantId) {
+          proxyReq.setHeader('X-Tenant-ID', tenantId);
+        }
+      } catch (e) {
+        logger.warn('Failed to forward auth/tenant headers', {
+          service: 'proxy-server',
+          targetService: serviceName,
+          error: e.message,
+          path: req.path,
+          method: req.method
+        });
+      }
       
       // Chiama logger se abilitato
       if (proxyLogger.onProxyReq) {
@@ -263,9 +293,6 @@ export function createCustomProxyMiddleware(serviceName, target, options = {}) {
           if (bodyBuffer && bodyBuffer.length > 0) {
             // Imposta Content-Length coerente con il body re-inviato
             proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyBuffer));
-            // Evita alterazioni indesiderate dell'encoding
-            // proxyReq.setHeader('Accept-Encoding', 'identity'); // opzionale
-
             // Scrivi il body verso il target
             proxyReq.write(bodyBuffer);
           }

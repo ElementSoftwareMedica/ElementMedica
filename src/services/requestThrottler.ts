@@ -40,6 +40,19 @@ class RequestThrottler {
       console.log(`🔑 RequestThrottler: Critical permissions request detected for ${url}, executing immediately`);
       return this.executeRequest(url, requestFn);
     }
+
+    // Eccezione specifica: bulk import corsi non deve essere throttled
+    if (requestKey === 'courses-bulk-import') {
+      console.log(`📦 RequestThrottler: Bulk import request detected for ${url}, executing immediately`);
+      return this.executeRequest(url, requestFn);
+    }
+    
+    // ✅ FIX: Schedules requests are critical for page rendering, execute immediately
+    // Evita race conditions tra preloader e componente che causano dati intermittenti
+    if (requestKey.includes('schedules')) {
+      console.log(`📅 RequestThrottler: Schedules request detected for ${url}, executing immediately`);
+      return this.executeRequest(url, requestFn);
+    }
     
     // Controlla se c'è già una richiesta identica in corso
     if (this.activeRequests.has(requestKey)) {
@@ -133,8 +146,9 @@ class RequestThrottler {
 
     const nextRequest = this.pendingQueue.shift();
     if (nextRequest) {
-      // Controlla se la richiesta non è scaduta (timeout di 30 secondi)
-      if (Date.now() - nextRequest.timestamp > 30000) {
+      // ✅ FIX: Aumentato timeout a 60s per ambienti lenti (Hetzner/Supabase)
+      // Evita timeout quando Dashboard + Modal richiedono courses contemporaneamente
+      if (Date.now() - nextRequest.timestamp > 60000) {
         nextRequest.reject(new Error('Request timeout'));
         this.processQueue();
         return;
@@ -165,6 +179,11 @@ class RequestThrottler {
     
     // Le richieste di permessi e ruoli non devono mai essere throttled
     if (requestKey.startsWith('roles-') || requestKey.startsWith('permissions-') || requestKey.includes('permissions')) {
+      return false;
+    }
+
+    // Eccezione: bulk import corsi non deve essere throttled
+    if (requestKey === 'courses-bulk-import') {
       return false;
     }
     
@@ -250,10 +269,15 @@ class RequestThrottler {
     if (cleanUrl.includes('/permissions')) return 'permissions-general';
     if (cleanUrl.includes('/roles/hierarchy')) return 'roles-hierarchy';
     if (cleanUrl.includes('/roles')) return 'roles-general';
+
+    // Eccezione: bulk import corsi
+    if (cleanUrl.endsWith('/courses/bulk-import') || cleanUrl.includes('/courses/bulk-import')) return 'courses-bulk-import';
     
     // Altri endpoint
     if (cleanUrl.includes('/tenants')) return 'tenants';
     if (cleanUrl.includes('/users')) return 'users';
+    if (cleanUrl.includes('/schedules/')) return 'schedules-detail';
+    if (cleanUrl.includes('/schedules')) return 'schedules-general';
     if (cleanUrl.includes('/courses/')) return 'courses-detail';
     if (cleanUrl.includes('/courses')) return 'courses-general';
     if (cleanUrl.includes('/persons/')) return 'persons-detail';

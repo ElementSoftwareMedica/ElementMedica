@@ -7,7 +7,7 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import { body, validationResult } from 'express-validator';
 import prisma from '../config/prisma-optimization.js';
-import { AdvancedJWTService } from '../auth/jwt-advanced.js';
+import { JWTService } from '../auth/jwt.js';
 import { GDPRService } from '../services/gdpr-service.js';
 import {
     authenticateAdvanced,
@@ -18,6 +18,7 @@ import {
     limitConcurrentSessions
 } from '../middleware/auth-advanced.js';
 import logger from '../utils/logger.js';
+
 
 const router = express.Router();
 // Prisma client importato dalla configurazione ottimizzata
@@ -86,7 +87,15 @@ router.post('/login',
             
             // Check concurrent session limits
             const maxSessions = parseInt(process.env.MAX_CONCURRENT_SESSIONS) || 3;
-            await AdvancedJWTService.cleanupExpiredSessions(person.id);
+            // Cleanup session scadute per questa persona
+            await prisma.personSession.updateMany({
+                where: {
+                    personId: person.id,
+                    isActive: true,
+                    expiresAt: { lt: new Date() }
+                },
+                data: { isActive: false }
+            });
             
             const activeSessions = await prisma.personSession.count({
                 where: {
@@ -139,12 +148,13 @@ router.post('/login',
                 }
             });
             
-            // Generate tokens
-            const tokens = await AdvancedJWTService.generateTokens(person.id, session.id, {
-                rememberMe,
-                deviceFingerprint: req.deviceFingerprint
-            });
-            
+            // Genera e salva i token in modo centralizzato tramite JWTService
+            const { accessToken, refreshToken, expiresIn, tokenType } = await JWTService.generateTokenPair(
+                person,
+                { userAgent: req.get('User-Agent'), ip: req.ip },
+                { rememberMe, extraClaims: { sessionId: session.id } }
+            );
+
             // Update person login info
             await prisma.person.update({
                 where: { id: person.id },
@@ -200,9 +210,10 @@ router.post('/login',
                     roles: person.personRoles.map(pr => pr.roleType)
                 },
                 tokens: {
-                    accessToken: tokens.accessToken,
-                    refreshToken: tokens.refreshToken,
-                    expiresIn: tokens.expiresIn
+                    accessToken,
+                    refreshToken,
+                    expiresIn,
+                    tokenType
                 },
                 session: {
                     id: session.id,
@@ -231,40 +242,35 @@ router.post('/login',
  * Refresh Access Token
  */
 router.post('/refresh',
-    [
-        body('refreshToken').isString().notEmpty()
-    ],
     async (req, res) => {
         try {
-            const errors = validationResult(req);
-            if (!errors.isEmpty()) {
-                return res.status(400).json({
-                    error: 'Validation failed',
-                    details: errors.array()
-                });
-            }
-            
-            const { refreshToken } = req.body;
-            
-            // Refresh tokens
-            const result = await AdvancedJWTService.refreshTokens(refreshToken);
-            
-            if (!result.success) {
+            const headerToken = req.headers['x-refresh-token'];
+            const bodyToken = req.body?.refresh_token || req.body?.refreshToken;
+            const refreshToken = headerToken || bodyToken;
+
+            if (!refreshToken) {
                 return res.status(401).json({
-                    error: result.error || 'Token refresh failed',
-                    code: 'AUTH_REFRESH_FAILED'
+                    error: 'Refresh token required',
+                    message: 'No refresh token provided'
                 });
             }
             
-            // Log token refresh
+            // Refresh access token (non ruota il refresh token)
+            const { accessToken, expiresIn, tokenType } = await JWTService.refreshAccessToken(refreshToken);
+
+            // Decodifica per logging (personId/sessionId)
+            let decoded = null;
+            try { decoded = JWTService.verifyRefreshToken(refreshToken); } catch (_) {}
+            
+            // Log token refresh (GDPR)
             await GDPRService.logGDPRActivity({
-                personId: result.personId,
+                personId: decoded?.personId || null,
                 action: 'TOKEN_REFRESHED',
                 dataType: 'authentication',
                 purpose: 'Token refresh for continued access',
                 legalBasis: 'legitimate_interest',
                 details: {
-                    sessionId: result.sessionId
+                    sessionId: decoded?.sessionId || null
                 },
                 ipAddress: req.ip,
                 userAgent: req.get('User-Agent')
@@ -273,18 +279,29 @@ router.post('/refresh',
             logger.info('Tokens refreshed successfully', {
                 component: 'auth-advanced',
                 action: 'refresh',
-                personId: result.personId,
-                sessionId: result.sessionId,
+                personId: decoded?.personId || null,
+                sessionId: decoded?.sessionId || null,
                 ip: req.ip
             });
-            
-            res.json({
-                message: 'Tokens refreshed successfully',
-                tokens: {
-                    accessToken: result.accessToken,
-                    refreshToken: result.refreshToken,
-                    expiresIn: result.expiresIn
+
+            // Converte expiresIn in secondi se necessario
+            let expiresInSeconds = 3600;
+            if (typeof expiresIn === 'string') {
+                const match = expiresIn.match(/^(\d+)([smhd])$/);
+                if (match) {
+                    const val = parseInt(match[1], 10);
+                    const unit = match[2];
+                    const multipliers = { s: 1, m: 60, h: 3600, d: 86400 };
+                    expiresInSeconds = val * (multipliers[unit] || 3600);
                 }
+            } else if (typeof expiresIn === 'number') {
+                expiresInSeconds = expiresIn;
+            }
+            
+            return res.json({
+                access_token: accessToken,
+                expires_in: expiresInSeconds,
+                token_type: tokenType || 'Bearer'
             });
             
         } catch (error) {
@@ -295,9 +312,9 @@ router.post('/refresh',
                 ip: req.ip
             });
             
-            res.status(500).json({
-                error: 'Token refresh failed',
-                code: 'AUTH_REFRESH_FAILED'
+            return res.status(401).json({
+                error: 'Invalid refresh token',
+                message: 'Unable to refresh token'
             });
         }
     }
@@ -311,9 +328,24 @@ router.post('/logout',
     async (req, res) => {
         try {
             const { sessionId, personId } = req.person;
+            const headerToken = req.headers['x-refresh-token'];
+            const bodyToken = req.body?.refresh_token || req.body?.refreshToken;
+            const refreshToken = headerToken || bodyToken;
             
-            // Revoke all tokens for this session
-            await AdvancedJWTService.revokeSession(sessionId);
+            // Revoca refresh token specifico se fornito, altrimenti tutte le sessioni dell'utente
+            if (refreshToken) {
+                await JWTService.revokeSession(refreshToken);
+            } else {
+                await JWTService.revokeAllPersonSessions(personId);
+            }
+
+            // Disattiva la sessione corrente se presente
+            if (sessionId) {
+                await prisma.personSession.update({
+                    where: { id: sessionId },
+                    data: { isActive: false }
+                });
+            }
             
             // Log logout
             await GDPRService.logGDPRActivity({
@@ -337,8 +369,9 @@ router.post('/logout',
                 ip: req.ip
             });
             
-            res.json({
-                message: 'Logout successful'
+            return res.json({
+                success: true,
+                message: 'Logged out successfully'
             });
             
         } catch (error) {
@@ -350,7 +383,7 @@ router.post('/logout',
                 ip: req.ip
             });
             
-            res.status(500).json({
+            return res.status(500).json({
                 error: 'Logout failed',
                 code: 'AUTH_LOGOUT_FAILED'
             });
@@ -367,8 +400,14 @@ router.post('/logout-all',
         try {
             const { personId } = req.person;
             
-            // Revoke all user sessions
-            await AdvancedJWTService.revokeAllPersonSessions(personId);
+            // Revoca tutti i refresh token dell'utente
+            await JWTService.revokeAllPersonSessions(personId);
+
+            // Disattiva tutte le personSession
+            await prisma.personSession.updateMany({
+                where: { personId, isActive: true },
+                data: { isActive: false }
+            });
             
             // Log logout from all devices
             await GDPRService.logGDPRActivity({
@@ -391,7 +430,8 @@ router.post('/logout-all',
                 ip: req.ip
             });
             
-            res.json({
+            return res.json({
+                success: true,
                 message: 'Logged out from all devices successfully'
             });
             
@@ -404,64 +444,9 @@ router.post('/logout-all',
                 ip: req.ip
             });
             
-            res.status(500).json({
+            return res.status(500).json({
                 error: 'Logout from all devices failed',
                 code: 'AUTH_LOGOUT_ALL_FAILED'
-            });
-        }
-    }
-);
-
-/**
- * Get user sessions
- */
-router.get('/sessions',
-    authenticateAdvanced,
-    async (req, res) => {
-        try {
-            const { personId } = req.person;
-            
-            const sessions = await prisma.personSession.findMany({
-                where: {
-                    personId: personId,
-                    isActive: true,
-                    expiresAt: {
-                        gt: new Date()
-                    }
-                },
-                select: {
-                    id: true,
-                    deviceName: true,
-                    lastActivityAt: true,
-                    createdAt: true
-                },
-                orderBy: {
-                    lastActivityAt: 'desc'
-                }
-            });
-            
-            // Mark current session
-            const sessionsWithCurrent = sessions.map(session => ({
-                ...session,
-                isCurrent: session.id === req.person.sessionId
-            }));
-            
-            res.json({
-                sessions: sessionsWithCurrent,
-                total: sessions.length
-            });
-            
-        } catch (error) {
-            logger.error('Failed to get user sessions', {
-                component: 'auth-advanced',
-                action: 'getSessions',
-                error: error.message,
-                personId: req.person?.personId
-            });
-            
-            res.status(500).json({
-                error: 'Failed to get sessions',
-                code: 'AUTH_GET_SESSIONS_FAILED'
             });
         }
     }
@@ -492,8 +477,30 @@ router.delete('/sessions/:sessionId',
                 });
             }
             
-            // Revoke session
-            await AdvancedJWTService.revokeSession(sessionId);
+            // Revoke session (disattiva personSession)
+            await prisma.personSession.update({
+                where: { id: sessionId },
+                data: { isActive: false }
+            });
+
+            // Revoca i refresh token associati alla stessa sessionId (se presenti nel payload)
+            const activeTokens = await prisma.refreshToken.findMany({
+                where: {
+                    personId,
+                    revokedAt: null,
+                    expiresAt: { gt: new Date() }
+                },
+                select: { token: true }
+            });
+
+            for (const t of activeTokens) {
+                try {
+                    const dec = JWTService.verifyRefreshToken(t.token);
+                    if (dec?.sessionId === sessionId) {
+                        await JWTService.revokeSession(t.token);
+                    }
+                } catch (_) { /* ignore invalid tokens */ }
+            }
             
             // Log session revocation
             await GDPRService.logGDPRActivity({
@@ -527,84 +534,12 @@ router.delete('/sessions/:sessionId',
                 action: 'revokeSession',
                 error: error.message,
                 personId: req.person?.personId,
-                sessionId: req.params?.sessionId
+                ip: req.ip
             });
             
             res.status(500).json({
                 error: 'Failed to revoke session',
                 code: 'AUTH_REVOKE_SESSION_FAILED'
-            });
-        }
-    }
-);
-
-/**
- * Verify token endpoint
- */
-router.post('/verify',
-    authenticateAdvanced,
-    async (req, res) => {
-        try {
-            const { user } = req;
-            
-            res.json({
-                valid: true,
-                user: {
-                    id: user.id,
-                    email: user.email,
-                    firstName: user.firstName,
-                    lastName: user.lastName,
-                    companyId: user.companyId,
-                    roles: user.roles,
-                    permissions: user.permissions
-                },
-                session: {
-                    id: user.sessionId,
-                    lastActivity: new Date()
-                }
-            });
-            
-        } catch (error) {
-            logger.error('Token verification failed', {
-                component: 'auth-advanced',
-                action: 'verify',
-                error: error.message,
-                personId: req.person?.personId
-            });
-            
-            res.status(500).json({
-                error: 'Token verification failed',
-                code: 'AUTH_VERIFY_FAILED'
-            });
-        }
-    }
-);
-
-/**
- * Get user permissions
- */
-router.get('/permissions',
-    authenticateAdvanced,
-    async (req, res) => {
-        try {
-            const { permissions, roles } = req.person;
-            
-            res.json({
-                permissions,
-                roles
-            });
-            
-        } catch (error) {
-            logger.error('Failed to get user permissions', {
-                component: 'auth-advanced',
-                action: 'getPermissions',
-                error: error.message,
-                personId: req.person?.personId
-            });
-            
-            res.status(500).json({
-                error: 'Failed to get permissions',
-                code: 'AUTH_GET_PERMISSIONS_FAILED'
             });
         }
     }

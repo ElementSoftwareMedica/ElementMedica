@@ -13,6 +13,8 @@ interface TemplateCardProps {
   onEdit: (template: Template) => void;
   onSetAsDefault: (id: string, type: string) => void;
   onRemove: (id: string) => void;
+  onDuplicate?: (template: Template) => Promise<void>;
+  onViewVersions?: (template: Template) => void;
   openDropdownId: string | null;
   toggleDropdown: (id: string) => void;
   dropdownRefs: React.MutableRefObject<{[key: string]: React.RefObject<HTMLButtonElement>}>;
@@ -24,6 +26,8 @@ export const TemplateCard: React.FC<TemplateCardProps> = ({
   onEdit,
   onSetAsDefault,
   onRemove,
+  onDuplicate,
+  onViewVersions,
   openDropdownId,
   toggleDropdown,
   dropdownRefs,
@@ -71,6 +75,8 @@ export const TemplateCard: React.FC<TemplateCardProps> = ({
               onEditProperties={(template: Template) => onEdit(template)}
               onSetAsDefault={onSetAsDefault}
               onRemove={onRemove}
+              onDuplicate={onDuplicate}
+              onViewVersions={onViewVersions}
               buttonRef={dropdownRefs.current[template.id]}
             />
           </div>

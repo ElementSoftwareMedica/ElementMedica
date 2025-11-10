@@ -25,6 +25,8 @@ interface TemplateTypeCardProps {
   onEditTemplate: (template: Template) => void;
   onSetAsDefault: (templateId: string) => void;
   onRemoveTemplate: (templateId: string) => Promise<void>;
+  onDuplicateTemplate?: (template: Template) => Promise<void>;
+  onViewVersions?: (template: Template) => void;
   fetchTemplates: () => Promise<void>;
 }
 
@@ -41,6 +43,8 @@ export const TemplateTypeCard: React.FC<TemplateTypeCardProps> = ({
   onEditTemplate,
   onSetAsDefault,
   onRemoveTemplate,
+  onDuplicateTemplate,
+  onViewVersions,
   fetchTemplates
 }) => {
   const defaultTemplate = templates.find(t => t.isDefault);
@@ -95,10 +99,11 @@ export const TemplateTypeCard: React.FC<TemplateTypeCardProps> = ({
               onEdit={onEditTemplate}
               onSetAsDefault={onSetAsDefault}
               onRemove={onRemoveTemplate}
+              onDuplicate={onDuplicateTemplate}
+              onViewVersions={onViewVersions}
               openDropdownId={openDropdownId}
               toggleDropdown={onToggleDropdown}
               dropdownRefs={dropdownRefs}
-              fetchTemplates={fetchTemplates}
             />
           ) : (
             <div className="border rounded-xl p-3 bg-gray-50 border-gray-200 text-center">
@@ -125,10 +130,11 @@ export const TemplateTypeCard: React.FC<TemplateTypeCardProps> = ({
                   onEdit={onEditTemplate}
                   onSetAsDefault={onSetAsDefault}
                   onRemove={onRemoveTemplate}
+                  onDuplicate={onDuplicateTemplate}
+                  onViewVersions={onViewVersions}
                   openDropdownId={openDropdownId}
                   toggleDropdown={onToggleDropdown}
                   dropdownRefs={dropdownRefs}
-                  fetchTemplates={fetchTemplates}
                 />
               ))}
             </div>

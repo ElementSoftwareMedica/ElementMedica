@@ -4,6 +4,8 @@ import { createRoot } from 'react-dom/client'
 import App from './App.tsx'
 import { AppProviders } from './providers'
 import './index.css'
+import 'react-datepicker/dist/react-datepicker.css'
+import './styles/datepicker-custom.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

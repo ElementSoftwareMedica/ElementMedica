@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { GDPREntityTemplate } from '../../templates/gdpr-entity-page/GDPREntityTemplate';
 import { DataTableColumn } from '../../components/shared/tables/DataTable';
-import { Badge } from '../../design-system';
-import { Building2, MapPin, Phone, Mail, Globe } from 'lucide-react';
-import CompanyImport from '../../components/companies/CompanyImport';
-import { apiGet, apiPost } from '../../services/api';
+import { Badge, Modal, Select, Button } from '../../design-system';
+import { Building2, MapPin, Phone, Mail, Globe, AlertTriangle, Users, ArrowRight } from 'lucide-react';
+import CompanyImport from '../../components/companies/company-import/CompanyImportRefactored';
+import { apiGet, apiPost, apiDelete } from '../../services/api';
+import { getPersons, updatePerson, deleteMultiplePersons } from '../../services/persons';
 import { CompanyData } from '../../components/companies/company-import/types';
+import type { CompanySite } from '../../types';
 
 interface Company {
   id: string;
@@ -45,6 +47,8 @@ interface Company {
   taxCode?: string;
   website?: string;
   status?: 'Active' | 'Inactive' | 'Pending';
+  // Aggiunta: includi le sedi per il rilevamento duplicati nel modal import
+  sites?: CompanySite[];
 }
 
 // Configurazione colonne per la tabella
@@ -329,13 +333,35 @@ export const CompaniesPage: React.FC = () => {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [, setLoadingCompanies] = useState(false);
 
+  // Stati per migrazione persone e eliminazione azienda
+  const [showMigrateModal, setShowMigrateModal] = useState(false);
+  const [companyToDeleteId, setCompanyToDeleteId] = useState<string | null>(null);
+  const [linkedPersonsCount, setLinkedPersonsCount] = useState(0);
+  const [targetCompanyId, setTargetCompanyId] = useState('');
+  const [migrationLoading, setMigrationLoading] = useState(false);
+  const [deleteEmployeesWithoutMigration, setDeleteEmployeesWithoutMigration] = useState(false);
+
   // Carica i dati delle aziende per l'import
   const loadCompanies = async () => {
     try {
       setLoadingCompanies(true);
       const response = await apiGet('/api/v1/companies') as Company[];
       console.log('Aziende caricate per import:', response?.length || 0, response?.[0]); // Debug log
-      setCompanies(response || []);
+
+      // Prefetch delle sedi per ogni azienda, necessario per il rilevamento duplicati nel modal di import
+      const companiesWithSites = await Promise.all(
+        (response || []).map(async (company) => {
+          try {
+            const sitesResp = await apiGet(`/api/v1/company-sites/company/${company.id}`) as { sites: CompanySite[] };
+            return { ...company, sites: Array.isArray(sitesResp?.sites) ? sitesResp.sites : [] } as Company;
+          } catch (e) {
+            console.warn('Impossibile caricare le sedi per azienda', company.id, e);
+            return { ...company, sites: [] } as Company;
+          }
+        })
+      );
+
+      setCompanies(companiesWithSites);
     } catch (error) {
       console.error('Errore nel caricamento delle aziende:', error);
       setCompanies([]);
@@ -349,13 +375,127 @@ export const CompaniesPage: React.FC = () => {
     loadCompanies();
   }, []);
 
-  // Funzione per gestire l'import delle aziende
-  const handleImportEntities = async () => {
-    // Ricarica i dati delle aziende prima di aprire il modal
-    await loadCompanies();
-    
-    // Apri il modal di import
+  // Gestione eliminazione singola con verifica persone collegate e migrazione
+  const handleDeleteCompany = async (id: string) => {
+    try {
+      // Verifica quante persone sono collegate a questa azienda (conteggio rapido)
+      const resp = await getPersons({ companyId: Number(id), page: 1, limit: 1 });
+      const total = resp?.total ?? 0;
+      if (total > 0) {
+        // Mostra modal di migrazione
+        setCompanyToDeleteId(id);
+        setLinkedPersonsCount(total);
+        setTargetCompanyId('');
+        setShowMigrateModal(true);
+        return;
+      }
+      // Nessuna persona collegata: elimina direttamente
+      await apiDelete(`/api/v1/companies/${id}`);
+      await loadCompanies();
+    } catch (e) {
+      console.error('Errore nell\'eliminazione azienda:', e);
+      throw e;
+    }
+  };
+
+  // Esegue migrazione persone verso azienda target e poi elimina l'azienda origine
+  const performMigrationAndDelete = async () => {
+    if (!companyToDeleteId) return;
+    if (!deleteEmployeesWithoutMigration && !targetCompanyId) return; // Button è disabilitato comunque
+    setMigrationLoading(true);
+    try {
+      if (deleteEmployeesWithoutMigration) {
+        // Elimina i dipendenti collegati senza migrazione
+        const pageSize = 100;
+        let page = 1;
+        let processed = 0;
+        let total = linkedPersonsCount;
+        const deletions: Array<Promise<unknown>> = [];
+
+        while (processed < total || page === 1) {
+          const resp = await getPersons({ companyId: Number(companyToDeleteId), page, limit: pageSize });
+          const persons = resp?.persons || [];
+          total = resp?.total ?? persons.length;
+          if (persons.length === 0) break;
+          
+          // Elimina persone in chunks per evitare sovraccarico
+          const chunks: typeof persons[] = [];
+          for (let i = 0; i < persons.length; i += 10) {
+            chunks.push(persons.slice(i, i + 10));
+          }
+          for (const chunk of chunks) {
+            deletions.push(
+              deleteMultiplePersons(chunk.map(p => p.id))
+            );
+          }
+          processed += persons.length;
+          page += 1;
+        }
+
+        // Attendi completamento eliminazioni
+        for (const batch of deletions) {
+          await batch;
+        }
+      } else {
+        // Migra i dipendenti verso l'azienda target
+        const pageSize = 100;
+        let page = 1;
+        let processed = 0;
+        let total = linkedPersonsCount;
+        const updates: Array<Promise<unknown>> = [];
+
+        while (processed < total || page === 1) {
+          const resp = await getPersons({ companyId: Number(companyToDeleteId), page, limit: pageSize });
+          const persons = resp?.persons || [];
+          total = resp?.total ?? persons.length;
+          if (persons.length === 0) break;
+          // Aggiorna companyId per ciascuna persona (limita la concorrenza a 5 per evitare sovraccarico)
+          const chunks: typeof persons[] = [];
+          for (let i = 0; i < persons.length; i += 5) {
+            chunks.push(persons.slice(i, i + 5));
+          }
+          for (const chunk of chunks) {
+            updates.push(
+              Promise.all(
+                chunk.map((p) => updatePerson(p.id, { companyId: Number(targetCompanyId) }))
+              )
+            );
+          }
+          processed += persons.length;
+          page += 1;
+        }
+
+        // Attendi completamento aggiornamenti
+        for (const batch of updates) {
+          await batch;
+        }
+      }
+
+      // Elimina ora l'azienda origine
+      await apiDelete(`/api/v1/companies/${companyToDeleteId}`);
+
+      // Pulizia stato e refresh elenco aziende
+      setShowMigrateModal(false);
+      setCompanyToDeleteId(null);
+      setTargetCompanyId('');
+      setDeleteEmployeesWithoutMigration(false);
+      await loadCompanies();
+    } catch (e) {
+      console.error('Errore nella migrazione/eliminazione azienda:', e);
+      // Lascia il modal aperto per permettere retry o cambio target
+      throw e;
+    } finally {
+      setMigrationLoading(false);
+    }
+  };
+
+   // Funzione per gestire l'import delle aziende
+   const handleImportEntities = async () => {
+    // Apri subito il modal per evitare ritardi percepiti
     setShowImportModal(true);
+    
+    // Aggiorna i dati in background senza bloccare l'UI
+    loadCompanies().catch(console.error);
   };
 
   // Funzione per gestire la creazione di una nuova azienda
@@ -364,7 +504,7 @@ export const CompaniesPage: React.FC = () => {
     window.location.href = '/companies/create';
   };
 
-  const handleImportCompanies = async (importedCompanies: CompanyData[], overwriteIds?: string[]) => {
+  const handleImportCompanies = async (importedCompanies: CompanyData[], overwriteIds?: string[]): Promise<import('../../components/companies/company-import/types').ImportResults> => {
     try {
       // Invia i dati al backend
       const response = await apiPost('/api/v1/companies/import', {
@@ -378,8 +518,11 @@ export const CompaniesPage: React.FC = () => {
       // Ricarica i dati delle aziende per aggiornare la lista
       await loadCompanies();
       
-      // Chiudi il modal
-      setShowImportModal(false);
+      // Chiudi il modal (la chiusura ora è gestita dal componente figlio in base ai conteggi)
+      // setShowImportModal(false);
+
+      // Ritorna la risposta per permettere il conteggio nel figlio
+      return response as import('../../components/companies/company-import/types').ImportResults;
     } catch (error) {
       console.error('Errore durante l\'import:', error);
       throw error; // Rilancia l'errore per permettere al modal di gestirlo
@@ -428,18 +571,214 @@ export const CompaniesPage: React.FC = () => {
         defaultViewMode="table"
         onCreateEntity={handleCreateCompany}
         onImportEntities={handleImportEntities}
-      />
-      
-      {showImportModal && (
-        <CompanyImport
-          onImport={handleImportCompanies}
-          onClose={() => setShowImportModal(false)}
-          existingCompanies={companies}
-        />
-      )}
-    </>
-  );
-};
+        onDeleteEntity={handleDeleteCompany}
+       />
+ 
 
-// Export default per compatibilità
-export default CompaniesPage;
+      {/* Modal migrazione persone prima dell'eliminazione azienda */}
+      <Modal
+        open={showMigrateModal}
+        onClose={() => {
+          if (migrationLoading) return;
+          setShowMigrateModal(false);
+          setCompanyToDeleteId(null);
+          setTargetCompanyId('');
+          setDeleteEmployeesWithoutMigration(false);
+        }}
+        title="Gestione dipendenti prima dell'eliminazione"
+        variant="centered"
+        size="lg"
+        className="rounded-xl" // Angoli uniformemente arrotondati
+        contentClassName="rounded-xl" // Anche il contenuto interno
+        footer={
+          <>
+            <Button 
+              variant="ghost" 
+              onClick={() => {
+                if (migrationLoading) return;
+                setShowMigrateModal(false);
+                setCompanyToDeleteId(null);
+                setTargetCompanyId('');
+                setDeleteEmployeesWithoutMigration(false);
+              }} 
+              disabled={migrationLoading}
+            >
+              Annulla
+            </Button>
+            <Button
+              variant="primary"
+              onClick={performMigrationAndDelete}
+              loading={migrationLoading}
+              disabled={migrationLoading || (!deleteEmployeesWithoutMigration && (!targetCompanyId || companies.filter(c => c.id !== companyToDeleteId).length === 0))}
+            >
+              {deleteEmployeesWithoutMigration ? 'Elimina dipendenti e azienda' : 'Migra dipendenti ed elimina azienda'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-6">
+          {/* Avviso importante */}
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+            <div className="flex">
+              <AlertTriangle className="h-5 w-5 text-amber-500 mt-0.5 mr-3 flex-shrink-0" />
+              <div>
+                <h4 className="text-sm font-medium text-amber-800 mb-1">
+                  Raccomandazione importante
+                </h4>
+                <p className="text-sm text-amber-700">
+                  Si consiglia vivamente di <strong>migrare i dipendenti</strong> verso un'altra azienda invece di eliminarli definitivamente. 
+                  La migrazione preserva lo storico e i dati dei dipendenti mantenendo la conformità GDPR.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Informazioni sui dipendenti */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex items-center gap-3">
+              <Users className="h-5 w-5 text-blue-600" />
+              <div>
+                <p className="text-sm font-medium text-blue-900">
+                  Dipendenti trovati: <span className="font-bold">{linkedPersonsCount}</span>
+                </p>
+                <p className="text-xs text-blue-700">
+                  Questi dipendenti sono attualmente collegati all'azienda che stai per eliminare.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Opzioni di gestione */}
+          <div className="space-y-4">
+            <h4 className="text-sm font-medium text-gray-900">Scegli come gestire i dipendenti:</h4>
+            
+            {/* Opzione 1: Migrazione (raccomandato) */}
+            <div className="space-y-3">
+              <label className="flex items-start space-x-3">
+                <input
+                  type="radio"
+                  name="migrationOption"
+                  checked={!deleteEmployeesWithoutMigration}
+                  onChange={() => setDeleteEmployeesWithoutMigration(false)}
+                  className="mt-0.5 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-gray-900">
+                      Migra verso un'altra azienda
+                    </span>
+                    <Badge variant="secondary" className="text-xs">Raccomandato</Badge>
+                  </div>
+                  <p className="text-xs text-gray-600 mt-1">
+                    I dipendenti saranno trasferiti all'azienda selezionata mantenendo tutti i loro dati.
+                  </p>
+                </div>
+              </label>
+
+              {!deleteEmployeesWithoutMigration && (
+                <div className="ml-7 space-y-3">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Seleziona azienda di destinazione
+                  </label>
+                  
+                  {/* Tabella aziende disponibili */}
+                  {companies.filter(c => c.id !== companyToDeleteId).length > 0 ? (
+                    <div className="border border-gray-200 rounded-lg overflow-hidden">
+                      <div className="bg-gray-50 px-4 py-2 border-b border-gray-200">
+                        <h5 className="text-xs font-medium text-gray-700 uppercase tracking-wide">
+                          Aziende disponibili per la migrazione
+                        </h5>
+                      </div>
+                      <div className="max-h-40 overflow-y-auto">
+                        {companies
+                          .filter(c => c.id !== companyToDeleteId)
+                          .map(company => (
+                            <label
+                              key={company.id}
+                              className={`flex items-center p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0 ${
+                                targetCompanyId === company.id ? 'bg-blue-50 border-blue-200' : ''
+                              }`}
+                            >
+                              <input
+                                type="radio"
+                                name="targetCompany"
+                                value={company.id}
+                                checked={targetCompanyId === company.id}
+                                onChange={(e) => setTargetCompanyId(e.target.value)}
+                                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 mr-3"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between">
+                                  <p className="text-sm font-medium text-gray-900 truncate">
+                                    {company.ragioneSociale || company.slug || company.domain || `Azienda ${company.id}`}
+                                  </p>
+                                  {targetCompanyId === company.id && (
+                                    <ArrowRight className="h-4 w-4 text-blue-600 ml-2 flex-shrink-0" />
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-4 mt-1">
+                                  {company.citta && (
+                                    <p className="text-xs text-gray-500">📍 {company.citta}</p>
+                                  )}
+                                  {company.mail && (
+                                    <p className="text-xs text-gray-500">✉️ {company.mail}</p>
+                                  )}
+                                </div>
+                              </div>
+                            </label>
+                          ))
+                        }
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="border border-red-200 bg-red-50 rounded-lg p-4">
+                      <p className="text-sm text-red-800">
+                        ❌ Non ci sono altre aziende disponibili per la migrazione. 
+                        Crea prima un'altra azienda o scegli di eliminare i dipendenti.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Opzione 2: Eliminazione (sconsigliato) */}
+            <div className="space-y-3">
+              <label className="flex items-start space-x-3">
+                <input
+                  type="radio"
+                  name="migrationOption"
+                  checked={deleteEmployeesWithoutMigration}
+                  onChange={() => setDeleteEmployeesWithoutMigration(true)}
+                  className="mt-0.5 h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300"
+                />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-gray-900">
+                      Elimina definitivamente i dipendenti
+                    </span>
+                    <Badge variant="destructive" className="text-xs">Sconsigliato</Badge>
+                  </div>
+                  <p className="text-xs text-gray-600 mt-1">
+                    ⚠️ I dipendenti e tutti i loro dati saranno eliminati permanentemente. Questa azione non è reversibile.
+                  </p>
+                </div>
+              </label>
+            </div>
+          </div>
+        </div>
+      </Modal>
+
+       {showImportModal && (
+         <CompanyImport
+           onImport={handleImportCompanies}
+           onClose={() => setShowImportModal(false)}
+           existingCompanies={companies as unknown as CompanyData[]}
+         />
+       )}
+     </>
+   );
+ };
+
+ // Export default per compatibilità
+ export default CompaniesPage;

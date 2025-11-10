@@ -11,8 +11,10 @@ import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import RsppPage from './pages/public/RsppPage';
 import MedicinaDelLavoroPage from './pages/public/MedicinaDelLavoroPage';
 
+// Import sincronocon percorso senza estensione (best practice TypeScript)
+import Dashboard from './pages/Dashboard';
 // Lazy-loaded page components
-import DashboardLazy from './pages/Dashboard/Dashboard.lazy';
+// import DashboardLazy from './pages/Dashboard/Dashboard.lazy';
 import CompaniesPageLazy from './pages/companies/CompaniesPage.lazy';
 import CompanyDetails from './pages/companies/CompanyDetails';
 import CompanyEdit from './pages/companies/CompanyEdit';
@@ -27,10 +29,19 @@ import EmployeeDetails from './pages/employees/EmployeeDetails';
 import EmployeeEdit from './pages/employees/EmployeeEdit';
 import EmployeeCreate from './pages/employees/EmployeeCreate';
 import TrainersPageNewLazy from './pages/trainers/TrainersPageNew.lazy';
+import TrainerDetails from './pages/trainers/TrainerDetails';
+import TrainerEdit from './pages/trainers/TrainerEdit';
 import SchedulesPageLazy from './pages/schedules/SchedulesPage.lazy';
+import ScheduleDetails from './pages/schedules/ScheduleDetails';
+import TemplateListPageLazy from './pages/templates/TemplateListPage.lazy';
+import TemplateEditorLazy from './pages/templates/TemplateEditor.lazy';
+import { DocumentListPage as DocumentListPageLazy } from './pages/documents/DocumentListPage.lazy';
+import { BatchMonitoringPage as BatchMonitoringPageLazy } from './pages/documents/BatchMonitoringPage.lazy';
 import { SettingsLazy } from './pages/settings/Settings.lazy';
 import TenantsPageLazy from './pages/tenants/TenantsPage.lazy';
 import QuotesAndInvoicesLazy from './pages/QuotesAndInvoices.lazy';
+import CodiciScontoPageLazy from './pages/finance/CodiciScontoPage.lazy';
+import PreventiviPageLazy from './pages/finance/PreventiviPage.lazy';
 import DocumentsCorsiLazy from './pages/DocumentsCorsi.lazy';
 import GDPRDashboardLazy from './pages/GDPRDashboard.lazy';
 import AdminGDPRLazy from './pages/AdminGDPR.lazy';
@@ -38,6 +49,7 @@ import UnifiedFormsPageLazy from './pages/forms/UnifiedFormsPage.lazy';
 import { FormTemplateCreateLazy } from './pages/forms/FormTemplateCreate.lazy';
 import { FormTemplateEditLazy } from './pages/forms/FormTemplateEdit.lazy';
 import { FormTemplateViewLazy } from './pages/forms/FormTemplateView.lazy';
+import GoogleOAuthCallback from './pages/settings/templates/GoogleOAuthCallback';
 
 // Public pages
 import HomePage from './pages/public/HomePage';
@@ -62,7 +74,8 @@ function App() {
     });
     
     // Preload high-priority routes on app start
-    routePreloader.preloadByPriority('high');
+    // TEMPORANEAMENTE DISABILITATO PER FIX VITE
+    // routePreloader.preloadByPriority('high');
     
     return () => {
       performanceMonitor.endRouteTracking(location.pathname);
@@ -71,13 +84,14 @@ function App() {
 
   useEffect(() => {
     // Preload medium-priority routes after initial load
-    const timer = setTimeout(() => {
-      startTransition(() => {
-        routePreloader.preloadByPriority('medium');
-      });
-    }, 2000);
+    // TEMPORANEAMENTE DISABILITATO PER FIX VITE
+    // const timer = setTimeout(() => {
+    //   startTransition(() => {
+    //     routePreloader.preloadByPriority('medium');
+    //   });
+    // }, 2000);
 
-    return () => clearTimeout(timer);
+    // return () => clearTimeout(timer);
   }, []);
 
   return (
@@ -100,13 +114,15 @@ function App() {
         <Route path="/termini" element={<TerminiPage />} />
       {/* Rotta pubblica per il login */}
       <Route path="/login" element={<LoginPage />} />
+      {/* Rotta di auto-login in dev */}
+            {/* DevLogin rimosso: nessuna rotta di bypass */}
       
       {/* Rotte protette - Area Riservata */}
        <Route element={<ProtectedRoute />}>
          <Route path="/dashboard" element={<ProtectedRoute resource="dashboard" action="read" />}>
            <Route index element={
              <Layout>
-               <DashboardLazy />
+               <Dashboard />
              </Layout>
            } />
          </Route>
@@ -230,10 +246,84 @@ function App() {
               <TrainersPageNewLazy />
             </Layout>
           } />
+          <Route path="create" element={
+            <ProtectedRoute resource="trainers" action="create" />
+          }>
+            <Route index element={
+              <Layout>
+                <TrainerEdit />
+              </Layout>
+            } />
+          </Route>
+          <Route path="new" element={
+            <ProtectedRoute resource="trainers" action="create" />
+          }>
+            <Route index element={
+              <Layout>
+                <TrainerEdit />
+              </Layout>
+            } />
+          </Route>
+          <Route path=":id" element={
+            <Layout>
+              <TrainerDetails />
+            </Layout>
+          } />
+          <Route path=":id/edit" element={
+            <Layout>
+              <TrainerEdit />
+            </Layout>
+          } />
         </Route>
-        <Route path="/schedules" element={
+        <Route path="/schedules">
+          <Route index element={
+            <Layout>
+              <SchedulesPageLazy />
+            </Layout>
+          } />
+          <Route path=":id" element={
+            <Layout>
+              <ScheduleDetails />
+            </Layout>
+          } />
+        </Route>
+        <Route path="/templates">
+          <Route index element={
+            <Layout>
+              <TemplateListPageLazy />
+            </Layout>
+          } />
+          <Route path="create" element={
+            <Layout>
+              <TemplateEditorLazy />
+            </Layout>
+          } />
+          <Route path=":id" element={
+            <Layout>
+              <TemplateEditorLazy />
+            </Layout>
+          } />
+        </Route>
+        <Route path="/documents">
+          <Route index element={
+            <Layout>
+              <DocumentListPageLazy />
+            </Layout>
+          } />
+          <Route path="batches" element={
+            <Layout>
+              <BatchMonitoringPageLazy />
+            </Layout>
+          } />
+        </Route>
+        <Route path="/settings/templates/google-callback" element={
+          <GoogleOAuthCallback />
+        } />
+        <Route path="/settings/templates/:id/edit" element={
           <Layout>
-            <SchedulesPageLazy />
+            <Suspense fallback={<div className="flex justify-center items-center h-screen"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div></div>}>
+              {React.createElement(React.lazy(() => import('./pages/settings/TemplateEditor')))}
+            </Suspense>
           </Layout>
         } />
         <Route path="/settings/*" element={
@@ -249,6 +339,16 @@ function App() {
         <Route path="/quotes-and-invoices" element={
           <Layout>
             <QuotesAndInvoicesLazy />
+          </Layout>
+        } />
+        <Route path="/admin/finance/codici-sconto" element={
+          <Layout>
+            <CodiciScontoPageLazy />
+          </Layout>
+        } />
+        <Route path="/admin/finance/preventivi" element={
+          <Layout>
+            <PreventiviPageLazy />
           </Layout>
         } />
         <Route path="/documents-corsi" element={

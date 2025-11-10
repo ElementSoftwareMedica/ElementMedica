@@ -725,3 +725,22 @@ Per proporre miglioramenti:
 ---
 
 *Per ulteriore assistenza, contatta il supporto tecnico o consulta la documentazione online.*
+
+### Importazione Corsi da CSV (con pre-check duplicati)
+
+1. Vai in "📚 Gestione Corsi" → "📥 Importa da CSV"
+2. Scarica il template CSV, compila i campi obbligatori e salva in UTF-8
+3. Carica il file: vedrai l'anteprima con validazioni di base
+4. Conferma l'importazione: il sistema esegue un pre-check sui duplicati del campo code (normalizzato)
+
+Cosa succede durante l'import:
+- I corsi nuovi vengono creati normalmente
+- I corsi con code duplicato vengono automaticamente saltati (nessuna sovrascrittura)
+- Viene mostrato un toast riepilogativo con: totale inviati, validi, creati, saltati, duplicati rilevati (in CSV e già presenti in DB)
+
+Suggerimenti per evitare duplicati:
+- Uniforma il campo code: niente spazi iniziali/finali, usa solo lettere/numeri e trattini
+- Evita differenze solo di maiuscole/minuscole (il confronto è case-insensitive)
+- Se vedi duplicati nel riepilogo, correggi il CSV e riesegui l'import
+
+Nota GDPR: non inserire dati personali non necessari nei campi del corso e verifica sempre la correttezza prima dell'import.

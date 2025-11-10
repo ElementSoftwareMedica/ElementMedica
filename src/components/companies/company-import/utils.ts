@@ -150,31 +150,38 @@ export const formatCompanyData = (company: CompanyImportData): CompanyImportData
 // Funzione per rilevare conflitti e duplicati
 export const detectConflicts = (companies: CompanyImportData[], existingCompanies: CompanyImportData[] = []): CompanyImportData[] => {
   return companies.map((company) => {
-    const conflictInfo = { ...company };
+    const conflictInfo = { ...company } as CompanyImportData & { _isExisting?: boolean; _existingId?: string; _isDuplicateSite?: boolean; _isNewSite?: boolean; _isNewCompanyWithSite?: boolean };
     
-    // Cerca aziende esistenti con stesso P.IVA o Codice Fiscale
-    const existingCompany = existingCompanies.find(existing => 
-      (company.piva && existing.vatNumber === company.piva) ||
-      (company.codiceFiscale && existing.taxCode === company.codiceFiscale)
-    );
+    // Cerca aziende esistenti con stessa P.IVA o Codice Fiscale (supporta sia chiavi italiane che alias inglesi)
+    const existingCompany = existingCompanies.find((existing: any) =>
+      (company.piva && (existing.piva === company.piva || existing.vatNumber === company.piva)) ||
+      (company.codiceFiscale && (existing.codiceFiscale === company.codiceFiscale || existing.taxCode === company.codiceFiscale))
+    ) as any;
     
     if (existingCompany) {
       conflictInfo._isExisting = true;
-      conflictInfo._existingId = existingCompany.id;
+      conflictInfo._existingId = existingCompany.id as string;
       
-      // Verifica se è una nuova sede per un'azienda esistente
-      if (company.siteName || company.siteIndirizzo) {
-        // Assumiamo che existingCompany possa avere sites come array di oggetti
-        const sites = (existingCompany as unknown as { sites?: Array<{ name?: string; address?: string }> }).sites;
-        const existingSite = sites?.find((site) => 
-          site.name === company.siteName || 
-          site.address === company.siteIndirizzo
-        );
-        
-        if (existingSite) {
-          conflictInfo._isDuplicateSite = true;
+      // Verifica se è una nuova sede per un'azienda esistente (solo match su siteName)
+      if ((company.siteName || company.siteIndirizzo)) {
+        if (Array.isArray((existingCompany as any).sites)) {
+          const sites = (existingCompany as any).sites as Array<{ name?: string; address?: string; siteName?: string; siteIndirizzo?: string; indirizzo?: string }>
+          const normalize = (v: unknown): string | undefined => (typeof v === 'string' ? v.trim().toLowerCase() : undefined)
+          const companySiteName = normalize(company.siteName)
+          const existingSite = sites?.find((site) =>
+            normalize(site.name) === companySiteName ||
+            normalize(site.siteName) === companySiteName
+          )
+          
+          if (companySiteName && existingSite) {
+            conflictInfo._isDuplicateSite = true
+          } else {
+            // Se non c'è match sul nome sede, trattiamo come nuova sede
+            conflictInfo._isNewSite = true
+          }
         } else {
-          conflictInfo._isNewSite = true;
+          // Nessuna lista siti disponibile: se arrivano dati sede, trattala come nuova sede
+          conflictInfo._isNewSite = true
         }
       }
     } else if (company.siteName || company.siteIndirizzo) {
@@ -185,54 +192,56 @@ export const detectConflicts = (companies: CompanyImportData[], existingCompanie
   });
 };
 
-// Funzione per convertire i dati per l'API
+// Funzione per convertire i dati per l'API (allineata ai campi attesi dal backend)
 export const convertToApiFormat = (company: CompanyImportData): Record<string, unknown> => {
-  return {
-    name: company.ragioneSociale,
-    atecoCode: company.codiceAteco,
-    vatNumber: company.piva,
-    taxCode: company.codiceFiscale,
+  const payload: Record<string, unknown> = {
+    // Campi Company
+    ragioneSociale: company.ragioneSociale,
+    codiceAteco: company.codiceAteco,
+    piva: company.piva,
+    codiceFiscale: company.codiceFiscale,
     sdi: company.sdi,
     pec: company.pec,
     iban: company.iban,
-    address: company.sedeAzienda,
-    city: company.citta,
-    province: company.provincia,
-    postalCode: company.cap,
-    email: company.mail,
-    phone: company.telefono,
-    contactPerson: company.personaRiferimento,
-    notes: company.note,
+    note: company.note,
     slug: company.slug,
     domain: company.domain,
     settings: company.settings,
     subscriptionPlan: company.subscriptionPlan,
     isActive: company.isActive,
-    // Dati della sede se presenti
-    ...(company.siteName ? {
-      sites: [{
-        name: company.siteName,
-        address: company.siteIndirizzo,
-        city: company.siteCitta,
-        province: company.siteProvincia,
-        postalCode: company.siteCap,
-        contactPerson: company.sitePersonaRiferimento,
-        phone: company.siteTelefono,
-        email: company.siteMail,
-        dvr: company.dvr,
-        rsppId: company.rsppId,
-        medicoCompetenteId: company.medicoCompetenteId,
-        ultimoSopralluogo: company.ultimoSopralluogo,
-        prossimoSopralluogo: company.prossimoSopralluogo,
-        valutazioneSopralluogo: company.valutazioneSopralluogo,
-        sopralluogoEseguitoDa: company.sopralluogoEseguitoDa,
-        ultimoSopralluogoRSPP: company.ultimoSopralluogoRSPP,
-        prossimoSopralluogoRSPP: company.prossimoSopralluogoRSPP,
-        noteSopralluogoRSPP: company.noteSopralluogoRSPP,
-        ultimoSopralluogoMedico: company.ultimoSopralluogoMedico,
-        prossimoSopralluogoMedico: company.prossimoSopralluogoMedico,
-        noteSopralluogoMedico: company.noteSopralluogoMedico
-      }]
-    } : {})
   };
+
+  // Campi CompanySite se presenti
+  const hasSite = !!(
+    company.siteName || company.siteIndirizzo || company.siteCitta || company.siteProvincia || company.siteCap ||
+    company.sitePersonaRiferimento || company.siteTelefono || company.siteMail
+  );
+
+  if (hasSite) {
+    payload.siteName = company.siteName || company.siteCitta; // fallback: usa città come nome sede
+    payload.siteIndirizzo = company.siteIndirizzo as string | undefined;
+    payload.siteCitta = company.siteCitta as string | undefined;
+    payload.siteProvincia = company.siteProvincia as string | undefined;
+    payload.siteCap = company.siteCap as string | undefined;
+    payload.sitePersonaRiferimento = (company.sitePersonaRiferimento || company.personaRiferimento) as string | undefined;
+    payload.siteTelefono = (company.siteTelefono || company.telefono) as string | undefined;
+    payload.siteMail = (company.siteMail || company.mail) as string | undefined;
+
+    // Campi extra sede (safety: pass-through)
+    payload.dvr = company.dvr;
+    payload.rsppId = company.rsppId;
+    payload.medicoCompetenteId = company.medicoCompetenteId;
+    payload.ultimoSopralluogo = company.ultimoSopralluogo;
+    payload.prossimoSopralluogo = company.prossimoSopralluogo;
+    payload.valutazioneSopralluogo = company.valutazioneSopralluogo;
+    payload.sopralluogoEseguitoDa = company.sopralluogoEseguitoDa;
+    payload.ultimoSopralluogoRSPP = company.ultimoSopralluogoRSPP;
+    payload.prossimoSopralluogoRSPP = company.prossimoSopralluogoRSPP;
+    payload.noteSopralluogoRSPP = company.noteSopralluogoRSPP;
+    payload.ultimoSopralluogoMedico = company.ultimoSopralluogoMedico;
+    payload.prossimoSopralluogoMedico = company.prossimoSopralluogoMedico;
+    payload.noteSopralluogoMedico = company.noteSopralluogoMedico;
+  }
+
+  return payload;
 };

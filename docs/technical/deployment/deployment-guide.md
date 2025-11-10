@@ -89,6 +89,7 @@ REDIS_URL="redis://localhost:6379"
 # JWT
 JWT_SECRET="your-super-secret-jwt-key-for-development"
 JWT_REFRESH_SECRET="your-super-secret-refresh-key-for-development"
+# Nota: l'API Server richiede entrambi i secret; il Proxy non firma token e non necessita JWT_SECRET/JWT_REFRESH_SECRET.
 JWT_EXPIRES_IN="1h"
 JWT_REFRESH_EXPIRES_IN="7d"
 
@@ -96,10 +97,10 @@ JWT_REFRESH_EXPIRES_IN="7d"
 MAIN_SERVER_PORT=4001
 API_SERVER_PORT=4001
 DOCS_SERVER_PORT=4002
-PROXY_SERVER_PORT=8888
+PROXY_SERVER_PORT=4003
 
 # Frontend
-VITE_API_URL="http://localhost:8888"
+VITE_API_URL="http://localhost:4003"
 VITE_APP_NAME="Document Management System"
 
 # File Upload
@@ -146,10 +147,9 @@ npm run storybook       # Porta 6006
 
 ```bash
 # Test connettività
-curl http://localhost:3001/health
 curl http://localhost:4001/health
 curl http://localhost:4002/health
-curl http://localhost:8888/api/health
+curl http://localhost:4003/api/health
 
 # Test frontend
 open http://localhost:5173
@@ -233,9 +233,9 @@ services:
     container_name: proxy_staging
     environment:
       - NODE_ENV=staging
-      - PORT=8888
+      - PORT=4003
     ports:
-      - "8888:8888"
+      - "4003:4003"
     depends_on:
       - api
       - docs
@@ -385,7 +385,7 @@ http {
     }
     
     upstream proxy_backend {
-        server proxy:8888;
+        server proxy:4003;
     }
     
     # HTTP to HTTPS redirect
@@ -522,7 +522,7 @@ ssh $STAGING_USER@$STAGING_HOST << EOF
   
   # Health check
   sleep 30
-  curl -f http://localhost:8888/api/health || exit 1
+  curl -f http://localhost:4003/api/health || exit 1
 EOF
 
 echo "✅ Staging deployment completed!"
@@ -620,9 +620,9 @@ services:
     container_name: proxy_prod
     environment:
       - NODE_ENV=production
-      - PORT=8888
+      - PORT=4003
     ports:
-      - "8888:8888"
+      - "4003:4003"
     depends_on:
       - api
       - docs

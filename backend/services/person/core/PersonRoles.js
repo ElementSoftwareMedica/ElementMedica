@@ -19,21 +19,37 @@ class PersonRoles {
       // Mappa il ruolo se necessario
       const mappedRoleType = PersonRoleMapping.mapRoleType(roleType);
 
-      // Verifica se il ruolo esiste già
-      const existingRole = await prisma.personRole.findFirst({
+      // Verifica se esiste già QUALSIASI ruolo con la stessa combinazione (attivo o meno)
+      const existingAny = await prisma.personRole.findFirst({
         where: {
           personId,
           roleType: mappedRoleType,
           companyId,
-          tenantId,
-          isActive: true
+          tenantId
         }
       });
-      
-      if (existingRole) {
-        throw new Error('Role already exists for this person');
+
+      if (existingAny) {
+        // Se già attivo, blocca l'operazione
+        if (existingAny.isActive) {
+          throw new Error('Role already exists for this person');
+        }
+        // Se esiste ma non è attivo, riattivalo invece di crearne uno nuovo (evita violazione unique)
+        return await prisma.personRole.update({
+          where: { id: existingAny.id },
+          data: {
+            isActive: true,
+            updatedAt: new Date()
+          },
+          include: {
+            person: true,
+            company: true,
+            tenant: true
+          }
+        });
       }
-      
+
+      // Altrimenti crea nuovo ruolo
       return await prisma.personRole.create({
         data: {
           personId,

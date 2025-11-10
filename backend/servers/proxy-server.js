@@ -76,11 +76,20 @@ async function initializeServer() {
     });
     
     // Inizializza sistema di autenticazione (legacy)
-    await initializeAuth();
-    logger.info('Authentication system initialized', { 
-      service: 'proxy-server', 
-      port: config.server.port 
-    });
+    const shouldInitAuth = process.env.PROXY_INIT_AUTH === 'true';
+    if (shouldInitAuth) {
+      await initializeAuth();
+      logger.info('Authentication system initialized', { 
+        service: 'proxy-server', 
+        port: config.server.port 
+      });
+    } else {
+      logger.info('Skipping auth initialization in proxy', {
+        service: 'proxy-server',
+        reason: 'PROXY_INIT_AUTH=false',
+        port: config.server.port
+      });
+    }
     
     // 🚀 NUOVO: Inizializza Sistema Routing Avanzato
     console.log('🚀 Initializing Advanced Routing System...');
@@ -173,8 +182,10 @@ async function initializeServer() {
     // Setup graceful shutdown
     setupGracefulShutdown({
       onShutdown: async () => {
-        console.log('🔄 Shutting down authentication system...');
-        await shutdownAuth();
+        if (process.env.PROXY_INIT_AUTH === 'true') {
+          console.log('🔄 Shutting down authentication system...');
+          await shutdownAuth();
+        }
         
         console.log('🔄 Stopping load balancer...');
         loadBalancer.stopHealthChecks();

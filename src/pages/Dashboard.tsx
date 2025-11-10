@@ -21,9 +21,12 @@ import {
 import { dummyData } from '../data/dummyData';
 import StatCard from '../components/dashboard/StatCard';
 import ScheduleCalendar, { ScheduleEvent } from '../components/dashboard/ScheduleCalendar';
-import ScheduleEventModalLazy from '../components/schedules/ScheduleEventModal.lazy';
+import ScheduleEventModal from '../components/schedules/ScheduleEventModal';
 import { useNavigate } from 'react-router-dom';
-import { apiGet} from '../services/api';
+import { apiGet, apiPost } from '../services/api';
+import { getTrainers } from '../services/trainers';
+import { getCompanies } from '../services/companies';
+import { getPersons } from '../services/persons';
 import { getToken } from '../services/auth';
 import { Company, Employee, Course } from '../types';
 import { checkConsent as checkGdprConsent, logGdprAction, ConsentRequiredError } from '../utils/gdpr';
@@ -201,23 +204,45 @@ const Dashboard: React.FC = () => {
 
   // Optimized data fetching with GDPR compliance
   const fetchData = useCallback(async () => {
-    if (fetchingRef.current || !mountedRef.current) return;
+    console.log('[Dashboard] 🔧 fetchData() called', { 
+      fetchingRef: fetchingRef.current, 
+      mountedRef: mountedRef.current,
+      timestamp: new Date().toISOString()
+    });
+    
+    // ✅ FIX CRITICO: Rimuovi check mountedRef che causa false-positive con React Strict Mode
+    if (fetchingRef.current) {
+      console.warn('[Dashboard] ⚠️ fetchData() early return: already fetching', { 
+        fetchingRef: fetchingRef.current,
+        timestamp: new Date().toISOString()
+      });
+      return;
+    }
     
     fetchingRef.current = true;
+    console.log('[Dashboard] 🔄 Setting isLoading = true');
     setIsLoading(true);
     setError(null);
     
     const timer = startTimer();
     
+    // ✅ FIX CRITICO: Wrap TUTTO in try-finally per garantire cleanup
+    
     try {
       // Check GDPR consent first
+      console.log('[Dashboard] 🔐 Checking GDPR consent...');
       const hasConsent = await checkDashboardConsent();
+      console.log('[Dashboard] 🔐 GDPR consent result:', hasConsent);
       
       if (!hasConsent) {
         // Use fallback data without API calls
+        console.log('[Dashboard] ⚠️ No GDPR consent, loading fallback data');
         await loadFallbackData();
+        console.log('[Dashboard] ✅ Fallback loaded, returning from fetchData');
         return;
       }
+      
+      console.log('[Dashboard] ✅ GDPR consent granted, proceeding with API calls');
       
       // Check permissions - permetti accesso se ha dashboard:read, companies:read o è admin
       const hasDashboardAccess = hasPermission && (
@@ -227,7 +252,10 @@ const Dashboard: React.FC = () => {
         hasPermission('administration', 'view')
       );
       
+      console.log('[Dashboard] 🔑 Dashboard access check:', hasDashboardAccess);
+      
       if (!hasDashboardAccess) {
+        console.error('[Dashboard] ❌ Insufficient permissions for dashboard');
         throw new Error('Permessi insufficienti per accedere al dashboard');
       }
       
@@ -248,46 +276,138 @@ const Dashboard: React.FC = () => {
         });
       }
       
-      // Fetch data using optimized API calls (removed non-existing dashboard endpoints)
-      const [coursesData, trainersData, schedulesData] = await Promise.allSettled([
-        apiGet('/courses').catch(err => {
-          console.warn('Failed to fetch courses:', err);
-          return [];
-        }),
-        apiGet('/trainers').catch(err => {
+      // Fetch data using optimized API calls (added companies and persons)
+      // FIX: Usa getCourses() service importato staticamente per garantire trasformazione
+      console.log('[Dashboard] 🔍 STARTING data fetch...');
+      const [coursesData, trainersData, schedulesData, companiesData] = await Promise.allSettled([
+        (async () => {
+          console.log('[Dashboard] 🚀 Calling getCourses()...');
+          try {
+            const { getCourses } = await import('../services/courses');
+            console.log('[Dashboard] ✅ Import successful, executing getCourses()');
+            const result = await getCourses();
+            console.log('[Dashboard] ✅ getCourses() returned:', result?.length, 'courses', result?.[0]);
+            return result;
+          } catch (err) {
+            console.error('[Dashboard] ❌ getCourses() FAILED:', err);
+            return [];
+          }
+        })(),
+        (async () => {
+          console.log('[Dashboard] 🚀 Calling getTrainers()...');
+          const result = await getTrainers();
+          console.log('[Dashboard] ✅ getTrainers() returned:', result?.length, 'trainers');
+          
+          // 🔍 DEBUG: Verifica certificazioni ricevute
+          if (result && result.length > 0) {
+            console.log('[Dashboard] 🔍 Sample trainer:', {
+              id: result[0].id,
+              name: `${result[0].firstName} ${result[0].lastName}`,
+              certifications: result[0].certifications,
+              hasCertsField: 'certifications' in result[0]
+            });
+          }
+          
+          return result;
+        })().catch(err => {
           console.warn('Failed to fetch trainers:', err);
           return [];
         }),
-        apiGet('/api/v1/schedules').catch(err => {
+        (async () => {
+          console.log('[Dashboard] 🚀 Calling apiGet(/schedules)...');
+          const result = await apiGet('/api/v1/schedules');
+          console.log('[Dashboard] ✅ apiGet(/schedules) returned:', result?.length, 'schedules');
+          return result;
+        })().catch(err => {
           console.warn('Failed to fetch schedules:', err);
           return [];
+        }),
+        (async () => {
+          console.log('[Dashboard] 🚀 Calling getCompanies()...');
+          const result = await getCompanies();
+          console.log('[Dashboard] ✅ getCompanies() returned:', result?.length, 'companies');
+          return result;
+        })().catch(err => {
+          console.warn('Failed to fetch companies:', err);
+          return [];
         })
+        // ✅ OTTIMIZZAZIONE CRITICA: Non caricare persons all'apertura Dashboard
+        // Vengono caricati lazy dalla modale quando necessario
+        // Questo mantiene il caricamento Dashboard veloce (<2s invece di 10s+)
       ]);
       
-      // Process results with safety checks
-      const courses = coursesData.status === 'fulfilled' ? (Array.isArray(coursesData.value) ? coursesData.value : []) : [];
-      const trainers = trainersData.status === 'fulfilled' ? (Array.isArray(trainersData.value) ? trainersData.value : []) : [];
-      const schedules = schedulesData.status === 'fulfilled' ? (Array.isArray(schedulesData.value) ? schedulesData.value : []) : [];
+      console.log('[Dashboard] ✅ ALL Promise.allSettled COMPLETED');
       
-      // Use empty arrays for companies and employees since we get counts from /api/counters
-      const companies: DashboardCompany[] = [];
-      const employees: DashboardEmployee[] = [];
+      // Process results with safety checks
+      console.log('[Dashboard] 🔍 Promise.allSettled status:', {
+        courses: coursesData.status,
+        trainers: trainersData.status,
+        schedules: schedulesData.status,
+        companies: companiesData.status
+      });
+      
+      console.log('[Dashboard] 📦 Step 1: Extracting courses...');
+      let courses: any[] = [];
+      try {
+        courses = coursesData.status === 'fulfilled' ? (Array.isArray(coursesData.value) ? coursesData.value : []) : [];
+        console.log('[Dashboard] ✅ Step 1 complete: Extracted', courses.length, 'courses');
+      } catch (err) {
+        console.error('[Dashboard] ❌ Error extracting courses:', err);
+        courses = [];
+      }
+      
+      console.log('[Dashboard] 📦 Step 2: Extracting trainers, schedules, companies, persons...');
+      const trainers = trainersData.status === 'fulfilled' ? (Array.isArray(trainersData.value) ? trainersData.value : []) : [];
+      console.log('[Dashboard] ✅ Trainers extracted:', trainers.length);
+      
+      const schedules = schedulesData.status === 'fulfilled' ? (Array.isArray(schedulesData.value) ? schedulesData.value : []) : [];
+      console.log('[Dashboard] ✅ Schedules extracted:', schedules.length);
+      
+      const rawCompanies = companiesData.status === 'fulfilled' ? (Array.isArray(companiesData.value) ? companiesData.value : []) : [];
+      console.log('[Dashboard] ✅ Raw companies extracted:', rawCompanies.length);
+      
+      // ✅ Persons NON caricati - verranno caricati lazy dalla modale
+      const rawPersons: any[] = [];
+      console.log('[Dashboard] ℹ️ Persons: lazy loading (will be loaded by modal)');
+      
+      console.log('[Dashboard] 📦 Step 3: Transforming companies...');
+      // Map companies to DashboardCompany ensuring ragioneSociale compatibility
+      const companies: DashboardCompany[] = rawCompanies.map((c: any) => ({
+        id: String(c.id),
+        name: c.name || c.ragioneSociale || '',
+        ragioneSociale: c.ragioneSociale || c.name || '',
+        sector: c.sector || c.industry || '',
+      }));
+      console.log('[Dashboard] ✅ Companies transformed:', companies.length);
+      
+      console.log('[Dashboard] 📦 Step 4: Transforming persons to employees...');
+      // Map persons to DashboardEmployee shape
+      const employees: DashboardEmployee[] = rawPersons.map((p: any) => ({
+        id: String(p.id),
+        firstName: p.firstName ?? p.first_name ?? '',
+        lastName: p.lastName ?? p.last_name ?? '',
+        email: p.email ?? '',
+        companyId: (p.companyId ?? p.company_id ?? p.company?.id) ? String(p.companyId ?? p.company_id ?? p.company?.id) : undefined,
+      }));
+      console.log('[Dashboard] ✅ Employees transformed:', employees.length);
       
       // DEBUG: Log dettagliato dei risultati
       console.log('🔍 [DEBUG] API Results Details:');
-      console.log('📊 Courses:', { status: coursesData.status, length: courses.length, data: courses });
-      console.log('👨‍🏫 Trainers:', { status: trainersData.status, length: trainers.length, data: trainers });
-      console.log('🏢 Companies:', { length: companies.length, data: companies, note: 'Using empty array - counts from /api/counters' });
-      console.log('👥 Employees:', { length: employees.length, data: employees, note: 'Using empty array - counts from /api/counters' });
-      console.log('📅 Schedules:', { status: schedulesData.status, length: schedules.length, data: schedules });
+      console.log('📊 Courses:', { status: coursesData.status, length: courses.length, sample: courses[0] });
+      console.log('👨‍🏫 Trainers:', { status: trainersData.status, length: trainers.length, sample: trainers[0] });
+      console.log('🏢 Companies:', { status: companiesData.status, length: companies.length, sample: companies[0] });
+      console.log('👥 Persons/Employees:', { lazy: true, length: employees.length });
+      console.log('📅 Schedules:', { status: schedulesData.status, length: schedules.length, sample: schedules[0] });
       
       // DEBUG: Log errori se presenti
       if (coursesData.status === 'rejected') console.error('❌ Courses error:', coursesData.reason);
       if (trainersData.status === 'rejected') console.error('❌ Trainers error:', trainersData.reason);
       if (schedulesData.status === 'rejected') console.error('❌ Schedules error:', schedulesData.reason);
+      if (companiesData.status === 'rejected') console.error('❌ Companies error:', companiesData.reason);
       
-      // Transform trainers data for compatibility
-      const transformedTrainers = trainers.map((trainer: DashboardTrainer) => ({
+      // Transform trainers data for compatibility - ✅ MANTIENI certifications e specialties
+      const transformedTrainers = trainers.map((trainer: any) => ({
+        ...trainer, // ✅ Mantieni TUTTI i campi inclusi certifications e specialties
         id: trainer.id,
         firstName: trainer.firstName || '',
         lastName: trainer.lastName || ''
@@ -303,26 +423,46 @@ const Dashboard: React.FC = () => {
         ragioneSociale: company.ragioneSociale || company.name || ''
       }));
       
-      // Update state only if component is still mounted
-      if (mountedRef.current) {
-        setCoursesList(courses);
-        setTrainersList(transformedTrainers);
-        setCompaniesList(companiesWithCounts);
-        setEmployeesList(employees);
-        setSchedulesData(schedules);
-        setDataSource('api');
-        
-        // Counters are now handled exclusively by fetchCounters() using /api/counters
-        console.log('✅ Counters managed by /api/counters endpoint:', counters);
-        
-        console.log('✅ Dashboard data loaded successfully:', {
-          courses: courses.length,
-          trainers: transformedTrainers.length,
-          companies: companiesWithCounts.length,
-          employees: employees.length,
-          schedules: schedules.length
+      // ✅ FIX CRITICO: Rimuovi guard mountedRef - React Strict Mode causa false positives
+      // setState è safe anche se componente viene rimontato, React gestisce automaticamente
+      
+      // DEBUG CRITICO: Log RAW courses PRIMA di salvare nello state
+      if (process.env.NODE_ENV === 'development' && courses.length > 0) {
+        const sample = courses[0];
+        console.debug('[Dashboard] RAW courses from getCourses():', {
+          totalCourses: courses.length,
+          sampleCourse: sample,
+          sampleKeys: Object.keys(sample),
+          hasRiskLevel_camel: !!sample.riskLevel,
+          hasRiskLevel_snake: !!(sample as any).risk_level,
+          hasCourseType_camel: !!sample.courseType,
+          hasCourseType_snake: !!(sample as any).course_type,
+          riskLevelValue: sample.riskLevel,
+          risk_levelValue: (sample as any).risk_level,
+          courseTypeValue: sample.courseType,
+          course_typeValue: (sample as any).course_type
         });
       }
+      
+      console.log('[Dashboard] 💾 Updating state with fetched data...');
+      setCoursesList(courses);
+      setTrainersList(transformedTrainers);
+      setCompaniesList(companiesWithCounts);
+      setEmployeesList(employees);
+      setSchedulesData(schedules);
+      setDataSource('api');
+      
+      // Counters are now handled exclusively by fetchCounters() using /api/counters
+      console.log('✅ Counters managed by /api/counters endpoint:', counters);
+      
+      console.log('✅ Dashboard data loaded successfully:', {
+        courses: courses.length,
+        trainers: transformedTrainers.length,
+        companies: companiesWithCounts.length,
+        employees: employees.length,
+        schedules: schedules.length,
+        mountedRef: mountedRef.current
+      });
       
       // Log successful data fetch
       await logGdprAction({
@@ -347,28 +487,46 @@ const Dashboard: React.FC = () => {
       
       const errorMessage = error instanceof Error ? error.message : 'Errore di connessione al server';
       
-      // Log error
-      await logGdprAction({
-        action: 'DASHBOARD_DATA_ERROR',
-        timestamp: new Date().toISOString(),
-        tenantId: tenant?.id,
-        error: errorMessage,
-        metadata: {
-          duration: timer(),
-          errorType: error instanceof Error ? error.constructor.name : 'UnknownError'
-        }
-      });
+      // ✅ FIX: Log error in modo non-bloccante
+      try {
+        await logGdprAction({
+          action: 'DASHBOARD_DATA_ERROR',
+          timestamp: new Date().toISOString(),
+          tenantId: tenant?.id,
+          error: errorMessage,
+          metadata: {
+            duration: timer(),
+            errorType: error instanceof Error ? error.constructor.name : 'UnknownError'
+          }
+        });
+      } catch (logError) {
+        console.warn('[Dashboard] GDPR error log failed (non-blocking):', logError);
+      }
       
-      if (mountedRef.current) {
-        setError(errorMessage);
-        // Load fallback data on error
-        await loadFallbackData();
-      }
+      // ✅ FIX: Rimuovi guard mountedRef anche qui
+      setError(errorMessage);
+      // Load fallback data on error
+      await loadFallbackData();
     } finally {
+      console.log('[Dashboard] 🏁 Finally block executing', { 
+        fetchingRef: fetchingRef.current, 
+        mountedRef: mountedRef.current,
+        timestamp: new Date().toISOString()
+      });
       fetchingRef.current = false;
+      
+      // ✅ FIX CRITICO: Rimuovi guard mountedRef per setIsLoading
+      // React Strict Mode causa mountedRef=false durante remount, ma isLoading DEVE essere aggiornato
+      console.log('[Dashboard] 🔄 Setting isLoading = false (unconditionally)');
+      setIsLoading(false);
+      
+      // Mantieni guard per altri setState per sicurezza
       if (mountedRef.current) {
-        setIsLoading(false);
+        console.log('[Dashboard] ✅ Component mounted, state updates safe');
+      } else {
+        console.warn('[Dashboard] ⚠️ Component unmounted during fetch (React Strict Mode remount)');
       }
+      console.log('[Dashboard] ✅ fetchData() COMPLETED');
     }
   }, [tenant?.id, hasPermission, checkDashboardConsent]);
   
@@ -394,42 +552,59 @@ const Dashboard: React.FC = () => {
         sector: c.sector || ''
       }));
       
-      if (mountedRef.current) {
-        setCoursesList(dummyDataTyped.courses || []);
-        setTrainersList(transformedTrainers);
-        setCompaniesList(transformedCompanies);
-        setEmployeesList(dummyDataTyped.employees || []);
-        setSchedulesData(dummyDataTyped.schedules || []);
-        setDataSource('fallback');
-        // Set fallback counters
-        setCounters({
-          companies: transformedCompanies.length,
-          employees: (dummyDataTyped.employees || []).length
-        });
-      }
-      
-      await logGdprAction({
-        action: 'DASHBOARD_FALLBACK_DATA_LOADED',
-        timestamp: new Date().toISOString(),
-        tenantId: tenant?.id,
-        metadata: {
-          reason: gdprConsent ? 'API error' : 'Missing GDPR consent'
-        }
+      // ✅ FIX: Rimuovi guard mountedRef
+      setCoursesList(dummyDataTyped.courses || []);
+      setTrainersList(transformedTrainers);
+      setCompaniesList(transformedCompanies);
+      setEmployeesList(dummyDataTyped.employees || []);
+      setSchedulesData(dummyDataTyped.schedules || []);
+      setDataSource('fallback');
+      // Set fallback counters
+      setCounters({
+        companies: transformedCompanies.length,
+        employees: (dummyDataTyped.employees || []).length
       });
+      
+      // ✅ FIX: Non bloccare fallback load se GDPR log fallisce
+      try {
+        await logGdprAction({
+          action: 'DASHBOARD_FALLBACK_DATA_LOADED',
+          timestamp: new Date().toISOString(),
+          tenantId: tenant?.id,
+          metadata: {
+            reason: gdprConsent ? 'API error' : 'Missing GDPR consent'
+          }
+        });
+      } catch (logError) {
+        console.warn('[Dashboard] GDPR log failed (non-blocking):', logError);
+      }
       
     } catch (error) {
       console.error('Failed to load fallback data:', error);
+    } finally {
+      // ✅ FIX: Setta isLoading = false anche per fallback data
+      console.log('[Dashboard] ✅ Fallback data loaded, setting isLoading = false');
+      setIsLoading(false);
     }
   }, [tenant?.id, gdprConsent]);
   
-  // Initial data load
+  // Initial data load - FIXED: Rimosso [fetchData] per evitare loop infinito
   useEffect(() => {
+    console.log('[Dashboard] 🎬 Mount useEffect triggered', {
+      mountedRef: mountedRef.current,
+      tenantId: tenant?.id || 'not available',
+      timestamp: new Date().toISOString()
+    });
+    
     // Load data even without tenant for testing - tenant is only used for GDPR logging
     if (mountedRef.current) {
-      console.log('🚀 Dashboard: Loading data (tenant:', tenant?.id || 'not available', ')');
+      console.log('[Dashboard] 🚀 Calling fetchData() from mount useEffect');
       fetchData();
+    } else {
+      console.warn('[Dashboard] ⚠️ mountedRef is false, skipping fetchData()');
     }
-  }, [fetchData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // ✅ Empty deps: carica SOLO al mount, come SchedulesPage
   
   // Log when tenant becomes available
   useEffect(() => {
@@ -592,7 +767,7 @@ const Dashboard: React.FC = () => {
         }
       });
       
-      const result = await apiPost('/schedules', data);
+      const result = await apiPost('/api/v1/schedules', data);
       
       await logGdprAction({
         action: 'SCHEDULE_CREATE_SUCCESS',
@@ -686,6 +861,7 @@ const Dashboard: React.FC = () => {
           icon={<Building2 className="h-7 w-7 text-blue-500" />} 
           trend=""
           trendDirection="up"
+          to="/companies"
         />
         <StatCard 
           title="Totale Dipendenti" 
@@ -693,6 +869,7 @@ const Dashboard: React.FC = () => {
           icon={<Users className="h-7 w-7 text-green-500" />} 
           trend=""
           trendDirection="up"
+          to="/employees"
         />
         <StatCard 
           title="Corsi Programmati Futuri" 
@@ -713,6 +890,7 @@ const Dashboard: React.FC = () => {
           icon={<GraduationCap className="h-7 w-7 text-amber-500" />} 
           trend=""
           trendDirection="up"
+          to="/schedules"
         />
         <StatCard 
           title="Corsi in Scadenza" 
@@ -720,6 +898,7 @@ const Dashboard: React.FC = () => {
           icon={<Calendar className="h-7 w-7 text-red-500" />} 
           trend=""
           trendDirection="up"
+          to="/courses"
         />
       </div>
 
@@ -752,6 +931,33 @@ const Dashboard: React.FC = () => {
           }
         }}
         onSelectSlot={(slotInfo) => {
+          // ✅ FIX CRITICO: Blocca apertura se dati non pronti
+          if (isLoading || coursesList.length === 0) {
+            if (process.env.NODE_ENV === 'development') {
+              console.warn('[Dashboard] Cannot open modal: data still loading', {
+                isLoading,
+                coursesAvailable: coursesList.length,
+                companiesAvailable: companiesList.length,
+                employeesAvailable: employeesList.length
+              });
+            }
+            // Mostra messaggio user-friendly
+            const message = isLoading 
+              ? 'Caricamento dati in corso, attendi qualche secondo...'
+              : 'Nessun corso disponibile. Verifica la connessione o ricarica la pagina.';
+            alert(message);
+            return;
+          }
+          
+          if (process.env.NODE_ENV === 'development') {
+            console.debug('[Dashboard] Opening modal with data:', {
+              coursesAvailable: coursesList.length,
+              companiesAvailable: companiesList.length,
+              employeesAvailable: employeesList.length,
+              sampleCourse: coursesList[0]
+            });
+          }
+          
           const start = slotInfo.start;
           const end = slotInfo.end;
           const isAllDay = start.getHours() === 0 && start.getMinutes() === 0 && end.getHours() === 0 && end.getMinutes() === 0;
@@ -862,13 +1068,22 @@ const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {showForm && (
-        <ScheduleEventModalLazy
-          trainings={coursesList.map((c: any) => ({ ...c, title: c.title || c.name }))}
-          trainers={trainersList}
-          companies={companiesList}
-          employees={employeesList}
-          existingEvent={undefined}
+      {showForm && (() => {
+        console.debug('[Dashboard] Rendering ScheduleEventModal with:', {
+          coursesList: coursesList.length,
+          trainersList: trainersList.length,
+          companiesList: companiesList.length,
+          employeesList: employeesList.length,
+          sampleEmployee: employeesList[0]
+        });
+        return (
+          <ScheduleEventModal
+            key={selectedSlot ? `${selectedSlot.start.toISOString()}_${selectedSlot.end.toISOString()}` : 'new-schedule-dashboard'}
+            trainings={coursesList as any[]}
+            trainers={trainersList}
+            companies={companiesList}
+            persons={employeesList}
+            existingEvent={undefined}
           initialDate={
             selectedSlot
               ? selectedSlot.start.getFullYear() +
@@ -893,10 +1108,12 @@ const Dashboard: React.FC = () => {
           onSuccess={() => {
             setShowForm(false);
             setSelectedSlot(null);
-            // Optionally refresh calendar data here
+            // Refresh calendar data to show the new course
+            fetchData();
           }}
         />
-      )}
+        );
+      })()}
     </div>
   );
 };

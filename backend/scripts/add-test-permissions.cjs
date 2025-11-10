@@ -34,12 +34,22 @@ async function addPermissions() {
       
       // Add permissions
       const permissionsToAdd = [
+        // Template permissions
+        'VIEW_TEMPLATES',
+        'CREATE_TEMPLATES',
+        'EDIT_TEMPLATES',
+        'DELETE_TEMPLATES',
+        'MANAGE_TEMPLATES',
+        // Document permissions
         'VIEW_DOCUMENTS',
         'CREATE_DOCUMENTS',
         'EDIT_DOCUMENTS',
         'DELETE_DOCUMENTS',
+        // Admin permissions
         'ADMIN_PANEL',
         'SYSTEM_SETTINGS',
+        'USER_MANAGEMENT',
+        'ROLE_MANAGEMENT',
       ];
       
       for (const perm of permissionsToAdd) {

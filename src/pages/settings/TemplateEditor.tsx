@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { apiGet, apiPost, apiPut } from '../../services/api';
 import { ChevronLeft, Save, Download, Layout, Image, Eye, FileEdit } from 'lucide-react';
 import { Button } from '../../design-system/atoms/Button';
 import { PlaceholderDemo, GoogleTemplateProvider, GoogleDocsPreview } from '../../components/shared/template';
 import PageHeader from '../../components/layouts/PageHeader';
+import TipTapEditor from '../../components/editor/TipTapEditor';
+import PlaceholderPanel from './templates/components/PlaceholderPanel';
 
 // Template interface
 interface Template {
@@ -59,27 +61,34 @@ const TemplateEditor: React.FC = () => {
   const [previewContent, setPreviewContent] = useState<string>('');
   const [editingName, setEditingName] = useState(false);
   const [templateType, setTemplateType] = useState<string>('');
-  const templateFormat = new URLSearchParams(location.search).get('format') || 'text';
+  const templateFormat = new URLSearchParams(location.search).get('format') || 'HTML';
+  
+  // Refs for TipTap editors
+  const headerEditorRef = useRef<any>(null);
+  const contentEditorRef = useRef<any>(null);
+  const footerEditorRef = useRef<any>(null);
   
   // Template types available for selection
   const templateTypes = [
-    { value: 'lettera_incarico', label: 'Lettera di Incarico' },
-    { value: 'attestati', label: 'Attestati' },
-    { value: 'fattura', label: 'Fattura' },
-    { value: 'programma_corso', label: 'Programma Corso' },
-    { value: 'registro_presenze', label: 'Registro Presenze' },
+    { value: 'LETTER_OF_ENGAGEMENT', label: 'Lettera di Incarico' },
+    { value: 'CERTIFICATE', label: 'Attestato' },
+    { value: 'ATTENDANCE_REGISTER', label: 'Registro Presenze' },
+    { value: 'INVOICE', label: 'Fattura' },
+    { value: 'COURSE_PROGRAM', label: 'Programma Corso' },
+    { value: 'CUSTOM', label: 'Personalizzato' },
   ];
 
   // Load template based on ID from URL params
   useEffect(() => {
     const fetchTemplate = async () => {
-      const initialType = new URLSearchParams(location.search).get('type') || 'lettera_incarico';
+      const initialType = new URLSearchParams(location.search).get('type') || 'CERTIFICATE';
       setTemplateType(initialType);
       
       if (id) {
         try {
           console.log('Fetching template with ID:', id);
-          const templateData = await apiGet<Template>(`/template-links/${id}`);
+          const response = await apiGet<any>(`/api/v1/templates/${id}`);
+          const templateData = response?.data;
           
           if (!templateData) {
             throw new Error(`Template with ID ${id} not found`);
@@ -181,30 +190,14 @@ const TemplateEditor: React.FC = () => {
       console.log('Saving template data:', templateData);
       
       // Save template (create or update)
+      // Backend now handles automatically unsetting other default templates
       if (id) {
-        await apiPut(`/template-links/${id}`, templateData);
+        await apiPut(`/api/v1/templates/${id}`, templateData);
         console.log(`Template with ID ${id} updated`);
       } else {
-        const newTemplate = await apiPost<Template>('/template-links', templateData);
+        const response = await apiPost<any>('/api/v1/templates', templateData);
+        const newTemplate = response?.data;
         console.log('New template created:', newTemplate);
-        
-        // If this template is set as default, update other templates of the same type
-        if (isDefault) {
-          const allTemplates = await apiGet<Template[]>('/template-links');
-          const templatesOfSameType = allTemplates.filter(
-            (t: Template) => t.type === templateType && t.id !== (newTemplate.id || id)
-          );
-          
-          // Update other templates to not be default
-          for (const template of templatesOfSameType) {
-            if (template.isDefault) {
-              await apiPut(`/template-links/${template.id}`, {
-                ...template,
-                isDefault: false
-              });
-            }
-          }
-        }
       }
       
       // Navigate back to templates list
@@ -235,49 +228,71 @@ const TemplateEditor: React.FC = () => {
 
   // Render template editor
   return (
-    <div className="container mx-auto py-8">
-      <PageHeader 
-        title="Editor Template" 
-        subtitle="Crea e modifica template"
-        viewMode="table" 
-        onViewModeChange={() => {}}
-        selectionMode={false}
-        onToggleSelectionMode={() => {}}
-        searchValue=""
-        onSearchChange={() => {}}
-        description="Crea e modifica template per documenti con supporto per placeholder"
-      />
-      
-      {/* Template type selector */}
-      <div className="mt-6">
-        <label className="block text-sm font-medium text-gray-700 mb-2">Tipo di Template</label>
-        <select
-          value={templateType}
-          onChange={(e) => setTemplateType(e.target.value)}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-        >
-          {templateTypes.map((type) => (
-            <option key={type.value} value={type.value}>{type.label}</option>
-          ))}
-        </select>
-      </div>
-      
-      {/* Template name */}
-      <div className="mt-6">
-        <label className="block text-sm font-medium text-gray-700 mb-2">Nome Template</label>
-        <input
-          type="text"
-          value={templateName}
-          onChange={(e) => setTemplateName(e.target.value)}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-        />
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
+      <div className="container mx-auto px-4 py-8 max-w-7xl">
+        {/* Header with back button */}
+        <div className="mb-8">
+          <button
+            onClick={() => navigate('/settings/templates')}
+            className="inline-flex items-center gap-2 text-slate-600 hover:text-slate-900 mb-4 transition-colors"
+          >
+            <ChevronLeft className="w-5 h-5" />
+            <span className="font-medium">Torna ai Template</span>
+          </button>
+          
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+            <h1 className="text-3xl font-bold text-slate-900 mb-2">
+              {template?.name || 'Nuovo Template'}
+            </h1>
+            <p className="text-slate-600">
+              Crea e modifica template per documenti con supporto per placeholder dinamici
+            </p>
+          </div>
+        </div>
+        
+        {/* Template configuration card */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-6">
+          <h2 className="text-lg font-semibold text-slate-900 mb-4">Configurazione Template</h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Nome Template */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Nome Template
+              </label>
+              <input
+                type="text"
+                value={templateName}
+                onChange={(e) => setTemplateName(e.target.value)}
+                className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                placeholder="Es. Attestato di Formazione"
+              />
+            </div>
+            
+            {/* Tipo Template */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Tipo di Template
+              </label>
+              <select
+                value={templateType}
+                onChange={(e) => setTemplateType(e.target.value)}
+                className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+              >
+                {templateTypes.map((type) => (
+                  <option key={type.value} value={type.value}>{type.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
       
       {/* Google Docs integration */}
-      <div className="mt-8">
-        <h2 className="text-lg font-semibold mb-4">Integrazione Google Docs/Slides</h2>
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-6">
+        <h2 className="text-lg font-semibold text-slate-900 mb-4">Integrazione Google Docs/Slides</h2>
         <GoogleTemplateProvider 
-          documentType={templateType} 
+          documentType={templateType}
+          initialTemplateUrl={googleDocsUrl}
           onTemplateSelected={(url, id) => {
             setGoogleDocsUrl(url);
             console.log(`Template selezionato: ${id}`);
@@ -304,59 +319,118 @@ const TemplateEditor: React.FC = () => {
         </div>
       )}
       
-      {/* Placeholder demo */}
-      <div className="mt-8">
-        <h2 className="text-lg font-semibold mb-4">Anteprima Placeholder</h2>
-        <PlaceholderDemo 
-          documentType={templateType}
-          initialContent={template?.content || ''}
-          previewData={{
-            NOME: "Mario",
-            COGNOME: "Rossi",
-            NOME_COMPLETO: "Mario Rossi",
-          }}
-        />
+      {/* Layout a 2 colonne: Editor + Placeholder Selector - visible only for HTML templates */}
+      {!googleDocsUrl && (
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* WYSIWYG Editor - 2/3 dello spazio */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Header Section */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+            <h2 className="text-lg font-semibold text-slate-900 mb-4">Intestazione (Header)</h2>
+            <TipTapEditor
+              content={header}
+              onChange={setHeader}
+              placeholder="Intestazione del documento (apparirà in tutte le pagine)..."
+              editorRef={headerEditorRef}
+              minHeight="150px"
+            />
+            <p className="mt-2 text-sm text-slate-600">
+              L'intestazione apparirà nella parte superiore di ogni pagina. Puoi inserire logo, titoli, informazioni aziendali.
+            </p>
+          </div>
+
+          {/* Content Section */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+            <h2 className="text-lg font-semibold text-slate-900 mb-4">Contenuto Template</h2>
+            <TipTapEditor
+              content={content}
+              onChange={setContent}
+              placeholder="Inizia a scrivere il contenuto del template..."
+              editorRef={contentEditorRef}
+              minHeight="500px"
+            />
+            <p className="mt-2 text-sm text-slate-600">
+              Contenuto principale del documento. Seleziona i segnaposto dalla lista a destra per inserirli.
+            </p>
+          </div>
+
+          {/* Footer Section */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+            <h2 className="text-lg font-semibold text-slate-900 mb-4">Piè di pagina (Footer)</h2>
+            <TipTapEditor
+              content={footer}
+              onChange={setFooter}
+              placeholder="Piè di pagina del documento (apparirà in tutte le pagine)..."
+              editorRef={footerEditorRef}
+              minHeight="150px"
+            />
+            <p className="mt-2 text-sm text-slate-600">
+              Il piè di pagina apparirà nella parte inferiore di ogni pagina. Puoi inserire contatti, note legali, numeri di pagina.
+            </p>
+          </div>
+        </div>
+
+        {/* Placeholder Selector - 1/3 dello spazio */}
+        <div className="lg:col-span-1">
+          <div className="sticky top-4">
+            <PlaceholderPanel
+              onInsert={(placeholder: string) => {
+                // Insert at cursor position in the active editor
+                // Default to content editor if none is focused
+                const activeEditor = contentEditorRef.current || headerEditorRef.current || footerEditorRef.current;
+                if (activeEditor) {
+                  activeEditor.chain().focus().insertContent(placeholder).run();
+                }
+              }}
+            />
+          </div>
+        </div>
       </div>
+      )}
       
       {/* Default template toggle */}
-      <div className="mt-6">
-        <div className="flex items-center">
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mt-6">
+        <div className="flex items-start gap-3">
           <input
             type="checkbox"
             id="isDefault"
             checked={isDefault}
             onChange={(e) => setIsDefault(e.target.checked)}
-            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            className="mt-1 h-5 w-5 rounded border-slate-300 text-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
           />
-          <label htmlFor="isDefault" className="ml-2 block text-sm text-gray-700">
-            Imposta come template predefinito per {templateType.replace('_', ' ')}
-          </label>
+          <div className="flex-1">
+            <label htmlFor="isDefault" className="block text-sm font-medium text-slate-900 cursor-pointer">
+              Imposta come template predefinito
+            </label>
+            <p className="mt-1 text-sm text-slate-600">
+              Questo template verrà utilizzato automaticamente per i documenti di tipo "{templateTypes.find(t => t.value === templateType)?.label}"
+            </p>
+          </div>
         </div>
-        <p className="mt-1 text-xs text-gray-500">
-          Se selezionato, questo template verrà utilizzato come predefinito per questo tipo di documento
-        </p>
       </div>
       
       {/* Save/Cancel buttons */}
-      <div className="mt-8 flex gap-4 justify-end">
+      <div className="mt-8 flex gap-3 justify-end pb-8">
         <Button 
           variant="outline" 
           onClick={() => navigate('/settings/templates')}
+          className="px-6"
         >
-          <ChevronLeft className="mr-1 h-4 w-4" /> Annulla
+          <ChevronLeft className="mr-2 h-4 w-4" /> Annulla
         </Button>
         <Button 
           onClick={handleSave} 
           disabled={saving}
+          className="px-6 bg-blue-600 hover:bg-blue-700"
         >
           {saving ? (
             <span className="flex items-center">
-              <span className="animate-spin h-4 w-4 border-2 border-b-0 border-r-0 rounded-full mr-2" />
-              Salvataggio...
+              <span className="animate-spin h-4 w-4 border-2 border-white/30 border-t-white rounded-full mr-2" />
+              Salvataggio in corso...
             </span>
           ) : (
             <>
-              <Save className="mr-1 h-4 w-4" /> Salva Template
+              <Save className="mr-2 h-4 w-4" /> Salva Template
             </>
           )}
         </Button>
@@ -378,6 +452,7 @@ const TemplateEditor: React.FC = () => {
           Il sistema sostituirà automaticamente i placeholder nel formato {'{{NOME_PLACEHOLDER}}'} con i valori effettivi.
           Per funzionare correttamente, assicurati che le credenziali Google API siano configurate nel backend.
         </p>
+      </div>
       </div>
     </div>
   );

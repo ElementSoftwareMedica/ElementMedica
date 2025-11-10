@@ -35,9 +35,6 @@ export class EmployeesService {
   static async getEmployees(filters: EmployeesFilters = {}): Promise<Employee[]> {
     const params = new URLSearchParams();
     
-    // Forza il roleType a EMPLOYEE
-    params.append('roleType', 'EMPLOYEE');
-    
     // Imposta ordinamento di default per nome
     const sortBy = filters.sortBy || 'firstName';
     const sortOrder = filters.sortOrder || 'asc';
@@ -45,7 +42,8 @@ export class EmployeesService {
     params.append('sortBy', sortBy);
     params.append('sortOrder', sortOrder);
     
-    if (filters.isActive !== undefined) params.append('isActive', filters.isActive.toString());
+    // Default esplicito: mostra solo attivi salvo override
+    params.set('isActive', typeof filters.isActive === 'boolean' ? String(filters.isActive) : 'true');
     if (filters.companyId) params.append('companyId', filters.companyId.toString());
     if (filters.search) params.append('search', filters.search);
     if (filters.page) params.append('page', filters.page.toString());
@@ -54,10 +52,14 @@ export class EmployeesService {
     if (filters.position) params.append('position', filters.position);
     if (filters.status) params.append('status', filters.status);
     
-    const response = await apiGet<PersonsResponse>(`/persons?${params.toString()}`);
+    // Usa endpoint unificato persons con filtro roleType=EMPLOYEE
+    const resp = await apiGet<any>(`/api/v1/persons?roleType=EMPLOYEE&${params.toString()}`);
+    const persons: Person[] = Array.isArray(resp?.data)
+      ? resp.data
+      : (Array.isArray(resp?.persons) ? resp.persons : (Array.isArray(resp) ? resp : []));
     
     // Trasforma i dati per includere i campi specifici degli employee
-    const employees = response.persons.map((person: Person) => ({
+    const employees = persons.map((person: Person) => ({
       ...person,
       status: person.isActive ? 'ACTIVE' : 'INACTIVE' as 'ACTIVE' | 'INACTIVE'
     }));
@@ -69,7 +71,8 @@ export class EmployeesService {
    * Ottiene un dipendente specifico per ID
    */
   static async getEmployeeById(id: string): Promise<Employee> {
-    const response = await apiGet<Person>(`/persons/${id}`);
+    const resp = await apiGet<any>(`/api/v1/persons/${id}`);
+    const response: Person = resp?.data ?? resp;
     return {
       ...response,
       status: response.isActive ? 'ACTIVE' : 'INACTIVE'
@@ -86,7 +89,8 @@ export class EmployeesService {
       isActive: employeeData.status === 'ACTIVE'
     };
     
-    const response = await apiPost<Person>('/persons', personData);
+    const resp = await apiPost<any>('/api/v1/persons', personData);
+    const response: Person = resp?.data ?? resp;
     return {
       ...response,
       status: response.isActive ? 'ACTIVE' : 'INACTIVE'
@@ -102,7 +106,8 @@ export class EmployeesService {
       isActive: employeeData.status === 'ACTIVE'
     };
     
-    const response = await apiPut<Person>(`/persons/${id}`, personData);
+    const resp = await apiPut<any>(`/api/v1/persons/${id}`, personData);
+    const response: Person = resp?.data ?? resp;
     return {
       ...response,
       status: response.isActive ? 'ACTIVE' : 'INACTIVE'
@@ -113,14 +118,14 @@ export class EmployeesService {
    * Elimina un dipendente
    */
   static async deleteEmployee(id: string): Promise<void> {
-    await apiDelete(`/persons/${id}`);
+    await apiDelete(`/api/v1/persons/${id}`);
   }
 
   /**
    * Attiva/disattiva un dipendente
    */
   static async toggleEmployeeStatus(id: string, isActive: boolean): Promise<Employee> {
-    const response = await apiPut<Person>(`/persons/${id}/status`, { isActive });
+    const response = await apiPut<Person>(`/api/v1/persons/${id}/status`, { isActive });
     return {
       ...response,
       status: response.isActive ? 'ACTIVE' : 'INACTIVE'
@@ -143,7 +148,7 @@ export class EmployeesService {
       inactive: number;
       byDepartment: Record<string, number>;
       byPosition: Record<string, number>;
-    }>('/persons/stats?roleType=EMPLOYEE');
+    }>(('/api/v1/persons/stats?roleType=EMPLOYEE'));
     return response;
   }
 
@@ -153,8 +158,6 @@ export class EmployeesService {
   static async exportEmployees(filters: EmployeesFilters = {}): Promise<Blob> {
     const params = new URLSearchParams();
     
-    params.append('roleType', 'EMPLOYEE');
-    
     if (filters.isActive !== undefined) params.append('isActive', filters.isActive.toString());
     if (filters.companyId) params.append('companyId', filters.companyId.toString());
     if (filters.search) params.append('search', filters.search);
@@ -162,7 +165,7 @@ export class EmployeesService {
     if (filters.position) params.append('position', filters.position);
     if (filters.status) params.append('status', filters.status);
     
-    const response = await apiGet(`/persons/export?${params.toString()}`, {
+    const response = await apiGet(`/api/v1/persons/export?view=employee&${params.toString()}`, {
       responseType: 'blob'
     }) as Blob;
     return response;
@@ -182,7 +185,7 @@ export class EmployeesService {
     const response = await apiPost<{
       imported: number;
       errors: Array<{ row: number; error: string }>;
-    }>('/api/v1/persons/import', formData, {
+    }>("/api/v1/persons/import", formData, {
       headers: {
         'Content-Type': 'multipart/form-data'
       }

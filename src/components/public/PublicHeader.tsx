@@ -50,11 +50,11 @@ export const PublicHeader: React.FC = () => {
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-1">
                 <Phone className="w-4 h-4" />
-                <span>+39 123 456 7890</span>
+                <span>351 318 1574</span>
               </div>
               <div className="flex items-center space-x-1">
                 <Mail className="w-4 h-4" />
-                <span>info@elementformazione.it</span>
+                <span>info@elementformazione.com</span> 
               </div>
             </div>
             <div className="hidden md:block">

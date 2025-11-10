@@ -178,14 +178,38 @@ function getRoutesInfo(routerMap, versionManager) {
 function getLegacyRoutesInfo(routerMap) {
   const legacyRoutes = RouterMapUtils.getLegacyRoutes();
   
-  return Object.entries(legacyRoutes).map(([pattern, config]) => ({
-    pattern: pattern,
-    redirect: config.redirect || config,
-    method: config.method,
-    methods: config.methods,
-    description: config.description,
-    type: 'legacy_redirect'
-  }));
+  return Object.entries(legacyRoutes).map(([pattern, config]) => {
+    // Manteniamo il comportamento esistente
+    const redirect = (config && config.redirect) || config;
+
+    // Nuovo: calcola una mappatura leggibile se presente una pathRewrite
+    let mapping = null;
+    try {
+      const pathRewrite = redirect && typeof redirect === 'object' ? redirect.pathRewrite : null;
+      if (pathRewrite && typeof pathRewrite === 'object') {
+        const firstEntry = Object.entries(pathRewrite)[0];
+        if (firstEntry) {
+          const [from, to] = firstEntry;
+          // Rendi la sorgente più chiara rimuovendo ancore come ^
+          const fromReadable = typeof from === 'string' ? from.replace(/^\^/, '') : from;
+          mapping = `${fromReadable} -> ${to}`;
+        }
+      }
+    } catch (_) {
+      // Silenzia eventuali errori di parsing per robustezza diagnostica
+    }
+
+    return {
+      pattern: pattern,
+      redirect: redirect,
+      // Nuovo campo informativo per evidenziare i redirect legacy effettivi
+      mapping: mapping,
+      method: config.method,
+      methods: config.methods,
+      description: config.description,
+      type: 'legacy_redirect'
+    };
+  });
 }
 
 /**

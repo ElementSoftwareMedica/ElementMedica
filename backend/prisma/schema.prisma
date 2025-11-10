@@ -42,6 +42,8 @@ model Company {
   personRoles        PersonRole[]
   persons            Person[]
   preventivoAzienda  PreventivoAzienda[]
+  preventivi         Preventivo[]        @relation("PreventivoAziendaDiretta")
+  codiciSconto       CodiceAzienda[] // Relazione con codici sconto
 
   @@index([tenantId])
 }
@@ -123,6 +125,7 @@ model Course {
   subcategory      String?
   tenant           Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   schedules        CourseSchedule[]
+  codiciSconto     CodiceCorso[] // Relazione con codici sconto
 
   @@index([tenantId])
   @@index([tenantId, status])
@@ -423,7 +426,7 @@ model GoogleTokens {
   expiryDate   BigInt // Token expiration timestamp (Unix milliseconds)
   scope        String[] @default([]) // OAuth scopes granted
   tokenType    String   @default("Bearer")
-  
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -530,25 +533,105 @@ model RegistroPresenzePartecipante {
   @@map("registro_presenze_partecipanti")
 }
 
-model Preventivo {
-  id                String                   @id @default(uuid())
-  scheduledCourseId String
-  nomeFile          String
-  url               String
-  dataGenerazione   DateTime                 @default(now())
-  numeroProgressivo Int
-  annoProgressivo   Int
-  createdAt         DateTime                 @default(now())
-  deletedAt         DateTime?
-  updatedAt         DateTime                 @updatedAt
-  tenantId          String
-  scheduledCourse   CourseSchedule           @relation(fields: [scheduledCourseId], references: [id], onDelete: Cascade)
-  tenant            Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  aziende           PreventivoAzienda[]
-  partecipanti      PreventivoPartecipante[]
+// ========================================
+// MODELLO PREVENTIVO ESTESO - Multi-Servizio
+// ========================================
 
-  @@index([tenantId])
+model Preventivo {
+  id String @id @default(uuid())
+
+  // Numerazione progressiva
+  numero            String // Formato: "PREV-2025-0001"
+  annoProgressivo   Int // Anno di riferimento
+  numeroProgressivo Int // Numero nell'anno
+
+  // Tipo Servizio e Prezzo
+  tipoServizio TipoServizio @default(CORSO)
+  tipoPrezzo   TipoPrezzo   @default(PER_PERSONA)
+
+  // Dettagli Specifici (JSON per flessibilità)
+  dettagliServizio Json @default("{}")
+
+  // Riferimenti (opzionali per supportare multi-servizio)
+  scheduledCourseId String?         @map("scheduledCourseId")
+  schedule          CourseSchedule? @relation(fields: [scheduledCourseId], references: [id], onDelete: SetNull)
+
+  corsoId String? // Riferimento al corso (opzionale)
+
+  // Cliente
+  clienteType ClienteType // AZIENDA o PERSONA
+  aziendaId   String? // Se clienteType = AZIENDA
+  personaId   String? // Se clienteType = PERSONA
+  
+  // Relazioni cliente
+  azienda Company? @relation("PreventivoAziendaDiretta", fields: [aziendaId], references: [id], onDelete: SetNull)
+  persona Person? @relation("PreventivoPersonaDiretta", fields: [personaId], references: [id], onDelete: SetNull)
+
+  // Campi Unificati
+  titoloServizio      String // Titolo generico del servizio
+  descrizioneServizio String? @db.Text
+
+  // Calcoli finanziari
+  quantita       Int     @default(1) // N° partecipanti, visite, mesi, etc.
+  prezzoUnitario Decimal @db.Decimal(10, 2)
+  prezzoTotale   Decimal @db.Decimal(10, 2) // prezzoUnitario × quantita
+  scontoTotale   Decimal @default(0) @db.Decimal(10, 2)
+  imponibile     Decimal @db.Decimal(10, 2) // prezzoTotale - scontoTotale
+  
+  // Gestione IVA
+  aliquotaIva Decimal @default(22.00) @db.Decimal(5, 2) // Aliquota IVA % (4, 10, 22, etc.)
+  importoIva  Decimal @db.Decimal(10, 2) // Importo IVA calcolato
+  
+  // Totale finale con IVA
+  importoFinale Decimal @db.Decimal(10, 2) // imponibile + importoIva
+
+  // Date
+  dataEmissione      DateTime  @default(now())
+  dataScadenza       DateTime
+  dataInizioServizio DateTime? // Data inizio erogazione (opzionale)
+  dataFineServizio   DateTime? // Data fine erogazione (opzionale)
+
+  // Workflow
+  stato            StatoPreventivo @default(BOZZA)
+  dataInvio        DateTime?
+  dataAccettazione DateTime?
+  dataRifiuto      DateTime?
+  motivoRifiuto    String?         @db.Text
+
+  // Note e condizioni
+  note                String? @db.Text
+  condizioniPagamento String? @db.Text
+
+  // File PDF (campi legacy mantenuti per compatibilità)
+  nomeFile        String?
+  url             String?
+  fileUrl         String?
+  fileName        String?
+  fileSize        Int?
+  dataGenerazione DateTime?
+
+  // Relazioni
+  sconti       PreventivoSconto[] // Sconti applicati
+  aziende      PreventivoAzienda[] // Legacy: mantenuto per compatibilità
+  partecipanti PreventivoPartecipante[] // Legacy: mantenuto per compatibilità
+
+  // Multi-tenancy
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Audit
+  generatedBy String? // User ID che ha generato
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime? // Soft delete
+
+  // Indexes
+  @@unique([tenantId, numero])
+  @@index([tenantId, stato, dataEmissione])
+  @@index([tenantId, tipoServizio])
+  @@index([tenantId, clienteType, aziendaId, personaId])
   @@index([scheduledCourseId])
+  @@index([corsoId])
   @@map("preventivi")
 }
 
@@ -628,6 +711,162 @@ model FatturaAzienda {
   @@index([aziendaId])
   @@index([fatturaId])
   @@map("fattura_aziende")
+}
+
+// ========================================
+// MODELLI CODICI SCONTO
+// ========================================
+
+model CodiceSconto {
+  id String @id @default(uuid())
+
+  // Identificazione
+  codice      String // Es: "PROMO2025", "VIP50"
+  nome        String // Nome descrittivo
+  descrizione String? @db.Text
+
+  // Tipo e valore sconto
+  tipoSconto TipoSconto
+  valore     Decimal    @db.Decimal(10, 2) // Percentuale (0-100) o valore assoluto in €
+
+  // Validità temporale
+  dataInizio DateTime
+  dataFine   DateTime
+  attivo     Boolean  @default(true) // Toggle on/off manuale
+
+  // Limitazioni utilizzo
+  utilizzoMassimo   Int? // Max utilizzi globali (null = illimitato)
+  utilizzoCorrente  Int  @default(0) // Contatore utilizzi
+  utilizzoPerUtente Int? // Max utilizzi per singolo utente (null = illimitato)
+
+  // Regole applicazione
+  cumulabile Boolean  @default(false) // Può essere combinato con altri sconti
+  minImporto Decimal? @db.Decimal(10, 2) // Importo minimo richiesto
+  maxImporto Decimal? @db.Decimal(10, 2) // Sconto massimo applicabile (cap)
+
+  // Applicabilità
+  applicabileA       ApplicabilitaSconto @default(TUTTI)
+  applicabileServizi TipoServizio[]      @default([CORSO]) // Array: [CORSO, DVR, RSPP]
+  tipoCorso          TipoCorsoSconto?    @default(TUTTI) // Legacy: mantenuto per compatibilità
+  categorieCorso     String[]            @default([]) // Array categorie corsi
+
+  // Relazioni
+  aziende    CodiceAzienda[] // Aziende specifiche autorizzate
+  persone    CodicePersona[] // Persone specifiche autorizzate
+  corsi      CodiceCorso[] // Corsi specifici applicabili
+  preventivi PreventivoSconto[] // Preventivi che usano questo codice
+
+  // Multi-tenancy
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Audit
+  createdBy String // User ID che ha creato
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? // Soft delete
+
+  // Indexes
+  @@unique([codice, tenantId])
+  @@index([tenantId, attivo, dataInizio, dataFine])
+  @@index([tenantId, tipoSconto])
+  @@index([codice])
+  @@index([tenantId, attivo])
+  @@map("codici_sconto")
+}
+
+model PreventivoSconto {
+  id String @id @default(uuid())
+
+  // Relazioni
+  preventivoId String
+  codiceId     String
+  preventivo   Preventivo   @relation(fields: [preventivoId], references: [id], onDelete: Cascade)
+  codice       CodiceSconto @relation(fields: [codiceId], references: [id], onDelete: Restrict)
+
+  // Snapshot dei dati al momento dell'applicazione
+  codiceTesto       String // Codice testuale applicato
+  nomeCodice        String // Nome del codice
+  descrizioneCodice String?    @db.Text
+  tipoSconto        TipoSconto // PERCENTUALE o VALORE_ASSOLUTO
+  valoreSconto      Decimal    @db.Decimal(10, 2) // Valore al momento dell'applicazione
+  importoScontato   Decimal    @db.Decimal(10, 2) // Importo effettivo scontato in €
+
+  // Audit
+  applicatoDa String // User ID che ha applicato
+  applicatoIl DateTime @default(now())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  // Indexes
+  @@unique([preventivoId, codiceId])
+  @@index([preventivoId])
+  @@index([codiceId])
+  @@index([tenantId])
+  @@map("preventivi_sconti")
+}
+
+// Join tables per relazioni many-to-many CodiciSconto
+
+model CodiceAzienda {
+  id        String       @id @default(uuid())
+  codiceId  String
+  aziendaId String
+  codice    CodiceSconto @relation(fields: [codiceId], references: [id], onDelete: Cascade)
+  azienda   Company      @relation(fields: [aziendaId], references: [id], onDelete: Cascade)
+  tenantId  String
+  tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  deletedAt DateTime?
+
+  @@unique([codiceId, aziendaId])
+  @@index([codiceId])
+  @@index([aziendaId])
+  @@index([tenantId])
+  @@map("codici_aziende")
+}
+
+model CodicePersona {
+  id        String       @id @default(uuid())
+  codiceId  String
+  personaId String
+  codice    CodiceSconto @relation(fields: [codiceId], references: [id], onDelete: Cascade)
+  persona   Person       @relation("CodicePersona_Person", fields: [personaId], references: [id], onDelete: Cascade)
+  tenantId  String
+  tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  deletedAt DateTime?
+
+  @@unique([codiceId, personaId])
+  @@index([codiceId])
+  @@index([personaId])
+  @@index([tenantId])
+  @@map("codici_persone")
+}
+
+model CodiceCorso {
+  id        String       @id @default(uuid())
+  codiceId  String
+  corsoId   String
+  codice    CodiceSconto @relation(fields: [codiceId], references: [id], onDelete: Cascade)
+  corso     Course       @relation(fields: [corsoId], references: [id], onDelete: Cascade)
+  tenantId  String
+  tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  deletedAt DateTime?
+
+  @@unique([codiceId, corsoId])
+  @@index([codiceId])
+  @@index([corsoId])
+  @@index([tenantId])
+  @@map("codici_corsi")
 }
 
 model Permission {
@@ -889,6 +1128,8 @@ model Person {
   createdVersions                                      TemplateVersion[]              @relation("VersionCreator")
   generatedDocuments                                   GeneratedDocument[]            @relation("DocumentGenerator")
   googleTokens                                         GoogleTokens[]                 @relation("GoogleTokensUser")
+  codiciSconto                                         CodicePersona[]                @relation("CodicePersona_Person")
+  preventivi                                           Preventivo[]                   @relation("PreventivoPersonaDiretta")
 
   @@index([email])
   @@index([username])
@@ -1046,6 +1287,11 @@ model Tenant {
   templateVersions             TemplateVersion[]
   generatedDocuments           GeneratedDocument[]
   googleTokens                 GoogleTokens[]
+  codiciSconto                 CodiceSconto[]
+  preventiviSconti             PreventivoSconto[]
+  codiciAziende                CodiceAzienda[]
+  codiciPersone                CodicePersona[]
+  codiciCorsi                  CodiceCorso[]
 
   @@map("tenants")
 }
@@ -1595,6 +1841,18 @@ enum PersonPermission {
   DELETE_API_KEYS
   MANAGE_API_KEYS
   REGENERATE_API_KEYS
+  VIEW_CODICI_SCONTO
+  CREATE_CODICI_SCONTO
+  EDIT_CODICI_SCONTO
+  DELETE_CODICI_SCONTO
+  MANAGE_CODICI_SCONTO
+  VIEW_PREVENTIVI
+  CREATE_PREVENTIVI
+  EDIT_PREVENTIVI
+  DELETE_PREVENTIVI
+  MANAGE_PREVENTIVI
+  GENERATE_PREVENTIVI_PDF
+  SEND_PREVENTIVI
 
   @@map("person_permissions")
 }
@@ -1638,6 +1896,7 @@ enum TemplateType {
   LETTER_OF_ENGAGEMENT // Lettera di Incarico
   ATTENDANCE_REGISTER // Registro Presenze
   CERTIFICATE // Attestato
+  PREVENTIVO // Preventivo/Quotazione (FASE 5)
   INVOICE // Fattura (future)
   COURSE_PROGRAM // Programma Corso (future)
   CUSTOM // Custom documents
@@ -1655,4 +1914,59 @@ enum DocumentStatus {
   GENERATED // Document generated
   SENT // Document sent via email
   ARCHIVED // Document archived
+}
+
+// ========================================
+// ENUMS - Sistema Preventivi e Codici Sconto
+// ========================================
+
+enum TipoSconto {
+  PERCENTUALE
+  VALORE_ASSOLUTO
+}
+
+enum ApplicabilitaSconto {
+  TUTTI // Applicabile a tutti
+  AZIENDE // Solo aziende
+  PERSONE // Solo persone fisiche
+  SPECIFICI // Solo aziende/persone/corsi specifici
+}
+
+enum TipoCorsoSconto {
+  TUTTI // Tutti i corsi
+  SPECIFICI // Solo corsi nella lista corsiApplicabili
+}
+
+enum StatoPreventivo {
+  BOZZA // Appena creato, ancora modificabile
+  INVIATO // Inviato al cliente
+  VISUALIZZATO // Cliente ha aperto il PDF
+  ACCETTATO // Cliente ha accettato
+  RIFIUTATO // Cliente ha rifiutato
+  SCADUTO // Oltre dataScadenza
+  CONVERTITO // Convertito in ordine/fattura
+  ANNULLATO // Annullato manualmente
+}
+
+enum ClienteType {
+  AZIENDA
+  PERSONA
+}
+
+enum TipoServizio {
+  CORSO // Corsi di formazione (default)
+  DVR // Documento Valutazione Rischi
+  RSPP // Responsabile Servizio Prevenzione Protezione
+  MEDICO_COMPETENTE // Sorveglianza sanitaria
+  CONSULENZA // Consulenza generica
+  ALTRO // Servizi custom
+}
+
+enum TipoPrezzo {
+  PER_PERSONA // Prezzo × numero persone (corsi)
+  PER_UNITA // Prezzo × quantità (visite mediche)
+  FORFAIT // Prezzo fisso (DVR)
+  MENSILE // Abbonamento mensile (RSPP)
+  ORARIO // Prezzo all'ora (consulenze)
+  PERSONALIZZATO // Altro
 }

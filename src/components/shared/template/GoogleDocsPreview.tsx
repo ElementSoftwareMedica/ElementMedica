@@ -100,12 +100,31 @@ const GoogleDocsPreview: React.FC<GoogleDocsPreviewProps> = ({
     }
   };
   
+  // Convert Google Docs/Slides URL to embed URL
+  const getEmbedUrl = (url: string): string => {
+    if (!url) return '';
+    
+    // Extract document ID from URL
+    const docsMatch = url.match(/\/document\/d\/([a-zA-Z0-9-_]+)/);
+    const slidesMatch = url.match(/\/presentation\/d\/([a-zA-Z0-9-_]+)/);
+    
+    if (docsMatch) {
+      // Google Docs embed format
+      return `https://docs.google.com/document/d/${docsMatch[1]}/preview`;
+    } else if (slidesMatch) {
+      // Google Slides embed format
+      return `https://docs.google.com/presentation/d/${slidesMatch[1]}/embed?start=false&loop=false&delayms=3000`;
+    }
+    
+    return url;
+  };
+  
   return (
     <div className={`google-docs-preview ${className}`}>
       <div className="border rounded-xl overflow-hidden">
         <div className="bg-gray-50 p-3 border-b flex justify-between items-center">
           <h3 className="text-gray-700 font-medium">
-            Preview Documento {generatedFile ? `- ${generatedFile.name}` : ''}
+            Preview Template {generatedFile ? `- ${generatedFile.name}` : ''}
           </h3>
           <div className="flex gap-2">
             <Button
@@ -157,11 +176,21 @@ const GoogleDocsPreview: React.FC<GoogleDocsPreviewProps> = ({
         )}
         
         <div className="p-4 bg-white">
-          {!generatedFile && !showPreview ? (
+          {!generatedFile && documentUrl ? (
+            // Show template preview before generation
+            <div className="aspect-[16/9] w-full bg-gray-100 rounded overflow-hidden">
+              <iframe
+                src={getEmbedUrl(documentUrl)}
+                className="w-full h-full rounded"
+                title="Template preview"
+                allow="autoplay"
+              />
+            </div>
+          ) : !generatedFile && !documentUrl ? (
             <div className="border-2 border-dashed rounded-xl p-8 flex flex-col items-center justify-center text-center text-gray-500">
               <FileText className="h-12 w-12 mb-3 text-gray-400" />
-              <p className="mb-2">Nessun documento generato</p>
-              <p className="text-sm">Clicca su "Genera PDF" per creare un documento usando i dati inseriti</p>
+              <p className="mb-2">Nessun template selezionato</p>
+              <p className="text-sm">Seleziona un template Google Docs/Slides per visualizzare l'anteprima</p>
             </div>
           ) : (
             <div className="aspect-[210/297] w-full bg-gray-100 rounded">

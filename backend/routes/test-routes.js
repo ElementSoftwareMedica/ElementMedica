@@ -1,12 +1,29 @@
 /**
  * Test Routes for Advanced Route Management System
  * Provides comprehensive testing endpoints for all features
+ * 
+ * SECURITY: These routes are DISABLED in production
  */
 
 import express from 'express';
 import { logger } from '../utils/logger.js';
 
 const router = express.Router();
+
+// SECURITY: Disable test routes in production
+if (process.env.NODE_ENV === 'production') {
+  router.use((req, res) => {
+    logger.warn('Test routes accessed in production environment', {
+      path: req.path,
+      ip: req.ip
+    });
+    res.status(404).json({
+      error: 'Not Found',
+      message: 'Test routes are disabled in production'
+    });
+  });
+} else {
+  // Test routes only available in development/test environments
 
 /**
  * @swagger
@@ -612,5 +629,7 @@ router.get('/health', async (req, res) => {
     timestamp: new Date().toISOString()
   });
 });
+
+} // End of development/test environment check
 
 export default router;

@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 // Removed unused Course import - using CourseFormData type instead
-import { createCourse, getCourse, updateCourse } from '@/api/courses';
+import { createCourse, getCourse, updateCourse } from '@/services/courses';
 import { Button } from '@/design-system/atoms/Button';
 import { Input } from '@/design-system/atoms/Input';
 import { Label } from '@/design-system/atoms/Label';
@@ -16,6 +16,8 @@ type CourseFormData = {
   description: string;
   duration: string;
   status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+  riskLevel: '' | 'ALTO' | 'MEDIO' | 'BASSO' | 'A' | 'B' | 'C';
+  courseType: '' | 'PRIMO_CORSO' | 'AGGIORNAMENTO';
 };
 
 const initialFormData: CourseFormData = {
@@ -24,6 +26,8 @@ const initialFormData: CourseFormData = {
   description: '',
   duration: '',
   status: 'DRAFT',
+  riskLevel: '',
+  courseType: '',
 };
 
 export default function CourseForm({ params }: { params: { id: string } }) {
@@ -39,8 +43,10 @@ export default function CourseForm({ params }: { params: { id: string } }) {
           title: course.title,
           category: course.category || '',
           description: course.description || '',
-          duration: course.duration || '',
-          status: course.status || 'DRAFT',
+          duration: (course as any).duration || '',
+          status: (course as any).status || 'DRAFT',
+          riskLevel: (course as any).riskLevel || '',
+          courseType: (course as any).courseType || '',
         });
       }
     } catch {
@@ -59,100 +65,103 @@ export default function CourseForm({ params }: { params: { id: string } }) {
     e.preventDefault();
     try {
       if (isEditing) {
-        await updateCourse(params.id, formData);
+        await updateCourse(params.id, {
+          ...formData,
+          duration: formData.duration && String(formData.duration).trim() !== '' ? String(formData.duration).trim() : undefined,
+        } as any);
         toast.success('Course updated successfully');
       } else {
-        await createCourse(formData);
+        await createCourse({
+          ...formData,
+          duration: formData.duration && String(formData.duration).trim() !== '' ? String(formData.duration).trim() : undefined,
+        } as any);
         toast.success('Course created successfully');
       }
       router.push('/courses');
     } catch {
-      toast.error(isEditing ? 'Failed to update course' : 'Failed to create course');
+      toast.error('Failed to save course');
     }
   };
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
-  ) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  };
-
   return (
-    <div className="container mx-auto py-10">
-      <h1 className="text-3xl font-bold mb-6">
-        {isEditing ? 'Edit Course' : 'New Course'}
-      </h1>
-      <form onSubmit={handleSubmit} className="space-y-6 max-w-2xl">
-        <div>
-          <Label htmlFor="title">Title</Label>
-          <Input
-            id="title"
-            name="title"
-            value={formData.title}
-            onChange={handleChange}
-            required
-          />
-        </div>
-
-        <div>
-          <Label htmlFor="category">Category</Label>
-          <Input
-            id="category"
-            name="category"
-            value={formData.category || ''}
-            onChange={handleChange}
-          />
-        </div>
-
-        <div>
-          <Label htmlFor="description">Description</Label>
-          <textarea
-            id="description"
-            name="description"
-            value={formData.description || ''}
-            onChange={handleChange}
-            className="w-full min-h-[100px] p-2 border rounded-md"
-          />
-        </div>
-
-        <div>
-          <Label htmlFor="duration">Duration</Label>
-          <Input
-            id="duration"
-            name="duration"
-            value={formData.duration || ''}
-            onChange={handleChange}
-          />
-        </div>
-
-        <div>
-          <Label htmlFor="status">Status</Label>
-          <Select
-            id="status"
-            name="status"
-            value={formData.status}
-            onChange={handleChange}
-          >
-            <option value="DRAFT">Draft</option>
-            <option value="PUBLISHED">Published</option>
-            <option value="ARCHIVED">Archived</option>
-          </Select>
-        </div>
-
-        <div className="flex gap-4">
-          <Button type="submit">
-            {isEditing ? 'Update Course' : 'Create Course'}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => router.push('/courses')}
-          >
-            Cancel
-          </Button>
-        </div>
-      </form>
-    </div>
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <Label htmlFor="title">Title</Label>
+        <Input
+          id="title"
+          value={formData.title}
+          onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+        />
+      </div>
+      <div>
+        <Label htmlFor="category">Category</Label>
+        <Input
+          id="category"
+          value={formData.category}
+          onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+        />
+      </div>
+      <div>
+        <Label htmlFor="description">Description</Label>
+        <Input
+          id="description"
+          value={formData.description}
+          onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+        />
+      </div>
+      <div>
+        <Label htmlFor="duration">Duration</Label>
+        <Input
+          id="duration"
+          type="number"
+          value={formData.duration}
+          onChange={(e) => setFormData({ ...formData, duration: e.target.value })}
+        />
+      </div>
+      <div>
+        <Label htmlFor="status">Status</Label>
+        <Select
+          id="status"
+          value={formData.status}
+          onChange={(e) => setFormData({ ...formData, status: (e.target as HTMLSelectElement).value as any })}
+          options={[
+            { label: 'Draft', value: 'DRAFT' },
+            { label: 'Published', value: 'PUBLISHED' },
+            { label: 'Archived', value: 'ARCHIVED' },
+          ]}
+        />
+      </div>
+      <div>
+        <Label htmlFor="riskLevel">Risk Level</Label>
+        <Select
+          id="riskLevel"
+          value={formData.riskLevel}
+          onChange={(e) => setFormData({ ...formData, riskLevel: (e.target as HTMLSelectElement).value as any })}
+          options={[
+            { label: 'N/A', value: '' },
+            { label: 'Alto', value: 'ALTO' },
+            { label: 'Medio', value: 'MEDIO' },
+            { label: 'Basso', value: 'BASSO' },
+            { label: 'A', value: 'A' },
+            { label: 'B', value: 'B' },
+            { label: 'C', value: 'C' },
+          ]}
+        />
+      </div>
+      <div>
+        <Label htmlFor="courseType">Course Type</Label>
+        <Select
+          id="courseType"
+          value={formData.courseType}
+          onChange={(e) => setFormData({ ...formData, courseType: (e.target as HTMLSelectElement).value as any })}
+          options={[
+            { label: 'N/A', value: '' },
+            { label: 'Primo Corso', value: 'PRIMO_CORSO' },
+            { label: 'Aggiornamento', value: 'AGGIORNAMENTO' },
+          ]}
+        />
+      </div>
+      <Button type="submit">Save</Button>
+    </form>
   );
 }

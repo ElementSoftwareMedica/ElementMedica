@@ -20,9 +20,8 @@ router.get('/', authMiddleware, checkAdvancedPermission('trainers', 'read'), fil
     userId: req.user?.id
   });
   
-  // Add roleType filter for trainers
-  req.query.roleType = 'TRAINER';
-  return personController.getPersons(req, res);
+  // Delegate to dedicated controller method for trainers
+  return personController.getTrainers(req, res);
 });
 
 // Get trainer by ID

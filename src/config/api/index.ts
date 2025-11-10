@@ -29,7 +29,7 @@ export const API_ENDPOINTS = {
   EMPLOYEES: '/employees',
   COURSES: '/courses',
   TRAINERS: '/trainers',
-  SCHEDULES: '/schedules',
+  SCHEDULES: '/api/v1/schedules',
   ATTESTATI: '/attestati',
   TEMPLATES: '/templates',
   TEMPLATE_LINKS: '/template-links',
@@ -41,7 +41,7 @@ export const API_ENDPOINTS = {
   EMPLOYEE_BY_ID: (id: string) => `/employees/${id}`,
   COURSE_BY_ID: (id: string) => `/courses/${id}`,
   TRAINER_BY_ID: (id: string) => `/trainers/${id}`,
-  SCHEDULE_BY_ID: (id: string) => `/schedules/${id}`,
+  SCHEDULE_BY_ID: (id: string) => `/api/v1/schedules/${id}`,
   ATTESTATO_BY_ID: (id: string) => `/attestati/${id}`,
   
   // Google API

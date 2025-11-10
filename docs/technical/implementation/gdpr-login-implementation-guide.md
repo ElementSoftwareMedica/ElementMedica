@@ -19,6 +19,9 @@ Questa guida descrive come implementare nuove funzionalità nel sistema unificat
 - **ConsentRecord**: Gestione consensi granulare
 
 ### Pattern di Autenticazione
+
+> Nota operativa: la generazione e la verifica dei token sono centralizzate in JWTService; il Proxy non firma token e non richiede variabili JWT. L'API Server richiede le variabili d'ambiente JWT_SECRET e JWT_REFRESH_SECRET correttamente impostate.
+
 ```typescript
 // Middleware di autenticazione aggiornato
 const authenticateToken = async (req: Request, res: Response, next: NextFunction) => {
@@ -29,7 +32,7 @@ const authenticateToken = async (req: Request, res: Response, next: NextFunction
   }
   
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as JWTPayload;
+    const decoded = JWTService.verifyAccessToken(token) as JWTPayload;
     
     // Verifica che la persona esista e sia attiva
     const person = await prisma.person.findFirst({
@@ -151,27 +154,10 @@ export const login = async (req: Request, res: Response) => {
       }
     });
     
-    // Genera JWT
-    const token = jwt.sign(
-      {
-        personId: person.id,
-        email: person.email,
-        roles: person.personRoles.map(r => r.roleType),
-        permissions: person.personRoles.flatMap(r => r.permissions.map(p => p.permission))
-      },
-      process.env.JWT_SECRET!,
-      { expiresIn: '24h' }
-    );
-    
-    // Crea sessione
-    const session = await prisma.personSession.create({
-      data: {
-        personId: person.id,
-        refreshToken: generateRefreshToken(),
-        userAgent: req.get('User-Agent'),
-        ipAddress: req.ip,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 giorni
-      }
+    // Genera token tramite servizio centralizzato
+    const pair = await JWTService.generateTokenPair(person, { 
+      userAgent: req.get('User-Agent'),
+      ip: req.ip
     });
     
     // Log GDPR successo
@@ -184,8 +170,10 @@ export const login = async (req: Request, res: Response) => {
     });
     
     res.json({
-      token,
-      refreshToken: session.refreshToken,
+      access_token: pair.accessToken,
+      refresh_token: pair.refreshToken,
+      expires_in: pair.expiresIn,
+      token_type: pair.tokenType,
       person: {
         id: person.id,
         email: person.email,
@@ -208,59 +196,24 @@ export const login = async (req: Request, res: Response) => {
 // POST /api/auth/refresh
 export const refreshToken = async (req: Request, res: Response) => {
   try {
-    const { refreshToken } = req.body;
+    const refreshToken = (req.headers['x-refresh-token'] as string) || req.body.refresh_token;
     
     if (!refreshToken) {
       return res.status(401).json({ error: 'Refresh token mancante' });
     }
     
-    // Trova sessione valida
-    const session = await prisma.personSession.findFirst({
-      where: {
-        refreshToken,
-        expiresAt: { gt: new Date() }
-      },
-      include: {
-        person: {
-          include: {
-            personRoles: {
-              where: { isActive: true },
-              include: { permissions: true }
-            }
-          }
-        }
-      }
+    // Genera un nuovo access token tramite servizio centralizzato
+    const refreshed = await JWTService.refreshAccessToken(refreshToken);
+
+    res.json({ 
+      access_token: refreshed.accessToken,
+      expires_in: refreshed.expiresIn,
+      token_type: refreshed.tokenType
     });
-    
-    if (!session || !session.person || session.person.deletedAt) {
-      return res.status(401).json({ error: 'Refresh token non valido' });
-    }
-    
-    // Genera nuovo JWT
-    const newToken = jwt.sign(
-      {
-        personId: session.person.id,
-        email: session.person.email,
-        roles: session.person.personRoles.map(r => r.roleType),
-        permissions: session.person.personRoles.flatMap(r => r.permissions.map(p => p.permission))
-      },
-      process.env.JWT_SECRET!,
-      { expiresIn: '24h' }
-    );
-    
-    // Aggiorna sessione
-    await prisma.personSession.update({
-      where: { id: session.id },
-      data: {
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-      }
-    });
-    
-    res.json({ token: newToken });
     
   } catch (error) {
     console.error('Errore refresh token:', error);
-    res.status(500).json({ error: 'Errore interno del server' });
+    res.status(401).json({ error: 'Refresh token non valido' });
   }
 };
 ```

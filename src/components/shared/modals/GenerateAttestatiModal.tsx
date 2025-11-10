@@ -38,7 +38,7 @@ const GenerateAttestatiModal: React.FC<GenerateAttestatiModalProps> = ({
   const fetchScheduledCourses = async () => {
     try {
       setLoading(true);
-      const data = await apiGet<ScheduledCourse[]>('/schedules-with-attestati');
+ const data = await apiGet<ScheduledCourse[]>('/api/v1/schedules/with-attestati');
       setScheduledCourses(data);
     } catch (error) {
       console.error('Error fetching scheduled courses:', error);

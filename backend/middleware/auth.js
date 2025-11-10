@@ -3,10 +3,10 @@
  * Simple JWT authentication for API endpoints
  */
 
-import jwt from 'jsonwebtoken';
 import prisma from '../config/prisma-optimization.js';
 import logger from '../utils/logger.js';
 import { RBACService } from './rbac.js';
+import { JWTService } from '../auth/jwt.js';
 
 /**
  * Basic JWT Authentication Middleware
@@ -21,8 +21,7 @@ const authenticate = async (req, res, next) => {
 
     const token = authHeader.substring(7);
     
-    const jwtSecret = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-this-in-production';
-    const decoded = jwt.verify(token, jwtSecret);
+    const decoded = JWTService.verifyAccessToken(token);
     
     const person = await prisma.person.findUnique({
       where: { id: decoded.personId },
@@ -54,13 +53,17 @@ const authenticate = async (req, res, next) => {
       companyId: person.companyId
     };
     
+    // Backwards compatibility - alcune routes usano req.user
+    req.user = req.person;
+    
     next();
   } catch (error) {
-    if (error.name === 'JsonWebTokenError') {
-      return res.status(401).json({ error: 'Token non valido' });
-    }
-    if (error.name === 'TokenExpiredError') {
+    const msg = (error && error.message) || '';
+    if (msg.toLowerCase().includes('expired')) {
       return res.status(401).json({ error: 'Token scaduto' });
+    }
+    if (msg.toLowerCase().includes('invalid access token') || msg.toLowerCase().includes('jwt')) {
+      return res.status(401).json({ error: 'Token non valido' });
     }
     
     console.error('Errore durante l\'autenticazione:', error);
@@ -82,9 +85,8 @@ export async function optionalAuth(req, res, next) {
         
         const token = authHeader.substring(7);
         let decoded;
-        const jwtSecret = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-this-in-production';
         try {
-            decoded = jwt.verify(token, jwtSecret);
+            decoded = JWTService.verifyAccessToken(token);
         } catch (tokenError) {
             return next();
         }
@@ -122,6 +124,9 @@ export async function optionalAuth(req, res, next) {
                     permissions: permissions,
                     lastLogin: person.lastLogin
                 };
+                
+                // Backwards compatibility - alcune routes usano req.user
+                req.user = req.person;
             }
         }
         

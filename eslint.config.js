@@ -18,7 +18,11 @@ export default tseslint.config(
       'tmp/**',
       'temp/**',
       // Escludo template GDPR dal lint generale (molto verboso e fuori scope)
-      'src/templates/gdpr-entity-page/**'
+      'src/templates/gdpr-entity-page/**',
+      // Ignora file generati e dichiarazioni TS
+      '**/*.d.ts',
+      'backend/generated/**',
+      'backend/generated/prisma/**'
     ] 
   },
   {

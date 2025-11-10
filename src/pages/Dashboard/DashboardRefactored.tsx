@@ -140,13 +140,11 @@ const DashboardRefactored: React.FC = () => {
         {/* Schedule Creation Modal */}
         {showForm && selectedSlot && (
           <ScheduleEventModalLazy
-            isOpen={showForm}
             onClose={closeForm}
-            onSave={handleCreateSchedule}
             trainings={data.courses.map((c: any) => ({ ...c, title: c.title || c.name }))}
             trainers={data.trainers}
             companies={data.companies}
-            employees={data.employees}
+            persons={data.employees}
             existingEvent={undefined}
             initialDate={
               selectedSlot
@@ -157,20 +155,24 @@ const DashboardRefactored: React.FC = () => {
                   String(selectedSlot.start.getDate()).padStart(2, '0')
                 : undefined
             }
-            initialStartTime={
+            initialTime={
               selectedSlot && !selectedSlot.isAllDay
-                ? String(selectedSlot.start.getHours()).padStart(2, '0') +
-                  ':' +
-                  String(selectedSlot.start.getMinutes()).padStart(2, '0')
+                ? {
+                    start:
+                      String(selectedSlot.start.getHours()).padStart(2, '0') +
+                      ':' +
+                      String(selectedSlot.start.getMinutes()).padStart(2, '0'),
+                    end:
+                      String(selectedSlot.end.getHours()).padStart(2, '0') +
+                      ':' +
+                      String(selectedSlot.end.getMinutes()).padStart(2, '0'),
+                  }
                 : undefined
             }
-            initialEndTime={
-              selectedSlot && !selectedSlot.isAllDay
-                ? String(selectedSlot.end.getHours()).padStart(2, '0') +
-                  ':' +
-                  String(selectedSlot.end.getMinutes()).padStart(2, '0')
-                : undefined
-            }
+            onSuccess={async () => {
+              await refreshData();
+              closeForm();
+            }}
           />
         )}
       </div>

@@ -29,17 +29,9 @@ describe('Virtual Entities Tests', () => {
                 password: 'Admin123!'
             });
 
-        console.log('Login response status:', loginResponse.status);
-        console.log('Login response body:', JSON.stringify(loginResponse.body, null, 2));
-        console.log('Login response headers:', loginResponse.headers);
-
         if (loginResponse.status === 200 && loginResponse.body.tokens) {
             authToken = loginResponse.body.tokens.access_token;
-            console.log('Token estratto:', authToken ? authToken.substring(0, 50) + '...' : 'UNDEFINED');
         } else {
-            console.error('Login fallito - Status:', loginResponse.status);
-            console.error('Login fallito - Body:', loginResponse.body);
-            console.error('Login fallito - Text:', loginResponse.text);
             throw new Error(`Login fallito durante setup test - Status: ${loginResponse.status}`);
         }
     });
@@ -60,8 +52,13 @@ describe('Virtual Entities Tests', () => {
                 .get('/api/v1/employees')
                 .set('Authorization', `Bearer ${authToken}`);
 
-            console.log('Employees list status:', response.status);
-            console.log('Employees list response:', response.body);
+            expect(response.status).toBe(200);
+        });
+
+        test('GET /api/v1/employees?companyId&tenantId - Lista con filtri company/tenant', async () => {
+            const response = await request(app)
+                .get(`/api/v1/employees?companyId=${encodeURIComponent(testCompany.id)}&tenantId=${encodeURIComponent(testCompany.tenantId)}`)
+                .set('Authorization', `Bearer ${authToken}`);
 
             expect(response.status).toBe(200);
         });
@@ -70,9 +67,6 @@ describe('Virtual Entities Tests', () => {
             const response = await request(app)
                 .get('/api/v1/employees/export')
                 .set('Authorization', `Bearer ${authToken}`);
-
-            console.log('Employees export status:', response.status);
-            console.log('Employees export response:', response.body);
 
             expect(response.status).toBe(200);
         });
@@ -84,8 +78,13 @@ describe('Virtual Entities Tests', () => {
                 .get('/api/v1/trainers')
                 .set('Authorization', `Bearer ${authToken}`);
 
-            console.log('Trainers list status:', response.status);
-            console.log('Trainers list response:', response.body);
+            expect(response.status).toBe(200);
+        });
+
+        test('GET /api/v1/trainers?companyId&tenantId - Lista con filtri company/tenant', async () => {
+            const response = await request(app)
+                .get(`/api/v1/trainers?companyId=${encodeURIComponent(testCompany.id)}&tenantId=${encodeURIComponent(testCompany.tenantId)}`)
+                .set('Authorization', `Bearer ${authToken}`);
 
             expect(response.status).toBe(200);
         });
@@ -95,10 +94,71 @@ describe('Virtual Entities Tests', () => {
                 .get('/api/v1/trainers/export')
                 .set('Authorization', `Bearer ${authToken}`);
 
-            console.log('Trainers export status:', response.status);
-            console.log('Trainers export response:', response.body);
+            expect(response.status).toBe(200);
+        });
+    });
+
+    describe('Persons unified routes', () => {
+        test('GET /api/v1/persons/export?format=json&view=employee - Export JSON employees', async () => {
+            const response = await request(app)
+                .get('/api/v1/persons/export?format=json&view=employee')
+                .set('Authorization', `Bearer ${authToken}`);
 
             expect(response.status).toBe(200);
+            // Deve essere JSON
+            expect(response.headers['content-type']).toMatch(/application\/json/);
+            expect(Array.isArray(response.body) || typeof response.body === 'object').toBeTruthy();
+        });
+
+        test('GET /api/v1/persons/export?view=trainer - Export CSV trainers', async () => {
+            const response = await request(app)
+                .get('/api/v1/persons/export?view=trainer')
+                .set('Authorization', `Bearer ${authToken}`);
+
+            expect(response.status).toBe(200);
+            expect(response.headers['content-type']).toMatch(/text\/csv/);
+            expect(response.headers['content-disposition']).toMatch(/attachment; filename="persons_export_trainer.csv"/);
+            expect(typeof response.text).toBe('string');
+            expect(response.text.length).toBeGreaterThan(0);
+        });
+
+        test('GET /api/v1/persons/:id/fields-visibility - Visibilità campi persona', async () => {
+            const response = await request(app)
+                .get(`/api/v1/persons/${encodeURIComponent(testUser.id)}/fields-visibility?view=person&fields=firstName,lastName,email`)
+                .set('Authorization', `Bearer ${authToken}`);
+
+            expect(response.status).toBe(200);
+            expect(response.body).toHaveProperty('personId', testUser.id);
+            expect(response.body).toHaveProperty('allowed', true);
+            expect(response.body).toHaveProperty('visibleFields');
+            expect(Array.isArray(response.body.visibleFields)).toBe(true);
+            // Nuove verifiche su editabilità e mappa campi
+            expect(response.body).toHaveProperty('editableFields');
+            expect(Array.isArray(response.body.editableFields)).toBe(true);
+            expect(response.body).toHaveProperty('fields');
+            expect(typeof response.body.fields).toBe('object');
+            // Verifica struttura per ciascun campo richiesto
+            ['firstName','lastName','email'].forEach(key => {
+                expect(response.body.fields).toHaveProperty(key);
+                expect(typeof response.body.fields[key].visible).toBe('boolean');
+                expect(typeof response.body.fields[key].editable).toBe('boolean');
+            });
+        });
+
+        test('GET /api/v1/persons/:id - Dettaglio persona', async () => {
+            const response = await request(app)
+                .get(`/api/v1/persons/${encodeURIComponent(testUser.id)}`)
+                .set('Authorization', `Bearer ${authToken}`);
+
+            expect(response.status).toBe(200);
+            expect(response.body).toHaveProperty('id', testUser.id);
+            // Verifica presenza meta visibilità se presente
+            if (response.body._visibility) {
+                expect(response.body._visibility).toHaveProperty('allowed', true);
+                // Nuove verifiche su editableFields nel meta
+                expect(response.body._visibility).toHaveProperty('editableFields');
+                expect(Array.isArray(response.body._visibility.editableFields)).toBe(true);
+            }
         });
     });
 
@@ -108,9 +168,6 @@ describe('Virtual Entities Tests', () => {
                 .get('/api/virtual-entities/employees')
                 .set('Authorization', `Bearer ${authToken}`);
 
-            console.log('Virtual employees status:', response.status);
-            console.log('Virtual employees response:', response.body);
-
             expect(response.status).toBe(200);
         });
 
@@ -118,9 +175,6 @@ describe('Virtual Entities Tests', () => {
             const response = await request(app)
                 .get('/api/virtual-entities/trainers')
                 .set('Authorization', `Bearer ${authToken}`);
-
-            console.log('Virtual trainers status:', response.status);
-            console.log('Virtual trainers response:', response.body);
 
             expect(response.status).toBe(200);
         });

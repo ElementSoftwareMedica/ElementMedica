@@ -1,24 +1,14 @@
 import React from 'react';
 import { Button } from '../../../design-system/atoms/Button';
+import { Label } from '../../../design-system/atoms/Label';
+import Select from 'react-select';
 
-interface Person {
-  id: string | number;
-  firstName: string;
-  lastName: string;
-  companyId: string | number;
-  company_id?: string | number;
-  company?: { id: string | number; name: string };
-  email?: string;
-}
+// Tipi condivisi dal dominio schedules
+type DateEntry = import('../types').ScheduleDateEntry;
+type Person = import('../types').Person;
+type Trainer = import('../types').Trainer;
 
-interface DateEntry {
-  date: string;
-  start: string;
-  end: string;
-  trainerId: string | number;
-  coTrainerId: string | number;
-}
-
+// rimosso: interface Trainer { id: string; firstName: string; lastName: string; certifications?: string[] }
 interface AttendanceManagerProps {
   dates: DateEntry[];
   selectedPersons: (string | number)[];
@@ -31,6 +21,11 @@ interface AttendanceManagerProps {
   formatDate: (isoDate: string) => string;
   selectedDayIdx: number;
   onSelectedDayChange: (idx: number) => void;
+  // Nuove props per gestione docenti per sessione
+  trainers: Trainer[];
+  filteredTrainers: Trainer[];
+  coTrainerOptions: Trainer[];
+  onUpdateDateTime: (idx: number, field: 'date' | 'start' | 'end' | 'trainerId' | 'coTrainerId', value: string) => void;
 }
 
 export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
@@ -44,97 +39,147 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
   getCompanyName,
   formatDate,
   selectedDayIdx,
-  onSelectedDayChange
+  onSelectedDayChange,
+  trainers,
+  filteredTrainers,
+  coTrainerOptions,
+  onUpdateDateTime
 }) => {
+  const getTrainerName = React.useCallback((trainerId: string | number) => {
+    const trainer = trainers.find(t => String(t.id) === String(trainerId));
+    return trainer ? `${trainer.firstName} ${trainer.lastName}` : '';
+  }, [trainers]);
+
   return (
     <div className="space-y-4">
-      <h3 className="font-semibold text-gray-700">Registrazione Presenze</h3>
+      <h3 className="font-semibold text-gray-700">Registrazione Presenze per Sessione</h3>
       
-      {/* Date Selector */}
-      <div className="flex flex-wrap gap-2">
-        {dates.map((dateEntry, idx) => (
-          <button
-            key={idx}
-            type="button"
-            onClick={() => onSelectedDayChange(idx)}
-            className={`px-3 py-2 text-sm rounded border ${
-              selectedDayIdx === idx
-                ? 'bg-blue-600 text-white border-blue-600'
-                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-            }`}
-          >
-            {formatDate(dateEntry.date)}
-            <div className="text-xs">
-              {dateEntry.start} - {dateEntry.end}
+      {/* Sessioni come Card Orizzontali con Scroll */}
+      <div className="overflow-x-auto pb-4">
+        <div className="flex gap-6" style={{ minWidth: 'min-content' }}>
+          {dates.map((dateEntry, idx) => (
+            <div key={idx} className="flex-shrink-0 w-80 border-2 rounded-lg shadow-md bg-white overflow-hidden">
+              {/* Header Compatto con Data, Ora e Docenti */}
+              <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white p-2">
+                <div className="text-center mb-2">
+                  <h4 className="text-sm font-semibold">
+                    Sessione {idx + 1} - {formatDate(dateEntry.date)}
+                  </h4>
+                  <p className="text-xs text-blue-100">
+                    {dateEntry.start} - {dateEntry.end}
+                  </p>
+                </div>
+                
+                {/* Docenti (Read-only) */}
+                <div className="bg-blue-600/50 rounded px-2 py-1 text-xs space-y-1">
+                  <div className="flex items-center gap-1">
+                    <span className="text-blue-200">👨‍🏫</span>
+                    <span className="font-medium">{getTrainerName(dateEntry.trainerId) || 'Non assegnato'}</span>
+                  </div>
+                  {dateEntry.coTrainerId && (
+                    <div className="flex items-center gap-1">
+                      <span className="text-blue-200">👥</span>
+                      <span>{getTrainerName(dateEntry.coTrainerId)}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Contatore Presenti */}
+                <div className="mt-2 pt-2 border-t border-blue-400 text-center">
+                  <div className="text-xs text-blue-100">Presenti</div>
+                  <div className="text-lg font-bold">
+                    {(attendance[idx] || []).length}/{selectedPersons.length}
+                  </div>
+                </div>
+              </div>
+
+              {/* Lista Partecipanti Scrollabile */}
+              <div className="p-3">
+                <div className="flex justify-between items-center mb-2">
+                  <h5 className="font-medium text-xs text-gray-700">👥 Partecipanti</h5>
+                  <div className="flex gap-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => onSelectAllForDate(idx)}
+                      className="text-xs py-1 px-2"
+                    >
+                      Tutti
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => onSelectNoneForDate(idx)}
+                      className="text-xs py-1 px-2"
+                    >
+                      Nessuno
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="border rounded overflow-y-auto max-h-64">
+                  {(() => {
+                    const selectedPersonsStrings = selectedPersons.map(String);
+                    const filteredPersons = persons.filter((person: Person) => 
+                      selectedPersonsStrings.includes(String(person.id))
+                    );
+                    
+                    if (idx === 0) { // Debug solo per prima sessione
+                      console.debug('[AttendanceManager] Debug filtro:', {
+                        totalPersons: persons.length,
+                        selectedPersonsIds: selectedPersonsStrings,
+                        personsIds: persons.slice(0, 3).map(p => String(p.id)),
+                        filteredCount: filteredPersons.length,
+                        samplePerson: persons[0] ? { id: persons[0].id, type: typeof persons[0].id } : null,
+                        sampleSelected: selectedPersonsStrings[0] ? { id: selectedPersonsStrings[0], type: typeof selectedPersonsStrings[0] } : null
+                      });
+                    }
+                    
+                    return filteredPersons.length > 0 ? (
+                      filteredPersons
+                        .sort((a: Person, b: Person) => {
+                          // Ordina alfabeticamente per cognome, poi per nome
+                          const lastNameCompare = (a.lastName || '').localeCompare(b.lastName || '', 'it-IT');
+                          if (lastNameCompare !== 0) return lastNameCompare;
+                          return (a.firstName || '').localeCompare(b.firstName || '', 'it-IT');
+                        })
+                        .map((person: Person) => (
+                        <div key={`${idx}-${person.id}`} className="flex items-center p-2 hover:bg-gray-50 border-b last:border-b-0">
+                          <input
+                            type="checkbox"
+                            id={`attendance-${idx}-${person.id}`}
+                            checked={(attendance[idx] || []).map(String).includes(String(person.id))}
+                            onChange={(e) => onAttendanceChange(idx, person.id, e.target.checked)}
+                            className="mr-2 w-3 h-3 accent-blue-600"
+                          />
+                          <div className="flex-1">
+                            <div className="text-xs font-medium">
+                              {person.lastName} {person.firstName}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {person.companyId != null ? getCompanyName(person.companyId) : 'Senza azienda'}
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center py-6 text-xs text-gray-500">
+                        Nessun partecipante selezionato nello Step 2
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
             </div>
-          </button>
-        ))}
+          ))}
+        </div>
       </div>
 
-      {/* Attendance for Selected Date */}
-      {dates[selectedDayIdx] && (
-        <div className="border rounded p-4">
-          <div className="flex justify-between items-center mb-4">
-            <h4 className="font-medium">
-              Presenze per {formatDate(dates[selectedDayIdx].date)}
-            </h4>
-            <div className="space-x-2">
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                onClick={() => onSelectAllForDate(selectedDayIdx)}
-              >
-                Tutti Presenti
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                onClick={() => onSelectNoneForDate(selectedDayIdx)}
-              >
-                Nessuno
-              </Button>
-            </div>
-          </div>
-          
-          <div className="max-h-80 overflow-y-auto border rounded">
-            {selectedPersons.length > 0 ? (
-              persons
-                .filter((person: Person) => selectedPersons.includes(person.id))
-                .map((person: Person) => (
-                  <div key={`${selectedDayIdx}-${person.id}`} className="flex items-center p-3 hover:bg-gray-50 border-b last:border-b-0">
-                    <input
-                      type="checkbox"
-                      id={`attendance-${selectedDayIdx}-${person.id}`}
-                      checked={(attendance[selectedDayIdx] || []).includes(person.id)}
-                      onChange={(e) => onAttendanceChange(selectedDayIdx, person.id, e.target.checked)}
-                      className="mr-3 w-4 h-4 accent-blue-600"
-                    />
-                    <div className="flex-1">
-                      <div className="font-medium">
-                        {person.firstName} {person.lastName}
-                      </div>
-                      <div className="text-sm text-gray-500">
-                        {getCompanyName(person.company_id || person.companyId)}
-                      </div>
-                      {person.email && (
-                        <div className="text-xs text-gray-400">{person.email}</div>
-                      )}
-                    </div>
-                  </div>
-                ))
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                Nessun partecipante selezionato
-              </div>
-            )}
-          </div>
-          
-          {/* Attendance Summary */}
-          <div className="mt-3 text-right text-sm text-gray-600">
-            Presenti: <span className="font-medium">{(attendance[selectedDayIdx] || []).length}</span> / {selectedPersons.length}
-          </div>
+      {dates.length === 0 && (
+        <div className="text-center py-8 text-gray-500 border-2 border-dashed rounded-lg">
+          Nessuna sessione programmata. Aggiungi date nello Step 1.
         </div>
       )}
     </div>

@@ -2,6 +2,9 @@ import { validationResult } from 'express-validator';
 import personService from '../services/personService.js';
 import logger from '../utils/logger.js';
 import prisma from '../config/prisma-optimization.js';
+import AdvancedPermissionService from '../services/advanced-permission.js';
+
+const advancedPermissionService = new AdvancedPermissionService();
 
 class PersonController {
   // GET /api/persons/employees
@@ -61,14 +64,24 @@ class PersonController {
 
       const employees = await prisma.person.findMany(queryOptions);
 
+      // Applica field-level filtering basato sui permessi, mantenendo la struttura di risposta
+      const enhancedRoleService = (await import('../services/enhancedRoleService.js')).default;
+      const filteredEmployees = await enhancedRoleService.filterDataByPermissions(
+        personId,
+        'employees',
+        'view',
+        employees,
+        req.tenantId || tenantId
+      );
+
       logger.info('Retrieved employees successfully with BYPASS', { 
-        count: employees.length 
+        count: (filteredEmployees || []).length 
       });
 
       res.json({
         success: true,
-        data: employees,
-        total: employees.length
+        data: filteredEmployees || [],
+        total: (filteredEmployees || []).length
       });
 
     } catch (error) {
@@ -197,19 +210,212 @@ class PersonController {
   async getPersonById(req, res) {
     try {
       const { id } = req.params;
+      const { view, fields } = req.query || {};
       const person = await personService.getPersonById(id);
       
       if (!person) {
         return res.status(404).json({ error: 'Person not found' });
       }
+
+      // Calcolo metadati visibilità (senza filtrare i campi della persona per retrocompatibilità)
+      const resource = (view === 'employee') ? 'employees' : (view === 'trainer') ? 'trainers' : 'persons';
+      const requestedFields = typeof fields === 'string' && fields.length > 0 ? fields.split(',').map(f => f.trim()).filter(Boolean) : undefined;
+
+      let visibilityMeta = { allowed: true, visibleFields: ['*'], defaults: ['*'], resource, view: view || 'person' };
+      try {
+        const target = await advancedPermissionService.getPersonById(id);
+        const permission = await advancedPermissionService.checkPermission({
+          personId: req.person.id,
+          resource,
+          action: 'read',
+          targetCompanyId: target?.companyId,
+          requestedFields
+        });
+
+        if (!permission.allowed) {
+          return res.status(403).json({ error: 'Permission denied', code: 'PERMISSION_DENIED' });
+        }
+
+        // Determina globalRole dell'utente corrente
+        const me = await prisma.person.findUnique({
+          where: { id: req.person.id },
+          select: {
+            globalRole: true,
+            personRoles: { where: { isActive: true }, select: { roleType: true } }
+          }
+        });
+
+        let globalRole = me?.globalRole || null;
+        const roles = (me?.personRoles || []).map(r => r.roleType);
+        if (!globalRole) {
+          if (roles.includes('SUPER_ADMIN')) globalRole = 'SUPER_ADMIN';
+          else if (roles.includes('ADMIN')) globalRole = 'ADMIN';
+          else if (roles.includes('COMPANY_ADMIN')) globalRole = 'COMPANY_ADMIN';
+          else if (roles.includes('MANAGER')) globalRole = 'MANAGER';
+          else if (roles.includes('EMPLOYEE')) globalRole = 'EMPLOYEE';
+        }
+
+        const defaultFields = advancedPermissionService.getDefaultFieldsForRole(globalRole || 'EMPLOYEE', resource) || [];
+        let visibleFields;
+        if (permission.allowedFields && permission.allowedFields.includes('*')) {
+          visibleFields = requestedFields || (defaultFields.length ? defaultFields : ['*']);
+        } else if (permission.allowedFields && permission.allowedFields.length > 0) {
+          visibleFields = advancedPermissionService.filterAllowedFields(requestedFields, permission.allowedFields);
+        } else {
+          // Nessuna policy esplicita: usa default per ruolo
+          visibleFields = defaultFields && defaultFields.length ? defaultFields : (requestedFields || ['*']);
+        }
+
+        // Calcola editableFields con azione 'update'
+        const editPermission = await advancedPermissionService.checkPermission({
+          personId: req.person.id,
+          resource,
+          action: 'update',
+          targetCompanyId: target?.companyId,
+          requestedFields
+        });
+        let editableFields;
+        if (editPermission.allowedFields && editPermission.allowedFields.includes('*')) {
+          editableFields = requestedFields || (defaultFields.length ? defaultFields : ['*']);
+        } else if (editPermission.allowedFields && editPermission.allowedFields.length > 0) {
+          editableFields = advancedPermissionService.filterAllowedFields(requestedFields, editPermission.allowedFields);
+        } else {
+          editableFields = defaultFields && defaultFields.length ? defaultFields : (requestedFields || ['*']);
+        }
+
+        visibilityMeta = {
+          allowed: true,
+          resource,
+          view: view || 'person',
+          visibleFields,
+          editableFields,
+          defaults: defaultFields,
+          meta: { scope: permission.scope, reason: permission.reason }
+        };
+      } catch (permErr) {
+        logger.warn('Visibility metadata calculation failed, falling back to default', { error: permErr.message });
+      }
       
-      res.json(person);
+      res.json({ ...person, _visibility: visibilityMeta });
     } catch (error) {
       logger.error('Error getting person by ID:', { error: error.message, id: req.params.id });
       res.status(500).json({ error: error.message });
     }
   }
   
+  // GET /api/persons/:id/fields-visibility
+  async getPersonFieldsVisibility(req, res) {
+    try {
+      const { id } = req.params;
+      const { view, fields } = req.query || {};
+
+      // Mappa view -> resource
+      const resource = (view === 'employee') ? 'employees' : (view === 'trainer') ? 'trainers' : 'persons';
+      const requestedFields = typeof fields === 'string' && fields.length > 0
+        ? fields.split(',').map(f => f.trim()).filter(Boolean)
+        : undefined;
+
+      // Persona target per determinare company scope
+      const target = await advancedPermissionService.getPersonById(id);
+
+      // Permessi di lettura
+      const readPermission = await advancedPermissionService.checkPermission({
+        personId: req.person.id,
+        resource,
+        action: 'read',
+        targetCompanyId: target?.companyId,
+        requestedFields
+      });
+
+      if (!readPermission.allowed) {
+        return res.status(403).json({ error: 'Permission denied', code: 'PERMISSION_DENIED', reason: readPermission.reason });
+      }
+
+      // Determina globalRole dell'utente corrente
+      const me = await prisma.person.findUnique({
+        where: { id: req.person.id },
+        select: {
+          globalRole: true,
+          personRoles: { where: { isActive: true }, select: { roleType: true } }
+        }
+      });
+
+      let globalRole = me?.globalRole || null;
+      const roles = (me?.personRoles || []).map(r => r.roleType);
+      if (!globalRole) {
+        if (roles.includes('SUPER_ADMIN')) globalRole = 'SUPER_ADMIN';
+        else if (roles.includes('ADMIN')) globalRole = 'ADMIN';
+        else if (roles.includes('COMPANY_ADMIN')) globalRole = 'COMPANY_ADMIN';
+        else if (roles.includes('MANAGER')) globalRole = 'MANAGER';
+        else if (roles.includes('EMPLOYEE')) globalRole = 'EMPLOYEE';
+      }
+
+      const defaultFields = advancedPermissionService.getDefaultFieldsForRole(globalRole || 'EMPLOYEE', resource) || [];
+
+      // Calcolo campi visibili
+      let visibleFields;
+      if (readPermission.allowedFields && readPermission.allowedFields.includes('*')) {
+        visibleFields = requestedFields || (defaultFields.length ? defaultFields : ['*']);
+      } else if (readPermission.allowedFields && readPermission.allowedFields.length > 0) {
+        visibleFields = advancedPermissionService.filterAllowedFields(requestedFields, readPermission.allowedFields);
+      } else {
+        visibleFields = defaultFields && defaultFields.length ? defaultFields : (requestedFields || ['*']);
+      }
+
+      // Permessi di modifica
+      const editPermission = await advancedPermissionService.checkPermission({
+        personId: req.person.id,
+        resource,
+        action: 'update',
+        targetCompanyId: target?.companyId,
+        requestedFields
+      });
+
+      // Calcolo campi editabili
+      let editableFields;
+      if (editPermission.allowedFields && editPermission.allowedFields.includes('*')) {
+        editableFields = requestedFields || (defaultFields.length ? defaultFields : ['*']);
+      } else if (editPermission.allowedFields && editPermission.allowedFields.length > 0) {
+        editableFields = advancedPermissionService.filterAllowedFields(requestedFields, editPermission.allowedFields);
+      } else {
+        editableFields = defaultFields && defaultFields.length ? defaultFields : (requestedFields || ['*']);
+      }
+
+      // Costruisco mappa per campo { visible, editable }
+      const fieldsSet = new Set(
+        (requestedFields && requestedFields.length > 0)
+          ? requestedFields
+          : Array.from(new Set([...(Array.isArray(visibleFields) ? visibleFields : []), ...(Array.isArray(editableFields) ? editableFields : [])]))
+      );
+
+      const isAllVisible = Array.isArray(visibleFields) && visibleFields.includes('*');
+      const isAllEditable = Array.isArray(editableFields) && editableFields.includes('*');
+
+      const fieldsMap = {};
+      for (const key of fieldsSet) {
+        fieldsMap[key] = {
+          visible: isAllVisible ? true : visibleFields.includes(key),
+          editable: isAllEditable ? true : editableFields.includes(key)
+        };
+      }
+
+      return res.json({
+        personId: id,
+        resource,
+        view: view || 'person',
+        allowed: true,
+        visibleFields,
+        editableFields,
+        fields: fieldsMap,
+        defaults: defaultFields,
+        meta: { scope: readPermission.scope, reason: readPermission.reason }
+      });
+    } catch (error) {
+      logger.error('Error getting person fields visibility:', { error: error.message, id: req.params?.id });
+      return res.status(500).json({ error: error.message });
+    }
+  }
+
   // POST /api/persons
   async createPerson(req, res) {
     try {
@@ -223,7 +429,11 @@ class PersonController {
       // Controllo completo di req.person per debug se necessario
       
       // Usa tenantId e companyId dell'utente autenticato se non forniti
-      const finalTenantId = tenantId || req.person?.tenantId;
+      const finalTenantId = tenantId 
+        || req.headers['x-tenant-id'] 
+        || req.tenantId 
+        || (req.tenant && req.tenant.id) 
+        || req.person?.tenantId;
       const finalCompanyId = companyId || req.person?.companyId;
       
       // Verifica che tenantId sia presente
@@ -258,107 +468,112 @@ class PersonController {
         globalRole: personData.globalRole,
         status: personData.status || 'ACTIVE'
       };
-      
-      // Rimuovi campi undefined per evitare errori Prisma
-      Object.keys(transformedData).forEach(key => {
-        if (transformedData[key] === undefined) {
-          delete transformedData[key];
-        }
-      });
-      
-      // Controllo duplicati per taxCode e email
-      if (transformedData.taxCode) {
-        const existingByTaxCode = await prisma.person.findFirst({
-          where: { 
-            taxCode: transformedData.taxCode.toUpperCase(), 
-            deletedAt: null,
-            tenantId: finalTenantId
+
+      // Converti date da stringa a Date se necessario
+      if (transformedData.birthDate && typeof transformedData.birthDate === 'string') {
+        try {
+          const dateStr = transformedData.birthDate.trim();
+          if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            // Formato YYYY-MM-DD: aggiungi orario per evitare problemi timezone
+            transformedData.birthDate = new Date(dateStr + 'T00:00:00.000Z');
+          } else {
+            // Altri formati: usa costruttore Date standard
+            transformedData.birthDate = new Date(dateStr);
           }
-        });
-        if (existingByTaxCode) {
-          return res.status(400).json({ 
-            error: `Una persona con codice fiscale ${transformedData.taxCode} esiste già nel sistema.`,
-            field: 'taxCode',
-            existingPersonId: existingByTaxCode.id
-          });
+          
+          // Verifica che la data sia valida
+          if (isNaN(transformedData.birthDate.getTime())) {
+            transformedData.birthDate = null;
+          }
+        } catch (error) {
+          transformedData.birthDate = null;
         }
       }
-      
+
+      if (transformedData.hiredDate && typeof transformedData.hiredDate === 'string') {
+        try {
+          const dateStr = transformedData.hiredDate.trim();
+          if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            transformedData.hiredDate = new Date(dateStr + 'T00:00:00.000Z');
+          } else {
+            transformedData.hiredDate = new Date(dateStr);
+          }
+          
+          if (isNaN(transformedData.hiredDate.getTime())) {
+            transformedData.hiredDate = null;
+          }
+        } catch (error) {
+          transformedData.hiredDate = null;
+        }
+      }
+
+      // Normalizzazione campi critici
       if (transformedData.email) {
-        const existingByEmail = await prisma.person.findFirst({
-          where: { 
-            email: transformedData.email.toLowerCase(), 
-            deletedAt: null,
-            tenantId: finalTenantId
-          }
+        transformedData.email = String(transformedData.email).toLowerCase().trim();
+      }
+      if (transformedData.taxCode) {
+        transformedData.taxCode = String(transformedData.taxCode).toUpperCase().trim();
+      }
+
+      // Validazioni minime per prevenire errori 500 lato Prisma
+      if (!transformedData.firstName || !transformedData.lastName) {
+        return res.status(400).json({
+          error: 'firstName e lastName sono obbligatori per creare una persona',
+          code: 'VALIDATION_ERROR',
+          fields: ['firstName', 'lastName']
         });
+      }
+
+      // Controlli duplicati di base
+      if (transformedData.email) {
+        const existingByEmail = await prisma.person.findFirst({ where: { email: transformedData.email, deletedAt: null } });
         if (existingByEmail) {
-          return res.status(400).json({ 
-            error: `Una persona con email ${transformedData.email} esiste già nel sistema.`,
-            field: 'email',
-            existingPersonId: existingByEmail.id
-          });
+          return res.status(409).json({ error: 'Email already in use' });
         }
       }
-      
-      const person = await personService.createPerson(
-        transformedData, 
-        roleType || 'EMPLOYEE', 
-        finalCompanyId, 
+      if (transformedData.username) {
+        const existingByUsername = await prisma.person.findFirst({ where: { username: transformedData.username, deletedAt: null } });
+        if (existingByUsername) {
+          return res.status(409).json({ error: 'Username already in use' });
+        }
+      }
+
+      const created = await personService.createPerson(
+        { ...transformedData },
+        roleType,
+        finalCompanyId,
         finalTenantId
       );
-      
-      res.status(201).json(person);
+
+      res.status(201).json(created);
     } catch (error) {
-      logger.error('Error creating person:', { error: error.message, body: req.body });
-      res.status(500).json({ error: error.message });
+      logger.error('Error creating person:', { error: error.message });
+      const message = (error && error.message) || '';
+      if (message && message.toLowerCase().includes('tenantid is required')) {
+        return res.status(400).json({ error: 'TenantId is required' });
+      }
+      const resp = { error: 'Failed to create person' };
+      if (process.env.NODE_ENV !== 'production' && message) {
+        resp.details = message;
+      }
+      res.status(500).json(resp);
     }
   }
   
   // PUT /api/persons/:id
   async updatePerson(req, res) {
     try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
       const { id } = req.params;
-      const { roleType, ...personData } = req.body;
-      
-      // Trasforma i campi da snake_case a camelCase se necessario
-      const transformedData = {
-        firstName: personData.firstName || personData.first_name,
-        lastName: personData.lastName || personData.last_name,
-        email: personData.email,
-        phone: personData.phone,
-        taxCode: personData.taxCode || personData.codice_fiscale,
-        birthDate: personData.birthDate || personData.birth_date,
-        residenceAddress: personData.residenceAddress || personData.residence_address,
-        residenceCity: personData.residenceCity || personData.residence_city,
-        postalCode: personData.postalCode || personData.postal_code,
-        province: personData.province,
-        title: personData.title,
-        hiredDate: personData.hiredDate || personData.hired_date,
-        hourlyRate: personData.hourlyRate || personData.hourly_rate,
-        iban: personData.iban,
-        registerCode: personData.registerCode || personData.register_code,
-        certifications: personData.certifications,
-        specialties: personData.specialties,
-        vatNumber: personData.vatNumber || personData.vat_number,
-        username: personData.username,
-        globalRole: personData.globalRole,
-        status: personData.status || 'ACTIVE'
-      };
-      
-      // Rimuovi campi undefined
-      Object.keys(transformedData).forEach(key => {
-        if (transformedData[key] === undefined) {
-          delete transformedData[key];
-        }
-      });
-      
-      const person = await personService.updatePerson(id, transformedData);
-      
-      res.json(person);
+      const updated = await personService.updatePerson(id, req.body);
+      res.json(updated);
     } catch (error) {
-      logger.error('Error updating person:', { error: error.message, id: req.params.id, body: req.body });
-      res.status(500).json({ error: error.message });
+      logger.error('Error updating person:', { error: error.message, id: req.params.id });
+      res.status(500).json({ error: 'Failed to update person' });
     }
   }
   
@@ -367,12 +582,7 @@ class PersonController {
     try {
       const { id } = req.params;
       await personService.deletePerson(id);
-      
-      res.json({ 
-        success: true, 
-        message: 'Persona eliminata con successo',
-        id: id
-      });
+      res.json({ success: true });
     } catch (error) {
       logger.error('Error deleting person:', { error: error.message, id: req.params.id });
       res.status(500).json({ error: error.message });
@@ -383,13 +593,12 @@ class PersonController {
   async addRole(req, res) {
     try {
       const { id } = req.params;
-      const { roleType, companyId, tenantId } = req.body;
-      
-      const role = await personService.addRole(id, roleType, companyId, tenantId);
-      res.status(201).json(role);
+      const { roleType } = req.body;
+      const result = await personService.addRole(id, roleType);
+      res.json(result);
     } catch (error) {
-      logger.error('Error adding role:', { error: error.message, id: req.params.id, body: req.body });
-      res.status(500).json({ error: error.message });
+      logger.error('Error adding role to person:', { error: error.message, id: req.params.id });
+      res.status(500).json({ error: 'Failed to add role to person' });
     }
   }
   
@@ -397,133 +606,108 @@ class PersonController {
   async removeRole(req, res) {
     try {
       const { id, roleType } = req.params;
-      const { companyId, tenantId } = req.query;
-      
-      await personService.removeRole(id, roleType, companyId, tenantId);
-      res.json({ 
-        success: true, 
-        message: 'Ruolo rimosso con successo',
-        personId: id,
-        roleType: roleType
-      });
+      const result = await personService.removeRole(id, roleType);
+      res.json(result);
     } catch (error) {
-      logger.error('Error removing role:', { error: error.message, id: req.params.id, roleType: req.params.roleType });
+      logger.error('Error removing role from person:', { error: error.message, id: req.params.id, params: req.params });
       res.status(500).json({ error: error.message });
     }
   }
-
-  // GET /api/persons - Ottieni tutte le persone con filtri e paginazione
+  
+  // GET /api/persons
   async getPersons(req, res) {
     try {
       const {
-        roleType,
-        isActive,
-        companyId,
+        page = 1,
+        limit = 20,
         search,
+        roleType,
+        companyId,
+        tenantId, // currently unused by core pagination
         sortBy = 'lastLogin',
         sortOrder = 'desc',
-        page = 1,
-        limit = 50,
-        includeDeleted = false
+        isActive
       } = req.query;
-      
-      const filters = {
+
+      const options = {
         roleType,
-        isActive: isActive !== undefined ? isActive === 'true' : undefined,
-        companyId: companyId || undefined,
+        companyId,
         search,
         sortBy,
         sortOrder,
         page: parseInt(page),
-        limit: parseInt(limit),
-        includeDeleted: includeDeleted === 'true'
+        limit: parseInt(limit)
       };
-      
-      const result = await personService.getPersonsWithPagination(filters);
-      
-      // Trasforma i dati per il frontend
-      const transformedPersons = result.persons.map(person => ({
+
+      if (typeof isActive !== 'undefined') {
+        // normalize string boolean to actual boolean
+        options.isActive = (isActive === true || isActive === 'true');
+      }
+
+      const result = await personService.getPersonsWithPagination(options);
+
+      // Trasforma per frontend
+      const transformed = (result.persons || []).map(person => ({
         id: person.id,
         firstName: person.firstName,
         lastName: person.lastName,
         email: person.email,
-        phone: person.phone,
-        taxCode: person.taxCode,
-        residenceAddress: person.residenceAddress,
-        position: person.title,
-        department: person.department,
-        companyId: person.companyId,
-        company: person.company,
-        roleType: person.personRoles?.[0]?.roleType || 'EMPLOYEE',
-        roles: person.personRoles?.map(role => ({
-          id: role.id,
-          roleType: role.roleType,
-          isActive: role.isActive,
-          company: role.company,
-          assignedAt: role.assignedAt
-        })) || [],
-        isActive: person.status === 'ACTIVE',
-        isOnline: person.isOnline || false,
-        lastLogin: person.lastLogin,
         username: person.username,
+        phone: person.phone,
+        companyId: person.companyId, // ✅ Include companyId for schedules
+        companyName: person.company?.name,
+        tenantId: person.tenantId, // ✅ Include tenantId for consistency
+        tenantName: person.tenant?.name,
+        birthDate: person.birthDate, // ✅ Include birthDate for display
+        position: person.position,
         status: person.status,
+        certifications: person.certifications, // ✅ Include certifications for trainers filtering
+        specialties: person.specialties, // ✅ Include specialties for trainers
         createdAt: person.createdAt,
         updatedAt: person.updatedAt
       }));
-      
+
       res.json({
-        persons: transformedPersons,
+        success: true,
+        persons: transformed,
+        data: transformed, // alias retrocompatibile
         total: result.total,
         page: result.page,
-        totalPages: result.totalPages
+        totalPages: result.totalPages,
+        pages: result.totalPages // alias retrocompatibile
       });
     } catch (error) {
-      logger.error('Error getting persons:', { error: error.message });
+      logger.error('Error getting persons:', { error: error.message, query: req.query });
       res.status(500).json({ error: error.message });
     }
   }
 
-  // PUT /api/persons/:id/status - Attiva/disattiva persona
+  // PUT /api/persons/:id/status
   async togglePersonStatus(req, res) {
     try {
       const { id } = req.params;
       const { isActive } = req.body;
-      
-      const person = await personService.updatePerson(id, {
-        status: isActive ? 'ACTIVE' : 'INACTIVE'
-      });
-      
-      res.json({
-        id: person.id,
-        firstName: person.firstName,
-        lastName: person.lastName,
-        email: person.email,
-        isActive: person.status === 'ACTIVE',
-        updatedAt: person.updatedAt
-      });
+      const result = await personService.togglePersonStatus(id, isActive);
+      res.json(result);
     } catch (error) {
       logger.error('Error toggling person status:', { error: error.message, id: req.params.id });
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: 'Failed to toggle status' });
     }
   }
 
-  // POST /api/persons/:id/reset-password - Reset password persona
+  // POST /api/persons/:id/reset-password
   async resetPersonPassword(req, res) {
     try {
       const { id } = req.params;
-      
       const result = await personService.resetPersonPassword(id);
-      
-      res.json({
-        temporaryPassword: result.temporaryPassword
-      });
+      res.json(result);
     } catch (error) {
       logger.error('Error resetting person password:', { error: error.message, id: req.params.id });
       res.status(500).json({ error: error.message });
     }
   }
 
-  // GET /api/persons/stats - Ottieni statistiche persone
+  // GET /api/persons/stats
   async getPersonStats(req, res) {
     try {
       const stats = await personService.getPersonStats();
@@ -534,187 +718,212 @@ class PersonController {
     }
   }
 
-  // GET /api/persons/check-username - Verifica disponibilità username
+  // GET /api/persons/check-username
   async checkUsernameAvailability(req, res) {
     try {
       const { username } = req.query;
-      
-      if (!username) {
-        return res.status(400).json({ error: 'Username is required' });
-      }
-      
       const available = await personService.checkUsernameAvailability(username);
       res.json({ available });
     } catch (error) {
-      logger.error('Error checking username availability:', { error: error.message });
+      logger.error('Error checking username availability:', { error: error.message, query: req.query });
       res.status(500).json({ error: error.message });
     }
   }
 
-  // GET /api/persons/check-email - Verifica disponibilità email
+  // GET /api/persons/check-email
   async checkEmailAvailability(req, res) {
     try {
-      const { email, excludePersonId } = req.query;
-    
-    if (!email) {
-      return res.status(400).json({ error: 'Email parameter is required' });
-    }
-    
-    const available = await personService.checkEmailAvailability(email, excludePersonId);
+      const { email } = req.query;
+      const available = await personService.checkEmailAvailability(email);
       res.json({ available });
     } catch (error) {
-      logger.error('Error checking email availability:', { error: error.message });
+      logger.error('Error checking email availability:', { error: error.message, query: req.query });
       res.status(500).json({ error: error.message });
     }
   }
 
-  // GET /api/persons/export - Esporta persone in CSV
+  // GET /api/persons/export
   async exportPersons(req, res) {
     try {
-      const {
-        roleType,
-        isActive,
-        companyId,
-        search
-      } = req.query;
-      
-      const filters = {
-        roleType,
-        isActive: isActive !== undefined ? isActive === 'true' : undefined,
-        companyId: companyId || undefined,
-        search
-      };
-      
-      const csvData = await personService.exportPersonsToCSV(filters);
-      
+      const { format = 'csv', view: viewQuery, fields, ...filtersFromQuery } = req.query;
+
+      // Determina view effettiva (preferisci entità virtuale se presente)
+      const effectiveView = viewQuery || (
+        req.virtualEntity?.name === 'TRAINERS' ? 'trainer' :
+        req.virtualEntity?.name === 'EMPLOYEES' ? 'employee' :
+        'person'
+      );
+
+      // Costruisci filtri effettivi partendo dalla query
+      const filters = { ...filtersFromQuery };
+
+      // Imposta tenantId di default dall'utente autenticato se non esplicitato
+      const tenantIdFromAuth = req.user?.tenantId || req.tenant?.id;
+      if (!filters.tenantId && tenantIdFromAuth) {
+        filters.tenantId = tenantIdFromAuth;
+      }
+
+      // Se invocato da route di entità virtuale, applica roleType coerente se non già passato
+      if (!filters.roleType && req.virtualEntity?.name) {
+        if (req.virtualEntity.name === 'TRAINERS') filters.roleType = 'TRAINER';
+        if (req.virtualEntity.name === 'EMPLOYEES') filters.roleType = 'EMPLOYEE';
+      }
+      // In assenza di virtual entity, deduci da view
+      if (!filters.roleType) {
+        if (effectiveView === 'trainer') filters.roleType = 'TRAINER';
+        else if (effectiveView === 'employee') filters.roleType = 'EMPLOYEE';
+      }
+
+      // Mappa view -> resource per controllo permessi
+      const resource = (effectiveView === 'employee') ? 'employees' : (effectiveView === 'trainer') ? 'trainers' : 'persons';
+      const requestedFields = typeof fields === 'string' && fields.length > 0
+        ? fields.split(',').map(f => f.trim()).filter(Boolean)
+        : undefined;
+
+      // Permessi sull'export (azione read sulla risorsa)
+      const permission = await advancedPermissionService.checkPermission({
+        personId: req.person.id,
+        resource,
+        action: 'read',
+        targetCompanyId: filters?.companyId,
+        requestedFields
+      });
+
+      if (!permission.allowed) {
+        return res.status(403).json({ error: 'Permission denied', code: 'PERMISSION_DENIED', reason: permission.reason });
+      }
+
+      // Determina globalRole dell'utente corrente per i default fields
+      const me = await prisma.person.findUnique({
+        where: { id: req.person.id },
+        select: {
+          globalRole: true,
+          personRoles: { where: { isActive: true }, select: { roleType: true } }
+        }
+      });
+
+      let globalRole = me?.globalRole || null;
+      const roles = (me?.personRoles || []).map(r => r.roleType);
+      if (!globalRole) {
+        if (roles.includes('SUPER_ADMIN')) globalRole = 'SUPER_ADMIN';
+        else if (roles.includes('ADMIN')) globalRole = 'ADMIN';
+        else if (roles.includes('COMPANY_ADMIN')) globalRole = 'COMPANY_ADMIN';
+        else if (roles.includes('MANAGER')) globalRole = 'MANAGER';
+        else if (roles.includes('EMPLOYEE')) globalRole = 'EMPLOYEE';
+      }
+
+      const defaultFields = advancedPermissionService.getDefaultFieldsForRole(globalRole || 'EMPLOYEE', resource) || [];
+
+      // Calcola allowedFields da passare all'export
+      let allowedFields;
+      if (permission.allowedFields && permission.allowedFields.includes('*')) {
+        allowedFields = requestedFields || (defaultFields.length ? defaultFields : ['*']);
+      } else if (permission.allowedFields && permission.allowedFields.length > 0) {
+        allowedFields = advancedPermissionService.filterAllowedFields(requestedFields, permission.allowedFields);
+      } else {
+        allowedFields = defaultFields && defaultFields.length ? defaultFields : (requestedFields || ['*']);
+      }
+
+      const options = { view: effectiveView, allowedFields };
+
+      if (format === 'json') {
+        const data = await personService.exportPersonsToJSON(filters, options);
+        res.setHeader('Content-Type', 'application/json');
+        return res.status(200).json(data);
+      }
+
+      const csv = await personService.exportPersonsToCSV(filters, options);
       res.setHeader('Content-Type', 'text/csv');
-      res.setHeader('Content-Disposition', 'attachment; filename="persons.csv"');
-      res.send(csvData);
+      const fileView = effectiveView ? `_${effectiveView}` : '';
+      res.setHeader('Content-Disposition', `attachment; filename="persons_export${fileView}.csv"`);
+      return res.status(200).send(csv);
     } catch (error) {
-      logger.error('Error exporting persons:', { error: error.message });
-      res.status(500).json({ error: error.message });
+      logger.error('Error exporting persons:', { error: error.message, query: req.query });
+      return res.status(500).json({ error: error.message });
     }
   }
 
-  // POST /api/persons/import - Importa persone da CSV o JSON
+  // POST /api/persons/import
   async importPersons(req, res) {
     try {
-      // Gestisce sia file CSV che dati JSON
-      if (req.file) {
-        // Importazione da file CSV
-        const companyId = req.body.companyId || req.person?.companyId || null;
-        let tenantId = req.body.tenantId || req.person?.tenantId || req.tenantId || null;
-        
-        // Se tenantId è null, usa il primo tenant disponibile
-        if (!tenantId) {
-          const defaultTenant = await prisma.tenant.findFirst({
-            where: {
-              isActive: true,
-              deletedAt: null
-            },
-            orderBy: {
-              createdAt: 'asc'
-            }
-          });
-          
-          if (defaultTenant) {
-            tenantId = defaultTenant.id;
-            logger.info('Using default tenant for import:', { tenantId: defaultTenant.id, tenantName: defaultTenant.name });
-          } else {
-            return res.status(400).json({ 
-              error: 'No active tenant found. Please contact system administrator.' 
-            });
-          }
+      const contentType = req.headers['content-type'] || '';
+      const isJson = contentType.includes('application/json');
+      const { mode = 'csv' } = req.query;
+
+      // Path JSON: accetta sia mode=json sia Content-Type JSON o presenza di body.persons
+      if (mode === 'json' || isJson || Array.isArray(req.body?.persons) || Array.isArray(req.body)) {
+        // Normalizza payload in array
+        let personsPayload = [];
+        if (Array.isArray(req.body?.persons)) {
+          personsPayload = req.body.persons;
+        } else if (req.body?.persons && typeof req.body.persons === 'object') {
+          personsPayload = [req.body.persons];
+        } else if (Array.isArray(req.body)) {
+          personsPayload = req.body;
+        } else if (req.body && typeof req.body === 'object') {
+          personsPayload = [req.body];
         }
-        
-        logger.info('Importing persons from CSV:', { 
-          companyId,
-          tenantId,
-          fromBody: req.body.tenantId,
-          fromPerson: req.person?.tenantId,
-          fromMiddleware: req.tenantId
-        });
-        
-        const csvContent = req.file.buffer.toString('utf-8');
-        const result = await personService.importPersonsFromCSV(csvContent, { companyId, tenantId });
-        
-        res.json({
-          imported: result.imported,
-          errors: result.errors
-        });
-      } else if (req.body.persons && Array.isArray(req.body.persons)) {
-        // Importazione da dati JSON processati dal frontend
-        const { persons, overwriteIds = [] } = req.body;
-        const companyId = req.body.companyId || req.person?.companyId || null;
-        let tenantId = req.body.tenantId || req.person?.tenantId || req.tenantId || null;
-        
-        // Se tenantId è null, usa il primo tenant disponibile
-        if (!tenantId) {
-          const defaultTenant = await prisma.tenant.findFirst({
-            where: {
-              isActive: true,
-              deletedAt: null
-            },
-            orderBy: {
-              createdAt: 'asc'
-            }
-          });
-          
-          if (defaultTenant) {
-            tenantId = defaultTenant.id;
-            logger.info('Using default tenant for import:', { tenantId: defaultTenant.id, tenantName: defaultTenant.name });
-          } else {
-            return res.status(400).json({ 
-              error: 'No active tenant found. Please contact system administrator.' 
-            });
-          }
+        if (!personsPayload || personsPayload.length === 0) {
+          return res.status(400).json({ error: 'JSON payload vuoto: fornire almeno una persona' });
         }
-        
-        logger.info('Importing persons from JSON data:', { 
-          count: persons.length, 
-          overwriteIds: overwriteIds.length,
-          companyId,
-          tenantId,
-          fromBody: req.body.tenantId,
-          fromPerson: req.person?.tenantId,
-          fromMiddleware: req.tenantId
-        });
-        
-        const result = await personService.importPersonsFromJSON(persons, overwriteIds, companyId, tenantId);
-        
-        res.json({
-          imported: result.imported,
+
+        const options = {
+          overwriteIds: Array.isArray(req.body?.overwriteIds) ? req.body.overwriteIds : [],
+          defaultTenantId: req.headers['x-tenant-id'] || req.body?.defaultTenantId || req.body?.tenantId || null,
+          defaultCompanyId: req.body?.defaultCompanyId || null,
+          updateExisting: Array.isArray(req.body?.overwriteIds) && req.body.overwriteIds.length > 0,
+          skipDuplicates: false
+        };
+
+        const result = await personService.importPersonsFromJSON(personsPayload, options);
+        return res.json({
+          success: true,
+          imported: result.imported || 0,
+          updated: result.updated || 0,
+          skipped: result.skipped || 0,
           errors: result.errors || []
         });
-      } else {
-        return res.status(400).json({ 
-          error: 'Either file upload or persons array is required' 
-        });
       }
+
+      // Path CSV (predefinito)
+      if (!req.file) {
+        return res.status(400).json({ error: 'CSV file is required' });
+      }
+      const csvContent = req.file?.buffer ? req.file.buffer.toString('utf-8') : '';
+      if (!csvContent) {
+        return res.status(400).json({ error: 'CSV file is empty' });
+      }
+
+      const result = await personService.importPersonsFromCSV(csvContent, {
+        defaultTenantId: req.headers['x-tenant-id'] || null,
+        defaultCompanyId: req.body?.defaultCompanyId || null,
+        skipDuplicates: false
+      });
+      res.json({
+        success: true,
+        imported: result.imported || 0,
+        skipped: result.skipped || 0,
+        errors: result.errors || []
+      });
     } catch (error) {
-      logger.error('Error importing persons:', { error: error.message, stack: error.stack });
+      logger.error('Error importing persons:', { error: error.message, query: req.query });
       res.status(500).json({ error: error.message });
     }
   }
 
-  // DELETE /api/persons/bulk - Elimina più persone
+  // DELETE /api/persons/bulk
   async deleteMultiplePersons(req, res) {
     try {
       const { personIds } = req.body;
-      
-      if (!personIds || !Array.isArray(personIds) || personIds.length === 0) {
-        return res.status(400).json({ error: 'personIds array is required' });
-      }
-      
       const result = await personService.deleteMultiplePersons(personIds);
-      
       res.json({
-        deleted: result.deleted,
+        success: true,
+        deleted: result.deleted || 0,
         errors: result.errors || []
       });
     } catch (error) {
       logger.error('Error deleting multiple persons:', { error: error.message });
-      res.status(500).json({ error: error.message });
+      return res.status(500).json({ error: error.message });
     }
   }
 

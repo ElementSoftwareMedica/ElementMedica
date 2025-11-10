@@ -216,7 +216,7 @@ export const routePreloader = new RoutePreloader();
 // Register all application routes
 routePreloader.registerRoute({
   route: '/',
-  loader: () => import('../pages/Dashboard/Dashboard.lazy'),
+  loader: () => import('../pages/Dashboard'),
   priority: 'high',
   preloadOn: 'idle'
 });

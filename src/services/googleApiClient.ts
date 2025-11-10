@@ -4,9 +4,9 @@ import { apiGet, apiPost } from './api';
  * Google Docs API endpoints
  */
 export const GOOGLE_API_ENDPOINTS = {
-  TEMPLATES: '/api/google-docs/templates',
-  GENERATE: '/api/google-docs/generate',
-  ATTESTATI: '/api/google-docs/attestati',
+  TEMPLATES: '/api/v1/templates',
+  GENERATE: '/api/v1/google/generate',
+  ATTESTATI: '/api/v1/google/attestati',
 };
 
 /**
@@ -71,15 +71,15 @@ const getErrorDetails = (error: unknown): string | undefined => {
  */
 const googleApiClient = {
   /**
-   * Get the default template for a document type
+   * Get default template for a document type
    * 
-   * @param type - Document type (e.g., 'attestato', 'lettera_incarico')
+   * @param type - Document type (e.g., 'CERTIFICATE', 'ASSIGNMENT_LETTER')
    * @returns Promise with template response
    */
   async getDefaultTemplate(type: string): Promise<GoogleTemplateResponse> {
     try {
       const response = await apiGet<GoogleTemplateResponse>(
-        `${GOOGLE_API_ENDPOINTS.TEMPLATES}/${type}`
+        `${GOOGLE_API_ENDPOINTS.TEMPLATES}/default/${type}`
       );
       return response;
     } catch (error: unknown) {

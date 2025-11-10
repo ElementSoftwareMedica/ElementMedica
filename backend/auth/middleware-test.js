@@ -3,7 +3,7 @@
  * Per testare se il problema è nelle query al database
  */
 
-import jwt from 'jsonwebtoken';
+import { JWTService } from './jwt.js';
 
 /**
  * Extract token from request headers
@@ -36,34 +36,8 @@ export function authenticateTest(req, res, next) {
             });
         }
         
-        // Verify JWT token without database lookup
-        let decoded;
-        
-        const secretsToTry = [
-            process.env.JWT_SECRET,
-            'your-super-secret-jwt-key-change-this-in-production',
-            'super-secret-jwt-key-for-development-change-in-production-2024'
-        ].filter(Boolean);
-        
-        let lastError;
-        for (const secret of secretsToTry) {
-            try {
-                decoded = jwt.verify(token, secret, {
-                    issuer: 'training-platform',
-                    audience: 'training-platform-users'
-                });
-                break;
-            } catch (fallbackError) {
-                lastError = fallbackError;
-            }
-        }
-        
-        if (!decoded) {
-            return res.status(401).json({
-                error: 'Invalid token',
-                code: 'AUTH_TOKEN_INVALID'
-            });
-        }
+        // Verify JWT token using central JWTService (no DB lookup)
+        const decoded = JWTService.verifyAccessToken(token);
         
         // Attach minimal person info WITHOUT database queries
         req.person = {
@@ -72,8 +46,8 @@ export function authenticateTest(req, res, next) {
             email: decoded.email || 'test@example.com',
             firstName: 'Test',
             lastName: 'User',
-            roles: ['ADMIN'],
-            permissions: ['ALL_PERMISSIONS']
+            roles: Array.isArray(decoded.roles) ? decoded.roles : ['ADMIN'],
+            permissions: Array.isArray(decoded.permissions) ? decoded.permissions : ['ALL_PERMISSIONS']
         };
         
         req.user = req.person; // Backward compatibility
@@ -81,6 +55,13 @@ export function authenticateTest(req, res, next) {
         next();
         
     } catch (error) {
+        // Config error (missing secrets) should be 500 to reflect server misconfiguration
+        if (error && typeof error.message === 'string' && error.message.includes('JWT configuration error')) {
+            return res.status(500).json({
+                error: 'JWT secret non configurato',
+                code: 'AUTH_CONFIG_ERROR'
+            });
+        }
         return res.status(401).json({
             error: 'Authentication failed',
             code: 'AUTH_TOKEN_INVALID'

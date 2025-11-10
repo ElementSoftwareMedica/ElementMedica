@@ -3,6 +3,7 @@
  * Week 5: Database and Performance Optimization
  */
 
+import { PrismaClient } from '@prisma/client';
 import logger from '../utils/logger.js';
 
 // Database configuration - minimal setup for compatibility

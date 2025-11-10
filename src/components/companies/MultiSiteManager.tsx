@@ -10,6 +10,7 @@ import TabPills from '../ui/TabPills';
 import SiteCard from './SiteCard';
 import CompanySiteForm from './CompanySiteForm';
 import { DVRManager, RepartoManager, SopralluogoManager } from '../managers';
+import { getEmployees as getEmployeesService } from '../../services/employees';
 
 interface CompanySite {
   id: string;
@@ -57,9 +58,10 @@ interface Employee {
 interface MultiSiteManagerProps {
   companyId: string;
   companyName: string;
+  fetchInternals?: boolean; // se true, esegue fetch interno; se false, delega ad altri componenti
 }
 
-const MultiSiteManager: React.FC<MultiSiteManagerProps> = ({ companyId }) => {
+const MultiSiteManager: React.FC<MultiSiteManagerProps> = ({ companyId, fetchInternals = false }) => {
   const [sites, setSites] = useState<CompanySite[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,19 +76,17 @@ const MultiSiteManager: React.FC<MultiSiteManagerProps> = ({ companyId }) => {
   const { showToast } = useToast();
 
   const fetchData = useCallback(async () => {
+    if (!fetchInternals) {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
-      
-      // Fetch sites
       const sitesResponse = await apiGet(`/api/v1/company-sites/company/${companyId}`) as { sites: CompanySite[] };
       const sitesData = sitesResponse.sites || [];
       setSites(sitesData);
-      
-      // Fetch employees
-      const employeesResponse = await apiGet(`/api/v1/persons?companyId=${companyId}&roleType=EMPLOYEE`) as { persons?: Employee[] };
-      setEmployees(employeesResponse.persons || []);
-      
-      // Set default tab (company if no sites, first site if sites exist)
+      const emps = await getEmployeesService({ companyId });
+      setEmployees(emps as unknown as Employee[]);
       if (sitesData.length > 0 && activeTab === 'company') {
         setActiveTab('company');
       }
@@ -96,7 +96,7 @@ const MultiSiteManager: React.FC<MultiSiteManagerProps> = ({ companyId }) => {
     } finally {
       setLoading(false);
     }
-  }, [companyId, activeTab, showToast]);
+  }, [companyId, activeTab, fetchInternals, showToast]);
 
   useEffect(() => {
     fetchData();

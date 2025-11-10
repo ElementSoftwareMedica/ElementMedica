@@ -44,11 +44,11 @@ const ContactsPage: React.FC = () => {
                   <div>
                     <div className="flex items-center gap-2 mb-1">
                       <h3 className="text-lg font-semibold text-gray-900">Sede Principale</h3>
-                      <PublicBadge variant="blue" size="sm">Milano</PublicBadge>
+                      <PublicBadge variant="blue" size="sm">Padova</PublicBadge>
                     </div>
                     <p className="text-gray-600">
-                      Via Roma, 123<br />
-                      20100 Milano (MI)<br />
+                      Via Lanari, 14<br />
+                      35129 Padova (PD)<br />
                       Italia
                     </p>
                   </div>
@@ -66,13 +66,13 @@ const ContactsPage: React.FC = () => {
                       <PublicBadge variant="green" size="sm">Attivo</PublicBadge>
                     </div>
                     <p className="text-gray-600">
-                      <a href="tel:+390212345678" className="text-gray-700 hover:text-gray-900 font-medium">
-                        +39 02 1234 5678
+                      <a href="tel: 351 318 1574" className="text-gray-700 hover:text-blue-600 font-medium">
+                        351 318 1574 (Edoardo)
                       </a>
                     </p>
                     <p className="text-gray-600">
-                      <a href="tel:+393331234567" className="hover:text-primary-600 transition-colors">
-                        +39 333 123 4567 (Mobile)
+                      <a href="tel: 351 623 9176" className="text-gray-700 hover:text-blue-600 font-medium">
+                        351 623 9176 (Matteo)
                       </a>
                     </p>
                   </div>
@@ -90,13 +90,13 @@ const ContactsPage: React.FC = () => {
                       <PublicBadge variant="purple" size="sm">24/7</PublicBadge>
                     </div>
                     <p className="text-gray-600">
-                      <a href="mailto:info@elementformazione.it" className="text-gray-700 hover:text-gray-900 font-medium">
-                        info@elementformazione.it
+                      <a href="mailto:info@elementformazione.com" className="text-gray-700 hover:text-gray-900 font-medium">
+                        info@elementformazione.com
                       </a>
                     </p>
                     <p className="text-gray-600">
-                      <a href="mailto:corsi@elementformazione.it" className="hover:text-primary-600 transition-colors">
-                        corsi@elementformazione.it
+                      <a href="mailto:corsi@elementformazione.com" className="hover:text-primary-600 transition-colors">
+                        corsi@elementformazione.com
                       </a>
                     </p>
                   </div>
@@ -111,8 +111,8 @@ const ContactsPage: React.FC = () => {
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900 mb-1">Orari di Apertura</h3>
                     <p className="text-gray-600">
-                      Lunedì - Venerdì: 9:00 - 18:00<br />
-                      Sabato: 9:00 - 13:00<br />
+                      Lunedì - Venerdì: 8:00 - 19:00<br />
+                      Sabato: 8:00 - 13:00<br />
                       Domenica: Chiuso
                     </p>
                   </div>

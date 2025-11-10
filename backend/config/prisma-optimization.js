@@ -7,9 +7,18 @@ import { PrismaClient } from '@prisma/client';
 import { createAdvancedSoftDeleteMiddleware } from '../middleware/soft-delete-advanced.js';
 import logger from '../utils/logger.js';
 
-// Configurazione Prisma con middleware
+// Determina URL del database da env, con fallback per Supabase/Hetzner
+const dbUrl = process.env.DATABASE_URL || process.env.SUPABASE_DATABASE_URL || process.env.POSTGRES_URL;
+if (!dbUrl) {
+  logger.warn('DATABASE_URL non impostata. Impostare l\'URL del DB per abilitare Prisma.', {
+    component: 'prisma-client'
+  });
+}
+
+// Configurazione Prisma con middleware e datasources override per supportare env diversi
 const prisma = new PrismaClient({
-  log: ['error', 'warn']
+  log: ['error', 'warn'],
+  ...(dbUrl ? { datasources: { db: { url: dbUrl } } } : {})
 });
 
 // Abilito il middleware soft-delete avanzato

@@ -1,0 +1,958 @@
+src/api/companies.ts(4,15): error TS2614: Module '"../hooks/resources/useCompaniesOptimized"' has no exported member 'Company'. Did you mean to use 'import Company from "../hooks/resources/useCompaniesOptimized"' instead?
+src/api/courses.ts(2,10): error TS2305: Module '"@prisma/client"' has no exported member 'Course'.
+src/backend/controllers/publicCourseController.ts(1,35): error TS2307: Cannot find module 'express' or its corresponding type declarations.
+src/backend/controllers/publicCourseController.ts(2,31): error TS2307: Cannot find module '../config/database' or its corresponding type declarations.
+src/backend/controllers/publicCourseController.ts(3,24): error TS2307: Cannot find module '../entities/Course' or its corresponding type declarations.
+src/backend/controllers/publicCourseController.ts(4,32): error TS2307: Cannot find module '../entities/CourseSchedule' or its corresponding type declarations.
+src/backend/controllers/publicCourseController.ts(165,32): error TS7006: Parameter 'course' implicitly has an 'any' type.
+src/backend/controllers/publicCourseController.ts(212,52): error TS7006: Parameter 'acc' implicitly has an 'any' type.
+src/backend/controllers/publicCourseController.ts(212,57): error TS7006: Parameter 'item' implicitly has an 'any' type.
+src/backend/controllers/publicCourseController.ts(254,39): error TS7006: Parameter 'item' implicitly has an 'any' type.
+src/backend/controllers/publicCourseController.ts(296,35): error TS7006: Parameter 'course' implicitly has an 'any' type.
+src/components/__tests__/Button.test.tsx(3,24): error TS2307: Cannot find module '../Button' or its corresponding type declarations.
+src/components/assessments/AssessmentCard.tsx(57,16): error TS2304: Cannot find name 'User'.
+src/components/companies/CompanyEditForm.tsx(24,5): error TS2820: Type '"Active"' is not assignable to type '"ACTIVE" | "INACTIVE" | "PENDING" | undefined'. Did you mean '"ACTIVE"'?
+src/components/companies/CompanyEditForm.tsx(160,33): error TS2339: Property 'employees' does not exist on type 'Partial<Company>'.
+src/components/companies/CompanyEditForm.tsx(179,35): error TS2339: Property 'established' does not exist on type 'Partial<Company>'.
+src/components/companies/CompanyEditForm.tsx(193,18): error TS2304: Cannot find name 'User'.
+src/components/companies/EmployeesSection.tsx(32,48): error TS2322: Type 'string' is not assignable to type 'number'.
+src/components/companies/MultiSiteManager.tsx(88,48): error TS2322: Type 'string' is not assignable to type 'number'.
+src/components/courses/CourseDetails.tsx(33,19): error TS2345: Argument of type 'unknown' is not assignable to parameter of type 'SetStateAction<Course | null>'.
+src/components/courses/CourseDetails.tsx(109,76): error TS2339: Property 'code' does not exist on type 'Course'.
+src/components/courses/CourseDetails.tsx(122,13): error TS2322: Type '{ children: string; variant: "primary"; shape: string; leftIcon: Element; onClick: () => void; }' is not assignable to type 'IntrinsicAttributes & ButtonProps & RefAttributes<HTMLButtonElement>'.
+  Property 'shape' does not exist on type 'IntrinsicAttributes & ButtonProps & RefAttributes<HTMLButtonElement>'.
+src/components/courses/CourseDetails.tsx(139,95): error TS2339: Property 'validityYears' does not exist on type 'Course'.
+src/components/courses/CourseDetails.tsx(140,108): error TS2339: Property 'renewalDuration' does not exist on type 'Course'.
+src/components/courses/CourseDetails.tsx(141,91): error TS2339: Property 'pricePerPerson' does not exist on type 'Course'.
+src/components/courses/CourseDetails.tsx(141,119): error TS2339: Property 'pricePerPerson' does not exist on type 'Course'.
+src/components/courses/CourseDetails.tsx(142,96): error TS2339: Property 'certifications' does not exist on type 'Course'.
+src/components/courses/CourseDetails.tsx(145,93): error TS2339: Property 'maxPeople' does not exist on type 'Course'.
+src/components/courses/CourseDetails.tsx(146,91): error TS2339: Property 'regulation' does not exist on type 'Course'.
+src/components/courses/CourseDetails.tsx(147,91): error TS2339: Property 'contents' does not exist on type 'Course'.
+src/components/courses/CourseDetails.tsx(148,88): error TS2339: Property 'code' does not exist on type 'Course'.
+src/components/courses/CourseDetails.tsx(300,17): error TS2322: Type '{ children: string; variant: "primary"; shape: string; leftIcon: Element; onClick: () => void; }' is not assignable to type 'IntrinsicAttributes & ButtonProps & RefAttributes<HTMLButtonElement>'.
+  Property 'shape' does not exist on type 'IntrinsicAttributes & ButtonProps & RefAttributes<HTMLButtonElement>'.
+src/components/courses/CourseDetails.tsx(384,17): error TS2322: Type '{ children: string; variant: "primary"; shape: string; leftIcon: Element; onClick: () => void; }' is not assignable to type 'IntrinsicAttributes & ButtonProps & RefAttributes<HTMLButtonElement>'.
+  Property 'shape' does not exist on type 'IntrinsicAttributes & ButtonProps & RefAttributes<HTMLButtonElement>'.
+src/components/courses/CourseDetails.tsx(385,28): error TS2304: Cannot find name 'UserPlus'.
+src/components/courses/CourseDetails.tsx(439,27): error TS2322: Type '{ children: string; variant: "outline"; shape: string; size: "sm"; leftIcon: Element; }' is not assignable to type 'IntrinsicAttributes & ButtonProps & RefAttributes<HTMLButtonElement>'.
+  Property 'shape' does not exist on type 'IntrinsicAttributes & ButtonProps & RefAttributes<HTMLButtonElement>'.
+src/components/gdpr/AuditTrailTab.tsx(62,5): error TS2339: Property 'auditLogs' does not exist on type 'UseAuditTrailReturn'.
+src/components/gdpr/AuditTrailTab.tsx(65,5): error TS2339: Property 'pagination' does not exist on type 'UseAuditTrailReturn'.
+src/components/gdpr/AuditTrailTab.tsx(67,5): error TS2339: Property 'refreshAuditTrail' does not exist on type 'UseAuditTrailReturn'.
+src/components/gdpr/AuditTrailTab.tsx(71,5): error TS2339: Property 'getAuditStats' does not exist on type 'UseAuditTrailReturn'.
+src/components/gdpr/AuditTrailTab.tsx(72,5): error TS2339: Property 'exportToCSV' does not exist on type 'UseAuditTrailReturn'.
+src/components/gdpr/AuditTrailTab.tsx(73,5): error TS2339: Property 'exportToJSON' does not exist on type 'UseAuditTrailReturn'.
+src/components/gdpr/AuditTrailTab.tsx(74,5): error TS2339: Property 'hasFilters' does not exist on type 'UseAuditTrailReturn'.
+src/components/gdpr/AuditTrailTab.tsx(101,7): error TS2322: Type '""' is not assignable to type 'AuditAction | undefined'.
+src/components/gdpr/AuditTrailTab.tsx(102,7): error TS2322: Type 'string' is not assignable to type 'Date'.
+src/components/gdpr/AuditTrailTab.tsx(103,7): error TS2322: Type 'string' is not assignable to type 'Date'.
+src/components/gdpr/AuditTrailTab.tsx(254,10): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; sm: number; md: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+    Type '{ children: Element; item: true; xs: number; sm: number; md: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+src/components/gdpr/AuditTrailTab.tsx(267,10): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; sm: number; md: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+    Type '{ children: Element; item: true; xs: number; sm: number; md: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+src/components/gdpr/AuditTrailTab.tsx(280,10): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; sm: number; md: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+    Type '{ children: Element; item: true; xs: number; sm: number; md: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+src/components/gdpr/AuditTrailTab.tsx(293,10): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; sm: number; md: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+    Type '{ children: Element; item: true; xs: number; sm: number; md: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+src/components/gdpr/AuditTrailTab.tsx(347,37): error TS7006: Parameter 'entry' implicitly has an 'any' type.
+src/components/gdpr/AuditTrailTab.tsx(473,14): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+    Type '{ children: Element; item: true; xs: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+src/components/gdpr/AuditTrailTab.tsx(491,14): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+    Type '{ children: Element; item: true; xs: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+src/components/gdpr/AuditTrailTab.tsx(502,14): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+    Type '{ children: Element; item: true; xs: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+src/components/gdpr/AuditTrailTab.tsx(513,14): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+    Type '{ children: Element; item: true; xs: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+src/components/gdpr/AuditTrailTab.tsx(517,36): error TS2339: Property 'ipAddress' does not exist on type 'AuditTrailFilters'.
+src/components/gdpr/AuditTrailTab.tsx(518,53): error TS2345: Argument of type '"ipAddress"' is not assignable to parameter of type 'keyof AuditTrailFilters'.
+src/components/gdpr/AuditTrailTab.tsx(523,14): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+    Type '{ children: Element; item: true; xs: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+src/components/gdpr/AuditTrailTab.tsx(527,36): error TS2339: Property 'userAgent' does not exist on type 'AuditTrailFilters'.
+src/components/gdpr/AuditTrailTab.tsx(528,53): error TS2345: Argument of type '"userAgent"' is not assignable to parameter of type 'keyof AuditTrailFilters'.
+src/components/gdpr/AuditTrailTab.tsx(563,18): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: Element[]; item: true; xs: number; sm: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+    Type '{ children: Element[]; item: true; xs: number; sm: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+src/components/gdpr/AuditTrailTab.tsx(574,18): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: Element[]; item: true; xs: number; sm: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+    Type '{ children: Element[]; item: true; xs: number; sm: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+src/components/gdpr/AuditTrailTab.tsx(583,18): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: Element[]; item: true; xs: number; sm: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+    Type '{ children: Element[]; item: true; xs: number; sm: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+src/components/gdpr/AuditTrailTab.tsx(592,18): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: Element[]; item: true; xs: number; sm: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+    Type '{ children: Element[]; item: true; xs: number; sm: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+src/components/gdpr/AuditTrailTab.tsx(601,18): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: Element[]; item: true; xs: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+    Type '{ children: Element[]; item: true; xs: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+src/components/gdpr/AuditTrailTab.tsx(616,45): error TS2339: Property 'metadata' does not exist on type 'AuditLogEntry'.
+src/components/gdpr/ComplianceReport.tsx(95,55): error TS2339: Property 'overallScore' does not exist on type 'ComplianceReport'.
+src/components/gdpr/ComplianceReport.tsx(98,45): error TS2339: Property 'consentStats' does not exist on type 'ComplianceReport'.
+src/components/gdpr/ComplianceReport.tsx(100,13): error TS18046: 'stats' is of type 'unknown'.
+src/components/gdpr/ComplianceReport.tsx(101,16): error TS18046: 'stats' is of type 'unknown'.
+src/components/gdpr/ComplianceReport.tsx(102,12): error TS18046: 'stats' is of type 'unknown'.
+src/components/gdpr/ComplianceReport.tsx(105,29): error TS2339: Property 'trends' does not exist on type 'ComplianceReport'.
+src/components/gdpr/ComplianceReport.tsx(105,41): error TS7006: Parameter 'trend' implicitly has an 'any' type.
+src/components/gdpr/ComplianceReport.tsx(118,43): error TS2551: Property 'generatedAt' does not exist on type 'ComplianceReport'. Did you mean 'generatedBy'?
+src/components/gdpr/ComplianceReport.tsx(150,82): error TS2339: Property 'overallScore' does not exist on type 'ComplianceReport'.
+src/components/gdpr/ComplianceReport.tsx(151,27): error TS2339: Property 'overallScore' does not exist on type 'ComplianceReport'.
+src/components/gdpr/ComplianceReport.tsx(154,39): error TS2339: Property 'overallScore' does not exist on type 'ComplianceReport'.
+src/components/gdpr/ComplianceReport.tsx(168,57): error TS2339: Property 'totalUsers' does not exist on type 'ComplianceReport'.
+src/components/gdpr/ComplianceReport.tsx(181,57): error TS2339: Property 'totalConsents' does not exist on type 'ComplianceReport'.
+src/components/gdpr/ComplianceReport.tsx(194,57): error TS2339: Property 'pendingDeletions' does not exist on type 'ComplianceReport'.
+src/components/gdpr/ComplianceReport.tsx(207,57): error TS2339: Property 'dataExports' does not exist on type 'ComplianceReport'.
+src/components/gdpr/ComplianceReport.tsx(293,36): error TS2339: Property 'type' does not exist on type '{ severity: "critical" | "low" | "medium" | "high"; description: string; recommendation: string; }'.
+src/components/gdpr/ConsentManagementTab.tsx(54,5): error TS2339: Property 'hasConsent' does not exist on type 'UseGDPRConsentReturn'.
+src/components/gdpr/ConsentManagementTab.tsx(55,5): error TS2339: Property 'getConsentByType' does not exist on type 'UseGDPRConsentReturn'.
+src/components/gdpr/ConsentManagementTab.tsx(83,28): error TS2345: Argument of type 'string' is not assignable to parameter of type 'ConsentFormData'.
+  Type 'string' is not assignable to type 'ConsentFormData'.
+src/components/gdpr/ConsentManagementTab.tsx(85,31): error TS2345: Argument of type 'string' is not assignable to parameter of type 'ConsentWithdrawalFormData'.
+  Type 'string' is not assignable to type 'ConsentWithdrawalFormData'.
+src/components/gdpr/ConsentManagementTab.tsx(105,28): error TS2769: No overload matches this call.
+  Overload 1 of 4, '(value: string | number | Date): Date', gave the following error.
+    Argument of type 'Date | undefined' is not assignable to parameter of type 'string | number | Date'.
+      Type 'undefined' is not assignable to type 'string | number | Date'.
+  Overload 2 of 4, '(value: string | number): Date', gave the following error.
+    Argument of type 'Date | undefined' is not assignable to parameter of type 'string | number'.
+      Type 'undefined' is not assignable to type 'string | number'.
+src/components/gdpr/ConsentManagementTab.tsx(129,29): error TS2339: Property 'granted' does not exist on type '{ total: number; active: number; withdrawn: number; percentage: number; }'.
+src/components/gdpr/ConsentManagementTab.tsx(130,26): error TS2339: Property 'granted' does not exist on type '{ total: number; active: number; withdrawn: number; percentage: number; }'.
+src/components/gdpr/ConsentManagementTab.tsx(151,10): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; md: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+    Type '{ children: Element; item: true; xs: number; md: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+src/components/gdpr/ConsentManagementTab.tsx(155,24): error TS2339: Property 'granted' does not exist on type '{ total: number; active: number; withdrawn: number; percentage: number; }'.
+src/components/gdpr/ConsentManagementTab.tsx(164,10): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; md: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+    Type '{ children: Element; item: true; xs: number; md: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+src/components/gdpr/ConsentManagementTab.tsx(177,10): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; md: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+    Type '{ children: Element; item: true; xs: number; md: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+src/components/gdpr/ConsentManagementTab.tsx(181,36): error TS2339: Property 'granted' does not exist on type '{ total: number; active: number; withdrawn: number; percentage: number; }'.
+src/components/gdpr/DataExportTab.tsx(210,10): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; sm: number; md: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+    Type '{ children: Element; item: true; xs: number; sm: number; md: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+src/components/gdpr/DataExportTab.tsx(223,10): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; sm: number; md: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+    Type '{ children: Element; item: true; xs: number; sm: number; md: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+src/components/gdpr/DataExportTab.tsx(236,10): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; sm: number; md: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+    Type '{ children: Element; item: true; xs: number; sm: number; md: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+src/components/gdpr/DataExportTab.tsx(249,10): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; sm: number; md: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+    Type '{ children: Element; item: true; xs: number; sm: number; md: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+src/components/gdpr/DataExportTab.tsx(448,16): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; md: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+    Type '{ children: Element; item: true; xs: number; md: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+src/components/gdpr/DataExportTab.tsx(462,16): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; md: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+    Type '{ children: Element; item: true; xs: number; md: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+src/components/gdpr/DeletionRequestTab.tsx(63,5): error TS2339: Property 'submitDeletionRequest' does not exist on type 'UseDeletionRequestReturn'.
+src/components/gdpr/DeletionRequestTab.tsx(64,5): error TS2339: Property 'cancelDeletionRequest' does not exist on type 'UseDeletionRequestReturn'.
+src/components/gdpr/DeletionRequestTab.tsx(66,5): error TS2339: Property 'getDeletionStats' does not exist on type 'UseDeletionRequestReturn'.
+src/components/gdpr/DeletionRequestTab.tsx(67,5): error TS2339: Property 'getLatestRequest' does not exist on type 'UseDeletionRequestReturn'.
+src/components/gdpr/DeletionRequestTab.tsx(69,5): error TS2339: Property 'getStatusColor' does not exist on type 'UseDeletionRequestReturn'.
+src/components/gdpr/DeletionRequestTab.tsx(70,5): error TS2339: Property 'getStatusDescription' does not exist on type 'UseDeletionRequestReturn'.
+src/components/gdpr/DeletionRequestTab.tsx(71,5): error TS2339: Property 'formatRequestForDisplay' does not exist on type 'UseDeletionRequestReturn'.
+src/components/gdpr/DeletionRequestTab.tsx(72,5): error TS2339: Property 'validateFormData' does not exist on type 'UseDeletionRequestReturn'.
+src/components/gdpr/DeletionRequestTab.tsx(76,75): error TS2345: Argument of type '{ reason: string; confirmEmail: string; additionalInfo: string; }' is not assignable to parameter of type 'DeletionRequestFormData | (() => DeletionRequestFormData)'.
+  Type '{ reason: string; confirmEmail: string; additionalInfo: string; }' is missing the following properties from type 'DeletionRequestFormData': anonymize, confirmDeletion
+src/components/gdpr/DeletionRequestTab.tsx(111,22): error TS2345: Argument of type '{ reason: string; confirmEmail: string; additionalInfo: string; }' is not assignable to parameter of type 'SetStateAction<DeletionRequestFormData>'.
+  Type '{ reason: string; confirmEmail: string; additionalInfo: string; }' is missing the following properties from type 'DeletionRequestFormData': anonymize, confirmDeletion
+src/components/gdpr/DeletionRequestTab.tsx(252,10): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; sm: number; md: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+    Type '{ children: Element; item: true; xs: number; sm: number; md: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+src/components/gdpr/DeletionRequestTab.tsx(265,10): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; sm: number; md: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+    Type '{ children: Element; item: true; xs: number; sm: number; md: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+src/components/gdpr/DeletionRequestTab.tsx(278,10): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; sm: number; md: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+    Type '{ children: Element; item: true; xs: number; sm: number; md: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+src/components/gdpr/DeletionRequestTab.tsx(291,10): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; sm: number; md: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+    Type '{ children: Element; item: true; xs: number; sm: number; md: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+src/components/gdpr/PrivacySettingsTab.tsx(55,5): error TS2339: Property 'hasUnsavedChanges' does not exist on type 'UsePrivacySettingsReturn'.
+src/components/gdpr/PrivacySettingsTab.tsx(56,5): error TS2339: Property 'updatePrivacySettings' does not exist on type 'UsePrivacySettingsReturn'.
+src/components/gdpr/PrivacySettingsTab.tsx(57,5): error TS2339: Property 'updateSingleSetting' does not exist on type 'UsePrivacySettingsReturn'.
+src/components/gdpr/PrivacySettingsTab.tsx(59,5): error TS2339: Property 'getComplianceScore' does not exist on type 'UsePrivacySettingsReturn'.
+src/components/gdpr/PrivacySettingsTab.tsx(60,5): error TS2339: Property 'getComplianceRecommendations' does not exist on type 'UsePrivacySettingsReturn'.
+src/components/gdpr/PrivacySettingsTab.tsx(61,5): error TS2339: Property 'checkForChanges' does not exist on type 'UsePrivacySettingsReturn'.
+src/components/gdpr/PrivacySettingsTab.tsx(62,5): error TS2339: Property 'getSettingDescription' does not exist on type 'UsePrivacySettingsReturn'.
+src/components/gdpr/PrivacySettingsTab.tsx(63,5): error TS2339: Property 'getSettingImpact' does not exist on type 'UsePrivacySettingsReturn'.
+src/components/gdpr/PrivacySettingsTab.tsx(64,5): error TS2339: Property 'exportSettings' does not exist on type 'UsePrivacySettingsReturn'.
+src/components/gdpr/PrivacySettingsTab.tsx(75,24): error TS2345: Argument of type '{ dataProcessingConsent: boolean; marketingConsent: boolean; analyticsConsent: boolean; profileVisibility: "public" | "private" | "company_only"; dataRetentionOptOut: boolean; thirdPartySharing: boolean; }' is not assignable to parameter of type 'SetStateAction<PrivacySettingsFormData | null>'.
+  Type '{ dataProcessingConsent: boolean; marketingConsent: boolean; analyticsConsent: boolean; profileVisibility: "public" | "private" | "company_only"; dataRetentionOptOut: boolean; thirdPartySharing: boolean; }' is missing the following properties from type 'PrivacySettingsFormData': emailNotifications, marketingEmails, analyticsTracking, dataRetentionPeriod, and 3 more.
+src/components/gdpr/PrivacySettingsTab.tsx(226,10): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; lg: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+    Type '{ children: Element; item: true; xs: number; lg: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+src/components/gdpr/PrivacySettingsTab.tsx(338,10): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; lg: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+    Type '{ children: Element; item: true; xs: number; lg: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+src/components/gdpr/PrivacySettingsTab.tsx(374,43): error TS7006: Parameter 'recommendation' implicitly has an 'any' type.
+src/components/gdpr/PrivacySettingsTab.tsx(374,59): error TS7006: Parameter 'index' implicitly has an 'any' type.
+src/components/index.ts(27,10): error TS2724: '"../design-system/atoms/Button"' has no exported member named 'buttonVariants'. Did you mean 'ButtonVariant'?
+src/components/managers/DVRManager.tsx(80,15): error TS2304: Cannot find name 'apiPut'.
+src/components/managers/DVRManager.tsx(83,15): error TS2304: Cannot find name 'apiPost'.
+src/components/managers/DVRManager.tsx(238,24): error TS2304: Cannot find name 'User'.
+src/components/managers/RepartoManager.tsx(74,15): error TS2304: Cannot find name 'apiPut'.
+src/components/managers/RepartoManager.tsx(78,15): error TS2304: Cannot find name 'apiPost'.
+src/components/managers/SopralluogoManager.tsx(77,15): error TS2304: Cannot find name 'apiPut'.
+src/components/managers/SopralluogoManager.tsx(81,15): error TS2304: Cannot find name 'apiPost'.
+src/components/persons/import/ConflictResolutionPanel.tsx(40,38): error TS2339: Property 'fiscalCode' does not exist on type 'PersonData'.
+src/components/persons/import/ConflictResolutionPanel.tsx(42,43): error TS2339: Property 'fiscalCode' does not exist on type 'PersonData'.
+src/components/public/ContactForm.tsx(226,32): error TS2367: This comparison appears to be unintentional because the types '"default" | "compact"' and '"inline"' have no overlap.
+src/components/roles/AdvancedPermissionManager.tsx(32,15): error TS2459: Module '"../../hooks/useRoles"' declares 'Person' locally, but it is not exported.
+src/components/roles/AdvancedPermissionManager.tsx(79,9): error TS2322: Type '{ persons: LucideIcon; companies: LucideIcon; courses: LucideIcon; trainings: LucideIcon; roles: LucideIcon; hierarchy: LucideIcon; ... 6 more ...; templates: LucideIcon; }' is not assignable to type 'Record<string, ComponentType<{ className?: string | undefined; size?: number | undefined; }>>'.
+  Property 'persons' is incompatible with index signature.
+    Type 'LucideIcon' is not assignable to type 'ComponentType<{ className?: string | undefined; size?: number | undefined; }>'.
+      Type 'ForwardRefExoticComponent<LucideProps>' is not assignable to type 'FunctionComponent<{ className?: string | undefined; size?: number | undefined; }>'.
+        Types of property 'propTypes' are incompatible.
+          Type 'WeakValidationMap<LucideProps> | undefined' is not assignable to type 'WeakValidationMap<{ className?: string | undefined; size?: number | undefined; }> | undefined'.
+            Type 'WeakValidationMap<LucideProps>' is not assignable to type 'WeakValidationMap<{ className?: string | undefined; size?: number | undefined; }>'.
+              Types of property 'size' are incompatible.
+                Type 'Validator<string | number | null | undefined> | undefined' is not assignable to type 'Validator<number | null | undefined> | undefined'.
+                  Type 'Validator<string | number | null | undefined>' is not assignable to type 'Validator<number | null | undefined>'.
+                    Type 'string | number | null | undefined' is not assignable to type 'number | null | undefined'.
+                      Type 'string' is not assignable to type 'number'.
+src/components/roles/permission-manager/PermissionsSection.tsx(62,67): error TS2345: Argument of type 'string' is not assignable to parameter of type 'number'.
+src/components/roles/permission-manager/PermissionsSection.tsx(120,55): error TS2345: Argument of type 'string[]' is not assignable to parameter of type 'number[]'.
+  Type 'string' is not assignable to type 'number'.
+src/components/roles/permission-manager/PermissionsSection.tsx(128,55): error TS2345: Argument of type 'string[]' is not assignable to parameter of type 'number[]'.
+  Type 'string' is not assignable to type 'number'.
+src/components/roles/permission-manager/PermissionsSection.tsx(208,70): error TS2345: Argument of type 'string' is not assignable to parameter of type 'number'.
+src/components/roles/permission-manager/PermissionsSection.tsx(218,75): error TS2345: Argument of type 'string' is not assignable to parameter of type 'number'.
+src/components/roles/permission-manager/PermissionsSection.tsx(227,89): error TS2345: Argument of type 'string' is not assignable to parameter of type 'number'.
+src/components/roles/permission-manager/utils.ts(133,82): error TS2345: Argument of type 'string | number | string[] | number[]' is not assignable to parameter of type '"none" | "all" | "tenant" | "own"'.
+  Type 'string' is not assignable to type '"none" | "all" | "tenant" | "own"'.
+src/components/roles/permission-manager/utils.ts(139,83): error TS2345: Argument of type 'string | number' is not assignable to parameter of type 'string'.
+  Type 'number' is not assignable to type 'string'.
+src/components/roles/permission-manager/utils.ts(146,84): error TS2345: Argument of type 'string | number' is not assignable to parameter of type 'number'.
+  Type 'string' is not assignable to type 'number'.
+src/components/roles/PermissionsGrid.tsx(186,67): error TS2345: Argument of type 'string' is not assignable to parameter of type 'number'.
+src/components/roles/RoleHierarchy.tsx(210,22): error TS2353: Object literal may only specify known properties, and 'roleType' does not exist in type 'Role | ((prevState: Role | null) => Role | null)'.
+src/components/roles/RoleHierarchy.tsx(223,23): error TS2353: Object literal may only specify known properties, and 'roleType' does not exist in type 'Role | ((prevState: Role | null) => Role | null)'.
+src/components/roles/RoleHierarchy.tsx(236,21): error TS2353: Object literal may only specify known properties, and 'roleType' does not exist in type 'Role | ((prevState: Role | null) => Role | null)'.
+src/components/roles/RoleHierarchy.tsx(252,32): error TS2352: Conversion of type 'string[]' to type '{ permissionId: string; granted: boolean; scope: string; tenantIds: string[]; fieldRestrictions: string[]; }[]' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Type 'string' is not comparable to type '{ permissionId: string; granted: boolean; scope: string; tenantIds: string[]; fieldRestrictions: string[]; }'.
+src/components/roles/RoleHierarchy.tsx(300,25): error TS2339: Property 'roleType' does not exist on type 'Role'.
+src/components/roles/RoleHierarchy.tsx(302,44): error TS2339: Property 'roleType' does not exist on type 'Role'.
+src/components/roles/RoleHierarchy.tsx(314,40): error TS2339: Property 'roleType' does not exist on type 'Role'.
+src/components/roles/RoleHierarchy.tsx(332,57): error TS2339: Property 'roleType' does not exist on type 'Role'.
+src/components/roles/RoleHierarchy.tsx(585,32): error TS2345: Argument of type '{ name: string; description: string | undefined; permissions: string[]; }' is not assignable to parameter of type '{ name: string; description: string; permissions?: string[] | undefined; }'.
+  Types of property 'description' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/roles/RoleHierarchy.tsx(603,38): error TS2345: Argument of type 'Role' is not assignable to parameter of type '{ name: string; description: string; permissions?: string[] | undefined; level?: number | undefined; parentRoleType?: string | undefined; }'.
+  Types of property 'description' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/roles/RoleHierarchy.tsx(792,9): error TS2322: Type '(roleData: { name: string; description: string; permissions?: string[]; level?: number; parentRoleType?: string; }) => Promise<void>' is not assignable to type '(roleData: Role) => Promise<void>'.
+  Types of parameters 'roleData' and 'roleData' are incompatible.
+    Type 'Role' is not assignable to type '{ name: string; description: string; permissions?: string[] | undefined; level?: number | undefined; parentRoleType?: string | undefined; }'.
+      Types of property 'description' are incompatible.
+        Type 'string | undefined' is not assignable to type 'string'.
+          Type 'undefined' is not assignable to type 'string'.
+src/components/roles/RoleHierarchy.tsx(793,9): error TS2322: Type 'Role | null' is not assignable to type 'Role | undefined'.
+  Type 'null' is not assignable to type 'Role | undefined'.
+src/components/roles/RoleHierarchy.tsx(804,26): error TS2322: Type 'Promise<void> | null' is not assignable to type 'Promise<void>'.
+  Type 'null' is not assignable to type 'Promise<void>'.
+src/components/roles/RoleHierarchy.tsx(804,72): error TS2339: Property 'roleType' does not exist on type 'Role'.
+src/components/roles/RoleHierarchy.tsx(805,9): error TS2322: Type 'Role | null' is not assignable to type 'Role'.
+  Type 'null' is not assignable to type 'Role'.
+src/components/roles/RoleHierarchy.tsx(814,31): error TS2322: Type 'Promise<void> | null' is not assignable to type 'Promise<void>'.
+  Type 'null' is not assignable to type 'Promise<void>'.
+src/components/roles/RoleHierarchy.tsx(814,71): error TS2339: Property 'roleType' does not exist on type 'Role'.
+src/components/roles/RoleHierarchy.tsx(815,9): error TS2322: Type 'Role | null' is not assignable to type 'Role'.
+  Type 'null' is not assignable to type 'Role'.
+src/components/roles/VirtualEntityPermissionManager.tsx(222,14): error TS2304: Cannot find name 'GraduationCap'.
+src/components/schedules/components/steps/StepAttendanceSimple.tsx(42,35): error TS2551: Property 'company_id' does not exist on type 'Person'. Did you mean 'companyId'?
+src/components/schedules/components/steps/StepAttendanceSimple.tsx(42,78): error TS2551: Property 'company_id' does not exist on type 'Person'. Did you mean 'companyId'?
+src/components/schedules/components/steps/StepAttendanceSimple.tsx(46,14): error TS2339: Property 'name' does not exist on type 'Person'.
+src/components/schedules/components/steps/StepAttendanceSimple.tsx(47,14): error TS2339: Property 'surname' does not exist on type 'Person'.
+src/components/schedules/components/steps/StepAttendanceSimple.tsx(143,33): error TS2339: Property 'name' does not exist on type 'Person'.
+src/components/schedules/components/steps/StepAttendanceSimple.tsx(143,47): error TS2339: Property 'surname' does not exist on type 'Person'.
+src/components/schedules/components/steps/StepAttendanceSimple.tsx(148,31): error TS2339: Property 'phone' does not exist on type 'Person'.
+src/components/schedules/components/steps/StepAttendanceSimple.tsx(149,72): error TS2339: Property 'phone' does not exist on type 'Person'.
+src/components/schedules/components/steps/StepCourseDetailsOptimized.tsx(75,29): error TS2339: Property 'toLowerCase' does not exist on type '{}'.
+src/components/schedules/components/steps/StepCourseDetailsOptimized.tsx(108,9): error TS2322: Type '{}' is not assignable to type 'string'.
+src/components/schedules/components/steps/StepCourseDetailsSimple.tsx(51,27): error TS2339: Property 'toLowerCase' does not exist on type '{}'.
+src/components/schedules/components/steps/StepCourseDetailsSimple.tsx(153,11): error TS2322: Type 'unknown' is not assignable to type 'string | number | bigint | boolean | ReactElement<any, string | JSXElementConstructor<any>> | Iterable<ReactNode> | ReactPortal | Promise<...> | null | undefined'.
+src/components/schedules/components/steps/StepCourseDetailsSimple.tsx(154,55): error TS2322: Type '{}' is not assignable to type 'ReactI18NextChildren | Iterable<ReactI18NextChildren>'.
+src/components/schedules/hooks/useAdvancedMemoization.ts(84,37): error TS2339: Property 'length' does not exist on type '{}'.
+src/components/schedules/hooks/useAdvancedMemoization.ts(86,25): error TS2339: Property 'every' does not exist on type '{}'.
+src/components/schedules/ScheduleEventModal.original.tsx(265,5): error TS2322: Type 'FormData' is not assignable to type 'ScheduleFormData & { dates: DateEntry[]; }'.
+  Type 'FormData' is not assignable to type 'ScheduleFormData'.
+    Index signature for type 'string' is missing in type 'FormData'.
+src/components/schedules/ScheduleEventModal.original.tsx(354,75): error TS2345: Argument of type 'FormData' is not assignable to parameter of type 'ScheduleFormData'.
+  Index signature for type 'string' is missing in type 'FormData'.
+src/components/schedules/ScheduleEventModal.tsx(217,5): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/components/schedules/ScheduleEventModal.tsx(218,5): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/components/schedules/ScheduleEventModal.tsx(236,16): error TS2322: Type 'string | number | undefined' is not assignable to type 'string | number'.
+  Type 'undefined' is not assignable to type 'string | number'.
+src/components/schedules/ScheduleEventModal.tsx(236,51): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/components/schedules/ScheduleEventModal.tsx(236,84): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/components/schedules/ScheduleEventModal.tsx(252,5): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/components/schedules/ScheduleEventModal.tsx(253,5): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/components/schedules/ScheduleEventModal.tsx(365,5): error TS2739: Type 'ScheduleFormData' is missing the following properties from type 'FormData': trainer_id, co_trainer_id, max_participants, notes, delivery_mode
+src/components/schedules/ScheduleEventModal.tsx(384,72): error TS2322: Type 'ScheduleFormData' is not assignable to type 'Pick<ScheduleFormData, "dates"> & { dates: ScheduleDateEntry[]; }'.
+  Type 'ScheduleFormData' is not assignable to type '{ dates: ScheduleDateEntry[]; }'.
+    Types of property 'dates' are incompatible.
+      Type 'ScheduleDateEntry[] | undefined' is not assignable to type 'ScheduleDateEntry[]'.
+        Type 'undefined' is not assignable to type 'ScheduleDateEntry[]'.
+src/components/schedules/ScheduleEventModal.tsx(438,13): error TS2739: Type 'ScheduleFormData' is missing the following properties from type 'FormData': trainer_id, co_trainer_id, max_participants, notes, delivery_mode
+src/components/schedules/ScheduleEventModal.tsx(483,13): error TS2322: Type 'ScheduleDateEntry[] | undefined' is not assignable to type '{ date: string; start: string; end: string; trainerId: string | number; coTrainerId: string | number; }[]'.
+  Type 'undefined' is not assignable to type '{ date: string; start: string; end: string; trainerId: string | number; coTrainerId: string | number; }[]'.
+src/components/schedules/ScheduleEventModal.tsx(508,13): error TS2322: Type 'ScheduleDateEntry[] | undefined' is not assignable to type '{ date: string; start: string; end: string; trainerId: string | number; coTrainerId: string | number; }[]'.
+  Type 'undefined' is not assignable to type '{ date: string; start: string; end: string; trainerId: string | number; coTrainerId: string | number; }[]'.
+src/components/schedules/ScheduleEventModal.tsx(516,13): error TS2322: Type 'ScheduleDateEntry[] | undefined' is not assignable to type '{ date: string; start: string; end: string; trainerId: string | number; coTrainerId: string | number; }[]'.
+  Type 'undefined' is not assignable to type '{ date: string; start: string; end: string; trainerId: string | number; coTrainerId: string | number; }[]'.
+src/components/schedules/ScheduleEventModal.tsx(522,26): error TS2488: Type 'ScheduleDateEntry[] | undefined' must have a '[Symbol.iterator]()' method that returns an iterator.
+src/components/schedules/ScheduleEventModalRefactored.tsx(60,13): error TS2739: Type 'ScheduleFormData' is missing the following properties from type '{ training_id: string | number; trainer_id: string | number; co_trainer_id: string | number; location: string; max_participants: number; notes: string; delivery_mode: string; risk_level: string; course_type: string; dates: { ...; }[]; }': trainer_id, co_trainer_id, max_participants, notes, delivery_mode
+src/components/settings/DashboardCustomization.tsx(187,31): error TS2741: Property 'columns' is missing in type '{ layout: DashboardLayoutType; widgets: { id: string; enabled: boolean; order: number; size: "medium"; }[]; compact: boolean; }' but required in type 'DashboardLayout'.
+src/components/settings/DashboardCustomization.tsx(225,41): error TS2339: Property 'layout' does not exist on type 'DashboardLayout'.
+src/components/settings/DashboardCustomization.tsx(234,42): error TS2339: Property 'layout' does not exist on type 'DashboardLayout'.
+src/components/settings/DashboardCustomization.tsx(304,47): error TS2339: Property 'enabled' does not exist on type 'DashboardWidget'.
+src/components/settings/DashboardCustomization.tsx(336,47): error TS2339: Property 'order' does not exist on type 'DashboardWidget'.
+src/components/settings/DashboardCustomization.tsx(354,50): error TS2339: Property 'enabled' does not exist on type 'DashboardWidget'.
+src/components/settings/DashboardCustomization.tsx(369,51): error TS2339: Property 'enabled' does not exist on type 'DashboardWidget'.
+src/components/settings/DashboardCustomization.tsx(370,69): error TS2339: Property 'order' does not exist on type 'DashboardWidget'.
+src/components/settings/DashboardCustomization.tsx(370,79): error TS2339: Property 'order' does not exist on type 'DashboardWidget'.
+src/components/settings/DashboardCustomization.tsx(415,124): error TS2339: Property 'layout' does not exist on type 'DashboardLayout'.
+src/components/settings/DashboardCustomization.tsx(418,114): error TS2339: Property 'enabled' does not exist on type 'DashboardWidget'.
+src/components/settings/LanguageSelector.tsx(94,11): error TS2322: Type '(languageCode: LanguageCode) => Promise<void>' is not assignable to type '(value: string) => void'.
+  Types of parameters 'languageCode' and 'value' are incompatible.
+    Type 'string' is not assignable to type 'LanguageCode'.
+src/components/settings/LanguageSelector.tsx(98,14): error TS2559: Type '{ children: Element | undefined; }' has no properties in common with type 'IntrinsicAttributes & SelectValueProps'.
+src/components/settings/NotificationSettings.tsx(177,19): error TS2322: Type '(value: NotificationFrequency) => Promise<void>' is not assignable to type '(value: string) => void'.
+  Types of parameters 'value' and 'value' are incompatible.
+    Type 'string' is not assignable to type 'NotificationFrequency'.
+src/components/settings/NotificationSettings.tsx(364,58): error TS2339: Property 'position' does not exist on type '{ enabled: boolean; sound: boolean; desktop: boolean; }'.
+src/components/shared/form/EntityFormLayout.tsx(126,15): error TS2322: Type '{ children: string; variant: "outline"; shape: string; onClick: () => void; disabled: boolean; }' is not assignable to type 'IntrinsicAttributes & ButtonProps & RefAttributes<HTMLButtonElement>'.
+  Property 'shape' does not exist on type 'IntrinsicAttributes & ButtonProps & RefAttributes<HTMLButtonElement>'.
+src/components/shared/form/EntityFormLayout.tsx(137,15): error TS2322: Type '{ children: string; variant: "primary"; shape: string; onClick: () => void; disabled: boolean; }' is not assignable to type 'IntrinsicAttributes & ButtonProps & RefAttributes<HTMLButtonElement>'.
+  Property 'shape' does not exist on type 'IntrinsicAttributes & ButtonProps & RefAttributes<HTMLButtonElement>'.
+src/components/shared/form/Form.tsx(85,15): error TS2322: Type '"link" | "primary" | "secondary" | "outline" | "ghost" | "danger"' is not assignable to type 'ButtonVariant | undefined'.
+  Type '"link"' is not assignable to type 'ButtonVariant | undefined'.
+src/components/shared/form/Form.tsx(96,13): error TS2322: Type '"link" | "primary" | "secondary" | "outline" | "ghost" | "danger"' is not assignable to type 'ButtonVariant | undefined'.
+  Type '"link"' is not assignable to type 'ButtonVariant | undefined'.
+src/components/shared/index.ts(41,8): error TS2307: Cannot find module './ui/AddEntityDropdown' or its corresponding type declarations.
+src/components/shared/PageScaffold.tsx(14,8): error TS2307: Cannot find module './ui' or its corresponding type declarations.
+src/components/shared/PageScaffold.tsx(182,11): error TS2322: Type '({ label: string; icon: Element; onClick: () => void; } | undefined)[]' is not assignable to type 'DropdownAction[]'.
+  Type '{ label: string; icon: Element; onClick: () => void; } | undefined' is not assignable to type 'DropdownAction'.
+    Type 'undefined' is not assignable to type 'DropdownAction'.
+src/components/shared/tables/DataTable.tsx(325,15): error TS2484: Export declaration conflicts with exported declaration of 'DataTableColumn'.
+src/components/shared/template/GoogleDocsPreview.tsx(188,15): error TS2322: Type '"link"' is not assignable to type 'ButtonVariant | undefined'.
+src/components/shared/template/SimpleEditor.tsx(263,13): error TS2322: Type '"default" | "ghost"' is not assignable to type 'ButtonVariant | undefined'.
+  Type '"default"' is not assignable to type 'ButtonVariant | undefined'.
+src/components/shared/template/SimpleEditor.tsx(272,13): error TS2322: Type '"default" | "ghost"' is not assignable to type 'ButtonVariant | undefined'.
+  Type '"default"' is not assignable to type 'ButtonVariant | undefined'.
+src/components/shared/template/SimpleEditor.tsx(281,13): error TS2322: Type '"default" | "ghost"' is not assignable to type 'ButtonVariant | undefined'.
+  Type '"default"' is not assignable to type 'ButtonVariant | undefined'.
+src/components/shared/template/SimpleEditor.tsx(325,13): error TS2322: Type '"default" | "ghost"' is not assignable to type 'ButtonVariant | undefined'.
+  Type '"default"' is not assignable to type 'ButtonVariant | undefined'.
+src/components/shared/template/SimpleEditor.tsx(334,13): error TS2322: Type '"default" | "ghost"' is not assignable to type 'ButtonVariant | undefined'.
+  Type '"default"' is not assignable to type 'ButtonVariant | undefined'.
+src/components/shared/template/SimpleEditor.tsx(347,13): error TS2322: Type '"default" | "ghost"' is not assignable to type 'ButtonVariant | undefined'.
+  Type '"default"' is not assignable to type 'ButtonVariant | undefined'.
+src/components/shared/template/SimpleEditor.tsx(356,13): error TS2322: Type '"default" | "ghost"' is not assignable to type 'ButtonVariant | undefined'.
+  Type '"default"' is not assignable to type 'ButtonVariant | undefined'.
+src/components/shared/template/SimpleEditor.tsx(365,13): error TS2322: Type '"default" | "ghost"' is not assignable to type 'ButtonVariant | undefined'.
+  Type '"default"' is not assignable to type 'ButtonVariant | undefined'.
+src/components/shared/template/SimpleEditor.tsx(565,19): error TS2322: Type '"default"' is not assignable to type 'ButtonVariant | undefined'.
+src/components/shared/template/TemplateTypeCard.tsx(101,15): error TS2322: Type '{ template: Template; isDefault: true; onEdit: (template: Template) => void; onSetAsDefault: (templateId: string) => void; onRemove: (templateId: string) => Promise<void>; openDropdownId: string | null; toggleDropdown: (id: string) => void; dropdownRefs: MutableRefObject<...>; fetchTemplates: () => Promise<...>; }' is not assignable to type 'IntrinsicAttributes & TemplateCardProps'.
+  Property 'fetchTemplates' does not exist on type 'IntrinsicAttributes & TemplateCardProps'.
+src/components/shared/template/TemplateTypeCard.tsx(131,19): error TS2322: Type '{ key: string; template: Template; isDefault: false; onEdit: (template: Template) => void; onSetAsDefault: (templateId: string) => void; onRemove: (templateId: string) => Promise<...>; openDropdownId: string | null; toggleDropdown: (id: string) => void; dropdownRefs: MutableRefObject<...>; fetchTemplates: () => Prom...' is not assignable to type 'IntrinsicAttributes & TemplateCardProps'.
+  Property 'fetchTemplates' does not exist on type 'IntrinsicAttributes & TemplateCardProps'.
+src/context/TenantContext.tsx(2,19): error TS2305: Module '"../types"' has no exported member 'Permission'.
+src/context/TenantContext.tsx(148,9): error TS2353: Object literal may only specify known properties, and 'tenantId' does not exist in type 'GdprAction'.
+src/context/TenantContext.tsx(158,27): error TS2345: Argument of type '{ action: string; timestamp: string; userId: string; }' is not assignable to parameter of type 'string | GdprAction'.
+  Type '{ action: string; timestamp: string; userId: string; }' is missing the following properties from type 'GdprAction': id, entityType, entityId, details, success
+src/context/TenantContext.tsx(224,24): error TS18046: 'error' is of type 'unknown'.
+src/context/TenantContext.tsx(225,25): error TS18046: 'error' is of type 'unknown'.
+src/context/TenantContext.tsx(226,29): error TS18046: 'error' is of type 'unknown'.
+src/context/TenantContext.tsx(227,31): error TS18046: 'error' is of type 'unknown'.
+src/context/TenantContext.tsx(228,24): error TS18046: 'error' is of type 'unknown'.
+src/context/TenantContext.tsx(235,19): error TS18046: 'error' is of type 'unknown'.
+src/context/TenantContext.tsx(257,11): error TS2353: Object literal may only specify known properties, and 'tenantId' does not exist in type 'GdprAction'.
+src/context/TenantContext.tsx(310,11): error TS2353: Object literal may only specify known properties, and 'metadata' does not exist in type 'GdprAction'.
+src/data/dummyData.ts(5,3): error TS2741: Property 'ragioneSociale' is missing in type '{ id: string; name: string; industry: string; status: "ACTIVE"; location: string; employeesCount: number; establishedYear: number; contactPerson: string; phone: string; email: string; address: string; website: string; description: string; }' but required in type 'Company'.
+src/data/dummyData.ts(24,5): error TS2820: Type '"Active"' is not assignable to type '"ACTIVE" | "INACTIVE" | "PENDING" | undefined'. Did you mean '"ACTIVE"'?
+src/data/dummyData.ts(39,5): error TS2820: Type '"Active"' is not assignable to type '"ACTIVE" | "INACTIVE" | "PENDING" | undefined'. Did you mean '"ACTIVE"'?
+src/data/dummyData.ts(54,5): error TS2820: Type '"Active"' is not assignable to type '"ACTIVE" | "INACTIVE" | "PENDING" | undefined'. Did you mean '"ACTIVE"'?
+src/data/dummyData.ts(69,5): error TS2820: Type '"Active"' is not assignable to type '"ACTIVE" | "INACTIVE" | "PENDING" | undefined'. Did you mean '"ACTIVE"'?
+src/data/dummyData.ts(84,5): error TS2820: Type '"Inactive"' is not assignable to type '"ACTIVE" | "INACTIVE" | "PENDING" | undefined'. Did you mean '"INACTIVE"'?
+src/data/dummyData.ts(106,5): error TS2820: Type '"Active"' is not assignable to type '"ACTIVE" | "INACTIVE" | "PENDING" | "SUSPENDED" | "TERMINATED"'. Did you mean '"ACTIVE"'?
+src/data/dummyData.ts(119,5): error TS2820: Type '"Active"' is not assignable to type '"ACTIVE" | "INACTIVE" | "PENDING" | "SUSPENDED" | "TERMINATED"'. Did you mean '"ACTIVE"'?
+src/data/dummyData.ts(132,5): error TS2820: Type '"Active"' is not assignable to type '"ACTIVE" | "INACTIVE" | "PENDING" | "SUSPENDED" | "TERMINATED"'. Did you mean '"ACTIVE"'?
+src/data/dummyData.ts(145,5): error TS2820: Type '"Active"' is not assignable to type '"ACTIVE" | "INACTIVE" | "PENDING" | "SUSPENDED" | "TERMINATED"'. Did you mean '"ACTIVE"'?
+src/data/dummyData.ts(158,5): error TS2322: Type '"On Leave"' is not assignable to type '"ACTIVE" | "INACTIVE" | "PENDING" | "SUSPENDED" | "TERMINATED"'.
+src/data/dummyData.ts(171,5): error TS2820: Type '"Active"' is not assignable to type '"ACTIVE" | "INACTIVE" | "PENDING" | "SUSPENDED" | "TERMINATED"'. Did you mean '"ACTIVE"'?
+src/data/dummyData.ts(184,5): error TS2820: Type '"Inactive"' is not assignable to type '"ACTIVE" | "INACTIVE" | "PENDING" | "SUSPENDED" | "TERMINATED"'. Did you mean '"INACTIVE"'?
+src/data/dummyData.ts(197,5): error TS2820: Type '"Active"' is not assignable to type '"ACTIVE" | "INACTIVE" | "PENDING" | "SUSPENDED" | "TERMINATED"'. Did you mean '"ACTIVE"'?
+src/data/dummyData.ts(210,5): error TS2820: Type '"Active"' is not assignable to type '"ACTIVE" | "INACTIVE" | "PENDING" | "SUSPENDED" | "TERMINATED"'. Did you mean '"ACTIVE"'?
+src/data/dummyData.ts(223,5): error TS2820: Type '"Active"' is not assignable to type '"ACTIVE" | "INACTIVE" | "PENDING" | "SUSPENDED" | "TERMINATED"'. Did you mean '"ACTIVE"'?
+src/data/dummyData.ts(239,5): error TS2820: Type '"Active"' is not assignable to type '"ACTIVE" | "INACTIVE"'. Did you mean '"ACTIVE"'?
+src/data/dummyData.ts(249,5): error TS2820: Type '"Active"' is not assignable to type '"ACTIVE" | "INACTIVE"'. Did you mean '"ACTIVE"'?
+src/data/dummyData.ts(259,5): error TS2820: Type '"Active"' is not assignable to type '"ACTIVE" | "INACTIVE"'. Did you mean '"ACTIVE"'?
+src/data/dummyData.ts(269,5): error TS2820: Type '"Active"' is not assignable to type '"ACTIVE" | "INACTIVE"'. Did you mean '"ACTIVE"'?
+src/data/dummyData.ts(279,5): error TS2820: Type '"Active"' is not assignable to type '"ACTIVE" | "INACTIVE"'. Did you mean '"ACTIVE"'?
+src/data/dummyData.ts(289,5): error TS2820: Type '"Active"' is not assignable to type '"ACTIVE" | "INACTIVE"'. Did you mean '"ACTIVE"'?
+src/data/dummyData.ts(299,5): error TS2820: Type '"Active"' is not assignable to type '"ACTIVE" | "INACTIVE"'. Did you mean '"ACTIVE"'?
+src/data/dummyData.ts(309,5): error TS2820: Type '"Inactive"' is not assignable to type '"ACTIVE" | "INACTIVE"'. Did you mean '"INACTIVE"'?
+src/design-system/atoms/Button/Button.stories.tsx(9,10): error TS2724: '"@heroicons/react/24/outline"' has no exported member named 'ChevronRightIconIcon'. Did you mean 'ChevronRightIcon'?
+src/design-system/atoms/Button/Button.stories.tsx(139,16): error TS2304: Cannot find name 'PlusIcon'.
+src/design-system/atoms/Button/Button.stories.tsx(146,17): error TS2304: Cannot find name 'ChevronRightIcon'.
+src/design-system/atoms/Button/Button.stories.tsx(153,16): error TS2304: Cannot find name 'PlusIcon'.
+src/design-system/atoms/Button/Button.stories.tsx(154,17): error TS2304: Cannot find name 'ChevronRightIcon'.
+src/design-system/atoms/Button/Button.stories.tsx(220,31): error TS2304: Cannot find name 'PlusIcon'.
+src/design-system/atoms/Icon/Icon.stories.tsx(10,3): error TS2724: '"./Icon"' has no exported member named 'ChevronUpIconIcon'. Did you mean 'ChevronUpIcon'?
+src/design-system/atoms/Icon/Icon.stories.tsx(17,3): error TS2614: Module '"./Icon"' has no exported member 'HomeIconIconIcon'. Did you mean to use 'import HomeIconIconIcon from "./Icon"' instead?
+src/design-system/atoms/Icon/Icon.stories.tsx(375,10): error TS2304: Cannot find name 'ChevronUpIcon'.
+src/design-system/atoms/Icon/Icon.stories.tsx(379,10): error TS2304: Cannot find name 'PlusIcon'.
+src/design-system/atoms/Icon/Icon.stories.tsx(407,10): error TS2304: Cannot find name 'HomeIcon'.
+src/design-system/atoms/Icon/Icon.stories.tsx(411,10): error TS2304: Cannot find name 'UserIcon'.
+src/design-system/atoms/Icon/Icon.stories.tsx(415,10): error TS2304: Cannot find name 'SettingsIcon'.
+src/design-system/atoms/Icon/Icon.stories.tsx(455,14): error TS2304: Cannot find name 'PlusIcon'.
+src/design-system/atoms/Icon/Icon.stories.tsx(473,12): error TS2304: Cannot find name 'HomeIcon'.
+src/design-system/atoms/Icon/Icon.stories.tsx(474,12): error TS2304: Cannot find name 'ChevronRightIcon'.
+src/design-system/atoms/Icon/Icon.stories.tsx(476,12): error TS2304: Cannot find name 'ChevronRightIcon'.
+src/design-system/atoms/Icon/Icon.test.tsx(40,42): error TS2322: Type '"invalid-icon"' is not assignable to type 'IconName | undefined'.
+src/design-system/atoms/Label/Label.test.tsx(9,1): error TS2582: Cannot find name 'describe'. Do you need to install type definitions for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`.
+src/design-system/atoms/Label/Label.test.tsx(10,3): error TS2582: Cannot find name 'it'. Do you need to install type definitions for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`.
+src/design-system/atoms/Label/Label.test.tsx(13,5): error TS2304: Cannot find name 'expect'.
+src/design-system/atoms/Label/Label.test.tsx(14,5): error TS2304: Cannot find name 'expect'.
+src/design-system/atoms/Label/Label.test.tsx(17,3): error TS2582: Cannot find name 'it'. Do you need to install type definitions for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`.
+src/design-system/atoms/Label/Label.test.tsx(20,5): error TS2304: Cannot find name 'expect'.
+src/design-system/atoms/Label/Label.test.tsx(21,5): error TS2304: Cannot find name 'expect'.
+src/design-system/atoms/Label/Label.test.tsx(24,3): error TS2582: Cannot find name 'it'. Do you need to install type definitions for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`.
+src/design-system/atoms/Label/Label.test.tsx(26,5): error TS2304: Cannot find name 'expect'.
+src/design-system/atoms/Label/Label.test.tsx(29,5): error TS2304: Cannot find name 'expect'.
+src/design-system/atoms/Label/Label.test.tsx(32,3): error TS2582: Cannot find name 'it'. Do you need to install type definitions for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`.
+src/design-system/atoms/Label/Label.test.tsx(34,5): error TS2304: Cannot find name 'expect'.
+src/design-system/atoms/Label/Label.test.tsx(37,5): error TS2304: Cannot find name 'expect'.
+src/design-system/atoms/Label/Label.test.tsx(40,3): error TS2582: Cannot find name 'it'. Do you need to install type definitions for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`.
+src/design-system/atoms/Label/Label.test.tsx(42,5): error TS2304: Cannot find name 'expect'.
+src/design-system/atoms/Label/Label.test.tsx(45,3): error TS2582: Cannot find name 'it'. Do you need to install type definitions for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`.
+src/design-system/atoms/Label/Label.test.tsx(48,5): error TS2304: Cannot find name 'expect'.
+src/design-system/atoms/Label/Label.test.tsx(51,3): error TS2582: Cannot find name 'it'. Do you need to install type definitions for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`.
+src/design-system/atoms/Label/Label.test.tsx(54,5): error TS2304: Cannot find name 'expect'.
+src/design-system/atoms/Select/Select.test.tsx(16,1): error TS2582: Cannot find name 'describe'. Do you need to install type definitions for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`.
+src/design-system/atoms/Select/Select.test.tsx(17,3): error TS2582: Cannot find name 'it'. Do you need to install type definitions for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`.
+src/design-system/atoms/Select/Select.test.tsx(20,5): error TS2304: Cannot find name 'expect'.
+src/design-system/atoms/Select/Select.test.tsx(21,5): error TS2304: Cannot find name 'expect'.
+src/design-system/atoms/Select/Select.test.tsx(24,3): error TS2582: Cannot find name 'it'. Do you need to install type definitions for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`.
+src/design-system/atoms/Select/Select.test.tsx(27,5): error TS2304: Cannot find name 'expect'.
+src/design-system/atoms/Select/Select.test.tsx(28,5): error TS2304: Cannot find name 'expect'.
+src/design-system/atoms/Select/Select.test.tsx(29,5): error TS2304: Cannot find name 'expect'.
+src/design-system/atoms/Select/Select.test.tsx(30,5): error TS2304: Cannot find name 'expect'.
+src/design-system/atoms/Select/Select.test.tsx(31,5): error TS2304: Cannot find name 'expect'.
+src/design-system/atoms/Select/Select.test.tsx(34,3): error TS2582: Cannot find name 'it'. Do you need to install type definitions for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`.
+src/design-system/atoms/Select/Select.test.tsx(37,5): error TS2304: Cannot find name 'expect'.
+src/design-system/atoms/Select/Select.test.tsx(38,5): error TS2304: Cannot find name 'expect'.
+src/design-system/atoms/Select/Select.test.tsx(41,3): error TS2582: Cannot find name 'it'. Do you need to install type definitions for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`.
+src/design-system/atoms/Select/Select.test.tsx(43,5): error TS2304: Cannot find name 'expect'.
+src/design-system/atoms/Select/Select.test.tsx(46,5): error TS2304: Cannot find name 'expect'.
+src/design-system/atoms/Select/Select.test.tsx(49,3): error TS2582: Cannot find name 'it'. Do you need to install type definitions for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`.
+src/design-system/atoms/Select/Select.test.tsx(51,5): error TS2304: Cannot find name 'expect'.
+src/design-system/atoms/Select/Select.test.tsx(54,5): error TS2304: Cannot find name 'expect'.
+src/design-system/atoms/Select/Select.test.tsx(57,3): error TS2582: Cannot find name 'it'. Do you need to install type definitions for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`.
+src/design-system/atoms/Select/Select.test.tsx(59,5): error TS2304: Cannot find name 'expect'.
+src/design-system/atoms/Select/Select.test.tsx(62,3): error TS2582: Cannot find name 'it'. Do you need to install type definitions for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`.
+src/design-system/atoms/Select/Select.test.tsx(69,5): error TS2304: Cannot find name 'expect'.
+src/design-system/atoms/Select/Select.test.tsx(72,3): error TS2582: Cannot find name 'it'. Do you need to install type definitions for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`.
+src/design-system/atoms/Select/Select.test.tsx(74,5): error TS2304: Cannot find name 'expect'.
+src/design-system/atoms/Select/Select.test.tsx(77,3): error TS2582: Cannot find name 'it'. Do you need to install type definitions for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`.
+src/design-system/atoms/Select/Select.test.tsx(80,5): error TS2304: Cannot find name 'expect'.
+src/design-system/atoms/Select/Select.test.tsx(83,3): error TS2582: Cannot find name 'it'. Do you need to install type definitions for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`.
+src/design-system/atoms/Select/Select.test.tsx(89,5): error TS2304: Cannot find name 'expect'.
+src/design-system/atoms/Select/Select.test.tsx(92,3): error TS2582: Cannot find name 'it'. Do you need to install type definitions for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`.
+src/design-system/atoms/Select/Select.test.tsx(94,5): error TS2304: Cannot find name 'expect'.
+src/design-system/atoms/Select/Select.test.tsx(95,5): error TS2304: Cannot find name 'expect'.
+src/design-system/atoms/Select/Select.tsx(18,18): error TS2430: Interface 'SelectProps' incorrectly extends interface 'SelectHTMLAttributes<HTMLSelectElement>'.
+  Types of property 'size' are incompatible.
+    Type 'SelectSize | undefined' is not assignable to type 'number | undefined'.
+      Type 'string' is not assignable to type 'number'.
+src/design-system/atoms/Typography/Typography.test.tsx(175,50): error TS2322: Type '{ children: string; "aria-label": string; role: string; }' is not assignable to type 'IntrinsicAttributes & TypographyProps'.
+  Property 'role' does not exist on type 'IntrinsicAttributes & TypographyProps'.
+src/design-system/atoms/Typography/Typography.test.tsx(294,13): error TS2741: Property 'children' is missing in type '{}' but required in type 'TypographyProps'.
+src/design-system/index.ts(46,3): error TS2305: Module '"./tokens"' has no exported member 'ButtonProps'.
+src/design-system/index.ts(47,3): error TS2305: Module '"./tokens"' has no exported member 'ButtonVariant'.
+src/design-system/index.ts(48,3): error TS2305: Module '"./tokens"' has no exported member 'ButtonSize'.
+src/design-system/index.ts(50,3): error TS2305: Module '"./tokens"' has no exported member 'InputProps'.
+src/design-system/index.ts(51,3): error TS2305: Module '"./tokens"' has no exported member 'InputVariant'.
+src/design-system/index.ts(52,3): error TS2305: Module '"./tokens"' has no exported member 'InputSize'.
+src/design-system/index.ts(53,3): error TS2305: Module '"./tokens"' has no exported member 'InputState'.
+src/design-system/index.ts(55,3): error TS2305: Module '"./tokens"' has no exported member 'CardProps'.
+src/design-system/index.ts(56,3): error TS2305: Module '"./tokens"' has no exported member 'CardVariant'.
+src/design-system/index.ts(57,3): error TS2305: Module '"./tokens"' has no exported member 'CardSize'.
+src/design-system/molecules/FormField/FormField.stories.tsx(63,29): error TS2339: Property 'checked' does not exist on type 'EventTarget & (HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement)'.
+  Property 'checked' does not exist on type 'EventTarget & HTMLTextAreaElement'.
+src/design-system/molecules/FormField/FormField.test.tsx(30,37): error TS2322: Type '{ name: string; defaultValue: string; }' is not assignable to type 'IntrinsicAttributes & FormFieldProps & RefAttributes<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>'.
+  Property 'defaultValue' does not exist on type 'IntrinsicAttributes & FormFieldProps & RefAttributes<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>'.
+src/design-system/molecules/FormField/FormField.test.tsx(261,37): error TS2322: Type '{ name: string; onFocus: Mock<Procedure>; }' is not assignable to type 'IntrinsicAttributes & FormFieldProps & RefAttributes<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>'.
+  Property 'onFocus' does not exist on type 'IntrinsicAttributes & FormFieldProps & RefAttributes<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>'.
+src/design-system/molecules/FormField/FormField.test.tsx(269,37): error TS2322: Type '{ name: string; onBlur: Mock<Procedure>; }' is not assignable to type 'IntrinsicAttributes & FormFieldProps & RefAttributes<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>'.
+  Property 'onBlur' does not exist on type 'IntrinsicAttributes & FormFieldProps & RefAttributes<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>'.
+src/design-system/molecules/FormField/FormField.test.tsx(424,37): error TS2322: Type '{ name: string; form: string; }' is not assignable to type 'IntrinsicAttributes & FormFieldProps & RefAttributes<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>'.
+  Property 'form' does not exist on type 'IntrinsicAttributes & FormFieldProps & RefAttributes<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>'.
+src/design-system/molecules/FormField/FormField.test.tsx(429,38): error TS2322: Type '{ name: string; autoComplete: string; }' is not assignable to type 'IntrinsicAttributes & FormFieldProps & RefAttributes<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>'.
+  Property 'autoComplete' does not exist on type 'IntrinsicAttributes & FormFieldProps & RefAttributes<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>'.
+src/design-system/molecules/FormField/FormField.test.tsx(494,37): error TS2322: Type '{ name: string; defaultValue: string; }' is not assignable to type 'IntrinsicAttributes & FormFieldProps & RefAttributes<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>'.
+  Property 'defaultValue' does not exist on type 'IntrinsicAttributes & FormFieldProps & RefAttributes<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>'.
+src/design-system/molecules/InputFilter/InputFilter.stories.tsx(68,12): error TS2304: Cannot find name 'User'.
+src/design-system/molecules/Modal/Modal.stories.tsx(332,11): error TS2322: Type '{ isOpen: boolean; onClose: () => void; onConfirm: () => void; title: string; message: string; variant: "warning" | "info" | "danger"; confirmText: string; cancelText: string; }' is not assignable to type 'IntrinsicAttributes & { open: boolean; onCancel: () => void; onConfirm: () => void; title: string; message: string; confirmLabel?: string | undefined; cancelLabel?: string | undefined; variant?: "warning" | ... 2 more ... | undefined; loading?: boolean | undefined; size?: ModalSize | undefined; className?: string | ...'.
+  Property 'isOpen' does not exist on type 'IntrinsicAttributes & { open: boolean; onCancel: () => void; onConfirm: () => void; title: string; message: string; confirmLabel?: string | undefined; cancelLabel?: string | undefined; variant?: "warning" | ... 2 more ... | undefined; loading?: boolean | undefined; size?: ModalSize | undefined; className?: string | ...'. Did you mean 'open'?
+src/design-system/molecules/Modal/Modal.test.tsx(298,23): error TS2345: Argument of type 'HTMLElement | null' is not assignable to parameter of type 'Element | Node | Window | Document'.
+  Type 'null' is not assignable to type 'Element | Node | Window | Document'.
+src/design-system/molecules/Modal/Modal.test.tsx(408,23): error TS2345: Argument of type 'HTMLElement | null' is not assignable to parameter of type 'Element | Node | Window | Document'.
+  Type 'null' is not assignable to type 'Element | Node | Window | Document'.
+src/design-system/molecules/Modal/Modal.test.tsx(750,23): error TS2345: Argument of type 'HTMLElement | null' is not assignable to parameter of type 'Element | Node | Window | Document'.
+  Type 'null' is not assignable to type 'Element | Node | Window | Document'.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(6,1): error TS2582: Cannot find name 'describe'. Do you need to install type definitions for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(9,3): error TS2582: Cannot find name 'it'. Do you need to install type definitions for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(13,5): error TS2304: Cannot find name 'expect'.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(14,5): error TS2304: Cannot find name 'expect'.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(17,3): error TS2582: Cannot find name 'it'. Do you need to install type definitions for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(20,5): error TS2304: Cannot find name 'expect'.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(23,3): error TS2582: Cannot find name 'it'. Do you need to install type definitions for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(27,5): error TS2304: Cannot find name 'expect'.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(30,3): error TS2582: Cannot find name 'it'. Do you need to install type definitions for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(33,5): error TS2304: Cannot find name 'expect'.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(36,3): error TS2582: Cannot find name 'it'. Do you need to install type definitions for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(46,5): error TS2304: Cannot find name 'expect'.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(49,3): error TS2582: Cannot find name 'it'. Do you need to install type definitions for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(58,5): error TS2304: Cannot find name 'expect'.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(61,3): error TS2582: Cannot find name 'it'. Do you need to install type definitions for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(71,5): error TS2304: Cannot find name 'expect'.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(74,3): error TS2582: Cannot find name 'it'. Do you need to install type definitions for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(83,5): error TS2304: Cannot find name 'expect'.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(88,5): error TS2304: Cannot find name 'expect'.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(91,3): error TS2582: Cannot find name 'it'. Do you need to install type definitions for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(99,5): error TS2304: Cannot find name 'expect'.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(100,5): error TS2304: Cannot find name 'expect'.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(103,3): error TS2582: Cannot find name 'it'. Do you need to install type definitions for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(110,5): error TS2304: Cannot find name 'expect'.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(113,5): error TS2304: Cannot find name 'expect'.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(117,5): error TS2304: Cannot find name 'expect'.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(120,3): error TS2582: Cannot find name 'it'. Do you need to install type definitions for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(126,5): error TS2304: Cannot find name 'expect'.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(132,5): error TS2304: Cannot find name 'expect'.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(135,3): error TS2582: Cannot find name 'it'. Do you need to install type definitions for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(146,5): error TS2304: Cannot find name 'expect'.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(149,3): error TS2582: Cannot find name 'it'. Do you need to install type definitions for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(154,5): error TS2304: Cannot find name 'expect'.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(157,3): error TS2582: Cannot find name 'it'. Do you need to install type definitions for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(163,5): error TS2304: Cannot find name 'expect'.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(164,5): error TS2304: Cannot find name 'expect'.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(167,3): error TS2582: Cannot find name 'it'. Do you need to install type definitions for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(183,7): error TS2304: Cannot find name 'expect'.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(187,3): error TS2582: Cannot find name 'it'. Do you need to install type definitions for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(200,38): error TS2353: Object literal may only specify known properties, and 'delay' does not exist in type 'typeOptions'.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(203,5): error TS2304: Cannot find name 'expect'.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(207,7): error TS2304: Cannot find name 'expect'.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(208,7): error TS2304: Cannot find name 'expect'.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(212,3): error TS2582: Cannot find name 'it'. Do you need to install type definitions for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(216,5): error TS2304: Cannot find name 'expect'.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(220,5): error TS2304: Cannot find name 'expect'.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(224,5): error TS2304: Cannot find name 'expect'.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(227,3): error TS2582: Cannot find name 'it'. Do you need to install type definitions for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(231,5): error TS2304: Cannot find name 'expect'.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(234,3): error TS2582: Cannot find name 'it'. Do you need to install type definitions for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(238,5): error TS2304: Cannot find name 'expect'.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(241,3): error TS2582: Cannot find name 'it'. Do you need to install type definitions for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`.
+src/design-system/molecules/SearchBar/SearchBar.test.tsx(249,5): error TS2304: Cannot find name 'expect'.
+src/design-system/molecules/SearchBar/SearchBar.tsx(129,31): error TS2322: Type '"sm" | "md"' is not assignable to type 'IconSize | undefined'.
+  Type '"md"' is not assignable to type 'IconSize | undefined'.
+src/design-system/molecules/SearchBar/SearchBar.tsx(156,31): error TS2322: Type '"sm" | "md"' is not assignable to type 'IconSize | undefined'.
+  Type '"md"' is not assignable to type 'IconSize | undefined'.
+src/design-system/molecules/SearchBarControls/SearchBarControls.stories.tsx(14,5): error TS2353: Object literal may only specify known properties, and 'onFilterChange' does not exist in type 'Partial<ArgTypes<SearchBarControlsProps>>'.
+src/design-system/molecules/SearchBarControls/SearchBarControls.stories.tsx(37,24): error TS7006: Parameter 'filters' implicitly has an 'any' type.
+src/design-system/molecules/SearchBarControls/SearchBarControls.stories.tsx(42,22): error TS7006: Parameter 'sort' implicitly has an 'any' type.
+src/design-system/molecules/Tabs/Tabs.test.tsx(232,17): error TS2339: Property 'List' does not exist on type 'FC<TabsProps>'.
+src/design-system/molecules/Tabs/Tabs.test.tsx(233,19): error TS2339: Property 'Trigger' does not exist on type 'FC<TabsProps>'.
+src/design-system/molecules/Tabs/Tabs.test.tsx(233,52): error TS2339: Property 'Trigger' does not exist on type 'FC<TabsProps>'.
+src/design-system/molecules/Tabs/Tabs.test.tsx(234,19): error TS2339: Property 'Trigger' does not exist on type 'FC<TabsProps>'.
+src/design-system/molecules/Tabs/Tabs.test.tsx(234,52): error TS2339: Property 'Trigger' does not exist on type 'FC<TabsProps>'.
+src/design-system/molecules/Tabs/Tabs.test.tsx(235,18): error TS2339: Property 'List' does not exist on type 'FC<TabsProps>'.
+src/design-system/molecules/Tabs/Tabs.test.tsx(236,17): error TS2339: Property 'Content' does not exist on type 'FC<TabsProps>'.
+src/design-system/molecules/Tabs/Tabs.test.tsx(236,54): error TS2339: Property 'Content' does not exist on type 'FC<TabsProps>'.
+src/design-system/molecules/Tabs/Tabs.test.tsx(237,17): error TS2339: Property 'Content' does not exist on type 'FC<TabsProps>'.
+src/design-system/molecules/Tabs/Tabs.test.tsx(237,54): error TS2339: Property 'Content' does not exist on type 'FC<TabsProps>'.
+src/design-system/molecules/Tabs/Tabs.tsx(211,6): error TS2339: Property 'List' does not exist on type 'FC<TabsProps>'.
+src/design-system/molecules/Tabs/Tabs.tsx(212,6): error TS2339: Property 'Trigger' does not exist on type 'FC<TabsProps>'.
+src/design-system/molecules/Tabs/Tabs.tsx(213,6): error TS2339: Property 'Content' does not exist on type 'FC<TabsProps>'.
+src/design-system/themes/dark.ts(14,15): error TS7053: Element implicitly has an 'any' type because expression of type '850' can't be used to index type '{ readonly 50: "#fafafa"; readonly 100: "#f5f5f5"; readonly 200: "#e5e5e5"; readonly 300: "#d4d4d4"; readonly 400: "#a3a3a3"; readonly 500: "#737373"; readonly 600: "#525252"; readonly 700: "#404040"; readonly 800: "#262626"; readonly 900: "#171717"; readonly 950: "#0a0a0a"; }'.
+  Property '850' does not exist on type '{ readonly 50: "#fafafa"; readonly 100: "#f5f5f5"; readonly 200: "#e5e5e5"; readonly 300: "#d4d4d4"; readonly 400: "#a3a3a3"; readonly 500: "#737373"; readonly 600: "#525252"; readonly 700: "#404040"; readonly 800: "#262626"; readonly 900: "#171717"; readonly 950: "#0a0a0a"; }'.
+src/design-system/themes/dark.ts(101,26): error TS7053: Element implicitly has an 'any' type because expression of type '850' can't be used to index type '{ readonly 50: "#fafafa"; readonly 100: "#f5f5f5"; readonly 200: "#e5e5e5"; readonly 300: "#d4d4d4"; readonly 400: "#a3a3a3"; readonly 500: "#737373"; readonly 600: "#525252"; readonly 700: "#404040"; readonly 800: "#262626"; readonly 900: "#171717"; readonly 950: "#0a0a0a"; }'.
+  Property '850' does not exist on type '{ readonly 50: "#fafafa"; readonly 100: "#f5f5f5"; readonly 200: "#e5e5e5"; readonly 300: "#d4d4d4"; readonly 400: "#a3a3a3"; readonly 500: "#737373"; readonly 600: "#525252"; readonly 700: "#404040"; readonly 800: "#262626"; readonly 900: "#171717"; readonly 950: "#0a0a0a"; }'.
+src/examples/OptimizedHooksDemo.tsx(29,11): error TS2339: Property 'language' does not exist on type 'AppStateContextType'.
+src/examples/OptimizedHooksDemo.tsx(29,21): error TS2339: Property 'theme' does not exist on type 'AppStateContextType'.
+src/examples/OptimizedHooksDemo.tsx(38,40): error TS2339: Property 'currentPath' does not exist on type '{ location: { currentPath: string; currentSearch: string; currentHash: string; currentState: any; isOnPath: (path: string) => boolean; isOnPathPattern: (pattern: RegExp) => boolean; ... 8 more ...; buildUrl: (path: string, searchParams?: Record<...> | undefined) => string; }; ... 26 more ...; goToIfAllowed: (path: s...'.
+src/examples/OptimizedHooksDemo.tsx(38,53): error TS2339: Property 'isOnCompanies' does not exist on type '{ location: { currentPath: string; currentSearch: string; currentHash: string; currentState: any; isOnPath: (path: string) => boolean; isOnPathPattern: (pattern: RegExp) => boolean; ... 8 more ...; buildUrl: (path: string, searchParams?: Record<...> | undefined) => string; }; ... 26 more ...; goToIfAllowed: (path: s...'.
+src/hooks/api/useEmployees.ts(12,5): error TS2322: Type 'string' is not assignable to type 'number'.
+src/hooks/api/useEmployees.ts(27,5): error TS2322: Type 'string' is not assignable to type 'number'.
+src/hooks/api/useEmployees.ts(42,5): error TS2322: Type 'string' is not assignable to type 'number'.
+src/hooks/api/useEmployees.ts(74,19): error TS2551: Property 'company' does not exist on type 'Employee'. Did you mean 'companyId'?
+src/hooks/api/useEmployees.ts(74,55): error TS2551: Property 'company' does not exist on type 'Employee'. Did you mean 'companyId'?
+src/hooks/import/usePersonImport.ts(65,72): error TS2345: Argument of type 'PersonData' is not assignable to parameter of type 'Record<string, unknown>'.
+  Index signature for type 'string' is missing in type 'PersonData'.
+src/hooks/useCourses.ts(3,10): error TS2614: Module '"../services/courses"' has no exported member 'Course'. Did you mean to use 'import Course from "../services/courses"' instead?
+src/hooks/useCourses.ts(3,18): error TS2614: Module '"../services/courses"' has no exported member 'CourseSchedule'. Did you mean to use 'import CourseSchedule from "../services/courses"' instead?
+src/hooks/useGDPRAdmin.ts(32,29): error TS18048: 'response.data.data' is possibly 'undefined'.
+src/hooks/useGDPRAdmin.ts(97,29): error TS18048: 'response.data.data' is possibly 'undefined'.
+src/hooks/useGDPRAdmin.ts(123,3): error TS2686: 'React' refers to a UMD global, but the current file is a module. Consider adding an import instead.
+src/hooks/usePrivacySettings.ts(105,35): error TS2345: Argument of type '{ [x: string]: boolean | "public" | "private" | "company_only"; dataProcessingConsent: boolean; marketingConsent: boolean; analyticsConsent: boolean; profileVisibility: "public" | "private" | "company_only"; dataRetentionOptOut: boolean; thirdPartySharing: boolean; }' is not assignable to parameter of type 'PrivacySettingsFormData'.
+  Type '{ [x: string]: boolean | "public" | "private" | "company_only"; dataProcessingConsent: boolean; marketingConsent: boolean; analyticsConsent: boolean; profileVisibility: "public" | "private" | "company_only"; dataRetentionOptOut: boolean; thirdPartySharing: boolean; }' is missing the following properties from type 'PrivacySettingsFormData': emailNotifications, marketingEmails, analyticsTracking, dataRetentionPeriod, and 3 more.
+src/hooks/usePrivacySettings.ts(238,12): error TS7053: Element implicitly has an 'any' type because expression of type 'keyof PrivacySettings' can't be used to index type '{ dataProcessingConsent: string; marketingConsent: string; analyticsConsent: string; profileVisibility: string; dataRetentionOptOut: string; thirdPartySharing: string; }'.
+  Property 'userId' does not exist on type '{ dataProcessingConsent: string; marketingConsent: string; analyticsConsent: string; profileVisibility: string; dataRetentionOptOut: string; thirdPartySharing: string; }'.
+src/hooks/usePrivacySettings.ts(254,12): error TS7053: Element implicitly has an 'any' type because expression of type 'keyof PrivacySettings' can't be used to index type '{ dataProcessingConsent: string; marketingConsent: string; analyticsConsent: string; profileVisibility: string; dataRetentionOptOut: string; thirdPartySharing: string; }'.
+  Property 'userId' does not exist on type '{ dataProcessingConsent: string; marketingConsent: string; analyticsConsent: string; profileVisibility: string; dataRetentionOptOut: string; thirdPartySharing: string; }'.
+src/hooks/usePrivacySettings.ts(326,5): error TS2353: Object literal may only specify known properties, and 'hasUnsavedChanges' does not exist in type 'UsePrivacySettingsReturn'.
+src/hooks/useTemplates.ts(41,13): error TS2304: Cannot find name 'apiPut'.
+src/hooks/useTemplates.ts(83,13): error TS2304: Cannot find name 'apiPost'.
+src/hooks/useTemplates.ts(103,13): error TS2304: Cannot find name 'apiPut'.
+src/hooks/useTheme.ts(177,5): error TS2353: Object literal may only specify known properties, and 'systemTheme' does not exist in type 'UseThemeReturn'.
+src/hooks/useTrainers.ts(60,46): error TS2345: Argument of type 'TrainerInsert' is not assignable to parameter of type 'CreateTrainerDTO'.
+  Types of property 'status' are incompatible.
+    Type '"Active" | "Inactive" | undefined' is not assignable to type '"ACTIVE" | "INACTIVE" | undefined'.
+      Type '"Active"' is not assignable to type '"ACTIVE" | "INACTIVE" | undefined'. Did you mean '"ACTIVE"'?
+src/hooks/useTrainers.ts(72,54): error TS2345: Argument of type 'TrainerUpdate' is not assignable to parameter of type 'UpdateTrainerDTO'.
+  Types of property 'status' are incompatible.
+    Type '"Active" | "Inactive" | undefined' is not assignable to type '"ACTIVE" | "INACTIVE" | undefined'.
+      Type '"Active"' is not assignable to type '"ACTIVE" | "INACTIVE" | undefined'. Did you mean '"ACTIVE"'?
+src/pages/AdminGDPR.tsx(144,13): error TS2322: Type '{ children: Element[]; defaultValue: string; className: string; }' is not assignable to type 'IntrinsicAttributes & TabsProps'.
+  Property 'defaultValue' does not exist on type 'IntrinsicAttributes & TabsProps'.
+src/pages/AdminGDPR.tsx(189,38): error TS2339: Property 'overallScore' does not exist on type 'ComplianceReport'.
+src/pages/AdminGDPR.tsx(202,16): error TS2304: Cannot find name 'CardDescription'.
+src/pages/AdminGDPR.tsx(204,17): error TS2304: Cannot find name 'CardDescription'.
+src/pages/AdminGDPR.tsx(218,66): error TS2339: Property 'userEmail' does not exist on type 'DeletionRequest'.
+src/pages/AdminGDPR.tsx(222,50): error TS2345: Argument of type 'Date' is not assignable to parameter of type 'string'.
+src/pages/AdminGDPR.tsx(265,16): error TS2304: Cannot find name 'CardDescription'.
+src/pages/AdminGDPR.tsx(267,17): error TS2304: Cannot find name 'CardDescription'.
+src/pages/AdminGDPR.tsx(291,67): error TS2339: Property 'userEmail' does not exist on type 'DeletionRequest'.
+src/pages/AdminGDPR.tsx(297,48): error TS2345: Argument of type 'Date' is not assignable to parameter of type 'string'.
+src/pages/AdminGDPR.tsx(371,68): error TS2339: Property 'userEmail' does not exist on type 'DeletionRequest'.
+src/pages/AdminGDPR.tsx(372,57): error TS2345: Argument of type 'Date' is not assignable to parameter of type 'string'.
+src/pages/AdminGDPR.tsx(407,13): error TS2322: Type '"default" | "destructive"' is not assignable to type 'ButtonVariant | undefined'.
+  Type '"default"' is not assignable to type 'ButtonVariant | undefined'.
+src/pages/courses/CourseSchedule.tsx(11,3): error TS2724: '"lucide-react"' has no exported member named 'MapPins'. Did you mean 'MapPin'?
+src/pages/courses/CourseSchedule.tsx(105,20): error TS2304: Cannot find name 'MapPin'.
+src/pages/Dashboard.tsx(154,32): error TS2554: Expected 2 arguments, but got 1.
+src/pages/Dashboard.tsx(155,20): error TS2345: Argument of type 'ConsentCheckResult' is not assignable to parameter of type 'SetStateAction<boolean>'.
+src/pages/Dashboard.tsx(161,11): error TS2353: Object literal may only specify known properties, and 'tenantId' does not exist in type 'GdprAction'.
+src/pages/Dashboard.tsx(332,9): error TS2353: Object literal may only specify known properties, and 'tenantId' does not exist in type 'GdprAction'.
+src/pages/Dashboard.tsx(355,9): error TS2353: Object literal may only specify known properties, and 'tenantId' does not exist in type 'GdprAction'.
+src/pages/Dashboard.tsx(415,9): error TS2353: Object literal may only specify known properties, and 'tenantId' does not exist in type 'GdprAction'.
+src/pages/Dashboard.tsx(451,77): error TS2339: Property '0' does not exist on type '{ id: string; date: string; start: string; end: string; trainer?: DashboardTrainer | undefined; }[] | undefined'.
+src/pages/Dashboard.tsx(460,41): error TS18048: 'allSessions' is possibly 'undefined'.
+src/pages/Dashboard.tsx(474,57): error TS2339: Property 'name' does not exist on type 'Course'.
+src/pages/Dashboard.tsx(475,32): error TS18048: 'allSessions' is possibly 'undefined'.
+src/pages/Dashboard.tsx(476,32): error TS18048: 'allSessions' is possibly 'undefined'.
+src/pages/Dashboard.tsx(478,27): error TS18048: 'allSessions' is possibly 'undefined'.
+src/pages/Dashboard.tsx(487,15): error TS2322: Type 'DashboardSchedule' is not assignable to type 'Record<string, unknown>'.
+  Index signature for type 'string' is missing in type 'DashboardSchedule'.
+src/pages/Dashboard.tsx(488,25): error TS2339: Property 'status' does not exist on type 'DashboardSchedule'.
+src/pages/Dashboard.tsx(489,63): error TS2339: Property 'name' does not exist on type 'Course'.
+src/pages/Dashboard.tsx(489,183): error TS2339: Property 'status' does not exist on type 'DashboardSchedule'.
+src/pages/Dashboard.tsx(499,49): error TS2339: Property 'name' does not exist on type 'Course'.
+src/pages/Dashboard.tsx(502,13): error TS2322: Type 'DashboardSchedule' is not assignable to type 'Record<string, unknown>'.
+  Index signature for type 'string' is missing in type 'DashboardSchedule'.
+src/pages/Dashboard.tsx(503,23): error TS2339: Property 'status' does not exist on type 'DashboardSchedule'.
+src/pages/Dashboard.tsx(504,61): error TS2339: Property 'name' does not exist on type 'Course'.
+src/pages/Dashboard.tsx(504,224): error TS2339: Property 'status' does not exist on type 'DashboardSchedule'.
+src/pages/Dashboard.tsx(576,32): error TS2554: Expected 2 arguments, but got 1.
+src/pages/Dashboard.tsx(578,15): error TS2554: Expected 2-3 arguments, but got 1.
+src/pages/Dashboard.tsx(589,9): error TS2353: Object literal may only specify known properties, and 'tenantId' does not exist in type 'GdprAction'.
+src/pages/Dashboard.tsx(596,28): error TS2304: Cannot find name 'apiPost'.
+src/pages/Dashboard.tsx(601,9): error TS2353: Object literal may only specify known properties, and 'tenantId' does not exist in type 'GdprAction'.
+src/pages/Dashboard.tsx(620,9): error TS2353: Object literal may only specify known properties, and 'tenantId' does not exist in type 'GdprAction'.
+src/pages/Dashboard.tsx(734,9): error TS2322: Type '{ events: ScheduleEvent[]; eventPropGetter: (event: any) => { style: { backgroundColor: string; color: string; borderRadius: string; border: string; padding: string; fontWeight: number; fontSize: string; boxShadow: string; cursor: string; }; }; onSelectEvent: (event: ScheduleEvent) => void; onSelectSlot: (slotInfo: ...' is not assignable to type 'IntrinsicAttributes & ScheduleCalendarProps'.
+  Property 'eventPropGetter' does not exist on type 'IntrinsicAttributes & ScheduleCalendarProps'.
+src/pages/Dashboard.tsx(734,27): error TS7006: Parameter 'event' implicitly has an 'any' type.
+src/pages/Dashboard/components/RecentActivity.tsx(46,15): error TS2304: Cannot find name 'User'.
+src/pages/Dashboard/components/RecentActivity.tsx(50,15): error TS2304: Cannot find name 'GraduationCap'.
+src/pages/Dashboard/DashboardRefactored.tsx(14,5): error TS2339: Property 'data' does not exist on type '{ courses: Course[]; trainers: DashboardTrainer[]; companies: DashboardCompany[]; employees: DashboardEmployee[]; schedules: DashboardSchedule[]; ... 4 more ...; refetch: () => Promise<...>; }'.
+src/pages/Dashboard/DashboardRefactored.tsx(18,5): error TS2339: Property 'refreshData' does not exist on type '{ courses: Course[]; trainers: DashboardTrainer[]; companies: DashboardCompany[]; employees: DashboardEmployee[]; schedules: DashboardSchedule[]; ... 4 more ...; refetch: () => Promise<...>; }'.
+src/pages/Dashboard/DashboardRefactored.tsx(121,15): error TS2322: Type 'import("/Users/matteo.michielon/project 2.0/src/pages/Dashboard/hooks/useCalendarEvents").ScheduleEvent[]' is not assignable to type 'import("/Users/matteo.michielon/project 2.0/src/components/dashboard/ScheduleCalendar").ScheduleEvent[]'.
+  Type 'import("/Users/matteo.michielon/project 2.0/src/pages/Dashboard/hooks/useCalendarEvents").ScheduleEvent' is not assignable to type 'import("/Users/matteo.michielon/project 2.0/src/components/dashboard/ScheduleCalendar").ScheduleEvent'.
+    Types of property 'resource' are incompatible.
+      Type 'Schedule' is not assignable to type 'Record<string, unknown>'.
+        Index signature for type 'string' is missing in type 'Schedule'.
+src/pages/documents/Attestati.tsx(299,11): error TS2322: Type '{ onToggleSelectionMode: () => void; isSelectionMode: boolean; selectedCount: number; onDeleteSelected: () => Promise<void>; onExportSelected: () => void; onClearSelection: () => void; ... 5 more ...; onSortChange: (sort: { ...; }) => void; }' is not assignable to type 'IntrinsicAttributes & SearchBarControlsProps'.
+  Property 'onToggleSelectionMode' does not exist on type 'IntrinsicAttributes & SearchBarControlsProps'.
+src/pages/documents/Attestati.tsx(313,28): error TS7006: Parameter 'filters' implicitly has an 'any' type.
+src/pages/documents/Attestati.tsx(337,13): error TS2322: Type '({ key: string; label: string; width: number; renderCell: (attestato: Attestato) => Element; } | { key: string; label: string; width: number; renderCell: (attestato: Attestato) => string; })[]' is not assignable to type 'ResizableTableColumn<Record<string, unknown> & { id?: string | number | undefined; }>[]'.
+  Type '{ key: string; label: string; width: number; renderCell: (attestato: Attestato) => Element; } | { key: string; label: string; width: number; renderCell: (attestato: Attestato) => string; }' is not assignable to type 'ResizableTableColumn<Record<string, unknown> & { id?: string | number | undefined; }>'.
+    Type '{ key: string; label: string; width: number; renderCell: (attestato: Attestato) => JSX.Element; }' is not assignable to type 'ResizableTableColumn<Record<string, unknown> & { id?: string | number | undefined; }>'.
+      Types of property 'renderCell' are incompatible.
+        Type '(attestato: Attestato) => JSX.Element' is not assignable to type '(row: Record<string, unknown> & { id?: string | number | undefined; }, col: ResizableTableColumn<Record<string, unknown> & { id?: string | number | undefined; }>, rowIndex: number) => ReactNode'.
+          Types of parameters 'attestato' and 'row' are incompatible.
+            Type 'Record<string, unknown> & { id?: string | number | undefined; }' is missing the following properties from type 'Attestato': employeeId, scheduledCourseId, templateId, url, and 7 more.
+src/pages/documents/Attestati.tsx(338,13): error TS2322: Type 'Attestato[]' is not assignable to type '(Record<string, unknown> & { id?: string | number | undefined; })[]'.
+  Type 'Attestato' is not assignable to type 'Record<string, unknown> & { id?: string | number | undefined; }'.
+    Type 'Attestato' is not assignable to type 'Record<string, unknown>'.
+      Index signature for type 'string' is missing in type 'Attestato'.
+src/pages/documents/LettereIncarico.tsx(289,11): error TS2322: Type '{ onToggleSelectionMode: () => void; isSelectionMode: boolean; selectedCount: number; onDeleteSelected: () => Promise<void>; onExportSelected: () => void; onClearSelection: () => void; ... 5 more ...; onSortChange: (sort: { ...; }) => void; }' is not assignable to type 'IntrinsicAttributes & SearchBarControlsProps'.
+  Property 'onToggleSelectionMode' does not exist on type 'IntrinsicAttributes & SearchBarControlsProps'.
+src/pages/documents/LettereIncarico.tsx(303,28): error TS7006: Parameter 'filters' implicitly has an 'any' type.
+src/pages/documents/LettereIncarico.tsx(327,13): error TS2322: Type '({ key: string; label: string; width: number; renderCell: (lettera: LetteraIncarico) => Element; } | { key: string; label: string; width: number; renderCell: (lettera: LetteraIncarico) => string; })[]' is not assignable to type 'ResizableTableColumn<Record<string, unknown> & { id?: string | number | undefined; }>[]'.
+  Type '{ key: string; label: string; width: number; renderCell: (lettera: LetteraIncarico) => Element; } | { key: string; label: string; width: number; renderCell: (lettera: LetteraIncarico) => string; }' is not assignable to type 'ResizableTableColumn<Record<string, unknown> & { id?: string | number | undefined; }>'.
+    Type '{ key: string; label: string; width: number; renderCell: (lettera: LetteraIncarico) => JSX.Element; }' is not assignable to type 'ResizableTableColumn<Record<string, unknown> & { id?: string | number | undefined; }>'.
+      Types of property 'renderCell' are incompatible.
+        Type '(lettera: LetteraIncarico) => JSX.Element' is not assignable to type '(row: Record<string, unknown> & { id?: string | number | undefined; }, col: ResizableTableColumn<Record<string, unknown> & { id?: string | number | undefined; }>, rowIndex: number) => ReactNode'.
+          Types of parameters 'lettera' and 'row' are incompatible.
+            Type 'Record<string, unknown> & { id?: string | number | undefined; }' is missing the following properties from type 'LetteraIncarico': scheduledCourseId, trainerId, nomeFile, url, and 4 more.
+src/pages/documents/LettereIncarico.tsx(328,13): error TS2322: Type 'LetteraIncarico[]' is not assignable to type '(Record<string, unknown> & { id?: string | number | undefined; })[]'.
+  Type 'LetteraIncarico' is not assignable to type 'Record<string, unknown> & { id?: string | number | undefined; }'.
+    Type 'LetteraIncarico' is not assignable to type 'Record<string, unknown>'.
+      Index signature for type 'string' is missing in type 'LetteraIncarico'.
+src/pages/documents/RegistriPresenze.tsx(74,11): error TS2322: Type '{ onToggleSelectionMode: () => void; isSelectionMode: boolean; selectedCount: number; onDeleteSelected: () => void; onExportSelected: () => void; onClearSelection: () => void; filterOptions: { label: string; value: string; options: { ...; }[]; }[]; ... 4 more ...; onSortChange: (sort: { ...; }) => void; }' is not assignable to type 'IntrinsicAttributes & SearchBarControlsProps'.
+  Property 'onToggleSelectionMode' does not exist on type 'IntrinsicAttributes & SearchBarControlsProps'.
+src/pages/documents/RegistriPresenze.tsx(88,28): error TS7006: Parameter 'filters' implicitly has an 'any' type.
+src/pages/employees/EmployeeDetails.tsx(148,78): error TS2339: Property 'taxCode' does not exist on type 'PersonData'.
+src/pages/employees/EmployeeDetails.tsx(174,75): error TS2339: Property 'birthDate' does not exist on type 'PersonData'.
+src/pages/employees/EmployeeDetails.tsx(174,105): error TS2339: Property 'birthDate' does not exist on type 'PersonData'.
+src/pages/employees/EmployeeDetails.tsx(224,75): error TS2339: Property 'hiredDate' does not exist on type 'PersonData'.
+src/pages/employees/EmployeeDetails.tsx(224,105): error TS2339: Property 'hiredDate' does not exist on type 'PersonData'.
+src/pages/employees/EmployeeDetails.tsx(242,75): error TS2339: Property 'residenceCity' does not exist on type 'PersonData'.
+src/pages/employees/EmployeeDetails.tsx(248,75): error TS2339: Property 'province' does not exist on type 'PersonData'.
+src/pages/employees/EmployeeDetails.tsx(254,75): error TS2339: Property 'postalCode' does not exist on type 'PersonData'.
+src/pages/employees/EmployeeDetails.tsx(344,19): error TS2367: This comparison appears to be unintentional because the types '"ACTIVE" | "INACTIVE" | "PENDING" | "SUSPENDED" | "TERMINATED"' and '"Active"' have no overlap.
+src/pages/employees/EmployeeDetails.tsx(346,23): error TS2367: This comparison appears to be unintentional because the types '"ACTIVE" | "INACTIVE" | "PENDING" | "SUSPENDED" | "TERMINATED"' and '"On Leave"' have no overlap.
+src/pages/employees/EmployeeDetails.tsx(385,27): error TS2339: Property 'notes' does not exist on type 'PersonData'.
+src/pages/finance/Invoices.tsx(280,11): error TS2322: Type '{ onToggleSelectionMode: () => void; isSelectionMode: boolean; selectedCount: number; onDeleteSelected: () => void; onExportSelected: () => void; onClearSelection: () => void; filterOptions: { label: string; value: string; options: { ...; }[]; }[]; ... 4 more ...; onSortChange: (sort: { ...; }) => void; }' is not assignable to type 'IntrinsicAttributes & SearchBarControlsProps'.
+  Property 'onToggleSelectionMode' does not exist on type 'IntrinsicAttributes & SearchBarControlsProps'.
+src/pages/finance/Invoices.tsx(304,28): error TS7006: Parameter 'filters' implicitly has an 'any' type.
+src/pages/finance/Invoices.tsx(328,13): error TS2322: Type '({ key: string; label: string; width: number; renderCell: (invoice: Invoice) => Element; } | { key: string; label: string; width: number; renderCell: (invoice: Invoice) => string; })[]' is not assignable to type 'ResizableTableColumn<Record<string, unknown> & { id?: string | number | undefined; }>[]'.
+  Type '{ key: string; label: string; width: number; renderCell: (invoice: Invoice) => Element; } | { key: string; label: string; width: number; renderCell: (invoice: Invoice) => string; }' is not assignable to type 'ResizableTableColumn<Record<string, unknown> & { id?: string | number | undefined; }>'.
+    Type '{ key: string; label: string; width: number; renderCell: (invoice: Invoice) => JSX.Element; }' is not assignable to type 'ResizableTableColumn<Record<string, unknown> & { id?: string | number | undefined; }>'.
+      Types of property 'renderCell' are incompatible.
+        Type '(invoice: Invoice) => JSX.Element' is not assignable to type '(row: Record<string, unknown> & { id?: string | number | undefined; }, col: ResizableTableColumn<Record<string, unknown> & { id?: string | number | undefined; }>, rowIndex: number) => ReactNode'.
+          Types of parameters 'invoice' and 'row' are incompatible.
+            Type 'Record<string, unknown> & { id?: string | number | undefined; }' is missing the following properties from type 'Invoice': number, date, total, status, due_date
+src/pages/finance/Invoices.tsx(329,13): error TS2322: Type 'Invoice[]' is not assignable to type '(Record<string, unknown> & { id?: string | number | undefined; })[]'.
+  Type 'Invoice' is not assignable to type 'Record<string, unknown> & { id?: string | number | undefined; }'.
+    Type 'Invoice' is not assignable to type 'Record<string, unknown>'.
+      Index signature for type 'string' is missing in type 'Invoice'.
+src/pages/finance/Quotes.tsx(271,11): error TS2322: Type '{ onToggleSelectionMode: () => void; isSelectionMode: boolean; selectedCount: number; onDeleteSelected: () => void; onExportSelected: () => void; onClearSelection: () => void; filterOptions: { label: string; value: string; options: { ...; }[]; }[]; ... 4 more ...; onSortChange: (sort: { ...; }) => void; }' is not assignable to type 'IntrinsicAttributes & SearchBarControlsProps'.
+  Property 'onToggleSelectionMode' does not exist on type 'IntrinsicAttributes & SearchBarControlsProps'.
+src/pages/finance/Quotes.tsx(295,28): error TS7006: Parameter 'filters' implicitly has an 'any' type.
+src/pages/finance/Quotes.tsx(319,13): error TS2322: Type '({ key: string; label: string; width: number; renderCell: (quote: Quote) => Element; } | { key: string; label: string; width: number; renderCell: (quote: Quote) => string; })[]' is not assignable to type 'ResizableTableColumn<Record<string, unknown> & { id?: string | number | undefined; }>[]'.
+  Type '{ key: string; label: string; width: number; renderCell: (quote: Quote) => Element; } | { key: string; label: string; width: number; renderCell: (quote: Quote) => string; }' is not assignable to type 'ResizableTableColumn<Record<string, unknown> & { id?: string | number | undefined; }>'.
+    Type '{ key: string; label: string; width: number; renderCell: (quote: Quote) => JSX.Element; }' is not assignable to type 'ResizableTableColumn<Record<string, unknown> & { id?: string | number | undefined; }>'.
+      Types of property 'renderCell' are incompatible.
+        Type '(quote: Quote) => JSX.Element' is not assignable to type '(row: Record<string, unknown> & { id?: string | number | undefined; }, col: ResizableTableColumn<Record<string, unknown> & { id?: string | number | undefined; }>, rowIndex: number) => ReactNode'.
+          Types of parameters 'quote' and 'row' are incompatible.
+            Type 'Record<string, unknown> & { id?: string | number | undefined; }' is missing the following properties from type 'Quote': number, date, total, status, expiration_date
+src/pages/finance/Quotes.tsx(320,13): error TS2322: Type 'Quote[]' is not assignable to type '(Record<string, unknown> & { id?: string | number | undefined; })[]'.
+  Type 'Quote' is not assignable to type 'Record<string, unknown> & { id?: string | number | undefined; }'.
+    Type 'Quote' is not assignable to type 'Record<string, unknown>'.
+      Index signature for type 'string' is missing in type 'Quote'.
+src/pages/forms/FormSubmissionsPage.tsx(351,31): error TS2322: Type '{}' is not assignable to type 'ReactI18NextChildren | Iterable<ReactI18NextChildren>'.
+src/pages/forms/FormSubmissionsPage.tsx(491,31): error TS2322: Type '{}' is not assignable to type 'ReactI18NextChildren | Iterable<ReactI18NextChildren>'.
+src/pages/GDPRDashboard.lazy.tsx(12,4): error TS2741: Property 'component' is missing in type '{ children: Element; }' but required in type 'LazyRouteProps'.
+src/pages/GDPRDashboard.tsx(101,19): error TS2551: Property 'refreshAuditTrail' does not exist on type 'UseAuditTrailReturn'. Did you mean 'fetchAuditTrail'?
+src/pages/GDPRDashboard.tsx(115,38): error TS2339: Property 'getComplianceScore' does not exist on type 'UsePrivacySettingsReturn'.
+src/pages/GDPRDashboard.tsx(118,23): error TS2339: Property 'granted' does not exist on type '{ total: number; active: number; withdrawn: number; percentage: number; }'.
+src/pages/GDPRDashboard.tsx(178,10): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; md: number; lg: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+    Type '{ children: Element; item: true; xs: number; md: number; lg: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+src/pages/GDPRDashboard.tsx(188,10): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; md: number; lg: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+    Type '{ children: Element; item: true; xs: number; md: number; lg: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+src/pages/GDPRDashboard.tsx(198,10): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; md: number; lg: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+    Type '{ children: Element; item: true; xs: number; md: number; lg: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+src/pages/GDPRDashboard.tsx(202,33): error TS2339: Property 'getDeletionStats' does not exist on type 'UseDeletionRequestReturn'.
+src/pages/GDPRDashboard.tsx(208,10): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; md: number; lg: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+    Type '{ children: Element; item: true; xs: number; md: number; lg: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+src/pages/GDPRDashboard.tsx(211,42): error TS2339: Property 'getComplianceRecommendations' does not exist on type 'UsePrivacySettingsReturn'.
+src/pages/schedules/SchedulesPage.tsx(286,13): error TS2322: Type 'Schedule' is not assignable to type 'Record<string, unknown>'.
+  Index signature for type 'string' is missing in type 'Schedule'.
+src/pages/schedules/SchedulesPage.tsx(308,13): error TS2322: Type 'Schedule' is not assignable to type 'Record<string, unknown>'.
+  Index signature for type 'string' is missing in type 'Schedule'.
+src/pages/schedules/SchedulesPage.tsx(336,5): error TS2554: Expected 3-4 arguments, but got 2.
+src/pages/schedules/SchedulesPage.tsx(408,5): error TS2554: Expected 3-4 arguments, but got 2.
+src/pages/schedules/SchedulesPage.tsx(476,8): error TS2559: Type '{ children: Element[]; }' has no properties in common with type 'IntrinsicAttributes & SearchBarControlsProps'.
+src/pages/schedules/SchedulesPage.tsx(485,15): error TS2353: Object literal may only specify known properties, and 'field' does not exist in type 'FilterOption'.
+src/pages/schedules/SchedulesPage.tsx(494,15): error TS2353: Object literal may only specify known properties, and 'field' does not exist in type 'FilterOption'.
+src/pages/schedules/SchedulesPage.tsx(501,15): error TS2353: Object literal may only specify known properties, and 'field' does not exist in type 'FilterOption'.
+src/pages/schedules/SchedulesPage.tsx(509,11): error TS2322: Type '(field: any, value: any) => void' is not assignable to type '(filters: Record<string, string>) => void'.
+  Target signature provides too few arguments. Expected 2 or more, but got 1.
+src/pages/schedules/SchedulesPage.tsx(509,28): error TS7006: Parameter 'field' implicitly has an 'any' type.
+src/pages/schedules/SchedulesPage.tsx(509,35): error TS7006: Parameter 'value' implicitly has an 'any' type.
+src/pages/schedules/SchedulesPage.tsx(516,15): error TS2353: Object literal may only specify known properties, and 'field' does not exist in type 'SortOption'.
+src/pages/schedules/SchedulesPage.tsx(517,15): error TS2353: Object literal may only specify known properties, and 'field' does not exist in type 'SortOption'.
+src/pages/schedules/SchedulesPage.tsx(518,15): error TS2353: Object literal may only specify known properties, and 'field' does not exist in type 'SortOption'.
+src/pages/schedules/SchedulesPage.tsx(519,15): error TS2353: Object literal may only specify known properties, and 'field' does not exist in type 'SortOption'.
+src/pages/schedules/SchedulesPage.tsx(520,15): error TS2353: Object literal may only specify known properties, and 'field' does not exist in type 'SortOption'.
+src/pages/schedules/SchedulesPage.tsx(536,9): error TS2322: Type '"table" | "calendar"' is not assignable to type '"table" | "grid" | undefined'.
+  Type '"calendar"' is not assignable to type '"table" | "grid" | undefined'.
+src/pages/schedules/SchedulesPage.tsx(559,7): error TS2322: Type 'null' is not assignable to type 'string | undefined'.
+src/pages/schedules/SchedulesPage.tsx(574,25): error TS2344: Type 'DataRow' does not satisfy the constraint 'Record<string, unknown> & { id?: string | number | undefined; }'.
+  Type 'DataRow' is not assignable to type 'Record<string, unknown>'.
+    Index signature for type 'string' is missing in type 'DataRow'.
+src/pages/settings/PermissionsTab.tsx(63,16): error TS18046: 'usersData' is of type 'unknown'.
+src/pages/settings/PermissionsTab.tsx(64,22): error TS18046: 'permissionsData' is of type 'unknown'.
+src/pages/settings/PermissionsTab.tsx(65,16): error TS18046: 'rolesData' is of type 'unknown'.
+src/pages/settings/PermissionsTab.tsx(242,26): error TS2693: 'User' only refers to a type, but is being used as a value here.
+src/pages/settings/PermissionsTab.tsx(329,18): error TS2693: 'User' only refers to a type, but is being used as a value here.
+src/pages/settings/RolesTab.tsx(223,33): error TS2339: Property 'type' does not exist on type 'never'.
+src/pages/settings/RolesTab.tsx(228,32): error TS2339: Property 'type' does not exist on type 'never'.
+src/pages/settings/UserPreferences.tsx(28,36): error TS1261: Already included file name '/Users/matteo.michielon/project 2.0/src/hooks/useUserPreferences.ts' differs from file name '/Users/matteo.michielon/project 2.0/src/hooks/useuserpreferences.ts' only in casing.
+  The file is in the program because:
+    Imported via '../../hooks/useUserPreferences' from file '/Users/matteo.michielon/project 2.0/src/pages/settings/UserPreferences.tsx'
+    Matched by include pattern 'src/**/*' in '/Users/matteo.michielon/project 2.0/tsconfig.json'
+src/pages/settings/UserPreferences.tsx(241,19): error TS2322: Type '(language: LanguageCode) => Promise<void>' is not assignable to type '(value: string) => void'.
+  Types of parameters 'language' and 'value' are incompatible.
+    Type 'string' is not assignable to type 'LanguageCode'.
+src/pages/settings/UserPreferences.tsx(288,19): error TS2322: Type '(dateFormat: "DD/MM/YYYY" | "MM/DD/YYYY" | "YYYY-MM-DD") => Promise<void>' is not assignable to type '(value: string) => void'.
+  Types of parameters 'dateFormat' and 'value' are incompatible.
+    Type 'string' is not assignable to type '"DD/MM/YYYY" | "MM/DD/YYYY" | "YYYY-MM-DD"'.
+src/pages/settings/UserPreferences.tsx(306,19): error TS2322: Type '(timeFormat: "12h" | "24h") => Promise<void>' is not assignable to type '(value: string) => void'.
+  Types of parameters 'timeFormat' and 'value' are incompatible.
+    Type 'string' is not assignable to type '"12h" | "24h"'.
+src/pages/settings/UserPreferences.tsx(352,93): error TS2345: Argument of type 'string' is not assignable to parameter of type 'boolean'.
+src/pages/tenants/TenantModal.tsx(40,9): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/pages/tenants/TenantModal.tsx(41,9): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/pages/tenants/TenantModal.tsx(43,35): error TS2551: Property 'subscription_plan' does not exist on type 'Company'. Did you mean 'subscriptionPlan'?
+src/pages/tenants/TenantModal.tsx(44,27): error TS2551: Property 'is_active' does not exist on type 'Company'. Did you mean 'isActive'?
+src/pages/tenants/TenantModal.tsx(183,16): error TS2790: The operand of a 'delete' operator must be optional.
+src/pages/tenants/TenantsPage.tsx(190,33): error TS2345: Argument of type 'boolean | undefined' is not assignable to parameter of type 'boolean'.
+  Type 'undefined' is not assignable to type 'boolean'.
+src/pages/tenants/TenantUsageModal.tsx(8,3): error TS2305: Module '"lucide-react"' has no exported member 'Xs'.
+src/pages/tenants/TenantUsageModal.tsx(83,14): error TS2304: Cannot find name 'X'.
+src/services/advanced-permissions/AdvancedPermissionsService.ts(102,30): error TS2304: Cannot find name 'apiPut'.
+src/services/advanced-permissions/AdvancedPermissionsService.ts(127,30): error TS2304: Cannot find name 'apiPost'.
+src/services/attestatiService.ts(117,32): error TS2304: Cannot find name 'apiPost'.
+src/services/attestatiService.ts(189,36): error TS2304: Cannot find name 'apiPost'.
+src/services/roles.ts(215,17): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/services/roles.ts(217,17): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/templates/gdpr-entity-page/components/GDPREntityPage.tsx(119,56): error TS2345: Argument of type '{ key: string; label: string; sortable?: boolean | undefined; width?: number | undefined; render?: ((value: any, entity: T) => ReactNode) | undefined; }[]' is not assignable to parameter of type 'ColumnConfig[]'.
+  Type '{ key: string; label: string; sortable?: boolean | undefined; width?: number | undefined; render?: ((value: any, entity: T) => ReactNode) | undefined; }' is not assignable to type 'ColumnConfig'.
+    Types of property 'render' are incompatible.
+      Type '((value: any, entity: T) => ReactNode) | undefined' is not assignable to type '((value: unknown, entity: EntityRecord) => ReactNode) | undefined'.
+        Type '(value: any, entity: T) => ReactNode' is not assignable to type '(value: unknown, entity: EntityRecord) => ReactNode'.
+          Types of parameters 'entity' and 'entity' are incompatible.
+            Type 'EntityRecord' is not assignable to type 'T'.
+              'T' could be instantiated with an arbitrary type which could be unrelated to 'EntityRecord'.
+src/templates/gdpr-entity-page/hooks/useTableColumns.tsx(217,19): error TS2352: Conversion of type 'GDPRPermissions' to type 'Record<string, boolean>' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Index signature for type 'string' is missing in type 'GDPRPermissions'.

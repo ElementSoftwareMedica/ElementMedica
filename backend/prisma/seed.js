@@ -1,10 +1,17 @@
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
 async function main() {
   console.log('🌱 Starting database seeding...');
+
+  const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD;
+  if (!ADMIN_PASSWORD) {
+    console.error('❌ SEED_ADMIN_PASSWORD non configurata. Impostare la variabile d\'ambiente prima di eseguire il seed.');
+    process.exit(1);
+  }
 
   // Create or get default tenant
   let defaultTenant = await prisma.tenant.findUnique({
@@ -35,8 +42,8 @@ async function main() {
   });
 
   if (!adminUser) {
-    const hashedPassword = await bcrypt.hash('Admin123!', 10);
-    
+    const hashedPassword = await bcrypt.hash(ADMIN_PASSWORD, 10);
+
     adminUser = await prisma.person.create({
       data: {
         firstName: 'Admin',
@@ -131,10 +138,10 @@ async function main() {
       birthDate: new Date('1980-01-01'),
       residenceAddress: 'Via Roma 123',
       residenceCity: 'Milano',
-        province: 'MI',
-        postalCode: '20100',
-        hiredDate: new Date('2020-01-15'),
-        title: 'Impiegato',
+      province: 'MI',
+      postalCode: '20100',
+      hiredDate: new Date('2020-01-15'),
+      title: 'Impiegato',
       notes: 'Dipendente di test',
       companyId: testCompany.id
     },
@@ -148,28 +155,28 @@ async function main() {
       birthDate: new Date('1985-02-15'),
       residenceAddress: 'Via Milano 456',
       residenceCity: 'Milano',
-        province: 'MI',
-        postalCode: '20121',
-        hiredDate: new Date('2021-03-10'),
-        title: 'Responsabile',
-        notes: 'Dipendente di test',
-        companyId: testCompany.id
-     },
-     {
-       firstName: 'Luca',
-       lastName: 'Verdi',
-       email: 'luca.verdi@testcompany.com',
-       username: 'luca.verdi',
-       taxCode: 'VRDLCU90C20L219Y',
-       phone: '+39 333 987 6543',
-       birthDate: new Date('1990-03-20'),
-       residenceAddress: 'Via Torino 789',
-       residenceCity: 'Milano',
-         province: 'MI',
-         postalCode: '20122',
-         hiredDate: new Date('2022-06-01'),
-         title: 'Tecnico',
-        notes: 'Dipendente di test',
+      province: 'MI',
+      postalCode: '20121',
+      hiredDate: new Date('2021-03-10'),
+      title: 'Responsabile',
+      notes: 'Dipendente di test',
+      companyId: testCompany.id
+    },
+    {
+      firstName: 'Luca',
+      lastName: 'Verdi',
+      email: 'luca.verdi@testcompany.com',
+      username: 'luca.verdi',
+      taxCode: 'VRDLCU90C20L219Y',
+      phone: '+39 333 987 6543',
+      birthDate: new Date('1990-03-20'),
+      residenceAddress: 'Via Torino 789',
+      residenceCity: 'Milano',
+      province: 'MI',
+      postalCode: '20122',
+      hiredDate: new Date('2022-06-01'),
+      title: 'Tecnico',
+      notes: 'Dipendente di test',
       companyId: testCompany.id
     }
   ];
@@ -180,8 +187,10 @@ async function main() {
     });
 
     if (!existingEmployee) {
-      const hashedPassword = await bcrypt.hash('Employee123!', 10);
-      
+      // Genera una password casuale e sicura per i dipendenti, senza loggarla
+      const randomPassword = crypto.randomBytes(18).toString('base64url');
+      const hashedPassword = await bcrypt.hash(randomPassword, 10);
+
       const employee = await prisma.person.create({
         data: {
           ...employeeData,
