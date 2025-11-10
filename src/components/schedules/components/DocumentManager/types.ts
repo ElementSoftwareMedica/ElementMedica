@@ -76,7 +76,7 @@ export interface DocumentState {
   lettereList: LetteraIncarico[];
   registriList: RegistroPresenze[];
   attestatiList: Attestato[];
-  preventiviList: Preventivo[];
+  preventiviList: any[]; // Use any[] to match service type
 }
 
 /**
