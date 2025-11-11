@@ -1,6 +1,6 @@
 // Middleware Configuration
 const QueryLoggingMiddleware = require('./middleware/query-logging');
-const PerformanceMonitoringMiddleware = require('./middleware/performance-monitoring');
+const PerformanceMonitoringMiddleware = require('../middleware/performance-monitor');
 const AuditTrailMiddleware = require('./middleware/audit-trail');
 const SecurityLoggingMiddleware = require('./middleware/security-logging');
 

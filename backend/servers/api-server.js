@@ -28,7 +28,7 @@ import { RedisService } from '../services/redis.js';
 import { GoogleAPIService } from '../services/google-api.js';
 
 // Middleware
-import performanceMonitor from '../middleware/performance.js';
+import performanceMonitor from '../middleware/performance-monitor.js';
 import { authMiddleware, authenticate } from '../middleware/auth.js';
 import { tenantMiddleware } from '../middleware/tenant.js';
 import { rbacMiddleware } from '../middleware/rbac.js';

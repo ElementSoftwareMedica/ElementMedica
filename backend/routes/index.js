@@ -8,7 +8,17 @@ import CoreRouteManager from './core/route-manager.js';
 import MiddlewareManager from './core/middleware-manager.js';
 import ApiVersionManager from './versioning/api-version-manager.js';
 import DocumentationManager from './documentation/documentation-manager.js';
-import PerformanceMonitor from './monitoring/performance-monitor.js';
+import express from 'express';
+import passport from 'passport';
+import authRoutes from './auth-routes.js';
+import personsRoutes from './persons-routes.js';
+import companiesRoutes from './companies-routes.js';
+import coursesRoutes from './courses-routes.js';
+import scheduleRoutes from './schedules-routes.js';
+import userRoutes from './users-routes.js';
+import reportsRoutes from './reports-routes.js';
+import docsRoutes from './documents-routes.js';
+import PerformanceMonitor from '../middleware/performance-monitor.js';
 
 export class ModularRouteManager {
   constructor(app, options = {}) {
