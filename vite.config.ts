@@ -81,7 +81,7 @@ export default defineConfig({
           ],
           
           // Heavy components
-          charts: ['chart.js', 'react-chartjs-2'],
+          charts: ['recharts'],
           calendar: [
             '@fullcalendar/core',
             '@fullcalendar/react',
