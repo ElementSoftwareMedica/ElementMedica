@@ -64,6 +64,12 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  // esbuild minify options (production)
+  esbuild: {
+    drop: process.env.NODE_ENV === 'production' ? ['console', 'debugger'] : [],
+    legalComments: 'none',
+    treeShaking: true
+  },
   build: {
     rollupOptions: {
       output: {
@@ -72,7 +78,7 @@ export default defineConfig({
           vendor: ['react', 'react-dom'],
           router: ['react-router-dom'],
           
-          // UI Library chunks (eventuali)
+          // UI Library chunks
           ui: [
             '@radix-ui/react-dropdown-menu',
             '@radix-ui/react-select',
@@ -81,7 +87,7 @@ export default defineConfig({
           ],
           
           // Heavy components
-          charts: ['chart.js', 'react-chartjs-2'],
+          charts: ['recharts'],
           calendar: [
             '@fullcalendar/core',
             '@fullcalendar/react',
@@ -110,7 +116,10 @@ export default defineConfig({
     chunkSizeWarningLimit: 1000,
     sourcemap: true,
     cssCodeSplit: true,
-    target: 'esnext',
-    minify: 'esbuild'
+    target: 'es2015', // Better browser compatibility
+    minify: 'esbuild', // Fast and effective
+    assetsInlineLimit: 4096, // Inline assets < 4kb
+    cssMinify: 'esbuild',
+    reportCompressedSize: true // Report gzip sizes
   }
 })

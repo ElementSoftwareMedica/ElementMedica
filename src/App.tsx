@@ -5,64 +5,81 @@ import { performanceMonitor } from './utils/performanceMonitor';
 import { routePreloader } from './utils/routePreloader';
 import { OptimizedHooksDemo } from './examples/OptimizedHooksDemo';
 import ProtectedRoute from './components/shared/ProtectedRoute';
-import LoginPage from './pages/auth/LoginPage';
 import { LoadingFallback } from './components/ui/LoadingFallback';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
-import RsppPage from './pages/public/RsppPage';
-import MedicinaDelLavoroPage from './pages/public/MedicinaDelLavoroPage';
 
-// Import sincronocon percorso senza estensione (best practice TypeScript)
-import Dashboard from './pages/Dashboard';
-// Lazy-loaded page components
-// import DashboardLazy from './pages/Dashboard/Dashboard.lazy';
+// === PHASE 4.2b: ALL ROUTES LAZY LOADED ===
+
+// Auth
+import LoginPageLazy from './pages/auth/LoginPage.lazy';
+
+// Dashboard (1121 lines - heavy!)
+import DashboardLazy from './pages/Dashboard.lazy';
+
+// Companies
 import CompaniesPageLazy from './pages/companies/CompaniesPage.lazy';
-import CompanyDetails from './pages/companies/CompanyDetails';
-import CompanyEdit from './pages/companies/CompanyEdit';
-import CompanyCreate from './pages/companies/CompanyCreate';
+import { CompanyDetailsLazy, CompanyEditLazy, CompanyCreateLazy } from './pages/companies/index.lazy';
+
+// Courses
 import CoursesPageLazy from './pages/courses/CoursesPage.lazy';
-import CourseDetails from './pages/courses/CourseDetails';
-import CourseEdit from './pages/courses/CourseEdit';
-import CourseCreate from './pages/courses/CourseCreate';
+import { CourseDetailsLazy, CourseEditLazy, CourseCreateLazy } from './pages/courses/index.lazy';
+
+// Persons/Employees
 import PersonsPageLazy from './pages/persons/PersonsPage.lazy';
 import EmployeesPageNewLazy from './pages/employees/EmployeesPageNew.lazy';
-import EmployeeDetails from './pages/employees/EmployeeDetails';
-import EmployeeEdit from './pages/employees/EmployeeEdit';
-import EmployeeCreate from './pages/employees/EmployeeCreate';
+import { EmployeeDetailsLazy, EmployeeEditLazy, EmployeeCreateLazy } from './pages/employees/index.lazy';
+
+// Trainers
 import TrainersPageNewLazy from './pages/trainers/TrainersPageNew.lazy';
-import TrainerDetails from './pages/trainers/TrainerDetails';
-import TrainerEdit from './pages/trainers/TrainerEdit';
+import { TrainerDetailsLazy, TrainerEditLazy } from './pages/trainers/index.lazy';
+
+// Schedules
 import SchedulesPageLazy from './pages/schedules/SchedulesPage.lazy';
-import ScheduleDetails from './pages/schedules/ScheduleDetails';
+import { ScheduleDetailsLazy } from './pages/schedules/index.lazy';
+
+// Templates & Documents
 import TemplateListPageLazy from './pages/templates/TemplateListPage.lazy';
 import TemplateEditorLazy from './pages/templates/TemplateEditor.lazy';
 import { DocumentListPage as DocumentListPageLazy } from './pages/documents/DocumentListPage.lazy';
 import { BatchMonitoringPage as BatchMonitoringPageLazy } from './pages/documents/BatchMonitoringPage.lazy';
+
+// Settings & Admin
 import { SettingsLazy } from './pages/settings/Settings.lazy';
 import TenantsPageLazy from './pages/tenants/TenantsPage.lazy';
+import GoogleOAuthCallbackLazy from './pages/settings/templates/GoogleOAuthCallback.lazy';
+
+// Finance
 import QuotesAndInvoicesLazy from './pages/QuotesAndInvoices.lazy';
 import CodiciScontoPageLazy from './pages/finance/CodiciScontoPage.lazy';
 import PreventiviPageLazy from './pages/finance/PreventiviPage.lazy';
 import DocumentsCorsiLazy from './pages/DocumentsCorsi.lazy';
+
+// GDPR
 import GDPRDashboardLazy from './pages/GDPRDashboard.lazy';
 import AdminGDPRLazy from './pages/AdminGDPR.lazy';
+
+// Forms
 import UnifiedFormsPageLazy from './pages/forms/UnifiedFormsPage.lazy';
 import { FormTemplateCreateLazy } from './pages/forms/FormTemplateCreate.lazy';
 import { FormTemplateEditLazy } from './pages/forms/FormTemplateEdit.lazy';
 import { FormTemplateViewLazy } from './pages/forms/FormTemplateView.lazy';
-import GoogleOAuthCallback from './pages/settings/templates/GoogleOAuthCallback';
 
-// Public pages
-import HomePage from './pages/public/HomePage';
-import CoursesPage from './pages/public/CoursesPage';
-import CourseDetailPage from './pages/public/CourseDetailPage';
-import UnifiedCourseDetailPage from './pages/public/UnifiedCourseDetailPage';
-import ServicesPage from './pages/public/ServicesPage';
-import ContactsPage from './pages/public/ContactsPage';
-import WorkWithUsPage from './pages/public/WorkWithUsPage';
-import PrivacyPage from './pages/public/PrivacyPage';
-import CookiePage from './pages/public/CookiePage';
-import TerminiPage from './pages/public/TerminiPage';
-import PublicFormPage from './pages/public/PublicFormPage';
+// Public Pages - All lazy loaded for better initial bundle
+import {
+  HomePageLazy,
+  CoursesPagePublicLazy,
+  CourseDetailPageLazy,
+  UnifiedCourseDetailPageLazy,
+  ServicesPageLazy,
+  ContactsPageLazy,
+  WorkWithUsPageLazy,
+  PrivacyPageLazy,
+  CookiePageLazy,
+  TerminiPageLazy,
+  PublicFormPageLazy,
+  RsppPageLazy,
+  MedicinaDelLavoroPageLazy,
+} from './pages/public/index.lazy';
 
 function App() {
   const location = useLocation();
@@ -99,21 +116,21 @@ function App() {
       <Suspense fallback={<LoadingFallback message="Loading application..." />}>
         <Routes>
         {/* Route pubbliche - Element Formazione */}
-        <Route path="/" element={<HomePage />} />
-        <Route path="/corsi" element={<CoursesPage />} />
-        <Route path="/corsi/unified/:title" element={<UnifiedCourseDetailPage />} />
-        <Route path="/corsi/:slug" element={<CourseDetailPage />} />
-        <Route path="/servizi" element={<ServicesPage />} />
-        <Route path="/rspp" element={<RsppPage />} />
-        <Route path="/medicina-del-lavoro" element={<MedicinaDelLavoroPage />} />
-        <Route path="/lavora-con-noi" element={<WorkWithUsPage />} />
-        <Route path="/contatti" element={<ContactsPage />} />
-        <Route path="/form/:id" element={<PublicFormPage />} />
-        <Route path="/privacy" element={<PrivacyPage />} />
-        <Route path="/cookie" element={<CookiePage />} />
-        <Route path="/termini" element={<TerminiPage />} />
+        <Route path="/" element={<HomePageLazy />} />
+        <Route path="/corsi" element={<CoursesPagePublicLazy />} />
+        <Route path="/corsi/unified/:title" element={<UnifiedCourseDetailPageLazy />} />
+        <Route path="/corsi/:slug" element={<CourseDetailPageLazy />} />
+        <Route path="/servizi" element={<ServicesPageLazy />} />
+        <Route path="/rspp" element={<RsppPageLazy />} />
+        <Route path="/medicina-del-lavoro" element={<MedicinaDelLavoroPageLazy />} />
+        <Route path="/lavora-con-noi" element={<WorkWithUsPageLazy />} />
+        <Route path="/contatti" element={<ContactsPageLazy />} />
+        <Route path="/form/:id" element={<PublicFormPageLazy />} />
+        <Route path="/privacy" element={<PrivacyPageLazy />} />
+        <Route path="/cookie" element={<CookiePageLazy />} />
+        <Route path="/termini" element={<TerminiPageLazy />} />
       {/* Rotta pubblica per il login */}
-      <Route path="/login" element={<LoginPage />} />
+      <Route path="/login" element={<LoginPageLazy />} />
       {/* Rotta di auto-login in dev */}
             {/* DevLogin rimosso: nessuna rotta di bypass */}
       
@@ -122,7 +139,7 @@ function App() {
          <Route path="/dashboard" element={<ProtectedRoute resource="dashboard" action="read" />}>
            <Route index element={
              <Layout>
-               <Dashboard />
+               <DashboardLazy />
              </Layout>
            } />
          </Route>
@@ -139,18 +156,18 @@ function App() {
           }>
             <Route index element={
               <Layout>
-                <CompanyCreate />
+                <CompanyCreateLazy />
               </Layout>
             } />
           </Route>
           <Route path=":id" element={
             <Layout>
-              <CompanyDetails />
+              <CompanyDetailsLazy />
             </Layout>
           } />
           <Route path=":id/edit" element={
             <Layout>
-              <CompanyEdit />
+              <CompanyEditLazy />
             </Layout>
           } />
         </Route>
@@ -167,18 +184,18 @@ function App() {
           }>
             <Route index element={
               <Layout>
-                <CourseCreate />
+                <CourseCreateLazy />
               </Layout>
             } />
           </Route>
           <Route path=":id" element={
             <Layout>
-              <CourseDetails />
+              <CourseDetailsLazy />
             </Layout>
           } />
           <Route path=":id/edit" element={
             <Layout>
-              <CourseEdit />
+              <CourseEditLazy />
             </Layout>
           } />
         </Route>
@@ -195,18 +212,18 @@ function App() {
           }>
             <Route index element={
               <Layout>
-                <EmployeeCreate />
+                <EmployeeCreateLazy />
               </Layout>
             } />
           </Route>
           <Route path=":id" element={
             <Layout>
-              <EmployeeDetails />
+              <EmployeeDetailsLazy />
             </Layout>
           } />
           <Route path=":id/edit" element={
             <Layout>
-              <EmployeeEdit />
+              <EmployeeEditLazy />
             </Layout>
           } />
         </Route>
@@ -223,18 +240,18 @@ function App() {
           }>
             <Route index element={
               <Layout>
-                <EmployeeCreate />
+                <EmployeeCreateLazy />
               </Layout>
             } />
           </Route>
           <Route path=":id" element={
             <Layout>
-              <EmployeeDetails />
+              <EmployeeDetailsLazy />
             </Layout>
           } />
           <Route path=":id/edit" element={
             <Layout>
-              <EmployeeEdit />
+              <EmployeeEditLazy />
             </Layout>
           } />
         </Route>
@@ -251,7 +268,7 @@ function App() {
           }>
             <Route index element={
               <Layout>
-                <TrainerEdit />
+                <TrainerEditLazy />
               </Layout>
             } />
           </Route>
@@ -260,18 +277,18 @@ function App() {
           }>
             <Route index element={
               <Layout>
-                <TrainerEdit />
+                <TrainerEditLazy />
               </Layout>
             } />
           </Route>
           <Route path=":id" element={
             <Layout>
-              <TrainerDetails />
+              <TrainerDetailsLazy />
             </Layout>
           } />
           <Route path=":id/edit" element={
             <Layout>
-              <TrainerEdit />
+              <TrainerEditLazy />
             </Layout>
           } />
         </Route>
@@ -283,7 +300,7 @@ function App() {
           } />
           <Route path=":id" element={
             <Layout>
-              <ScheduleDetails />
+              <ScheduleDetailsLazy />
             </Layout>
           } />
         </Route>
@@ -317,7 +334,7 @@ function App() {
           } />
         </Route>
         <Route path="/settings/templates/google-callback" element={
-          <GoogleOAuthCallback />
+          <GoogleOAuthCallbackLazy />
         } />
         <Route path="/settings/templates/:id/edit" element={
           <Layout>

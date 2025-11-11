@@ -4,13 +4,8 @@
  */
 
 export { LazyCalendar } from './LazyCalendar';
-export { 
-  LazyChart, 
-  LazyLineChart, 
-  LazyBarChart, 
-  LazyPieChart, 
-  LazyDoughnutChart 
-} from './LazyChart';
+// Charts removed - now using Recharts directly (Phase 4 optimization)
+// export { LazyChart, LazyLineChart, LazyBarChart, LazyPieChart, LazyDoughnutChart } from './LazyChart';
 
 // Re-export utility components
 export { LoadingFallback, SkeletonLoader } from '../ui/LoadingFallback';
