@@ -1,4 +1,5 @@
 import prisma from '../config/prisma-optimization.js';
+import logger from '../utils/logger.js';
 
 class TenantService {
   /**
@@ -43,7 +44,7 @@ class TenantService {
 
       return tenant;
     } catch (error) {
-      console.error('[TENANT_SERVICE] Error creating tenant:', error);
+      logger.error('Failed to create tenant', { component: 'tenantService', action: 'createTenant', error: error.message, stack: error.stack });
       throw error;
     }
   }
@@ -73,7 +74,7 @@ class TenantService {
         }
       });
     } catch (error) {
-      console.error('[TENANT_SERVICE] Error getting tenant:', error);
+      logger.error('Failed to get tenant', { component: 'tenantService', action: 'getTenant', error: error.message, stack: error.stack });
       throw error;
     }
   }
@@ -87,7 +88,7 @@ class TenantService {
         where: {slug}
       });
     } catch (error) {
-      console.error('[TENANT_SERVICE] Error getting tenant by slug:', error);
+      logger.error('Failed to get tenant by slug', { component: 'tenantService', action: 'getTenantBySlug', error: error.message, stack: error.stack });
       throw error;
     }
   }
@@ -104,7 +105,7 @@ class TenantService {
         }
       });
     } catch (error) {
-      console.error('[TENANT_SERVICE] Error getting tenant by domain:', error);
+      logger.error('Failed to get tenant by domain', { component: 'tenantService', action: 'getTenantByDomain', error: error.message, stack: error.stack });
       throw error;
     }
   }
@@ -150,7 +151,7 @@ class TenantService {
         data: updatePayload
       });
     } catch (error) {
-      console.error('[TENANT_SERVICE] Error updating tenant:', error);
+      logger.error('Failed to update tenant', { component: 'tenantService', action: 'updateTenant', error: error.message, stack: error.stack });
       throw error;
     }
   }
@@ -180,7 +181,7 @@ class TenantService {
 
       return { success: true, message: 'Tenant deleted successfully' };
     } catch (error) {
-      console.error('[TENANT_SERVICE] Error deleting tenant:', error);
+      logger.error('Failed to delete tenant', { component: 'tenantService', action: 'deleteTenant', error: error.message, stack: error.stack });
       throw error;
     }
   }
@@ -208,7 +209,7 @@ class TenantService {
         trainers: trainerCount
       };
     } catch (error) {
-      console.error('[TENANT_SERVICE] Error getting tenant stats:', error);
+      logger.error('Failed to get tenant stats', { component: 'tenantService', action: 'getTenantStats', error: error.message, stack: error.stack });
       throw error;
     }
   }
@@ -265,7 +266,7 @@ class TenantService {
 
       return defaultConfigs;
     } catch (error) {
-      console.error('[TENANT_SERVICE] Error creating default configurations:', error);
+      logger.error('Failed to create default configurations', { component: 'tenantService', action: 'createDefaultConfigurations', error: error.message, stack: error.stack });
       throw error;
     }
   }
@@ -305,7 +306,7 @@ class TenantService {
 
       return availableRoles;
     } catch (error) {
-      console.error('[TENANT_SERVICE] Error creating default roles:', error);
+      logger.error('Failed to create default roles', { component: 'tenantService', action: 'createDefaultRoles', error: error.message, stack: error.stack });
       throw error;
     }
   }
@@ -340,7 +341,7 @@ class TenantService {
         }
       };
     } catch (error) {
-      console.error('[TENANT_SERVICE] Error checking billing limits:', error);
+      logger.error('Failed to check billing limits', { component: 'tenantService', action: 'checkBillingLimits', error: error.message, stack: error.stack });
       throw error;
     }
   }
@@ -397,7 +398,7 @@ class TenantService {
         }
       };
     } catch (error) {
-      console.error('[TENANT_SERVICE] Error listing tenants:', error);
+      logger.error('Failed to list tenants', { component: 'tenantService', action: 'listTenants', error: error.message, stack: error.stack });
       throw error;
     }
   }

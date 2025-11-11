@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
+import logger from '../utils/logger.js';
 
 const prisma = new PrismaClient();
 
@@ -80,7 +81,12 @@ const getFormTemplates = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Errore nel recupero template form:', error);
+    logger.error('Failed to retrieve form templates list', {
+      component: 'formTemplatesController',
+      action: 'getFormTemplates',
+      error: error.message,
+      stack: error.stack
+    });
     res.status(500).json({
       success: false,
       message: 'Errore interno del server',
@@ -127,7 +133,13 @@ const getFormTemplate = async (req, res) => {
       data: template
     });
   } catch (error) {
-    console.error('Errore nel recupero template:', error);
+    logger.error('Failed to retrieve single template', {
+      component: 'formTemplatesController',
+      action: 'getTemplate',
+      templateId: req.params.id,
+      error: error.message,
+      stack: error.stack
+    });
     res.status(500).json({
       success: false,
       message: 'Errore interno del server',
@@ -221,7 +233,12 @@ const createFormTemplate = async (req, res) => {
       });
     }
 
-    console.error('Errore nella creazione template:', error);
+    logger.error('Failed to create form template', {
+      component: 'formTemplatesController',
+      action: 'createTemplate',
+      error: error.message,
+      stack: error.stack
+    });
     res.status(500).json({
       success: false,
       message: 'Errore interno del server',
@@ -344,7 +361,13 @@ const updateFormTemplate = async (req, res) => {
       });
     }
 
-    console.error('Errore nell\'aggiornamento template:', error);
+    logger.error('Failed to update form template', {
+      component: 'formTemplatesController',
+      action: 'updateTemplate',
+      templateId: req.params.id,
+      error: error.message,
+      stack: error.stack
+    });
     res.status(500).json({
       success: false,
       message: 'Errore interno del server',
@@ -392,7 +415,13 @@ const deleteFormTemplate = async (req, res) => {
       message: 'Template eliminato con successo'
     });
   } catch (error) {
-    console.error('Errore nell\'eliminazione template:', error);
+    logger.error('Failed to delete form template', {
+      component: 'formTemplatesController',
+      action: 'deleteTemplate',
+      templateId: req.params.id,
+      error: error.message,
+      stack: error.stack
+    });
     res.status(500).json({
       success: false,
       message: 'Errore interno del server',
@@ -519,7 +548,13 @@ const duplicateFormTemplate = async (req, res) => {
       message: 'Template duplicato con successo'
     });
   } catch (error) {
-    console.error('Errore nella duplicazione template:', error);
+    logger.error('Failed to duplicate form template', {
+      component: 'formTemplatesController',
+      action: 'duplicateTemplate',
+      templateId: req.params.id,
+      error: error.message,
+      stack: error.stack
+    });
     res.status(500).json({
       success: false,
       message: 'Errore interno del server',

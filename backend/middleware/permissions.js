@@ -4,6 +4,7 @@
  */
 
 import { checkPermission as utilCheckPermission } from '../utils/permissions.js';
+import logger from '../utils/logger.js';
 
 /**
  * Middleware per verificare un singolo permesso
@@ -22,18 +23,24 @@ export function checkPermission(permission) {
  */
 export function checkPermissions(permissions) {
   return async (req, res, next) => {
-    console.log(`🚀 [PERMISSIONS DEBUG] checkPermissions middleware started`);
-    console.log(`🚀 [PERMISSIONS DEBUG] Required permissions:`, permissions);
-    console.log(`🚀 [PERMISSIONS DEBUG] req.person:`, req.person ? 'Present' : 'Missing');
+    logger.debug("Permissions check started", { component: "permissions", action: "checkPermissions" });
+    logger.debug("Required permissions", { component: "permissions", permissions });
+    logger.debug("Person presence", { component: "permissions", hasPerson: !!req.person });
     if (req.person) {
-      console.log(`🚀 [PERMISSIONS DEBUG] req.person.id:`, req.person.id);
-      console.log(`🚀 [PERMISSIONS DEBUG] req.person.personId:`, req.person.personId);
+      logger.debug("Person IDs", { 
+        component: "permissions",
+        personId: req.person.id,
+        personIdAlt: req.person.personId
+      });
     }
     
     try {
       // Verifica che l'utente sia autenticato
       if (!req.person || !req.person.id) {
-        console.log(`❌ [PERMISSIONS DEBUG] Authentication required - req.person missing or no ID`);
+        logger.warn("Authentication required - person missing or no ID", {
+          component: "permissions",
+          action: "checkPermissions"
+        });
         return res.status(401).json({
           error: 'Authentication required',
           code: 'AUTH_REQUIRED'
@@ -59,22 +66,37 @@ export function checkPermissions(permissions) {
           // Determina se è un permesso enum o resource:action
           const isEnumPermission = !permission.includes(':');
           
-          console.log(`🔍 [PERMISSIONS DEBUG] Processing permission: ${permission}, isEnum: ${isEnumPermission}`);
+          logger.debug("Processing permission", { 
+            component: "permissions",
+            permission,
+            isEnumPermission
+          });
           
           if (isEnumPermission) {
             // Per permessi enum, usa getPersonPermissions e controlla direttamente
-            console.log(`🔍 [PERMISSIONS DEBUG] Getting permissions for personId: ${personId}`);
+            logger.debug("Getting person permissions", { 
+              component: "permissions",
+              personId
+            });
             const userPermissions = await RBACService.getPersonPermissions(personId);
-            console.log(`🔍 [PERMISSIONS DEBUG] User permissions:`, Object.keys(userPermissions));
-            console.log(`🔍 [PERMISSIONS DEBUG] Looking for permission: ${permission}`);
-            console.log(`🔍 [PERMISSIONS DEBUG] Permission value: ${userPermissions[permission]}`);
+            logger.debug("User permissions retrieved", { 
+              component: "permissions",
+              permissionCount: Object.keys(userPermissions).length,
+              hasPermission: !!userPermissions[permission]
+            });
             
             if (userPermissions[permission]) {
-              console.log(`✅ [PERMISSIONS DEBUG] Permission ${permission} GRANTED`);
+              logger.debug("Permission GRANTED", { 
+                component: "permissions",
+                permission
+              });
               hasAnyPermission = true;
               break;
             } else {
-              console.log(`❌ [PERMISSIONS DEBUG] Permission ${permission} DENIED`);
+              logger.debug("Permission DENIED", { 
+                component: "permissions",
+                permission
+              });
             }
           } else {
             // Usa il middleware AdvancedPermissionService per permessi resource:action
@@ -120,7 +142,13 @@ export function checkPermissions(permissions) {
 
       next();
     } catch (error) {
-      console.error('Multiple permissions check error:', error);
+      logger.error('Multiple permissions check failed', {
+        component: 'permissions',
+        action: 'checkPermissions',
+        permissions,
+        error: error.message,
+        stack: error.stack
+      });
       res.status(500).json({
         error: 'Permission check failed',
         code: 'PERMISSION_CHECK_ERROR'

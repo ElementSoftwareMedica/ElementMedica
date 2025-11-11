@@ -6,6 +6,7 @@
 import { z } from 'zod';
 import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
+import logger from '../utils/logger.js';
 
 const prisma = new PrismaClient();
 
@@ -76,7 +77,13 @@ const getPublicFormTemplate = async (req, res) => {
       data: publicTemplate
     });
   } catch (error) {
-    console.error('Errore nel recupero template pubblico:', error);
+    logger.error('Failed to retrieve public template', {
+      component: 'publicFormsController',
+      action: 'getPublicTemplate',
+      slug: req.params.slug,
+      error: error.message,
+      stack: error.stack
+    });
     res.status(500).json({
       success: false,
       message: 'Errore interno del server',
@@ -245,7 +252,13 @@ const submitPublicForm = async (req, res) => {
       });
     }
 
-    console.error('Errore nell\'invio form pubblico:', error);
+    logger.error('Failed to submit public form', {
+      component: 'publicFormsController',
+      action: 'submitPublicForm',
+      slug: req.params.slug,
+      error: error.message,
+      stack: error.stack
+    });
     res.status(500).json({
       success: false,
       message: 'Errore interno del server',
@@ -279,7 +292,12 @@ const getPublicFormTemplates = async (req, res) => {
       data: templates
     });
   } catch (error) {
-    console.error('Errore nel recupero templates pubblici:', error);
+    logger.error('Failed to retrieve public templates list', {
+      component: 'publicFormsController',
+      action: 'getPublicTemplates',
+      error: error.message,
+      stack: error.stack
+    });
     res.status(500).json({
       success: false,
       message: 'Errore interno del server',

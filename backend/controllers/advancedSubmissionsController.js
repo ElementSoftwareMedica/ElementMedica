@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import crypto from 'crypto';
 import { PrismaClient } from '@prisma/client';
+import logger from '../utils/logger.js';
 
 const prisma = new PrismaClient();
 
@@ -130,7 +131,7 @@ const getAdvancedSubmissions = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Errore nel recupero submissions avanzate:', error);
+    logger.error('Failed to retrieve advanced submissions list', { component: 'advancedSubmissionsController', action: 'getSubmissions', error: error.message, stack: error.stack });
     res.status(500).json({
       success: false,
       message: 'Errore interno del server',
@@ -215,7 +216,7 @@ const getAdvancedSubmission = async (req, res) => {
       data: submission
     });
   } catch (error) {
-    console.error('Errore nel recupero submission:', error);
+    logger.error('Failed to retrieve single submission', { component: 'advancedSubmissionsController', action: 'getSubmission', submissionId: req.params.id, error: error.message, stack: error.stack });
     res.status(500).json({
       success: false,
       message: 'Errore interno del server',
@@ -355,7 +356,7 @@ const createAdvancedSubmission = async (req, res) => {
       });
     }
 
-    console.error('Errore nella creazione submission:', error);
+    logger.error('Failed to create advanced submission', { component: 'advancedSubmissionsController', action: 'createSubmission', error: error.message, stack: error.stack });
     res.status(500).json({
       success: false,
       message: 'Errore interno del server',
@@ -455,7 +456,7 @@ const updateAdvancedSubmission = async (req, res) => {
       });
     }
 
-    console.error('Errore nell\'aggiornamento submission:', error);
+    logger.error('Failed to update submission', { component: 'advancedSubmissionsController', action: 'updateSubmission', submissionId: req.params.id, error: error.message, stack: error.stack });
     res.status(500).json({
       success: false,
       message: 'Errore interno del server',
@@ -498,7 +499,7 @@ const deleteAdvancedSubmission = async (req, res) => {
       message: 'Submission eliminata con successo'
     });
   } catch (error) {
-    console.error('Errore nell\'eliminazione submission:', error);
+    logger.error('Failed to delete submission', { component: 'advancedSubmissionsController', action: 'deleteSubmission', submissionId: req.params.id, error: error.message, stack: error.stack });
     res.status(500).json({
       success: false,
       message: 'Errore interno del server',
@@ -595,7 +596,7 @@ const getAdvancedSubmissionStats = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Errore nel recupero statistiche:', error);
+    logger.error('Failed to retrieve submission statistics', { component: 'advancedSubmissionsController', action: 'getStatistics', error: error.message, stack: error.stack });
     res.status(500).json({
       success: false,
       message: 'Errore interno del server',
@@ -713,7 +714,7 @@ const bulkActionSubmissions = async (req, res) => {
       affected: result.count
     });
   } catch (error) {
-    console.error('Errore nell\'azione bulk:', error);
+    logger.error('Failed to execute bulk action', { component: 'advancedSubmissionsController', action: 'bulkAction', error: error.message, stack: error.stack });
     res.status(500).json({
       success: false,
       message: 'Errore interno del server',
