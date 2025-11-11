@@ -77,17 +77,6 @@ interface DummyData {
   schedules?: DashboardSchedule[];
 }
 
-// Register ChartJS components
-ChartJS.register(
-  ArcElement,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend
-);
-
 // Funzione helper per combinare data e ora in modo robusto
 function combineDateAndTime(dateStr: string, timeStr: string) {
   const [year, month, day] = dateStr.split('T')[0].split('-');
@@ -143,16 +132,20 @@ const Dashboard: React.FC = () => {
   // GDPR Consent Check
   const checkDashboardConsent = useCallback(async () => {
     try {
-      const hasConsent = await checkGdprConsent('dashboard_data');
-    setGdprConsent(hasConsent);
+      // checkGdprConsent requires userId and consentType
+      const userId = user?.id || 'system';
+      const consentResult = await checkGdprConsent(userId, 'dashboard_data');
+      const hasConsent = consentResult.hasConsent;
+      setGdprConsent(hasConsent);
     
     if (!hasConsent) {
         await logGdprAction({
           action: 'DASHBOARD_ACCESS_DENIED',
           timestamp: new Date().toISOString(),
-          tenantId: tenant?.id,
           metadata: {
-            reason: 'Missing consent for dashboard data access'
+            reason: 'Missing consent for dashboard data access',
+            userId,
+            tenantId: tenant?.id
           }
         });
         
@@ -168,7 +161,7 @@ const Dashboard: React.FC = () => {
       setDataSource('fallback');
       return false;
     }
-  }, [tenant?.id]);
+  }, [tenant?.id, user?.id]);
 
   // Simplified counters fetch using only the working endpoint
   const fetchCounters = useCallback(async (): Promise<{ companies: number; employees: number }> => {
