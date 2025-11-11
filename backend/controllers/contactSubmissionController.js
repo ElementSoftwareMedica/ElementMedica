@@ -4,6 +4,7 @@
  */
 
 import { PrismaClient } from '@prisma/client';
+import logger from '../utils/logger.js';
 
 const prisma = new PrismaClient();
 
@@ -52,14 +53,24 @@ const createSubmission = async (req, res) => {
   }
 
     // Ottieni tenant ID - per le submission pubbliche, usa il primo tenant attivo
-    console.log('🔍 [CONTACT SUBMISSION] req.tenantId:', req.tenantId);
-    console.log('🔍 [CONTACT SUBMISSION] req.tenant:', req.tenant);
+    logger.debug('Contact submission tenant resolution started', {
+      component: 'contactSubmissionController',
+      action: 'createSubmission',
+      reqTenantId: req.tenantId,
+      reqTenantExists: !!req.tenant
+    });
     
     let tenantId = req.tenantId || req.tenant?.id;
-    console.log('🔍 [CONTACT SUBMISSION] tenantId iniziale:', tenantId);
+    logger.debug('Initial tenantId resolved', {
+      component: 'contactSubmissionController',
+      tenantId: tenantId || 'none'
+    });
     
     if (!tenantId) {
-      console.log('🔍 [CONTACT SUBMISSION] Nessun tenantId, cerco tenant di default...');
+      logger.debug('No tenantId found, searching for default tenant', {
+        component: 'contactSubmissionController'
+      });
+      
       // Per le submission pubbliche, trova il primo tenant attivo
       const defaultTenant = await prisma.tenant.findFirst({
         where: {
@@ -71,17 +82,29 @@ const createSubmission = async (req, res) => {
         }
       });
       
-      console.log('🔍 [CONTACT SUBMISSION] defaultTenant trovato:', defaultTenant);
+      if (defaultTenant) {
+        logger.debug('Default tenant found', {
+          component: 'contactSubmissionController',
+          tenantId: defaultTenant.id,
+          tenantSlug: defaultTenant.slug
+        });
+      }
       
       if (!defaultTenant) {
-        console.error('❌ [CONTACT SUBMISSION] Nessun tenant attivo trovato');
+        logger.error('No active tenant found', {
+          component: 'contactSubmissionController',
+          action: 'createSubmission'
+        });
         return res.status(500).json({
           error: 'Nessun tenant attivo trovato'
         });
       }
       
       tenantId = defaultTenant.id;
-      console.log('🔍 [CONTACT SUBMISSION] tenantId finale:', tenantId);
+      logger.debug('Final tenantId assigned', {
+        component: 'contactSubmissionController',
+        tenantId
+      });
     }
     
     // Ottieni informazioni aggiuntive dalla richiesta
@@ -114,7 +137,12 @@ const createSubmission = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Errore creazione submission:', error);
+    logger.error('Failed to create contact submission', {
+      component: 'contactSubmissionController',
+      action: 'createSubmission',
+      error: error.message,
+      stack: error.stack
+    });
     res.status(500).json({
       error: 'Errore interno del server',
       message: 'Impossibile processare la richiesta'
@@ -195,7 +223,12 @@ const getSubmissions = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Errore recupero submissions:', error);
+    logger.error('Failed to retrieve submissions list', {
+      component: 'contactSubmissionController',
+      action: 'getSubmissions',
+      error: error.message,
+      stack: error.stack
+    });
     res.status(500).json({ error: 'Errore interno del server' });
   }
 };
@@ -246,7 +279,13 @@ const getSubmissionById = async (req, res) => {
     res.json(submission);
 
   } catch (error) {
-    console.error('Errore recupero submission:', error);
+    logger.error('Failed to retrieve single submission', {
+      component: 'contactSubmissionController',
+      action: 'getSubmission',
+      submissionId: req.params.id,
+      error: error.message,
+      stack: error.stack
+    });
     res.status(500).json({ error: 'Errore interno del server' });
   }
 };
@@ -319,7 +358,13 @@ const updateSubmissionStatus = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Errore aggiornamento submission:', error);
+    logger.error('Failed to update submission', {
+      component: 'contactSubmissionController',
+      action: 'updateSubmission',
+      submissionId: req.params.id,
+      error: error.message,
+      stack: error.stack
+    });
     res.status(500).json({ error: 'Errore interno del server' });
   }
 };
@@ -355,7 +400,13 @@ const deleteSubmission = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Errore eliminazione submission:', error);
+    logger.error('Failed to delete submission', {
+      component: 'contactSubmissionController',
+      action: 'deleteSubmission',
+      submissionId: req.params.id,
+      error: error.message,
+      stack: error.stack
+    });
     res.status(500).json({ error: 'Errore interno del server' });
   }
 };
@@ -471,7 +522,12 @@ const getSubmissionStats = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Errore statistiche submissions:', error);
+    logger.error('Failed to retrieve submission statistics', {
+      component: 'contactSubmissionController',
+      action: 'getStatistics',
+      error: error.message,
+      stack: error.stack
+    });
     res.status(500).json({ error: 'Errore interno del server' });
   }
 };
