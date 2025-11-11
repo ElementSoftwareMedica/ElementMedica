@@ -64,3 +64,5 @@ export const DashboardCharts: React.FC = () => {
     </div>
   );
 };
+
+export default DashboardCharts;
