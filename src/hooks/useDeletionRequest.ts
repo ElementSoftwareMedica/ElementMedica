@@ -294,13 +294,22 @@ export const useDeletionRequest = (): UseDeletionRequestReturn => {
     loading,
     error,
     submitRequest: submitDeletionRequest,
+    submitDeletionRequest, // Add alias
     cancelRequest: cancelDeletionRequest,
+    cancelDeletionRequest, // Add alias
     refreshRequests,
     canSubmitNewRequest,
     getPendingRequests: () => deletionRequests.filter(r => r.status === 'pending'),
     getRequestHistory: () => deletionRequests,
     checkStatus: async (requestId: string) => deletionRequests.find(r => r.id === requestId) || null,
-    estimateProcessingTime: () => ({ min: 1, max: 14 })
+    estimateProcessingTime: () => ({ min: 1, max: 14 }),
+    // Add missing methods that components expect
+    getDeletionStats,
+    getLatestRequest,
+    getStatusColor,
+    getStatusDescription,
+    formatRequestForDisplay,
+    validateFormData
   };
 };
 

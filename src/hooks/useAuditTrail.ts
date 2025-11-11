@@ -222,9 +222,15 @@ export const useAuditTrail = (initialFilters?: AuditTrailFilters): UseAuditTrail
   const hasPrevPage = page > 1;
   const startIndex = (page - 1) * limit + 1;
   const endIndex = Math.min(page * limit, total);
+  
+  // Check if filters are applied
+  const hasActiveFilters = Boolean(
+    filters.action || filters.startDate || filters.endDate || filters.dataType
+  );
 
   return {
     auditTrail,
+    auditLogs: auditTrail, // Alias for component compatibility
     loading,
     error,
     total,
@@ -236,6 +242,12 @@ export const useAuditTrail = (initialFilters?: AuditTrailFilters): UseAuditTrail
     startIndex,
     endIndex,
     filters,
+    pagination: { // Additional pagination object
+      page,
+      limit,
+      total,
+      totalPages
+    },
     fetchAuditTrail,
     nextPage,
     prevPage,
@@ -243,8 +255,13 @@ export const useAuditTrail = (initialFilters?: AuditTrailFilters): UseAuditTrail
     applyFilters,
     clearFilters,
     refresh,
+    refreshAuditTrail: refresh, // Alias for refresh
+    hasFilters: hasActiveFilters,
     getStats,
-    exportData
+    getAuditStats: getStats, // Alias for getStats
+    exportData,
+    exportToCSV: async () => await exportData('csv'), // Convenience method
+    exportToJSON: async () => await exportData('json') // Convenience method
   };
 };
 

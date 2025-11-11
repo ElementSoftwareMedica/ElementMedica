@@ -98,11 +98,10 @@ export const AuditTrailTab: React.FC<AuditTrailTabProps> = ({ hook }) => {
 
   const handleClearFilters = () => {
     const emptyFilters: AuditTrailFilters = {
-      action: '',
-      startDate: '',
-      endDate: '',
-      ipAddress: '',
-      userAgent: ''
+      action: undefined,
+      startDate: undefined,
+      endDate: undefined,
+      dataType: undefined
     };
     setTempFilters(emptyFilters);
     clearFilters();
