@@ -53,7 +53,6 @@ export function getValidationForModel(modelName) {
     'LetteraIncarico': documentsValidations.LetteraIncaricoSchema,
     'TemplateLink': documentsValidations.TemplateLinkSchema,
     'Preventivo': billingValidations.PreventivoSchema,
-    'PreventivoPartecipante': billingValidations.PreventivoPartecipanteSchema,
     'Fattura': billingValidations.FatturaSchema,
     'TestDocument': testingValidations.TestDocumentSchema,
     'TestPartecipante': testingValidations.TestPartecipanteSchema,

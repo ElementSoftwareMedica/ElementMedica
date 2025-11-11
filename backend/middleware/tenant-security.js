@@ -10,7 +10,7 @@ import { JWTService } from '../auth/jwt.js';
 const TENANT_REQUIRED_MODELS = [
   'Person', 'Company', 'Course', 'CourseSchedule',
   'CourseEnrollment', 'CourseSession', 'RegistroPresenze',
-  'RegistroPresenzePartecipante', 'Preventivo', 'PreventivoPartecipante',
+  'RegistroPresenzePartecipante', 'Preventivo',
   'Fattura', 'Attestato', 'LetteraIncarico',
   'ActivityLog', 'GdprAuditLog', 'ConsentRecord'
 ];

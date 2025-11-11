@@ -8,7 +8,7 @@ datasource db {
 }
 
 model Company {
-  id                 String              @id @default(uuid())
+  id                 String            @id @default(uuid())
   iban               String?
   pec                String?
   sdi                String?
@@ -16,24 +16,24 @@ model Company {
   citta              String?
   mail               String?
   note               String?
-  piva               String?             @unique
+  piva               String?           @unique
   provincia          String?
   telefono           String?
   tenantId           String
-  slug               String?             @unique
-  domain             String?             @unique
-  settings           Json?               @default("{}")
+  slug               String?           @unique
+  domain             String?           @unique
+  settings           Json?             @default("{}")
   codiceAteco        String?
   codiceFiscale      String?
-  createdAt          DateTime            @default(now())
+  createdAt          DateTime          @default(now())
   deletedAt          DateTime?
-  isActive           Boolean             @default(true)
+  isActive           Boolean           @default(true)
   personaRiferimento String?
   sedeAzienda        String?
-  subscriptionPlan   String              @default("basic")
-  updatedAt          DateTime            @default(now()) @updatedAt
+  subscriptionPlan   String            @default("basic")
+  updatedAt          DateTime          @default(now()) @updatedAt
   ragioneSociale     String
-  tenant             Tenant              @relation(fields: [tenantId], references: [id])
+  tenant             Tenant            @relation(fields: [tenantId], references: [id])
   sites              CompanySite[]
   schedules          CourseSchedule[]
   scheduleCompanies  ScheduleCompany[]
@@ -41,8 +41,7 @@ model Company {
   fatturaAzienda     FatturaAzienda[]
   personRoles        PersonRole[]
   persons            Person[]
-  preventivoAzienda  PreventivoAzienda[]
-  preventivi         Preventivo[]        @relation("PreventivoAziendaDiretta")
+  preventivi         Preventivo[]      @relation("PreventivoAziendaDiretta")
   codiciSconto       CodiceAzienda[] // Relazione con codici sconto
 
   @@index([tenantId])
@@ -566,10 +565,10 @@ model Preventivo {
   clienteType ClienteType // AZIENDA o PERSONA
   aziendaId   String? // Se clienteType = AZIENDA
   personaId   String? // Se clienteType = PERSONA
-  
+
   // Relazioni cliente
   azienda Company? @relation("PreventivoAziendaDiretta", fields: [aziendaId], references: [id], onDelete: SetNull)
-  persona Person? @relation("PreventivoPersonaDiretta", fields: [personaId], references: [id], onDelete: SetNull)
+  persona Person?  @relation("PreventivoPersonaDiretta", fields: [personaId], references: [id], onDelete: SetNull)
 
   // Campi Unificati
   titoloServizio      String // Titolo generico del servizio
@@ -581,11 +580,11 @@ model Preventivo {
   prezzoTotale   Decimal @db.Decimal(10, 2) // prezzoUnitario × quantita
   scontoTotale   Decimal @default(0) @db.Decimal(10, 2)
   imponibile     Decimal @db.Decimal(10, 2) // prezzoTotale - scontoTotale
-  
+
   // Gestione IVA
   aliquotaIva Decimal @default(22.00) @db.Decimal(5, 2) // Aliquota IVA % (4, 10, 22, etc.)
   importoIva  Decimal @db.Decimal(10, 2) // Importo IVA calcolato
-  
+
   // Totale finale con IVA
   importoFinale Decimal @db.Decimal(10, 2) // imponibile + importoIva
 
@@ -615,9 +614,7 @@ model Preventivo {
   dataGenerazione DateTime?
 
   // Relazioni
-  sconti       PreventivoSconto[] // Sconti applicati
-  aziende      PreventivoAzienda[] // Legacy: mantenuto per compatibilità
-  partecipanti PreventivoPartecipante[] // Legacy: mantenuto per compatibilità
+  sconti PreventivoSconto[] // Sconti applicati
 
   // Multi-tenancy
   tenantId String
@@ -637,44 +634,6 @@ model Preventivo {
   @@index([scheduledCourseId])
   @@index([corsoId])
   @@map("preventivi")
-}
-
-model PreventivoPartecipante {
-  id           String     @id @default(uuid())
-  personId     String     @map("partecipante_id")
-  createdAt    DateTime   @default(now())
-  deletedAt    DateTime?
-  preventivoId String
-  updatedAt    DateTime   @updatedAt
-  tenantId     String
-  person       Person     @relation("PreventivoPartecipante_Person", fields: [personId], references: [id], onDelete: Cascade)
-  preventivo   Preventivo @relation(fields: [preventivoId], references: [id], onDelete: Cascade)
-  tenant       Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-
-  @@unique([preventivoId, personId])
-  @@index([tenantId])
-  @@index([personId])
-  @@index([preventivoId])
-  @@map("preventivo_partecipanti")
-}
-
-model PreventivoAzienda {
-  id           String     @id @default(uuid())
-  preventivoId String
-  aziendaId    String
-  createdAt    DateTime   @default(now())
-  deletedAt    DateTime?
-  updatedAt    DateTime   @updatedAt
-  tenantId     String
-  azienda      Company    @relation(fields: [aziendaId], references: [id], onDelete: Cascade)
-  preventivo   Preventivo @relation(fields: [preventivoId], references: [id], onDelete: Cascade)
-  tenant       Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-
-  @@unique([preventivoId, aziendaId])
-  @@index([tenantId])
-  @@index([aziendaId])
-  @@index([preventivoId])
-  @@map("preventivo_aziende")
 }
 
 model Fattura {
@@ -1121,7 +1080,6 @@ model Person {
   repartoAssegnato                                     Reparto?                       @relation("PersonReparto", fields: [repartoId], references: [id])
   site                                                 CompanySite?                   @relation("PersonSite", fields: [siteId], references: [id])
   tenant                                               Tenant                         @relation(fields: [tenantId], references: [id])
-  preventivoPartecipanti                               PreventivoPartecipante[]       @relation("PreventivoPartecipante_Person")
   refreshTokens                                        RefreshToken[]
   registriPresenze                                     RegistroPresenze[]             @relation("RegistroFormatore")
   registroPresenzePartecipanti                         RegistroPresenzePartecipante[] @relation("RegistroPresenzePartecipante_Person")
@@ -1279,8 +1237,6 @@ model Tenant {
   personSessions               PersonSession[]
   persons                      Person[]
   preventivi                   Preventivo[]
-  preventivoAziende            PreventivoAzienda[]
-  preventivoPartecipanti       PreventivoPartecipante[]
   refreshTokens                RefreshToken[]
   registriPresenze             RegistroPresenze[]
   registroPresenzePartecipanti RegistroPresenzePartecipante[]
