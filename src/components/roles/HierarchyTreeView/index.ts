@@ -1,12 +1,12 @@
 /**
- * Barrel export for HierarchyTreeView modular component
+ * HierarchyTreeView module exports
  * Phase 3.7 - God Component Refactoring
  */
 
-// Main component (will be moved here in Day 4)
-// export { default } from './HierarchyTreeView';
+// Main component export
+export { default } from './HierarchyTreeView';
 
-// Types
+// Type exports
 export type {
   TreeNode,
   HierarchyTreeViewProps,
@@ -14,5 +14,5 @@ export type {
   TreeActionCallbacks,
   RoleHierarchyType,
   UserRoleHierarchy,
-  Role,
+  Role
 } from './types';
