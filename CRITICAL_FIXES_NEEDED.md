@@ -1,15 +1,15 @@
 # 🚨 CRITICAL FIXES NEEDED - Project Status Report
 
 **Data**: 11-12 Novembre 2025  
-**Status Reale**: � **PROGRESSO ECCELLENTE**  
+**Status Reale**: 🟢 **PROGRESSO ECCELLENTE**  
 **Errori TypeScript Iniziali**: **735 errori**  
-**Errori TypeScript Correnti**: **444 errori** (-291, -39.6%)
+**Errori TypeScript Correnti**: **427 errori** (-308, -41.9%)
 
 ---
 
 ## 📊 Progresso Attuale
 
-### ✅ Completato (39.6% riduzione errori)
+### ✅ Completato (41.9% riduzione errori)
 
 | Fase | Azione | Errori Eliminati | Nuovo Totale |
 |------|--------|------------------|--------------|
@@ -17,19 +17,27 @@
 | **Phase 1.1** | Config + Legacy cleanup | -215 | 520 |
 | **Phase 1.2** | API/Type/Icon imports | -63 | 457 |
 | **Phase 1.3** | Core types (GDPR, Dashboard, Course) | -4 | 453 |
-| **Phase 2.1** | Interface fixes (getConsentStats, status) | -9 | 444 |
-| **TOTALE** | **Progresso attuale** | **-291** | **444** |
+| **Phase 2.1a** | Interface fixes (getConsentStats, status) | -9 | 444 |
+| **Phase 2.1b** | DashboardWidget/Layout (Week 14) | -11 | 433 |
+| **Phase 2.1c** | DeletionRequest.userEmail | -3 | 430 |
+| **Phase 2.1d** | ComplianceReport.issues.type | -1 | 429 |
+| **Phase 2.1e** | RolesTab type inference | -2 | 427 |
+| **TOTALE** | **Progresso attuale** | **-308** | **427** |
 
 ### ✅ Phase 1 COMPLETATA | 🔄 Phase 2.1 IN CORSO
 
 **Foundation work**: Tutti i fix fondamentali completati
 - ✅ Phase 1: Config, imports, core types (-282 errors)
-- 🔄 Phase 2.1: Interface definitions in progress (-9 errors)
-  - ✅ getConsentStats: added 'granted' field
-  - ✅ DashboardSchedule: added 'status' field (local + hook)
-  - ✅ RoleHierarchy.old2.tsx removed (legacy cleanup)
-- **Total so far**: 735 → 444 errors (-291, -39.6%)
-- **Next**: Continue property fixes (enabled, type, order, layout)
+- 🔄 Phase 2.1: Interface definitions in progress (-26 errors)
+  - ✅ getConsentStats: added 'granted' field (-5)
+  - ✅ DashboardSchedule: added 'status' field (-4)
+  - ✅ DashboardWidget/DashboardLayout: Updated to Week 14 (-11)
+  - ✅ DeletionRequest: added 'userEmail' (-3)
+  - ✅ ComplianceReport.issues: added 'type' (-1)
+  - ✅ RolesTab: Fixed type inference (-2)
+  - ✅ RoleHierarchy.old2.tsx removed (cleanup)
+- **Total so far**: 735 → 427 errors (-308, -41.9%)
+- **Next**: currentPage, totalItems, pageSize, hiredDate, fiscalCode
 
 ### Errori Verificati
 
