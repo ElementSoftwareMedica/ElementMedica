@@ -110,6 +110,7 @@ export type DeletionStatus = 'pending' | 'approved' | 'rejected' | 'processing' 
 export interface DeletionRequest {
   id: string;
   userId: string;
+  userEmail?: string; // Email dell'utente per display
   reason: string;
   confirmEmail: string;
   anonymize: boolean;
