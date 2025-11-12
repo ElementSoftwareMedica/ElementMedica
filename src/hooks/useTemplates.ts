@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { apiGet, apiDelete } from '../services/api';
+import { apiGet, apiDelete, apiPost, apiPut } from '../services/api';
 import { Template } from '../types/template';
 
 interface UseTemplatesReturn {

@@ -2,7 +2,8 @@ import React from 'react';
 import { 
   Calendar,
   Clock,
-  FileText
+  FileText,
+  User
 } from 'lucide-react';
 
 interface AssessmentCardProps {

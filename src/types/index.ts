@@ -254,6 +254,9 @@ export * from './courses';
 export * from './gdpr';
 export * from './preferences';
 
+// Import explicit types needed in Database interface below
+import type { Course } from './courses';
+
 // Database types per le interazioni con l'API
 export interface Database {
   public: {

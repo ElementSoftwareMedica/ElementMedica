@@ -4,7 +4,7 @@ import { Button } from '../../design-system/atoms/Button';
 import { Input } from '../../design-system/atoms/Input';
 import { Label } from '../../design-system/atoms/Label';
 import { Badge } from '../../design-system/atoms/Badge';
-import { apiGet, apiDelete } from '../../services/api';
+import { apiGet, apiDelete, apiPost, apiPut } from '../../services/api';
 import { toast } from 'react-hot-toast';
 
 interface Reparto {

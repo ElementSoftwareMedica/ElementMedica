@@ -13,7 +13,7 @@ import {
   Plus,
   Trash2
 } from 'lucide-react';
-import { apiGet, apiDelete } from '../../services/api';
+import { apiGet, apiDelete, apiPost, apiPut } from '../../services/api';
 import { useToast } from '../../hooks/useToast';
 
 interface DVR {
