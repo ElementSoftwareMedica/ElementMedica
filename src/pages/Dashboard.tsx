@@ -628,7 +628,7 @@ const Dashboard: React.FC = () => {
             const start = combineDateAndTime(day, sortedSessions[0].start);
             const end = combineDateAndTime(day, sortedSessions[sessions.length-1].end);
             // Titolo: aggiungi " - Sessione X" solo se ci sono sessioni in giorni diversi
-            let title = `${s.course?.title || s.course?.name || 'Corso'}`;
+            let title = `${s.course?.title || 'Corso'}`;
             const allSameDay = allSessions.every((ss: any) => ss.date.split('T')[0] === day);
             if (!allSameDay && allSessions.length > 1) {
               // Trova la sessione corrispondente a questo giorno
@@ -643,7 +643,7 @@ const Dashboard: React.FC = () => {
               end,
               resource: s,
               status: s.status,
-              tooltip: `Corso: ${s.course?.title || s.course?.name}\nAziende: ${aziende}\nLuogo: ${s.location || '-'}\nData: ${new Date(day).toLocaleDateString('it-IT')}\nStato: ${s.status}`,
+              tooltip: `Corso: ${s.course?.title}\nAziende: ${aziende}\nLuogo: ${s.location || '-'}\nData: ${new Date(day).toLocaleDateString('it-IT')}\nStato: ${s.status}`,
               sessioniTooltipHtml
             });
           });
@@ -653,12 +653,12 @@ const Dashboard: React.FC = () => {
           grouped.push({
             id: s.id,
             scheduleId: s.id,
-            title: s.course?.title || s.course?.name || 'Corso',
+            title: s.course?.title || 'Corso',
             start: new Date(s.startDate),
             end: new Date(s.endDate),
             resource: s,
             status: s.status,
-            tooltip: `Corso: ${s.course?.title || s.course?.name}\nAziende: ${aziende}\nLuogo: ${s.location || '-'}\nData: ${s.startDate ? new Date(s.startDate).toLocaleDateString('it-IT') : '-'}\nOrario: --:--\nStato: ${s.status}`,
+            tooltip: `Corso: ${s.course?.title}\nAziende: ${aziende}\nLuogo: ${s.location || '-'}\nData: ${s.startDate ? new Date(s.startDate).toLocaleDateString('it-IT') : '-'}\nOrario: --:--\nStato: ${s.status}`,
             sessioniTooltipHtml: ''
           });
         }
@@ -674,7 +674,7 @@ const Dashboard: React.FC = () => {
             const end = new Date(combineDateAndTime(sess.date, sess.end));
             const allSessions = s.sessions;
             const allSameDay = allSessions.every((ss: any) => ss.date.split('T')[0] === sess.date.split('T')[0]);
-            let sessionTitle = s.course?.title || s.course?.name || 'Corso';
+            let sessionTitle = s.course?.title || 'Corso';
             let sessionNumber = '';
             if (!allSameDay && allSessions.length > 1) {
               sessionNumber = ` - Sessione ${allSessions.findIndex((ss: any) => ss === sess) + 1}`;
@@ -697,7 +697,7 @@ const Dashboard: React.FC = () => {
               allDay: false,
               resource: s,
               status: s.status,
-              tooltip: `Corso: ${s.course?.title || s.course?.name}\nAziende: ${aziende}\nLuogo: ${s.location || '-'}\nData: ${new Date(sess.date).toLocaleDateString('it-IT')}\nStato: ${s.status}`,
+              tooltip: `Corso: ${s.course?.title}\nAziende: ${aziende}\nLuogo: ${s.location || '-'}\nData: ${new Date(sess.date).toLocaleDateString('it-IT')}\nStato: ${s.status}`,
               sessioniTooltipHtml
             };
           });
@@ -706,12 +706,12 @@ const Dashboard: React.FC = () => {
           return [{
             id: s.id,
             scheduleId: s.id,
-            title: s.course?.title || s.course?.name || 'Corso',
+            title: s.course?.title || 'Corso',
             start: new Date(s.startDate),
             end: new Date(s.endDate),
             resource: s,
             status: s.status,
-            tooltip: `Corso: ${s.course?.title || s.course?.name}\nAziende: ${aziende}\nLuogo: ${s.location || '-'}\nData: ${s.startDate ? new Date(s.startDate).toLocaleDateString('it-IT') : '-'}\nOrario: --:--\nStato: ${s.status}`,
+            tooltip: `Corso: ${s.course?.title}\nAziende: ${aziende}\nLuogo: ${s.location || '-'}\nData: ${s.startDate ? new Date(s.startDate).toLocaleDateString('it-IT') : '-'}\nOrario: --:--\nStato: ${s.status}`,
             sessioniTooltipHtml: ''
           }];
         }

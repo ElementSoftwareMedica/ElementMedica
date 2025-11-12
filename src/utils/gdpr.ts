@@ -16,6 +16,8 @@ export interface GdprAction {
   userAgent?: string;
   success: boolean;
   error?: string;
+  tenantId?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface ConsentCheckResult {

@@ -55,6 +55,7 @@ export interface DashboardSchedule {
   trainerId?: string;
   trainer?: DashboardTrainer;
   maxParticipants?: number;
+  status?: string;
   companies?: Array<{ company: DashboardCompany }>;
   enrollments?: Array<{ employee: DashboardEmployee }>;
   sessions?: Array<{
