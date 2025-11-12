@@ -39,24 +39,18 @@ export interface NotificationPreferences {
   };
 }
 
-// Dashboard customization
+// Dashboard customization (Week 14 Implementation)
 export interface DashboardWidget {
   id: string;
-  type: 'chart' | 'table' | 'metric' | 'calendar' | 'activity';
-  title: string;
-  position: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  };
-  visible: boolean;
-  config: Record<string, unknown>;
+  enabled: boolean;
+  order: number;
+  size?: 'small' | 'medium' | 'large';
 }
 
 export interface DashboardLayout {
+  layout?: 'grid' | 'masonry' | 'sidebar';
   widgets: DashboardWidget[];
-  columns: number;
+  columns?: number; // Optional for backwards compatibility
   compact: boolean;
 }
 
