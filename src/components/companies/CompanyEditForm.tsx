@@ -6,7 +6,8 @@ import {
   Globe,
   Mail,
   MapPin,
-  Phone
+  Phone,
+  User
 } from 'lucide-react';
 import { Company } from '../../types';
 

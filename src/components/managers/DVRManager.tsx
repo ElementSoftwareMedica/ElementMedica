@@ -11,7 +11,8 @@ import {
   Edit,
   FileText,
   Plus,
-  Trash2
+  Trash2,
+  User
 } from 'lucide-react';
 import { apiGet, apiDelete, apiPost, apiPut } from '../../services/api';
 import { useToast } from '../../hooks/useToast';

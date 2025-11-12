@@ -8,7 +8,7 @@ import { PDFDownloadLink } from '@react-pdf/renderer';
 import { 
   Clock,
   Download,
-  MapPins,
+  MapPin,
   Users
 } from 'lucide-react';
 import { useCourses } from '../../hooks/useCourses';

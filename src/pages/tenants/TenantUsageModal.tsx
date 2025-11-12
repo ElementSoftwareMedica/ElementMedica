@@ -5,7 +5,7 @@ import {
   HardDrive,
   TrendingUp,
   Users,
-  Xs
+  X
 } from 'lucide-react';
 import { getTenantUsage, TenantUsage } from '../../services/tenants';
 

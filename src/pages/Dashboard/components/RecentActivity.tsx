@@ -1,5 +1,5 @@
 import React from 'react';
-import { Clock, Building2} from 'lucide-react';
+import { Clock, Building2, GraduationCap, User} from 'lucide-react';
 
 interface ActivityItem {
   id: string;

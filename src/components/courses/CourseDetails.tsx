@@ -11,7 +11,8 @@ import {
   Edit,
   FileText,
   GraduationCap,
-  MessageCircle
+  MessageCircle,
+  UserPlus
 } from 'lucide-react';
 import EntityProfileHeader from '../../components/shared/EntityProfileHeader';
 import { Button } from '../../design-system/atoms/Button';

@@ -5,6 +5,7 @@ import {
   Check,
   Save,
   Shield,
+  User as UserIcon,
   Users,
   X
 } from 'lucide-react';
@@ -239,7 +240,7 @@ const PermissionsTab: React.FC = () => {
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
                         user.isActive ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'
                       }`}>
-                        <User className="w-4 h-4" />
+                        <UserIcon className="w-4 h-4" />
                       </div>
                       <div className="ml-3 flex-1">
                         <p className="text-sm font-medium text-gray-900">
@@ -326,7 +327,7 @@ const PermissionsTab: React.FC = () => {
               </div>
             ) : (
               <div className="bg-white border border-gray-200 rounded-lg p-8 text-center">
-                <User className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                <UserIcon className="mx-auto h-12 w-12 text-gray-400 mb-4" />
                 <h3 className="text-lg font-medium text-gray-900 mb-2">Seleziona un Utente</h3>
                 <p className="text-gray-600">Scegli un utente dalla lista per gestire i suoi permessi.</p>
               </div>
