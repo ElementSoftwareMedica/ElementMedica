@@ -158,13 +158,14 @@
 - [x] Remove 12 obsolete files (298KB)
 - [x] **Result**: 735 → 520 errors (-215, -29.2%)
 
-#### 1.2 Import Resolution (8h) 🔄 **IN PROGRESS**
+#### 1.2 Import Resolution (8h) ✅ **COMPLETE**
 - [x] Fix API functions (apiPut, apiPost) - 5 files
 - [x] Fix Course type import in types/index.ts
-- [x] Fix User icon in AssessmentCard
-- [ ] Fix remaining 23 icon imports (in progress)
-- [ ] **Current**: 520 → 506 errors (-14, -2.7%)
-- [ ] **Target**: 506 → ~485 errors
+- [x] Fix all production icon imports (8 files)
+- [x] Fix Storybook icon imports (3 files)
+- [x] Fix PermissionsTab User icon conflict (renamed to UserIcon)
+- [x] **Result**: 520 → 475 errors (-45, -8.7%)
+- [x] **Target SUPERATO**: obiettivo 485, raggiunto 475
 
 #### 1.3 Core Types Alignment (8h)
 - [ ] Sync Prisma types with frontend
