@@ -3,13 +3,13 @@
 **Data**: 11-12 Novembre 2025  
 **Status Reale**: 🟢 **PROGRESSO ECCELLENTE**  
 **Errori TypeScript Iniziali**: **735 errori**  
-**Errori TypeScript Correnti**: **427 errori** (-308, -41.9%)
+**Errori TypeScript Correnti**: **419 errori** (-316, -43.0%)
 
 ---
 
 ## 📊 Progresso Attuale
 
-### ✅ Completato (41.9% riduzione errori)
+### ✅ Completato (43.0% riduzione errori)
 
 | Fase | Azione | Errori Eliminati | Nuovo Totale |
 |------|--------|------------------|--------------|
@@ -22,22 +22,26 @@
 | **Phase 2.1c** | DeletionRequest.userEmail | -3 | 430 |
 | **Phase 2.1d** | ComplianceReport.issues.type | -1 | 429 |
 | **Phase 2.1e** | RolesTab type inference | -2 | 427 |
-| **TOTALE** | **Progresso attuale** | **-308** | **427** |
+| **Phase 2.1f** | Pagination UI aliases | -2 | 425 |
+| **Phase 2.1g** | PersonData UI aliases | -6 | 419 |
+| **TOTALE** | **Progresso attuale** | **-316** | **419** |
 
 ### ✅ Phase 1 COMPLETATA | 🔄 Phase 2.1 IN CORSO
 
 **Foundation work**: Tutti i fix fondamentali completati
 - ✅ Phase 1: Config, imports, core types (-282 errors)
-- 🔄 Phase 2.1: Interface definitions in progress (-26 errors)
+- 🔄 Phase 2.1: Interface definitions in progress (-34 errors)
   - ✅ getConsentStats: added 'granted' field (-5)
   - ✅ DashboardSchedule: added 'status' field (-4)
   - ✅ DashboardWidget/DashboardLayout: Updated to Week 14 (-11)
   - ✅ DeletionRequest: added 'userEmail' (-3)
   - ✅ ComplianceReport.issues: added 'type' (-1)
   - ✅ RolesTab: Fixed type inference (-2)
+  - ✅ Pagination: UI-friendly aliases (currentPage, pageSize, totalItems) (-2)
+  - ✅ PersonData: UI-friendly aliases (birthDate, hiredDate, fiscalCode) (-6)
   - ✅ RoleHierarchy.old2.tsx removed (cleanup)
-- **Total so far**: 735 → 427 errors (-308, -41.9%)
-- **Next**: currentPage, totalItems, pageSize, hiredDate, fiscalCode
+- **Total so far**: 735 → 419 errors (-316, -43.0%)
+- **Next**: Continue with remaining property fixes
 
 ### Errori Verificati
 
