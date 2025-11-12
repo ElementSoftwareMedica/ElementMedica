@@ -6,7 +6,7 @@
 import React from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import { Button } from './Button';
-import { ChevronRightIconIcon } from '@heroicons/react/24/outline';
+import { Plus, ChevronRight } from 'lucide-react';
 
 const meta = {
   title: 'Design System/Atoms/Button',
@@ -136,22 +136,22 @@ export const Disabled: Story = {
 // With Icons
 export const WithLeftIcon: Story = {
   args: {
-    leftIcon: <PlusIcon className="h-4 w-4" />,
+    leftIcon: <Plus className="h-4 w-4" />,
     children: 'Add Item',
   },
 };
 
 export const WithRightIcon: Story = {
   args: {
-    rightIcon: <ChevronRightIcon className="h-4 w-4" />,
+    rightIcon: <ChevronRight className="h-4 w-4" />,
     children: 'Continue',
   },
 };
 
 export const WithBothIcons: Story = {
   args: {
-    leftIcon: <PlusIcon className="h-4 w-4" />,
-    rightIcon: <ChevronRightIcon className="h-4 w-4" />,
+    leftIcon: <Plus className="h-4 w-4" />,
+    rightIcon: <ChevronRight className="h-4 w-4" />,
     children: 'Add and Continue',
   },
 };
@@ -217,7 +217,7 @@ export const Interactive: Story = {
       <Button 
         loading={loading} 
         onClick={handleClick}
-        leftIcon={!loading ? <PlusIcon className="h-4 w-4" /> : undefined}
+        leftIcon={!loading ? <Plus className="h-4 w-4" /> : undefined}
       >
         {loading ? 'Processing...' : 'Click me'}
       </Button>
