@@ -315,8 +315,11 @@ export interface UseAuditTrailReturn {
   filters: AuditTrailFilters;
   pagination?: { // Additional pagination object for component compatibility
     page: number;
+    currentPage?: number; // Alias for page (UI-friendly naming)
     limit: number;
+    pageSize?: number; // Alias for limit (UI-friendly naming)
     total: number;
+    totalItems?: number; // Alias for total (UI-friendly naming)
     totalPages: number;
   };
   fetchAuditTrail: (filters?: AuditTrailFilters) => Promise<void>;

@@ -242,10 +242,13 @@ export const useAuditTrail = (initialFilters?: AuditTrailFilters): UseAuditTrail
     startIndex,
     endIndex,
     filters,
-    pagination: { // Additional pagination object
+    pagination: { // Additional pagination object with UI-friendly aliases
       page,
+      currentPage: page, // Alias for UI components
       limit,
+      pageSize: limit, // Alias for UI components
       total,
+      totalItems: total, // Alias for UI components
       totalPages
     },
     fetchAuditTrail,
