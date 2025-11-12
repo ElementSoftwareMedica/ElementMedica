@@ -1,15 +1,15 @@
 # 🚨 CRITICAL FIXES NEEDED - Project Status Report
 
 **Data**: 11-12 Novembre 2025  
-**Status Reale**: 🟡 **PROGRESSO SIGNIFICATIVO**  
+**Status Reale**: � **PROGRESSO ECCELLENTE**  
 **Errori TypeScript Iniziali**: **735 errori**  
-**Errori TypeScript Correnti**: **453 errori** (-282, -38.4%)
+**Errori TypeScript Correnti**: **444 errori** (-291, -39.6%)
 
 ---
 
 ## 📊 Progresso Attuale
 
-### ✅ Completato (38.4% riduzione errori)
+### ✅ Completato (39.6% riduzione errori)
 
 | Fase | Azione | Errori Eliminati | Nuovo Totale |
 |------|--------|------------------|--------------|
@@ -17,16 +17,19 @@
 | **Phase 1.1** | Config + Legacy cleanup | -215 | 520 |
 | **Phase 1.2** | API/Type/Icon imports | -63 | 457 |
 | **Phase 1.3** | Core types (GDPR, Dashboard, Course) | -4 | 453 |
-| **TOTALE** | **Progresso attuale** | **-282** | **453** |
+| **Phase 2.1** | Interface fixes (getConsentStats, status) | -9 | 444 |
+| **TOTALE** | **Progresso attuale** | **-291** | **444** |
 
-### ✅ Phase 1 COMPLETATA
+### ✅ Phase 1 COMPLETATA | 🔄 Phase 2.1 IN CORSO
 
 **Foundation work**: Tutti i fix fondamentali completati
-- ✅ Phase 1.1: Config optimization & legacy cleanup
-- ✅ Phase 1.2: Import resolution (API, types, icons)
-- ✅ Phase 1.3: Core type definitions (GdprAction, DashboardSchedule, Course)
-- **Total Phase 1**: 735 → 453 errors (-282, -38.4%)
-- **Remaining work**: Interface definitions, component props (Phase 2)
+- ✅ Phase 1: Config, imports, core types (-282 errors)
+- 🔄 Phase 2.1: Interface definitions in progress (-9 errors)
+  - ✅ getConsentStats: added 'granted' field
+  - ✅ DashboardSchedule: added 'status' field (local + hook)
+  - ✅ RoleHierarchy.old2.tsx removed (legacy cleanup)
+- **Total so far**: 735 → 444 errors (-291, -39.6%)
+- **Next**: Continue property fixes (enabled, type, order, layout)
 
 ### Errori Verificati
 
