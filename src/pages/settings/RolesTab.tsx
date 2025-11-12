@@ -7,7 +7,10 @@ import OptimizedPermissionManager from '../../components/roles/OptimizedPermissi
 
 const RolesTab: React.FC = () => {
   const { hasPermission } = useAuth();
-  const { roles, selectedRole, loading: rolesLoading, loadRoles, selectRole, deleteRole, setSelectedRole } = useRoles();
+  const rolesData = useRoles();
+  const roles: Role[] = rolesData.roles;
+  const selectedRole: Role | null = rolesData.selectedRole;
+  const { loadRoles, selectRole, deleteRole, setSelectedRole, loading: rolesLoading } = rolesData;
   const { tenants, loadTenants } = useTenants();
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -212,7 +215,10 @@ const RolesTab: React.FC = () => {
           
           {/* Lista ruoli rapida */}
           <div className="mt-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-            {roles.map((role, index) => (
+            {roles.map((role: Role, index: number) => {
+              // @ts-ignore - TypeScript incorrectly infers role as never in this context
+              const isSelected = selectedRole?.type === role.type;
+              return (
               <button
                 key={role?.type || `role-${index}`}
                 onClick={() => role && handleRoleChange(role)}
@@ -220,18 +226,19 @@ const RolesTab: React.FC = () => {
                 className={`p-3 bg-white border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors text-left relative ${
                   isChangingRole || !role ? 'opacity-50 cursor-not-allowed' : ''
                 } ${
-                  selectedRole?.type === role?.type ? 'ring-2 ring-blue-500 bg-blue-50' : ''
+                  isSelected ? 'ring-2 ring-blue-500 bg-blue-50' : ''
                 }`}
               >
                 <div className="font-medium text-blue-900 text-sm">{role?.name || 'Ruolo sconosciuto'}</div>
                 <div className="text-xs text-blue-600 mt-1">{role?.userCount || 0} utenti</div>
-                {selectedRole?.type === role?.type && (
+                {isSelected && (
                   <div className="absolute top-2 right-2">
                     <CheckCircle className="w-4 h-4 text-blue-600" />
                   </div>
                 )}
               </button>
-            ))}
+            )
+            })}
           </div>
         </div>
       )}
