@@ -35,6 +35,7 @@ export interface PersonData {
   email?: string;
   phone?: string;
   taxCode?: string;
+  fiscalCode?: string; // Alias for taxCode (backward compatibility - TODO: consolidate with taxCode)
   birthDate?: string;
   residenceAddress?: string;
   city?: string;
@@ -56,6 +57,7 @@ export interface PersonData {
   department?: string;
   position?: string;
   hireDate?: string;
+  hiredDate?: string; // Alias for hireDate (UI component compatibility)
   salary?: string;
   contractType?: string;
   workLocation?: string;

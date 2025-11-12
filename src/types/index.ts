@@ -103,9 +103,11 @@ export interface PersonData {
   email: string;
   phone?: string;
   dateOfBirth?: string;
+  birthDate?: string; // Alias for dateOfBirth (UI component compatibility)
   residenceAddress?: string;
   employeeId?: string;
   startDate?: string;
+  hiredDate?: string; // Alias for startDate (UI component compatibility)
   roleType?: string;
   tenantId?: string;
 }
