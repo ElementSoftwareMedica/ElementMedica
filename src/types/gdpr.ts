@@ -172,6 +172,7 @@ export interface ComplianceReport {
   auditSummary: Record<AuditAction, number>;
   recommendations: string[];
   issues: {
+    type?: string; // Type of compliance issue
     severity: 'low' | 'medium' | 'high' | 'critical';
     description: string;
     recommendation: string;
