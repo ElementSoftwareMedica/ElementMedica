@@ -291,6 +291,7 @@ export interface UseGDPRConsentReturn {
   getConsentStats: () => {
     total: number;
     active: number;
+    granted: number; // Alias for active (backwards compatibility)
     withdrawn: number;
     percentage: number;
   };

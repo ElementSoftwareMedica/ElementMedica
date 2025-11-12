@@ -174,6 +174,7 @@ export const useGDPRConsent = (): UseGDPRConsentReturn => {
     return {
       total,
       active,
+      granted: active, // Alias for backwards compatibility
       withdrawn,
       percentage: total > 0 ? Math.round((active / total) * 100) : 0
     };
