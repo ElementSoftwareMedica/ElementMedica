@@ -27,53 +27,53 @@ Spunta i checkbox `[x]` man mano che completi i task.
 ## FASE 1: DATABASE (14 giorni)
 
 ### F1.1 Struttura Core
-- [ ] F1.1.1 Modello Poliambulatorio
-- [ ] F1.1.2 Modello Sede + Indirizzo
-- [ ] F1.1.3 Migration + seed base
-- [ ] F1.1.4 Test CRUD base
+- [x] F1.1.1 Modello Poliambulatorio
+- [x] F1.1.2 Modello Sede + Indirizzo
+- [x] F1.1.3 Migration + seed base
+- [x] F1.1.4 Test CRUD base
 
 ### F1.2 Ambulatori
-- [ ] F1.2.1 Modello Ambulatorio
-- [ ] F1.2.2 Modello OrarioAmbulatorio
-- [ ] F1.2.3 Migration + seed
-- [ ] F1.2.4 Test isolamento tenant
+- [x] F1.2.1 Modello Ambulatorio
+- [x] F1.2.2 Modello OrarioAmbulatorio
+- [x] F1.2.3 Migration + seed
+- [x] F1.2.4 Test isolamento tenant
 
 ### F1.3 Strumentario
-- [ ] F1.3.1 Modello Strumento
-- [ ] F1.3.2 Modello ManutenzioneStrumento
-- [ ] F1.3.3 Migration + seed
-- [ ] F1.3.4 Test relazioni
+- [x] F1.3.1 Modello Strumento
+- [x] F1.3.2 Modello ManutenzioneStrumento
+- [x] F1.3.3 Migration + seed
+- [x] F1.3.4 Test relazioni
 
 ### F1.4 Catalogo Prestazioni
-- [ ] F1.4.1 Modello Prestazione
-- [ ] F1.4.2 Modello TemplateCampoVisita
-- [ ] F1.4.3 Migration + seed
-- [ ] F1.4.4 Test associazioni
+- [x] F1.4.1 Modello Prestazione
+- [x] F1.4.2 Modello TemplateCampoVisita
+- [x] F1.4.3 Migration + seed
+- [x] F1.4.4 Test associazioni
 
 ### F1.5 Listini e Convenzioni
-- [ ] F1.5.1 Modello Listino + ListinoPrestazione
-- [ ] F1.5.2 Modello Convenzione + ConvenzioneListino
-- [ ] F1.5.3 Modello CodiceSconto
-- [ ] F1.5.4 Migration + seed
+- [x] F1.5.1 Modello Listino + ListinoPrestazione
+- [x] F1.5.2 Modello Convenzione + ConvenzioneListino
+- [x] F1.5.3 Modello CodiceSconto
+- [x] F1.5.4 Migration + seed
 
 ### F1.6 Agenda
-- [ ] F1.6.1 Modello SlotDisponibilita
-- [ ] F1.6.2 Modello Appuntamento
-- [ ] F1.6.3 Modello NumeroChiamata
-- [ ] F1.6.4 Migration + seed
-- [ ] F1.6.5 Test slot conflicts
+- [x] F1.6.1 Modello SlotDisponibilita
+- [x] F1.6.2 Modello Appuntamento
+- [x] F1.6.3 Modello NumeroChiamata
+- [x] F1.6.4 Migration + seed
+- [x] F1.6.5 Test slot conflicts
 
 ### F1.7 Clinica
-- [ ] F1.7.1 Modello Visita
-- [ ] F1.7.2 Modello ValoreCampoVisita
-- [ ] F1.7.3 Modello Referto + VersioneReferto
-- [ ] F1.7.4 Modello FirmaDigitale
-- [ ] F1.7.5 Migration + seed
+- [x] F1.7.1 Modello Visita
+- [x] F1.7.2 Modello ValoreCampoVisita
+- [x] F1.7.3 Modello Referto + VersioneReferto
+- [x] F1.7.4 Modello FirmaDigitale
+- [x] F1.7.5 Migration + seed
 
 ### F1.8 Audit e Sicurezza
-- [ ] F1.8.1 Modello AuditLogClinico
-- [ ] F1.8.2 Trigger audit automatici
-- [ ] F1.8.3 Indexes ottimizzati
+- [x] F1.8.1 Modello AuditLogClinico
+- [x] F1.8.2 Trigger audit automatici
+- [x] F1.8.3 Indexes ottimizzati
 
 ---
 
@@ -85,9 +85,9 @@ Spunta i checkbox `[x]` man mano che completi i task.
 - [ ] F2.1.3 Validazione schemas Joi
 
 ### F2.2 API Struttura
-- [ ] F2.2.1 CRUD Poliambulatorio
-- [ ] F2.2.2 CRUD Sedi
-- [ ] F2.2.3 CRUD Ambulatori
+- [x] F2.2.1 CRUD Poliambulatorio (service)
+- [x] F2.2.2 CRUD Sedi
+- [x] F2.2.3 CRUD Ambulatori (service)
 - [ ] F2.2.4 CRUD Orari Ambulatori
 - [ ] F2.2.5 Test endpoints struttura
 
@@ -448,8 +448,8 @@ Spunta i checkbox `[x]` man mano che completi i task.
 | Fase | Completati | Totale | % |
 |------|------------|--------|---|
 | F0 | 0 | 9 | 0% |
-| F1 | 0 | 28 | 0% |
-| F2 | 0 | 44 | 0% |
+| F1 | 28 | 28 | 100% |
+| F2 | 4 | 44 | 9% |
 | F3 | 0 | 21 | 0% |
 | F4 | 0 | 15 | 0% |
 | F5 | 0 | 15 | 0% |
@@ -460,4 +460,4 @@ Spunta i checkbox `[x]` man mano che completi i task.
 | F10 | 0 | 11 | 0% |
 | F11 | 0 | 12 | 0% |
 | F12 | 0 | 12 | 0% |
-| **TOTALE** | **0** | **237** | **0%** |
+| **TOTALE** | **32** | **237** | **13%** |

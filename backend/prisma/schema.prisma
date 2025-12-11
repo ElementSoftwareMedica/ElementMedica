@@ -1102,6 +1102,9 @@ model Person {
   disponibilita                                        DisponibilitaMedico[]          @relation("DisponibilitaMedico")
   ferieAssenze                                         FerieAssenza[]                 @relation("FerieAssenzaMedico")
   fattureSanitarie                                     FatturaSanitaria[]             @relation("FattureSanitariePaziente")
+  firmeDigitali                                        FirmaDigitale[]                @relation("FirmeDigitali")
+  slotsDisponibilita                                   SlotDisponibilita[]            @relation("SlotsDisponibilita")
+  auditLogsClinici                                     AuditLogClinico[]              @relation("AuditLogsClinici")
 
   @@index([email])
   @@index([username])
@@ -1275,6 +1278,15 @@ model Tenant {
   disponibilitaMedici          DisponibilitaMedico[]
   ferieAssenze                 FerieAssenza[]
   fattureSanitarie             FatturaSanitaria[]
+  orariAmbulatorio             OrarioAmbulatorio[]
+  manutenzioniStrumento        ManutenzioneStrumento[]
+  convenzioni                  Convenzione[]
+  codiciScontoClinici          CodiceScontoClinico[]        @relation("CodiciScontoClinici")
+  templateCampiVisita          TemplateCampoVisita[]
+  firmeDigitali                FirmaDigitale[]
+  slotsDisponibilita           SlotDisponibilita[]
+  numeriChiamata               NumeroChiamata[]
+  auditLogsClinici             AuditLogClinico[]
 
   @@map("tenants")
 }
@@ -2155,9 +2167,10 @@ model Poliambulatorio {
   deletedAt            DateTime?
 
   // Relations
-  tenant             Tenant        @relation(fields: [tenantId], references: [id])
-  direttoreSanitario Person?       @relation("DirettoreSanitario", fields: [direttoreSanitarioId], references: [id], onDelete: SetNull)
+  tenant             Tenant          @relation(fields: [tenantId], references: [id])
+  direttoreSanitario Person?         @relation("DirettoreSanitario", fields: [direttoreSanitarioId], references: [id], onDelete: SetNull)
   ambulatori         Ambulatorio[]
+  numeriChiamata     NumeroChiamata[]
 
   @@unique([tenantId, codice])
   @@index([tenantId, deletedAt])
@@ -2189,6 +2202,7 @@ model Ambulatorio {
   strumenti       StrumentoAmbulatorio[]
   appuntamenti    Appuntamento[]
   prestazioni     PrestazioneAmbulatorio[]
+  orari           OrarioAmbulatorio[]
 
   @@unique([poliambulatorioId, codice])
   @@index([tenantId, deletedAt])
@@ -2221,6 +2235,7 @@ model Prestazione {
   listinoPrezzi       ListinoPrezzo[]
   ambulatoriAbilitati PrestazioneAmbulatorio[]
   visite              Visita[]
+  templateCampi       TemplateCampoVisita[]
 
   @@unique([tenantId, codice])
   @@index([tenantId, deletedAt])
@@ -2268,8 +2283,9 @@ model Strumento {
   deletedAt            DateTime?
 
   // Relations
-  tenant              Tenant                 @relation(fields: [tenantId], references: [id])
+  tenant              Tenant                  @relation(fields: [tenantId], references: [id])
   ambulatoriAssegnati StrumentoAmbulatorio[]
+  manutenzioni        ManutenzioneStrumento[]
 
   @@unique([tenantId, codice])
   @@index([tenantId, deletedAt])
@@ -2316,8 +2332,9 @@ model ListinoPrezzo {
   deletedAt         DateTime?
 
   // Relations
-  tenant      Tenant      @relation(fields: [tenantId], references: [id])
-  prestazione Prestazione @relation(fields: [prestazioneId], references: [id], onDelete: Cascade)
+  tenant      Tenant             @relation(fields: [tenantId], references: [id])
+  prestazione Prestazione        @relation(fields: [prestazioneId], references: [id], onDelete: Cascade)
+  convenzioni ConvenzioneListino[]
 
   @@unique([tenantId, prestazioneId, tipo, codiceConvenzione, validoDa])
   @@index([tenantId, deletedAt])
@@ -2414,13 +2431,14 @@ model Visita {
   deletedAt           DateTime?
 
   // Relations
-  tenant       Tenant         @relation(fields: [tenantId], references: [id])
-  appuntamento Appuntamento?  @relation(fields: [appuntamentoId], references: [id], onDelete: SetNull)
-  paziente     Person         @relation("VisitePaziente", fields: [pazienteId], references: [id], onDelete: Restrict)
-  medico       Person         @relation("VisiteMedico", fields: [medicoId], references: [id], onDelete: Restrict)
-  prestazione  Prestazione    @relation(fields: [prestazioneId], references: [id], onDelete: Restrict)
+  tenant       Tenant             @relation(fields: [tenantId], references: [id])
+  appuntamento Appuntamento?      @relation(fields: [appuntamentoId], references: [id], onDelete: SetNull)
+  paziente     Person             @relation("VisitePaziente", fields: [pazienteId], references: [id], onDelete: Restrict)
+  medico       Person             @relation("VisiteMedico", fields: [medicoId], references: [id], onDelete: Restrict)
+  prestazione  Prestazione        @relation(fields: [prestazioneId], references: [id], onDelete: Restrict)
   referti      Referto[]
   allegati     AllegatoVisita[]
+  valoriCampi  ValoreCampoVisita[]
 
   @@index([tenantId, deletedAt])
   @@index([pazienteId])
@@ -2460,9 +2478,10 @@ model Referto {
   deletedAt       DateTime?
 
   // Relations
-  tenant   Tenant           @relation(fields: [tenantId], references: [id])
-  visita   Visita           @relation(fields: [visitaId], references: [id], onDelete: Cascade)
+  tenant   Tenant            @relation(fields: [tenantId], references: [id])
+  visita   Visita            @relation(fields: [visitaId], references: [id], onDelete: Cascade)
   allegati AllegatoReferto[]
+  versioni VersioneReferto[]
 
   @@unique([tenantId, codice])
   @@index([tenantId, deletedAt])
@@ -2601,4 +2620,363 @@ model FatturaSanitaria {
   @@index([dataEmissione])
   @@index([stato])
   @@map("fatture_sanitarie")
+}
+
+// ============================================
+// MODELLI CLINICI AGGIUNTIVI - ElementMedica
+// ============================================
+
+// OrarioAmbulatorio - Operating hours for ambulatorio
+model OrarioAmbulatorio {
+  id              String    @id @default(uuid())
+  tenantId        String
+  ambulatorioId   String
+  giornoSettimana Int       // 0=Sunday, 1=Monday, etc.
+  oraInizio       String    // HH:MM format
+  oraFine         String    // HH:MM format
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt       DateTime  @updatedAt @db.Timestamp(6)
+  deletedAt       DateTime?
+
+  // Relations
+  tenant      Tenant      @relation(fields: [tenantId], references: [id])
+  ambulatorio Ambulatorio @relation(fields: [ambulatorioId], references: [id], onDelete: Cascade)
+
+  @@unique([ambulatorioId, giornoSettimana, oraInizio])
+  @@index([tenantId, deletedAt])
+  @@index([ambulatorioId])
+  @@index([giornoSettimana])
+  @@map("orari_ambulatorio")
+}
+
+// ManutenzioneStrumento - Equipment maintenance records
+model ManutenzioneStrumento {
+  id            String    @id @default(uuid())
+  tenantId      String
+  strumentoId   String
+  tipo          String    // preventiva, correttiva, calibrazione
+  dataEsecuzione DateTime @db.Date
+  dataProssima  DateTime? @db.Date
+  esecutore     String?   // Who performed maintenance
+  costo         Decimal?  @db.Decimal(10, 2)
+  note          String?
+  esito         String?   // positivo, negativo, da_ripetere
+  certificato   String?   // Certificate path if any
+  createdBy     String?
+  createdAt     DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt     DateTime  @updatedAt @db.Timestamp(6)
+  deletedAt     DateTime?
+
+  // Relations
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
+  strumento Strumento @relation(fields: [strumentoId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, deletedAt])
+  @@index([strumentoId])
+  @@index([dataEsecuzione])
+  @@index([dataProssima])
+  @@map("manutenzioni_strumento")
+}
+
+// Convenzione - Insurance/health plan agreements
+model Convenzione {
+  id                String    @id @default(uuid())
+  tenantId          String
+  codice            String    // Convention code
+  nome              String    // Insurance/plan name
+  tipo              String    // assicurazione, mutua, asl, altro
+  descrizione       String?
+  contatto          String?   // Contact person
+  telefono          String?
+  email             String?
+  indirizzo         String?
+  validoDa          DateTime  @db.Date
+  validoA           DateTime? @db.Date
+  percentualeSconto Decimal?  @db.Decimal(5, 2) // Default discount %
+  massimaleAnnuo    Decimal?  @db.Decimal(10, 2)
+  documentoPath     String?   // Agreement document path
+  note              String?
+  isActive          Boolean   @default(true)
+  createdAt         DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt         DateTime  @updatedAt @db.Timestamp(6)
+  deletedAt         DateTime?
+
+  // Relations
+  tenant  Tenant             @relation(fields: [tenantId], references: [id])
+  listini ConvenzioneListino[]
+
+  @@unique([tenantId, codice])
+  @@index([tenantId, deletedAt])
+  @@index([tipo])
+  @@index([validoDa, validoA])
+  @@map("convenzioni")
+}
+
+// ConvenzioneListino - Links convention to price list
+model ConvenzioneListino {
+  id            String   @id @default(uuid())
+  convenzioneId String
+  listinoId     String   // References ListinoPrezzo.id
+  createdAt     DateTime @default(now()) @db.Timestamp(6)
+
+  // Relations
+  convenzione Convenzione   @relation(fields: [convenzioneId], references: [id], onDelete: Cascade)
+  listino     ListinoPrezzo @relation(fields: [listinoId], references: [id], onDelete: Cascade)
+
+  @@unique([convenzioneId, listinoId])
+  @@index([convenzioneId])
+  @@index([listinoId])
+  @@map("convenzione_listino")
+}
+
+// CodiceScontoClinico - Clinical discount codes (different from CodiceSconto for courses)
+model CodiceScontoClinico {
+  id                String    @id @default(uuid())
+  tenantId          String
+  codice            String    // Discount code
+  descrizione       String?
+  tipo              String    // percentuale, fisso
+  valore            Decimal   @db.Decimal(10, 2) // Discount value
+  validoDa          DateTime  @default(now()) @db.Date
+  validoA           DateTime? @db.Date
+  limiteUtilizzi    Int?      // Max uses
+  utilizziAttuali   Int       @default(0)
+  prestazioniIds    String?   // JSON array of prestazione IDs (if limited)
+  isActive          Boolean   @default(true)
+  createdAt         DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt         DateTime  @updatedAt @db.Timestamp(6)
+  deletedAt         DateTime?
+
+  // Relations
+  tenant Tenant @relation("CodiciScontoClinici", fields: [tenantId], references: [id])
+
+  @@unique([tenantId, codice])
+  @@index([tenantId, deletedAt])
+  @@index([codice])
+  @@index([validoDa, validoA])
+  @@map("codici_sconto_clinici")
+}
+
+// TipoCampoVisita - Types for dynamic form fields
+enum TipoCampoVisita {
+  TESTO
+  TEXTAREA
+  NUMERO
+  DECIMALE
+  DATA
+  DATETIME
+  BOOLEAN
+  SELECT
+  MULTISELECT
+  FILE
+  
+  @@map("tipo_campo_visita")
+}
+
+// TemplateCampoVisita - Dynamic form fields template for visits
+model TemplateCampoVisita {
+  id            String          @id @default(uuid())
+  tenantId      String
+  prestazioneId String
+  nome          String          // Field name (internal)
+  etichetta     String          // Display label
+  tipo          TipoCampoVisita @default(TESTO)
+  obbligatorio  Boolean         @default(false)
+  ordine        Int             @default(0) // Display order
+  opzioni       String?         // JSON array for SELECT/MULTISELECT
+  valoreDefault String?
+  validazione   String?         // JSON validation rules
+  placeholder   String?
+  helpText      String?
+  isActive      Boolean         @default(true)
+  createdAt     DateTime        @default(now()) @db.Timestamp(6)
+  updatedAt     DateTime        @updatedAt @db.Timestamp(6)
+  deletedAt     DateTime?
+
+  // Relations
+  tenant      Tenant        @relation(fields: [tenantId], references: [id])
+  prestazione Prestazione   @relation(fields: [prestazioneId], references: [id], onDelete: Cascade)
+  valori      ValoreCampoVisita[]
+
+  @@unique([prestazioneId, nome])
+  @@index([tenantId, deletedAt])
+  @@index([prestazioneId])
+  @@index([ordine])
+  @@map("template_campi_visita")
+}
+
+// ValoreCampoVisita - Actual values for dynamic fields in a visit
+model ValoreCampoVisita {
+  id           String   @id @default(uuid())
+  visitaId     String
+  campoId      String   // References TemplateCampoVisita
+  valore       String?  // Stored as string, converted by type
+  valoreJson   String?  // For complex types (multiselect, file refs)
+  createdAt    DateTime @default(now()) @db.Timestamp(6)
+  updatedAt    DateTime @updatedAt @db.Timestamp(6)
+
+  // Relations
+  visita Visita              @relation(fields: [visitaId], references: [id], onDelete: Cascade)
+  campo  TemplateCampoVisita @relation(fields: [campoId], references: [id], onDelete: Cascade)
+
+  @@unique([visitaId, campoId])
+  @@index([visitaId])
+  @@index([campoId])
+  @@map("valori_campo_visita")
+}
+
+// VersioneReferto - Report versioning for event sourcing
+model VersioneReferto {
+  id           String   @id @default(uuid())
+  refertoId    String
+  versione     Int      // Version number (1, 2, 3...)
+  contenuto    String?  // Content at this version
+  conclusioni  String?
+  motivoModifica String? // Reason for modification
+  modificatoDa String   // Person ID who made the change
+  createdAt    DateTime @default(now()) @db.Timestamp(6)
+
+  // Relations
+  referto Referto @relation(fields: [refertoId], references: [id], onDelete: Cascade)
+
+  @@unique([refertoId, versione])
+  @@index([refertoId])
+  @@index([createdAt])
+  @@map("versioni_referto")
+}
+
+// FirmaDigitale - Digital signature records
+model FirmaDigitale {
+  id              String   @id @default(uuid())
+  tenantId        String
+  refertoId       String?  // Can be linked to referto
+  visitaId        String?  // Or to visita
+  firmatarioId    String   // Person who signed
+  tipoFirma       String   // semplice, avanzata, qualificata
+  hashDocumento   String   // Document hash at signing time
+  certificato     String?  // Certificate reference
+  timestampFirma  DateTime @db.Timestamp(6)
+  ipAddress       String?
+  userAgent       String?
+  validaFino      DateTime? @db.Timestamp(6)
+  revocata        Boolean  @default(false)
+  dataRevoca      DateTime? @db.Timestamp(6)
+  motivoRevoca    String?
+  createdAt       DateTime @default(now()) @db.Timestamp(6)
+
+  // Relations
+  tenant     Tenant @relation(fields: [tenantId], references: [id])
+  firmatario Person @relation("FirmeDigitali", fields: [firmatarioId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId])
+  @@index([refertoId])
+  @@index([visitaId])
+  @@index([firmatarioId])
+  @@index([timestampFirma])
+  @@map("firme_digitali")
+}
+
+// SlotDisponibilita - Specific time slots for appointments
+model SlotDisponibilita {
+  id              String    @id @default(uuid())
+  tenantId        String
+  medicoId        String
+  ambulatorioId   String?
+  prestazioneId   String?   // If slot is for specific service
+  data            DateTime  @db.Date
+  oraInizio       String    // HH:MM
+  oraFine         String    // HH:MM
+  stato           String    @default("libero") // libero, prenotato, bloccato
+  appuntamentoId  String?   // If booked
+  note            String?
+  createdAt       DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt       DateTime  @updatedAt @db.Timestamp(6)
+  deletedAt       DateTime?
+
+  // Relations
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  medico Person @relation("SlotsDisponibilita", fields: [medicoId], references: [id], onDelete: Cascade)
+
+  @@unique([medicoId, data, oraInizio])
+  @@index([tenantId, deletedAt])
+  @@index([medicoId])
+  @@index([ambulatorioId])
+  @@index([data])
+  @@index([stato])
+  @@index([medicoId, data, stato])
+  @@map("slots_disponibilita")
+}
+
+// NumeroChiamata - Queue number for waiting room
+model NumeroChiamata {
+  id             String    @id @default(uuid())
+  tenantId       String
+  poliambulatorioId String
+  data           DateTime  @db.Date
+  numero         Int       // Progressive number for the day
+  appuntamentoId String?
+  pazienteId     String?
+  stato          String    @default("attesa") // attesa, chiamato, in_visita, completato, saltato
+  oraRitiro      DateTime? @db.Timestamp(6)
+  oraChiamata    DateTime? @db.Timestamp(6)
+  ambulatorioId  String?   // Called to which ambulatorio
+  note           String?
+  createdAt      DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt      DateTime  @updatedAt @db.Timestamp(6)
+
+  // Relations
+  tenant          Tenant          @relation(fields: [tenantId], references: [id])
+  poliambulatorio Poliambulatorio @relation(fields: [poliambulatorioId], references: [id], onDelete: Cascade)
+
+  @@unique([poliambulatorioId, data, numero])
+  @@index([tenantId])
+  @@index([poliambulatorioId])
+  @@index([data])
+  @@index([stato])
+  @@index([appuntamentoId])
+  @@map("numeri_chiamata")
+}
+
+// TipoAzioneClinica - Types of clinical actions for audit
+enum TipoAzioneClinica {
+  VISUALIZZAZIONE
+  CREAZIONE
+  MODIFICA
+  ELIMINAZIONE
+  FIRMA
+  STAMPA
+  EXPORT
+  ACCESSO_DATI_SENSIBILI
+  
+  @@map("tipo_azione_clinica")
+}
+
+// AuditLogClinico - Clinical-specific audit trail
+model AuditLogClinico {
+  id             String            @id @default(uuid())
+  tenantId       String
+  personId       String            // Who performed the action
+  azione         TipoAzioneClinica
+  entita         String            // Entity type (visita, referto, etc.)
+  entitaId       String            // Entity ID
+  pazienteId     String?           // If action involves a patient
+  descrizione    String?
+  datiPrecedenti String?           // JSON of previous state
+  datiNuovi      String?           // JSON of new state
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime          @default(now()) @db.Timestamp(6)
+
+  // Relations
+  tenant  Tenant @relation(fields: [tenantId], references: [id])
+  person  Person @relation("AuditLogsClinici", fields: [personId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId])
+  @@index([personId])
+  @@index([pazienteId])
+  @@index([entita, entitaId])
+  @@index([azione])
+  @@index([createdAt])
+  @@map("audit_log_clinico")
 }
