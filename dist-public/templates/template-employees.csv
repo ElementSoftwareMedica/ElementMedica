@@ -1,0 +1,3 @@
+Cognome,Nome,Codice Fiscale,Azienda,Profilo Professionale,Telefono,Email,Data Nascita,Indirizzo,Città,Provincia,CAP,Data Assunzione,Username,Note,Stato,Data Creazione,Ruolo
+Rossi,Mario,RSSMRA85M01H501Z,Esempio Azienda S.r.l.,Sviluppatore Software,+39 123 456 7890,mario.rossi@esempio.com,1985-08-01,Via Roma 123,Milano,MI,20100,2024-01-15,mario.rossi,Dipendente esempio,ACTIVE,2024-01-01,EMPLOYEE
+Bianchi,Anna,BNCNNA90F41H501W,Formazione Plus S.r.l.,Senior Trainer,+39 321 654 9870,anna.bianchi@esempio.com,1990-06-01,Via Milano 456,Roma,RM,00100,2024-02-01,anna.bianchi,Formatrice esperta,ACTIVE,2024-01-02,TRAINER

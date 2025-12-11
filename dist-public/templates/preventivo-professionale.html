@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Preventivo {{NUMERO}}</title>
+    <style>
+        /* ============================================
+           PREVENTIVO PROFESSIONALE - ELEMENT MEDICA
+           Template HTML per generazione PDF
+           ============================================ */
+
+        /* Reset & Base */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 9pt;
+            line-height: 1.4;
+            color: #333333;
+            background: #ffffff;
+            padding: 12mm;
+        }
+
+        /* Typography */
+        h1 {
+            font-size: 22pt;
+            font-weight: 700;
+            color: #1a365d;
+            margin-bottom: 4px;
+            letter-spacing: -0.5px;
+        }
+
+        h2 {
+            font-size: 14pt;
+            font-weight: 600;
+            color: #2d3748;
+            margin-top: 12px;
+            margin-bottom: 6px;
+            border-bottom: 2px solid #3b82f6;
+            padding-bottom: 4px;
+        }
+
+        h3 {
+            font-size: 11pt;
+            font-weight: 600;
+            color: #4a5568;
+            margin-top: 8px;
+            margin-bottom: 4px;
+        }
+
+        p {
+            margin-bottom: 4px;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #3b82f6;
+        }
+
+        .header-logo {
+            flex: 0 0 150px;
+        }
+
+        .header-logo img {
+            max-width: 100%;
+            height: auto;
+        }
+
+        .header-info {
+            flex: 1;
+            text-align: right;
+        }
+
+        .header-info h1 {
+            margin-bottom: 2px;
+        }
+
+        .header-info .numero {
+            font-size: 12pt;
+            color: #3b82f6;
+            font-weight: 600;
+        }
+
+        .header-info .data {
+            font-size: 9pt;
+            color: #718096;
+        }
+
+        /* Company Info Section */
+        .company-section {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            gap: 15px;
+        }
+
+        .company-box {
+            flex: 1;
+            padding: 10px;
+            background: #f7fafc;
+            border-radius: 6px;
+            border-left: 3px solid #3b82f6;
+        }
+
+        .company-box h3 {
+            margin-top: 0;
+            color: #1a365d;
+        }
+
+        .company-box p {
+            margin-bottom: 2px;
+            font-size: 9pt;
+        }
+
+        .company-box .label {
+            font-weight: 600;
+            color: #4a5568;
+        }
+
+        /* Service Section */
+        .service-section {
+            margin-bottom: 15px;
+        }
+
+        .service-type-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            background: #ebf5ff;
+            color: #1e40af;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 9pt;
+            margin-bottom: 8px;
+        }
+
+        .service-details {
+            background: #f9fafb;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+        }
+
+        .service-details .detail-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .service-details .detail-row:last-child {
+            border-bottom: none;
+        }
+
+        .service-details .detail-label {
+            font-weight: 600;
+            color: #4a5568;
+        }
+
+        .service-details .detail-value {
+            color: #1a202c;
+        }
+
+        /* Pricing Table */
+        .pricing-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 15px;
+        }
+
+        .pricing-table thead {
+            background: #1e40af;
+            color: white;
+        }
+
+        .pricing-table th {
+            padding: 8px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 9pt;
+        }
+
+        .pricing-table th.text-right {
+            text-align: right;
+        }
+
+        .pricing-table tbody tr {
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .pricing-table tbody tr:hover {
+            background: #f7fafc;
+        }
+
+        .pricing-table td {
+            padding: 8px;
+            font-size: 9pt;
+        }
+
+        .pricing-table td.text-right {
+            text-align: right;
+        }
+
+        .pricing-table .item-description {
+            color: #718096;
+            font-size: 8pt;
+            margin-top: 2px;
+        }
+
+        /* Discounts Section */
+        .discounts-section {
+            background: #ecfdf5;
+            border: 1px solid #10b981;
+            border-radius: 6px;
+            padding: 10px;
+            margin-bottom: 12px;
+        }
+
+        .discounts-section h3 {
+            margin-top: 0;
+            color: #065f46;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .discounts-section h3::before {
+            content: "🎟️";
+            font-size: 12pt;
+        }
+
+        .discount-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+            border-bottom: 1px solid #a7f3d0;
+        }
+
+        .discount-item:last-child {
+            border-bottom: none;
+        }
+
+        .discount-code {
+            font-weight: 600;
+            color: #065f46;
+            font-family: 'Courier New', monospace;
+        }
+
+        .discount-description {
+            color: #047857;
+            font-size: 8pt;
+        }
+
+        .discount-amount {
+            font-weight: 700;
+            color: #059669;
+            font-size: 10pt;
+        }
+
+        /* Totals Section */
+        .totals-section {
+            float: right;
+            width: 50%;
+            margin-top: 10px;
+        }
+
+        .totals-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .totals-table tr {
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .totals-table td {
+            padding: 6px;
+            font-size: 9pt;
+        }
+
+        .totals-table td:first-child {
+            text-align: right;
+            font-weight: 600;
+            color: #4a5568;
+        }
+
+        .totals-table td:last-child {
+            text-align: right;
+            width: 30%;
+        }
+
+        .totals-table .subtotal {
+            font-size: 10pt;
+        }
+
+        .totals-table .discount-row td {
+            color: #059669;
+        }
+
+        .totals-table .total-row {
+            background: #1e40af;
+            color: white;
+            font-size: 11pt;
+            font-weight: 700;
+        }
+
+        .totals-table .total-row td {
+            padding: 8px 6px;
+        }
+
+        .totals-table .iva-row {
+            background: #f7fafc;
+        }
+
+        .totals-table .grand-total-row {
+            background: #1a365d;
+            color: white;
+            font-size: 13pt;
+            font-weight: 700;
+        }
+
+        .totals-table .grand-total-row td {
+            padding: 10px 6px;
+        }
+
+        /* Payment Terms */
+        .payment-terms {
+            clear: both;
+            margin-top: 20px;
+            padding: 10px;
+            background: #fffbeb;
+            border-left: 4px solid #f59e0b;
+            border-radius: 4px;
+        }
+
+        .payment-terms h3 {
+            margin-top: 0;
+            color: #92400e;
+        }
+
+        .payment-terms p {
+            color: #78350f;
+            font-size: 9pt;
+        }
+
+        /* Notes Section */
+        .notes-section {
+            margin-top: 15px;
+            padding: 10px;
+            background: #f9fafb;
+            border-radius: 6px;
+        }
+
+        .notes-section h3 {
+            margin-top: 0;
+        }
+
+        .notes-section p {
+            font-size: 9pt;
+            color: #4a5568;
+            white-space: pre-line;
+        }
+
+        /* Validity Section */
+        .validity-section {
+            margin-top: 15px;
+            padding: 8px;
+            background: #fef2f2;
+            border: 1px solid #ef4444;
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        .validity-section .validity-text {
+            font-weight: 600;
+            color: #991b1b;
+            font-size: 9pt;
+        }
+
+        .validity-section .validity-date {
+            font-weight: 700;
+            color: #dc2626;
+            font-size: 11pt;
+        }
+
+        /* Footer */
+        .footer {
+            margin-top: 20px;
+            padding-top: 10px;
+            border-top: 1px solid #e2e8f0;
+            text-align: center;
+        }
+
+        .footer-company-info {
+            margin-bottom: 8px;
+        }
+
+        .footer-company-info p {
+            font-size: 8pt;
+            color: #718096;
+            margin-bottom: 2px;
+        }
+
+        .footer-company-info .company-name {
+            font-weight: 700;
+            color: #2d3748;
+            font-size: 9pt;
+        }
+
+        .footer-legal {
+            font-size: 7pt;
+            color: #a0aec0;
+            line-height: 1.3;
+        }
+
+        /* Signature Section */
+        .signature-section {
+            margin-top: 15px;
+            display: flex;
+            justify-content: space-between;
+            gap: 15px;
+        }
+
+        .signature-box {
+            flex: 1;
+            text-align: center;
+        }
+
+        .signature-box .signature-label {
+            font-weight: 600;
+            color: #4a5568;
+            font-size: 9pt;
+            margin-bottom: 25px;
+        }
+
+        .signature-box .signature-line {
+            border-top: 1px solid #1a202c;
+            padding-top: 4px;
+            font-size: 8pt;
+            color: #718096;
+        }
+
+        /* Utility Classes */
+        .text-bold {
+            font-weight: 700;
+        }
+
+        .text-center {
+            text-align: center;
+        }
+
+        .text-right {
+            text-align: right;
+        }
+
+        .text-muted {
+            color: #718096;
+        }
+
+        .text-primary {
+            color: #3b82f6;
+        }
+
+        .text-success {
+            color: #059669;
+        }
+
+        .text-danger {
+            color: #dc2626;
+        }
+
+        .mb-0 {
+            margin-bottom: 0;
+        }
+
+        .mb-1 {
+            margin-bottom: 8px;
+        }
+
+        .mb-2 {
+            margin-bottom: 16px;
+        }
+
+        .mb-3 {
+            margin-bottom: 24px;
+        }
+
+        .mt-0 {
+            margin-top: 0;
+        }
+
+        .mt-1 {
+            margin-top: 8px;
+        }
+
+        .mt-2 {
+            margin-top: 16px;
+        }
+
+        .mt-3 {
+            margin-top: 24px;
+        }
+
+        /* Print Styles */
+        @media print {
+            body {
+                padding: 10mm;
+            }
+
+            .header {
+                page-break-after: avoid;
+            }
+
+            .service-section,
+            .discounts-section,
+            .totals-section {
+                page-break-inside: avoid;
+            }
+
+            .footer {
+                position: fixed;
+                bottom: 0;
+                width: 100%;
+            }
+        }
+
+        /* Responsive (per visualizzazione web) */
+        @media screen and (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+
+            .header {
+                flex-direction: column;
+                gap: 20px;
+            }
+
+            .header-info {
+                text-align: left;
+            }
+
+            .company-section {
+                flex-direction: column;
+            }
+
+            .totals-section {
+                width: 100%;
+            }
+
+            .signature-section {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- HEADER -->
+    <div class="header">
+        <div class="header-logo">
+            <!-- Marker: LOGO -->
+            <img src="{{LOGO_URL}}" alt="{{COMPANY_NAME}}" />
+        </div>
+        <div class="header-info">
+            <h1>PREVENTIVO</h1>
+            <div class="numero">N° {{NUMERO}}</div>
+            <div class="data">Data: {{DATA_EMISSIONE}}</div>
+        </div>
+    </div>
+
+    <!-- COMPANY INFO SECTION -->
+    <div class="company-section">
+        <!-- Fornitore (Nostra Azienda) -->
+        <div class="company-box">
+            <h3>Fornitore</h3>
+            <p class="text-bold">{{COMPANY_NAME}}</p>
+            <p><span class="label">Indirizzo:</span> {{COMPANY_ADDRESS}}</p>
+            <p><span class="label">CAP/Città:</span> {{COMPANY_CAP}} {{COMPANY_CITY}} ({{COMPANY_PROVINCIA}})</p>
+            <p><span class="label">P.IVA:</span> {{COMPANY_PIVA}}</p>
+            <p><span class="label">C.F.:</span> {{COMPANY_CF}}</p>
+            <p><span class="label">Tel:</span> {{COMPANY_PHONE}}</p>
+            <p><span class="label">Email:</span> {{COMPANY_EMAIL}}</p>
+            <p><span class="label">PEC:</span> {{COMPANY_PEC}}</p>
+        </div>
+
+        <!-- Cliente -->
+        <div class="company-box">
+            <h3>Cliente</h3>
+            <p class="text-bold">{{CLIENT_NAME}}</p>
+            <p><span class="label">Indirizzo:</span> {{CLIENT_ADDRESS}}</p>
+            <p><span class="label">CAP/Città:</span> {{CLIENT_CAP}} {{CLIENT_CITY}} ({{CLIENT_PROVINCIA}})</p>
+            <!-- Markers condizionali per aziende -->
+            {{#IF_AZIENDA}}
+            <p><span class="label">P.IVA:</span> {{CLIENT_PIVA}}</p>
+            <p><span class="label">C.F.:</span> {{CLIENT_CF}}</p>
+            <p><span class="label">Codice SDI:</span> {{CLIENT_SDI}}</p>
+            {{/IF_AZIENDA}}
+            <!-- Markers condizionali per persone -->
+            {{#IF_PERSONA}}
+            <p><span class="label">C.F.:</span> {{CLIENT_CF}}</p>
+            {{/IF_PERSONA}}
+            <p><span class="label">Tel:</span> {{CLIENT_PHONE}}</p>
+            <p><span class="label">Email:</span> {{CLIENT_EMAIL}}</p>
+        </div>
+    </div>
+
+    <!-- SERVICE SECTION -->
+    <div class="service-section">
+        <h2>Oggetto del Preventivo</h2>
+
+        <!-- Service Type Badge -->
+        <div class="service-type-badge">
+            {{SERVICE_TYPE_LABEL}}
+        </div>
+
+        <div class="service-details">
+            <!-- Markers condizionali per CORSO -->
+            {{#IF_CORSO}}
+            <div class="detail-row">
+                <span class="detail-label">Corso:</span>
+                <span class="detail-value">{{CORSO_TITOLO}}</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Descrizione:</span>
+                <span class="detail-value">{{CORSO_DESCRIZIONE}}</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Durata:</span>
+                <span class="detail-value">{{CORSO_DURATA}} ore</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Numero Partecipanti:</span>
+                <span class="detail-value">{{CORSO_PARTECIPANTI}}</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Modalità Erogazione:</span>
+                <span class="detail-value">{{CORSO_MODALITA}}</span>
+            </div>
+            {{#IF_CORSO_DATE}}
+            <div class="detail-row">
+                <span class="detail-label">Date Previste:</span>
+                <span class="detail-value">{{CORSO_DATE_INIZIO}} - {{CORSO_DATE_FINE}}</span>
+            </div>
+            {{/IF_CORSO_DATE}}
+            {{#IF_CORSO_SEDE}}
+            <div class="detail-row">
+                <span class="detail-label">Sede:</span>
+                <span class="detail-value">{{CORSO_SEDE}}</span>
+            </div>
+            {{/IF_CORSO_SEDE}}
+            {{/IF_CORSO}}
+
+            <!-- Markers condizionali per DVR -->
+            {{#IF_DVR}}
+            <div class="detail-row">
+                <span class="detail-label">Servizio:</span>
+                <span class="detail-value">Documento di Valutazione dei Rischi (DVR)</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Azienda:</span>
+                <span class="detail-value">{{DVR_AZIENDA}}</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Numero Dipendenti:</span>
+                <span class="detail-value">{{DVR_NUM_DIPENDENTI}}</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Settore:</span>
+                <span class="detail-value">{{DVR_SETTORE}}</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Sedi da valutare:</span>
+                <span class="detail-value">{{DVR_NUM_SEDI}}</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Tempi di consegna:</span>
+                <span class="detail-value">{{DVR_TEMPI_CONSEGNA}}</span>
+            </div>
+            {{/IF_DVR}}
+
+            <!-- Markers condizionali per RSPP -->
+            {{#IF_RSPP}}
+            <div class="detail-row">
+                <span class="detail-label">Servizio:</span>
+                <span class="detail-value">Nomina Responsabile Servizio Prevenzione e Protezione (RSPP)</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Azienda:</span>
+                <span class="detail-value">{{RSPP_AZIENDA}}</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Numero Dipendenti:</span>
+                <span class="detail-value">{{RSPP_NUM_DIPENDENTI}}</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Classe Rischio:</span>
+                <span class="detail-value">{{RSPP_CLASSE_RISCHIO}}</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Durata Incarico:</span>
+                <span class="detail-value">{{RSPP_DURATA}} mesi</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Periodicità Visite:</span>
+                <span class="detail-value">{{RSPP_PERIODICITA_VISITE}}</span>
+            </div>
+            {{/IF_RSPP}}
+
+            <!-- Markers condizionali per MEDICO COMPETENTE -->
+            {{#IF_MEDICO}}
+            <div class="detail-row">
+                <span class="detail-label">Servizio:</span>
+                <span class="detail-value">Nomina Medico Competente</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Azienda:</span>
+                <span class="detail-value">{{MEDICO_AZIENDA}}</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Numero Dipendenti:</span>
+                <span class="detail-value">{{MEDICO_NUM_DIPENDENTI}}</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Tipologia Visite:</span>
+                <span class="detail-value">{{MEDICO_TIPO_VISITE}}</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Frequenza Visite Annue:</span>
+                <span class="detail-value">{{MEDICO_FREQUENZA}}</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Sede Visite:</span>
+                <span class="detail-value">{{MEDICO_SEDE}}</span>
+            </div>
+            {{/IF_MEDICO}}
+
+            <!-- Markers condizionali per ALTRO SERVIZIO -->
+            {{#IF_ALTRO}}
+            <div class="detail-row">
+                <span class="detail-label">Servizio:</span>
+                <span class="detail-value">{{ALTRO_SERVIZIO_NOME}}</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Descrizione:</span>
+                <span class="detail-value">{{ALTRO_SERVIZIO_DESCRIZIONE}}</span>
+            </div>
+            {{/IF_ALTRO}}
+        </div>
+    </div>
+
+    <!-- PRICING TABLE -->
+    <h2>Dettaglio Economico</h2>
+    <table class="pricing-table">
+        <thead>
+            <tr>
+                <th>Descrizione</th>
+                <th class="text-right">Quantità</th>
+                <th class="text-right">Prezzo Unitario</th>
+                <th class="text-right">Totale</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{#IF_CORSO}}
+            <tr>
+                <td>
+                    <strong>{{CORSO_TITOLO}}</strong>
+                    <div class="item-description">
+                        {{CORSO_DESCRIZIONE_BREVE}}<br />
+                        Modalità: {{CORSO_MODALITA}} • Durata: {{CORSO_DURATA}} ore
+                    </div>
+                </td>
+                <td class="text-right">{{CORSO_PARTECIPANTI}}</td>
+                <td class="text-right">€ {{PREZZO_UNITARIO}}</td>
+                <td class="text-right text-bold">€ {{PREZZO_TOTALE}}</td>
+            </tr>
+            {{/IF_CORSO}}
+
+            {{#IF_DVR}}
+            <tr>
+                <td>
+                    <strong>Valutazione Rischi (DVR)</strong>
+                    <div class="item-description">
+                        Include: sopralluogo, redazione documento, aggiornamenti periodici<br />
+                        Numero sedi: {{DVR_NUM_SEDI}} • Dipendenti: {{DVR_NUM_DIPENDENTI}}
+                    </div>
+                </td>
+                <td class="text-right">1</td>
+                <td class="text-right">€ {{PREZZO_UNITARIO}}</td>
+                <td class="text-right text-bold">€ {{PREZZO_TOTALE}}</td>
+            </tr>
+            {{/IF_DVR}}
+
+            {{#IF_RSPP}}
+            <tr>
+                <td>
+                    <strong>Servizio RSPP Esterno</strong>
+                    <div class="item-description">
+                        Incarico di {{RSPP_DURATA}} mesi<br />
+                        Include: visite {{RSPP_PERIODICITA_VISITE}}, consulenza, aggiornamento DVR
+                    </div>
+                </td>
+                <td class="text-right">{{RSPP_DURATA}}</td>
+                <td class="text-right">€ {{PREZZO_UNITARIO}} /mese</td>
+                <td class="text-right text-bold">€ {{PREZZO_TOTALE}}</td>
+            </tr>
+            {{/IF_RSPP}}
+
+            {{#IF_MEDICO}}
+            <tr>
+                <td>
+                    <strong>Sorveglianza Sanitaria</strong>
+                    <div class="item-description">
+                        Medico Competente<br />
+                        Tipologia: {{MEDICO_TIPO_VISITE}} • Frequenza: {{MEDICO_FREQUENZA}}
+                    </div>
+                </td>
+                <td class="text-right">{{MEDICO_NUM_DIPENDENTI}}</td>
+                <td class="text-right">€ {{PREZZO_UNITARIO}} /visita</td>
+                <td class="text-right text-bold">€ {{PREZZO_TOTALE}}</td>
+            </tr>
+            {{/IF_MEDICO}}
+
+            {{#IF_ALTRO}}
+            <tr>
+                <td>
+                    <strong>{{ALTRO_SERVIZIO_NOME}}</strong>
+                    <div class="item-description">{{ALTRO_SERVIZIO_DESCRIZIONE}}</div>
+                </td>
+                <td class="text-right">{{ALTRO_QUANTITA}}</td>
+                <td class="text-right">€ {{PREZZO_UNITARIO}}</td>
+                <td class="text-right text-bold">€ {{PREZZO_TOTALE}}</td>
+            </tr>
+            {{/IF_ALTRO}}
+        </tbody>
+    </table>
+
+    <!-- DISCOUNTS SECTION (se presenti) -->
+    {{#IF_SCONTI}}
+    <div class="discounts-section">
+        <h3>Sconti Applicati</h3>
+
+        {{#SCONTO_1}}
+        <div class="discount-item">
+            <div>
+                <span class="discount-code">{{SCONTO_1_CODICE}}</span>
+                <div class="discount-description">{{SCONTO_1_DESCRIZIONE}}</div>
+            </div>
+            <div class="discount-amount">-€ {{SCONTO_1_IMPORTO}}</div>
+        </div>
+        {{/SCONTO_1}}
+
+        {{#SCONTO_2}}
+        <div class="discount-item">
+            <div>
+                <span class="discount-code">{{SCONTO_2_CODICE}}</span>
+                <div class="discount-description">{{SCONTO_2_DESCRIZIONE}}</div>
+            </div>
+            <div class="discount-amount">-€ {{SCONTO_2_IMPORTO}}</div>
+        </div>
+        {{/SCONTO_2}}
+
+        {{#SCONTO_3}}
+        <div class="discount-item">
+            <div>
+                <span class="discount-code">{{SCONTO_3_CODICE}}</span>
+                <div class="discount-description">{{SCONTO_3_DESCRIZIONE}}</div>
+            </div>
+            <div class="discount-amount">-€ {{SCONTO_3_IMPORTO}}</div>
+        </div>
+        {{/SCONTO_3}}
+    </div>
+    {{/IF_SCONTI}}
+
+    <!-- TOTALS SECTION -->
+    <div class="totals-section">
+        <table class="totals-table">
+            <tr class="subtotal">
+                <td>Subtotale</td>
+                <td>€ {{PREZZO_TOTALE}}</td>
+            </tr>
+            {{#IF_SCONTI}}
+            <tr class="discount-row">
+                <td>Sconto Totale</td>
+                <td>-€ {{SCONTO_TOTALE}}</td>
+            </tr>
+            {{/IF_SCONTI}}
+            <tr class="total-row">
+                <td>TOTALE IMPONIBILE</td>
+                <td>€ {{IMPORTO_FINALE}}</td>
+            </tr>
+            <tr class="iva-row">
+                <td>IVA ({{IVA_PERCENTUALE}}%)</td>
+                <td>€ {{IVA_IMPORTO}}</td>
+            </tr>
+            <tr class="grand-total-row">
+                <td>TOTALE IVA INCLUSA</td>
+                <td>€ {{TOTALE_IVA_INCLUSA}}</td>
+            </tr>
+        </table>
+    </div>
+
+    <!-- PAYMENT TERMS -->
+    <div class="payment-terms">
+        <h3>Condizioni di Pagamento</h3>
+        <p>{{CONDIZIONI_PAGAMENTO}}</p>
+    </div>
+
+    <!-- NOTES SECTION (se presenti) -->
+    {{#IF_NOTE}}
+    <div class="notes-section">
+        <h3>Note Aggiuntive</h3>
+        <p>{{NOTE}}</p>
+    </div>
+    {{/IF_NOTE}}
+
+    <!-- VALIDITY SECTION -->
+    <div class="validity-section">
+        <p class="validity-text">Preventivo valido fino al:</p>
+        <p class="validity-date">{{DATA_SCADENZA}}</p>
+    </div>
+
+    <!-- SIGNATURE SECTION -->
+    <div class="signature-section">
+        <div class="signature-box">
+            <p class="signature-label">Per accettazione</p>
+            <div style="height: 60px;"></div>
+            <div class="signature-line">Firma Cliente</div>
+        </div>
+        <div class="signature-box">
+            <p class="signature-label">Il Fornitore</p>
+            <div style="height: 60px;"></div>
+            <div class="signature-line">{{COMPANY_NAME}}</div>
+        </div>
+    </div>
+
+    <!-- FOOTER -->
+    <div class="footer">
+        <div class="footer-company-info">
+            <p class="company-name">{{COMPANY_NAME}}</p>
+            <p>{{COMPANY_ADDRESS}}, {{COMPANY_CAP}} {{COMPANY_CITY}} ({{COMPANY_PROVINCIA}})</p>
+            <p>P.IVA: {{COMPANY_PIVA}} • C.F.: {{COMPANY_CF}}</p>
+            <p>Tel: {{COMPANY_PHONE}} • Email: {{COMPANY_EMAIL}} • PEC: {{COMPANY_PEC}}</p>
+            {{#IF_COMPANY_WEB}}
+            <p>Web: {{COMPANY_WEB}}</p>
+            {{/IF_COMPANY_WEB}}
+        </div>
+
+        <div class="footer-legal">
+            <p>
+                Il presente preventivo è valido fino alla data indicata. I prezzi si intendono IVA esclusa salvo diversa
+                indicazione.
+                La conferma dell'ordine implica l'accettazione delle condizioni generali di contratto disponibili su
+                richiesta.
+            </p>
+            <p>
+                Ai sensi del D.Lgs. 196/2003 e del Reg. UE 679/2016 (GDPR), i dati personali forniti saranno trattati
+                esclusivamente per finalità legate alla gestione del rapporto commerciale e non saranno comunicati a
+                terzi.
+            </p>
+        </div>
+    </div>
+
+</body>
+
+</html>

@@ -1,0 +1,3 @@
+import{j as o}from"./ui-CGZTu-WY.js";const i=({tabs:r,activeTabId:t,onTabChange:s,className:l=""})=>o.jsx("div",{className:`flex w-full justify-center ${l}`,children:o.jsx("div",{className:"flex bg-gray-100 rounded-full shadow-sm border border-gray-200 overflow-x-auto px-2 py-1 gap-1",style:{minHeight:40},children:r.map(e=>o.jsx("button",{type:"button",className:`px-4 py-1 text-base font-semibold rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-300
+              ${t===e.id?"bg-blue-600 text-white shadow":"bg-transparent text-gray-700 hover:bg-blue-100"}`,onClick:()=>s(e.id),children:e.label},e.id))})});export{i as T};
+//# sourceMappingURL=TabNavigation-CAAdrmE9.js.map

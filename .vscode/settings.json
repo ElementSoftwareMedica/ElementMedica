@@ -1,0 +1,10 @@
+{
+    "github.copilot.edits.autoApply": true,
+    "github.copilot.edits.confirmations": "none",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+        "source.fixAll.eslint": "explicit"
+    },
+    "typescript.tsdk": "node_modules/typescript/lib",
+    "typescript.enablePromptUseWorkspaceTsdk": true
+}

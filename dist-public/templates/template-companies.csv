@@ -1,0 +1,3 @@
+name,industry,status,location,employees_count,established_year,contact_person,phone,email,address,website
+Acme Inc,Technology,Active,New York,50,2010,John Smith,+1234567890,info@acme.com,123 Main St,https://acme.com
+Widget Co,Manufacturing,Active,Chicago,120,1995,Jane Doe,+0987654321,contact@widgetco.com,456 Elm St,https://widgetco.com 

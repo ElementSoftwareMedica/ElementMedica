@@ -1,0 +1,3 @@
+Nome;Cognome;Email;Telefono;Codice Fiscale;Data Nascita;Indirizzo;Citta;Provincia;CAP;Ruolo;Azienda;Sede;Username;Note;Stato;Data Creazione;Profilo Professionale;Data Assunzione
+Mario;Rossi;mario.rossi@esempio.com;+39 123 456 7890;RSSMRA85M01H501Z;1985-08-01;Via Roma 123;Milano;MI;20100;EMPLOYEE;Esempio Azienda S.r.l.;Sede Milano;mario.rossi;Dipendente esempio;ACTIVE;2024-01-01;Sviluppatore Software;2024-01-15
+Giovanni;Verdi;giovanni.verdi@esempio.com;+39 234 567 8901;VRDGNN90D15F205W;1990-04-15;Via Milano 456;Roma;RM;00100;MANAGER;Altra Azienda S.p.A.;Sede Roma;giovanni.verdi;Manager di reparto;ACTIVE;2024-02-01;Manager HR;2024-02-10
