@@ -379,6 +379,373 @@ export class RBACService {
                 permissions['documents:manage'] = true;
                 break;
                 
+            // ==========================================
+            // Clinical Permissions (ElementMedica)
+            // ==========================================
+            
+            // Patients permissions
+            case 'VIEW_PATIENTS':
+                permissions['VIEW_PATIENTS'] = true;
+                permissions['patients:read'] = true;
+                permissions['patients:view'] = true;
+                break;
+            case 'CREATE_PATIENTS':
+                permissions['CREATE_PATIENTS'] = true;
+                permissions['patients:create'] = true;
+                permissions['patients:write'] = true;
+                break;
+            case 'EDIT_PATIENTS':
+                permissions['EDIT_PATIENTS'] = true;
+                permissions['patients:edit'] = true;
+                permissions['patients:update'] = true;
+                permissions['patients:write'] = true;
+                break;
+            case 'DELETE_PATIENTS':
+                permissions['DELETE_PATIENTS'] = true;
+                permissions['patients:delete'] = true;
+                break;
+            case 'MANAGE_PATIENTS':
+                permissions['MANAGE_PATIENTS'] = true;
+                permissions['patients:read'] = true;
+                permissions['patients:create'] = true;
+                permissions['patients:edit'] = true;
+                permissions['patients:update'] = true;
+                permissions['patients:delete'] = true;
+                permissions['patients:manage'] = true;
+                break;
+            case 'EXPORT_PATIENTS':
+                permissions['EXPORT_PATIENTS'] = true;
+                permissions['patients:export'] = true;
+                permissions['patients:read'] = true;
+                break;
+            case 'VIEW_PATIENT_HISTORY':
+                permissions['VIEW_PATIENT_HISTORY'] = true;
+                permissions['patients:history'] = true;
+                permissions['patients:read'] = true;
+                break;
+                
+            // Appointments permissions
+            case 'VIEW_APPOINTMENTS':
+                permissions['VIEW_APPOINTMENTS'] = true;
+                permissions['appointments:read'] = true;
+                permissions['appointments:view'] = true;
+                break;
+            case 'CREATE_APPOINTMENTS':
+                permissions['CREATE_APPOINTMENTS'] = true;
+                permissions['appointments:create'] = true;
+                permissions['appointments:write'] = true;
+                break;
+            case 'EDIT_APPOINTMENTS':
+                permissions['EDIT_APPOINTMENTS'] = true;
+                permissions['appointments:edit'] = true;
+                permissions['appointments:update'] = true;
+                permissions['appointments:write'] = true;
+                break;
+            case 'DELETE_APPOINTMENTS':
+                permissions['DELETE_APPOINTMENTS'] = true;
+                permissions['appointments:delete'] = true;
+                break;
+            case 'MANAGE_APPOINTMENTS':
+                permissions['MANAGE_APPOINTMENTS'] = true;
+                permissions['appointments:read'] = true;
+                permissions['appointments:create'] = true;
+                permissions['appointments:edit'] = true;
+                permissions['appointments:update'] = true;
+                permissions['appointments:delete'] = true;
+                permissions['appointments:manage'] = true;
+                break;
+            case 'CONFIRM_APPOINTMENTS':
+                permissions['CONFIRM_APPOINTMENTS'] = true;
+                permissions['appointments:confirm'] = true;
+                break;
+            case 'CANCEL_APPOINTMENTS':
+                permissions['CANCEL_APPOINTMENTS'] = true;
+                permissions['appointments:cancel'] = true;
+                break;
+                
+            // Visits permissions
+            case 'VIEW_VISITS':
+                permissions['VIEW_VISITS'] = true;
+                permissions['visits:read'] = true;
+                permissions['visits:view'] = true;
+                break;
+            case 'CREATE_VISITS':
+                permissions['CREATE_VISITS'] = true;
+                permissions['visits:create'] = true;
+                permissions['visits:write'] = true;
+                break;
+            case 'EDIT_VISITS':
+                permissions['EDIT_VISITS'] = true;
+                permissions['visits:edit'] = true;
+                permissions['visits:update'] = true;
+                permissions['visits:write'] = true;
+                break;
+            case 'DELETE_VISITS':
+                permissions['DELETE_VISITS'] = true;
+                permissions['visits:delete'] = true;
+                break;
+            case 'MANAGE_VISITS':
+                permissions['MANAGE_VISITS'] = true;
+                permissions['visits:read'] = true;
+                permissions['visits:create'] = true;
+                permissions['visits:edit'] = true;
+                permissions['visits:update'] = true;
+                permissions['visits:delete'] = true;
+                permissions['visits:manage'] = true;
+                break;
+            case 'SIGN_VISITS':
+                permissions['SIGN_VISITS'] = true;
+                permissions['visits:sign'] = true;
+                break;
+            case 'COMPLETE_VISITS':
+                permissions['COMPLETE_VISITS'] = true;
+                permissions['visits:complete'] = true;
+                break;
+                
+            // Referti (Medical Reports) permissions
+            case 'VIEW_REFERTI':
+                permissions['VIEW_REFERTI'] = true;
+                permissions['referti:read'] = true;
+                permissions['referti:view'] = true;
+                break;
+            case 'CREATE_REFERTI':
+                permissions['CREATE_REFERTI'] = true;
+                permissions['referti:create'] = true;
+                permissions['referti:write'] = true;
+                break;
+            case 'EDIT_REFERTI':
+                permissions['EDIT_REFERTI'] = true;
+                permissions['referti:edit'] = true;
+                permissions['referti:update'] = true;
+                permissions['referti:write'] = true;
+                break;
+            case 'DELETE_REFERTI':
+                permissions['DELETE_REFERTI'] = true;
+                permissions['referti:delete'] = true;
+                break;
+            case 'SIGN_REFERTI':
+                permissions['SIGN_REFERTI'] = true;
+                permissions['referti:sign'] = true;
+                break;
+            case 'EXPORT_REFERTI':
+                permissions['EXPORT_REFERTI'] = true;
+                permissions['referti:export'] = true;
+                permissions['referti:read'] = true;
+                break;
+                
+            // Prestazioni (Medical Services) permissions
+            case 'VIEW_PRESTAZIONI':
+                permissions['VIEW_PRESTAZIONI'] = true;
+                permissions['prestazioni:read'] = true;
+                permissions['prestazioni:view'] = true;
+                break;
+            case 'CREATE_PRESTAZIONI':
+                permissions['CREATE_PRESTAZIONI'] = true;
+                permissions['prestazioni:create'] = true;
+                permissions['prestazioni:write'] = true;
+                break;
+            case 'EDIT_PRESTAZIONI':
+                permissions['EDIT_PRESTAZIONI'] = true;
+                permissions['prestazioni:edit'] = true;
+                permissions['prestazioni:update'] = true;
+                permissions['prestazioni:write'] = true;
+                break;
+            case 'DELETE_PRESTAZIONI':
+                permissions['DELETE_PRESTAZIONI'] = true;
+                permissions['prestazioni:delete'] = true;
+                break;
+            case 'MANAGE_PRESTAZIONI':
+                permissions['MANAGE_PRESTAZIONI'] = true;
+                permissions['prestazioni:read'] = true;
+                permissions['prestazioni:create'] = true;
+                permissions['prestazioni:edit'] = true;
+                permissions['prestazioni:update'] = true;
+                permissions['prestazioni:delete'] = true;
+                permissions['prestazioni:manage'] = true;
+                break;
+                
+            // Ambulatori permissions
+            case 'VIEW_AMBULATORI':
+                permissions['VIEW_AMBULATORI'] = true;
+                permissions['ambulatori:read'] = true;
+                permissions['ambulatori:view'] = true;
+                break;
+            case 'CREATE_AMBULATORI':
+                permissions['CREATE_AMBULATORI'] = true;
+                permissions['ambulatori:create'] = true;
+                permissions['ambulatori:write'] = true;
+                break;
+            case 'EDIT_AMBULATORI':
+                permissions['EDIT_AMBULATORI'] = true;
+                permissions['ambulatori:edit'] = true;
+                permissions['ambulatori:update'] = true;
+                permissions['ambulatori:write'] = true;
+                break;
+            case 'DELETE_AMBULATORI':
+                permissions['DELETE_AMBULATORI'] = true;
+                permissions['ambulatori:delete'] = true;
+                break;
+            case 'MANAGE_AMBULATORI':
+                permissions['MANAGE_AMBULATORI'] = true;
+                permissions['ambulatori:read'] = true;
+                permissions['ambulatori:create'] = true;
+                permissions['ambulatori:edit'] = true;
+                permissions['ambulatori:update'] = true;
+                permissions['ambulatori:delete'] = true;
+                permissions['ambulatori:manage'] = true;
+                break;
+                
+            // Poliambulatorio permissions
+            case 'VIEW_POLIAMBULATORIO':
+                permissions['VIEW_POLIAMBULATORIO'] = true;
+                permissions['poliambulatorio:read'] = true;
+                permissions['poliambulatorio:view'] = true;
+                break;
+            case 'CREATE_POLIAMBULATORIO':
+                permissions['CREATE_POLIAMBULATORIO'] = true;
+                permissions['poliambulatorio:create'] = true;
+                permissions['poliambulatorio:write'] = true;
+                break;
+            case 'EDIT_POLIAMBULATORIO':
+                permissions['EDIT_POLIAMBULATORIO'] = true;
+                permissions['poliambulatorio:edit'] = true;
+                permissions['poliambulatorio:update'] = true;
+                permissions['poliambulatorio:write'] = true;
+                break;
+            case 'DELETE_POLIAMBULATORIO':
+                permissions['DELETE_POLIAMBULATORIO'] = true;
+                permissions['poliambulatorio:delete'] = true;
+                break;
+            case 'MANAGE_POLIAMBULATORIO':
+                permissions['MANAGE_POLIAMBULATORIO'] = true;
+                permissions['poliambulatorio:read'] = true;
+                permissions['poliambulatorio:create'] = true;
+                permissions['poliambulatorio:edit'] = true;
+                permissions['poliambulatorio:update'] = true;
+                permissions['poliambulatorio:delete'] = true;
+                permissions['poliambulatorio:manage'] = true;
+                break;
+                
+            // Listino (Price List) permissions
+            case 'VIEW_LISTINO':
+                permissions['VIEW_LISTINO'] = true;
+                permissions['listino:read'] = true;
+                permissions['listino:view'] = true;
+                break;
+            case 'CREATE_LISTINO':
+                permissions['CREATE_LISTINO'] = true;
+                permissions['listino:create'] = true;
+                permissions['listino:write'] = true;
+                break;
+            case 'EDIT_LISTINO':
+                permissions['EDIT_LISTINO'] = true;
+                permissions['listino:edit'] = true;
+                permissions['listino:update'] = true;
+                permissions['listino:write'] = true;
+                break;
+            case 'DELETE_LISTINO':
+                permissions['DELETE_LISTINO'] = true;
+                permissions['listino:delete'] = true;
+                break;
+            case 'MANAGE_LISTINO':
+                permissions['MANAGE_LISTINO'] = true;
+                permissions['listino:read'] = true;
+                permissions['listino:create'] = true;
+                permissions['listino:edit'] = true;
+                permissions['listino:update'] = true;
+                permissions['listino:delete'] = true;
+                permissions['listino:manage'] = true;
+                break;
+                
+            // Strumenti (Equipment) permissions
+            case 'VIEW_STRUMENTI':
+                permissions['VIEW_STRUMENTI'] = true;
+                permissions['strumenti:read'] = true;
+                permissions['strumenti:view'] = true;
+                break;
+            case 'CREATE_STRUMENTI':
+                permissions['CREATE_STRUMENTI'] = true;
+                permissions['strumenti:create'] = true;
+                permissions['strumenti:write'] = true;
+                break;
+            case 'EDIT_STRUMENTI':
+                permissions['EDIT_STRUMENTI'] = true;
+                permissions['strumenti:edit'] = true;
+                permissions['strumenti:update'] = true;
+                permissions['strumenti:write'] = true;
+                break;
+            case 'DELETE_STRUMENTI':
+                permissions['DELETE_STRUMENTI'] = true;
+                permissions['strumenti:delete'] = true;
+                break;
+            case 'MANAGE_STRUMENTI':
+                permissions['MANAGE_STRUMENTI'] = true;
+                permissions['strumenti:read'] = true;
+                permissions['strumenti:create'] = true;
+                permissions['strumenti:edit'] = true;
+                permissions['strumenti:update'] = true;
+                permissions['strumenti:delete'] = true;
+                permissions['strumenti:manage'] = true;
+                break;
+                
+            // Agenda permissions
+            case 'VIEW_AGENDA':
+                permissions['VIEW_AGENDA'] = true;
+                permissions['agenda:read'] = true;
+                permissions['agenda:view'] = true;
+                break;
+            case 'MANAGE_AGENDA':
+                permissions['MANAGE_AGENDA'] = true;
+                permissions['agenda:read'] = true;
+                permissions['agenda:manage'] = true;
+                break;
+            case 'CONFIGURE_AGENDA':
+                permissions['CONFIGURE_AGENDA'] = true;
+                permissions['agenda:configure'] = true;
+                permissions['agenda:settings'] = true;
+                break;
+                
+            // Fatture Sanitarie (Medical Invoices) permissions
+            case 'VIEW_FATTURE_SANITARIE':
+                permissions['VIEW_FATTURE_SANITARIE'] = true;
+                permissions['fatture_sanitarie:read'] = true;
+                permissions['fatture_sanitarie:view'] = true;
+                break;
+            case 'CREATE_FATTURE_SANITARIE':
+                permissions['CREATE_FATTURE_SANITARIE'] = true;
+                permissions['fatture_sanitarie:create'] = true;
+                permissions['fatture_sanitarie:write'] = true;
+                break;
+            case 'EDIT_FATTURE_SANITARIE':
+                permissions['EDIT_FATTURE_SANITARIE'] = true;
+                permissions['fatture_sanitarie:edit'] = true;
+                permissions['fatture_sanitarie:update'] = true;
+                permissions['fatture_sanitarie:write'] = true;
+                break;
+            case 'DELETE_FATTURE_SANITARIE':
+                permissions['DELETE_FATTURE_SANITARIE'] = true;
+                permissions['fatture_sanitarie:delete'] = true;
+                break;
+            case 'SEND_FATTURE_SANITARIE':
+                permissions['SEND_FATTURE_SANITARIE'] = true;
+                permissions['fatture_sanitarie:send'] = true;
+                break;
+                
+            // Clinical Admin permissions
+            case 'CLINICAL_ADMIN_PANEL':
+                permissions['CLINICAL_ADMIN_PANEL'] = true;
+                permissions['clinical:admin'] = true;
+                permissions['clinical:access'] = true;
+                break;
+            case 'CLINICAL_SETTINGS':
+                permissions['CLINICAL_SETTINGS'] = true;
+                permissions['clinical:settings'] = true;
+                break;
+            case 'CLINICAL_REPORTS':
+                permissions['CLINICAL_REPORTS'] = true;
+                permissions['clinical:reports'] = true;
+                break;
+                
             // Default: pass through
             default:
                 permissions[permission] = true;
