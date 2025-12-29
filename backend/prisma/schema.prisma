@@ -2808,6 +2808,7 @@ model Prestazione {
   riconoscimenti     RiconoscimentoConvenzione[] // Riconoscimenti convenzioni
   vociTariffario     VoceTariffario[]            // Voci tariffario aziende
   slotDisponibilita  SlotDisponibilita[]         // Slot disponibilità
+  templateCampi      TemplateCampoVisita[]       // Template campi visita per questa prestazione
 
   @@unique([tenantId, codice])
   @@index([tenantId])
@@ -3510,9 +3511,19 @@ model TemplateCampoVisita {
   codice           String
   nome             String
   descrizione      String?
+  etichetta        String?          // Label visualizzata nel form
+  tipo             String           @default("TESTO") // TESTO, TEXTAREA, NUMERO, DECIMALE, DATA, DATETIME, BOOLEAN, SELECT, MULTISELECT, FILE
   tipoPrestazione  TipoPrestazione?
   specializzazione String?
-  schema           Json
+  prestazioneId    String?          // FK opzionale per template specifici per prestazione
+  schema           Json?
+  obbligatorio     Boolean          @default(false)
+  ordine           Int              @default(0)
+  opzioni          String?          // JSON array per SELECT/MULTISELECT
+  valoreDefault    String?
+  validazione      String?          // JSON regole validazione
+  placeholder      String?
+  helpText         String?
   attivo           Boolean          @default(true)
   versione         Int              @default(1)
   branchType       BranchType       @default(MEDICA) @map("branch_type") // Progetto 45
@@ -3522,11 +3533,14 @@ model TemplateCampoVisita {
   deletedAt        DateTime?
   createdBy        String?
 
+  prestazione Prestazione? @relation(fields: [prestazioneId], references: [id], onDelete: SetNull)
+
   @@unique([tenantId, codice, versione])
   @@index([tenantId])
   @@index([tenantId, branchType]) // Progetto 45
   @@index([tipoPrestazione])
   @@index([specializzazione])
+  @@index([prestazioneId])
   @@map("template_campi_visita")
 }
 

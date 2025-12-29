@@ -126,6 +126,7 @@ const TemplateCampoVisitaService = {
             const campo = await prisma.templateCampoVisita.create({
                 data: {
                     tenantId: data.tenantId,
+                    codice: data.codice || data.nome.toLowerCase().replace(/\s+/g, '_'),
                     prestazioneId: data.prestazioneId,
                     nome: data.nome,
                     etichetta: data.etichetta,
@@ -172,11 +173,6 @@ const TemplateCampoVisitaService = {
                     id,
                     tenantId,
                     deletedAt: null
-                },
-                include: {
-                    prestazione: {
-                        select: { id: true, nome: true, codice: true }
-                    }
                 }
             });
 
@@ -188,8 +184,41 @@ const TemplateCampoVisitaService = {
     },
 
     /**
-     * Recupera tutti i campi per una prestazione
+     * Recupera tutti i campi per una prestazione (wrapper che cerca per tipoPrestazione)
      * @param {string} prestazioneId - ID prestazione
+     * @param {string} tenantId - ID tenant
+     * @param {Object} [options] - Opzioni query
+     * @param {boolean} [options.onlyActive=true] - Solo campi attivi
+     * @returns {Promise<Array>} Lista campi
+     */
+    async getByPrestazione(prestazioneId, tenantId, options = {}) {
+        try {
+            // Recupera la prestazione per ottenere il tipo
+            const prestazione = await prisma.prestazione.findFirst({
+                where: {
+                    id: prestazioneId,
+                    tenantId,
+                    deletedAt: null
+                },
+                select: { tipo: true }
+            });
+
+            if (!prestazione) {
+                logger.warn({ prestazioneId, tenantId }, 'Prestazione non trovata per getByPrestazione');
+                return [];
+            }
+
+            // Delega a getByTipoPrestazione
+            return this.getByTipoPrestazione(prestazione.tipo, tenantId, options);
+        } catch (error) {
+            logger.error({ error: error.message, prestazioneId }, 'Errore recupero campi per prestazione');
+            throw error;
+        }
+    },
+
+    /**
+     * Recupera tutti i campi per un tipo di prestazione
+     * @param {string} tipoPrestazione - Tipo prestazione (enum TipoPrestazione)
      * @param {string} tenantId - ID tenant
      * @param {Object} [options] - Opzioni query
      * @param {boolean} [options.onlyActive=true] - Solo campi attivi
