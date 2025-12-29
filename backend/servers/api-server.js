@@ -80,7 +80,8 @@ import importRoutes from '../routes/import-routes.js';
 import backupRoutes from '../routes/backup-routes.js';
 import courseTestsRoutes from '../routes/course-tests-routes.js';
 import cmsAnalyticsRoutes from '../routes/cms-analytics-routes.js';
-import clinicaRoutes from '../routes/clinica-routes.js';
+// Project 46 - Modular clinical routes (18 sub-routers)
+import clinicaRoutes from '../routes/clinica/index.js';
 import tariffarioAziendaleRoutes from '../routes/tariffario-aziendale-routes.js';
 // Project 43 - Multi-tenant access management
 import personTenantAccessRoutes from '../routes/v1/person-tenant-access.js';
