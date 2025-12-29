@@ -1,6 +1,6 @@
 # 🚀 Progetto 46 - Indice Documentazione
 
-**Ultima Modifica**: 29/12/2025 - Aggiornamento stato fasi  
+**Ultima Modifica**: 29/12/2025 - Fase 3a COMPLETATA con test  
 **Decisione**: I nomi italiani nello schema Prisma sono ACCETTATI (app commercializzata solo in Italia)
 
 ---
@@ -29,12 +29,12 @@ docs/10_project_managemnt/46_code_optimization_deep_restructure/
 | 0 | Setup & Backup | ✅ Completato | 0.5 giorni | Tag v1.0.0-pre-optimization |
 | 1 | Pulizia File Obsoleti | ✅ Completato | 2 giorni | Commit e9fb4e7 |
 | 2 | Enum Standardizzazione | ⏭️ SKIPPATO | - | **Nomi IT accettati** |
-| 3 | Splitting clinica-routes.js | ✅ Completato | 1 giorno | 18 moduli estratti |
-| 4 | Splitting altri file backend | 🔄 In corso | 1 settimana | seed.js, preventivi, etc. |
-| 5 | Splitting file frontend | ⏳ Da iniziare | 1 settimana | PreventiviPage, CMSRenderer |
-| 6 | Schema camelCase | ⏭️ SKIPPATO | - | **Nomi IT accettati** |
-| 7 | Testing & Validazione | ⏳ Da iniziare | 3 giorni | Test dopo split |
-| 8 | Documentazione | ⏳ Da iniziare | 1 giorno | Aggiornare docs |
+| 3a | Splitting clinica-routes.js | ✅ TESTATO | 1 giorno | 18 moduli, 15/17 route OK |
+| 3b | Splitting altri file backend | ⏳ Da iniziare | 1 settimana | seed.js, preventivi, etc. |
+| 4 | Splitting file frontend | ⏳ Da iniziare | 1 settimana | PreventiviPage, CMSRenderer |
+| 5 | Schema camelCase | ⏭️ SKIPPATO | - | **Nomi IT accettati** |
+| 6 | Testing & Validazione | ⏳ Da iniziare | 3 giorni | Test dopo split |
+| 7 | Documentazione | ⏳ Da iniziare | 1 giorno | Aggiornare docs |
 
 ---
 
@@ -109,6 +109,37 @@ docs/10_project_managemnt/46_code_optimization_deep_restructure/
 | fatture.routes.js | ~230 | CRUD fatture |
 
 **Totale**: ~10,000+ linee organizzate in 20 file modulari
+
+---
+
+## ✅ Test Fase 3a - Risultati (29/12/2025)
+
+**Route Funzionanti (15/17)**:
+| Route | Status | Note |
+|-------|--------|------|
+| /clinica/poliambulatori | ✅ OK | |
+| /clinica/ambulatori | ✅ OK | |
+| /clinica/prestazioni | ✅ OK | |
+| /clinica/medici | ✅ OK | |
+| /clinica/visite | ✅ OK | |
+| /clinica/referti | ✅ OK | |
+| /clinica/strumenti | ✅ OK | |
+| /clinica/convenzioni | ✅ OK | |
+| /clinica/listini | ✅ OK | |
+| /clinica/sedi | ✅ OK | |
+| /clinica/manutenzioni | ✅ OK | |
+| /clinica/tariffario-medico | ✅ OK | |
+| /clinica/orari-ambulatorio | ✅ OK | |
+| /clinica/fatture | ✅ OK | |
+| /clinica/documenti/storage-stats | ✅ OK | No GET root (by design) |
+| /clinica/slots | ⚠️ Servizio | Errore Prisma pre-esistente (campo 'stato') |
+| /clinica/bundle | ⚠️ Servizio | Errore Prisma pre-esistente |
+| /clinica/template-campi | ⚠️ Servizio | Errore Prisma pre-esistente |
+
+**Commit**: 
+- `1d8873a` - Fix all import paths in modular clinica routes
+- `7574bf6` - Archive old clinica-routes.js
+- `4a41443` - First batch import fixes
 
 ---
 
