@@ -25,10 +25,10 @@ import sediRouter from './sedi.routes.js';
 import bundleRouter from './bundle.routes.js';
 import convenzioniRouter from './convenzioni.routes.js';
 import manutenzioniRouter from './manutenzioni.routes.js';
+import slotsRouter from './slots.routes.js';
+import listiniRouter from './listini.routes.js';
 // Future imports - will be added as files are created:
 // import appuntamentiRouter from './appuntamenti.routes.js';
-// import slotsRouter from './slots.routes.js';
-// import listiniRouter from './listini.routes.js';
 // import scontiRouter from './sconti.routes.js';
 // import orariRouter from './orari.routes.js';
 // import templateCampiRouter from './template-campi.routes.js';
@@ -77,11 +77,11 @@ router.use('/sedi', sediRouter);
 router.use('/bundle', bundleRouter);
 router.use('/convenzioni', convenzioniRouter);
 router.use('/manutenzioni', manutenzioniRouter);
+router.use('/slots', slotsRouter);
+router.use('/listini', listiniRouter);
 
 // Future mounts - will be enabled as files are created:
 // router.use('/appuntamenti', appuntamentiRouter);
-// router.use('/slots', slotsRouter);
-// router.use('/listini', listiniRouter);
 // router.use('/sconti', scontiRouter);
 // router.use('/orari-ambulatorio', orariRouter);
 // router.use('/template-campi', templateCampiRouter);
