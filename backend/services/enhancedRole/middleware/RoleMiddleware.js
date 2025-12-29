@@ -1,6 +1,6 @@
 import { logger } from '../../../utils/logger.js';
 import { hasPermission } from '../permissions/PermissionChecker.js';
-import { convertPermissionsToBackend } from '../../../utils/permissionMapping.js';
+// Rimossa conversione legacy - i permessi sono già nel formato resource:action
 
 /**
  * Middleware per la verifica dei permessi
@@ -43,16 +43,14 @@ export function requirePermission(requiredPermissions, options = {}) {
           requiredPermissions
         });
 
-        // Converte i permessi per coerenza anche per gli admin
-        const frontendPermissions = Array.isArray(requiredPermissions)
+        // Normalizza i permessi in array (già nel formato resource:action)
+        const permissions = Array.isArray(requiredPermissions)
           ? requiredPermissions
           : [requiredPermissions];
-        const backendPermissions = convertPermissionsToBackend(frontendPermissions);
 
         // Aggiungi informazioni sui permessi alla request
         req.userPermissions = {
-          verified: frontendPermissions,
-          verifiedBackend: backendPermissions,
+          verified: permissions,
           hasAll: true,
           hasAny: true,
           bypassedAsAdmin: true
@@ -69,17 +67,14 @@ export function requirePermission(requiredPermissions, options = {}) {
         });
       }
 
-      // Normalizza i permessi richiesti in array
-      const frontendPermissions = Array.isArray(requiredPermissions)
+      // Normalizza i permessi richiesti in array (già nel formato resource:action)
+      const permissions = Array.isArray(requiredPermissions)
         ? requiredPermissions
         : [requiredPermissions];
 
-      // Converte i permessi dal formato frontend a quello backend
-      const backendPermissions = convertPermissionsToBackend(frontendPermissions);
-
-      // Verifica i permessi solo per utenti non-admin
+      // Verifica i permessi (formato unificato resource:action)
       const permissionChecks = await Promise.all(
-        backendPermissions.map(permission =>
+        permissions.map(permission =>
           hasPermission(userId, permission, tenantId, {
             resource: options.resource,
             action: options.action,
@@ -97,8 +92,7 @@ export function requirePermission(requiredPermissions, options = {}) {
         logger.warn('[ROLE_MIDDLEWARE] Permission denied', {
           userId,
           tenantId,
-          requiredPermissions: frontendPermissions,
-          backendPermissions: backendPermissions,
+          requiredPermissions: permissions,
           resource: options.resource,
           action: options.action
         });
@@ -106,15 +100,13 @@ export function requirePermission(requiredPermissions, options = {}) {
         return res.status(403).json({
           error: 'Insufficient permissions',
           code: 'PERMISSION_DENIED',
-          required: frontendPermissions,
-          backend: backendPermissions
+          required: permissions
         });
       }
 
       // Aggiungi informazioni sui permessi alla request per uso successivo
       req.userPermissions = {
-        verified: frontendPermissions,
-        verifiedBackend: backendPermissions,
+        verified: permissions,
         hasAll: permissionChecks.every(Boolean),
         hasAny: permissionChecks.some(Boolean)
       };

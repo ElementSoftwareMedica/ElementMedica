@@ -6,7 +6,7 @@
 import { JWTService } from './jwt.js';
 // removed: import jwt from 'jsonwebtoken';
 import logger from '../utils/logger.js';
-import { convertPermissionsToBackend } from '../utils/permissionMapping.js';
+import { matchPermission } from '../constants/permissions.js';
 import { getDefaultPermissions } from '../services/enhancedRole/utils/RoleTypes.js';
 
 import prisma from '../config/prisma-optimization.js';
@@ -223,12 +223,10 @@ export function authorize(requiredPermissions = []) {
         // Ensure requiredPermissions is always an array
         const permissions = Array.isArray(requiredPermissions) ? requiredPermissions : [requiredPermissions];
 
-        // Convert frontend format (e.g., 'read:schedules') to backend format (e.g., 'VIEW_SCHEDULES')
-        const backendPermissions = convertPermissionsToBackend(permissions);
-
-        // Check if user has any of the required permissions
-        const hasPermission = backendPermissions.some(permission =>
-            req.person.permissions.includes(permission)
+        // Check if user has any of the required permissions (formato unificato resource:action)
+        const userPermissions = req.person.permissions || [];
+        const hasPermission = permissions.some(required =>
+            userPermissions.some(userPerm => matchPermission(userPerm, required))
         );
 
         if (!hasPermission && permissions.length > 0) {
@@ -237,8 +235,7 @@ export function authorize(requiredPermissions = []) {
                 action: 'authorize',
                 personId: req.person.id,
                 requiredPermissions: permissions,
-                backendPermissions: backendPermissions,
-                userPermissions: req.person.permissions,
+                userPermissions,
                 path: req.path,
                 method: req.method
             });
