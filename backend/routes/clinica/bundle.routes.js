@@ -23,10 +23,12 @@
  */
 
 import express from 'express';
-import { authenticateToken } from '../../auth/authenticateToken.js';
-import checkAdvancedPermission from '../../middleware/checkAdvancedPermission.js';
+import middleware from '../../auth/middleware.js';
+import { checkAdvancedPermission } from '../../middleware/advanced-permissions.js';
 import logger from '../../utils/logger.js';
 import { auditClinico, getEffectiveTenantId } from './utils/clinica-utils.js';
+
+const { authenticate: authenticateToken } = middleware;
 
 // Services
 import OffertaBundleService from '../../services/clinical/OffertaBundleService.js';

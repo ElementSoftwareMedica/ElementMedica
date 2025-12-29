@@ -25,18 +25,20 @@
  */
 
 import express from 'express';
-import { authenticateToken } from '../../auth/authenticateToken.js';
-import checkAdvancedPermission from '../../middleware/checkAdvancedPermission.js';
+import middleware from '../../auth/middleware.js';
+import { checkAdvancedPermission } from '../../middleware/advanced-permissions.js';
 import prisma from '../../config/database.js';
 import logger from '../../utils/logger.js';
 import { auditClinico, getEffectiveTenantId } from './utils/clinica-utils.js';
+
+const { authenticate: authenticateToken } = middleware;
 
 // Services
 import SedePoliambulatorioService from '../../services/clinical/SedePoliambulatorioService.js';
 import PoliambulatorioService from '../../services/clinical/PoliambulatorioService.js';
 
 // Validators
-import clinicalValidators from '../../validations/clinicalValidators.js';
+import { clinicalValidators } from '../../config/validation-clinical.js';
 
 const router = express.Router();
 

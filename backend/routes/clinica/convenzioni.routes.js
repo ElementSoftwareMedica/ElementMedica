@@ -30,17 +30,19 @@
  */
 
 import express from 'express';
-import { authenticateToken } from '../../auth/authenticateToken.js';
-import checkAdvancedPermission from '../../middleware/checkAdvancedPermission.js';
+import middleware from '../../auth/middleware.js';
+import { checkAdvancedPermission } from '../../middleware/advanced-permissions.js';
 import logger from '../../utils/logger.js';
 import { auditClinico, getEffectiveTenantId } from './utils/clinica-utils.js';
+
+const { authenticate: authenticateToken } = middleware;
 
 // Services
 import ConvenzioneService from '../../services/clinical/ConvenzioneService.js';
 import RiconoscimentoConvenzioneService from '../../services/clinical/RiconoscimentoConvenzioneService.js';
 
 // Validators
-import clinicalValidators from '../../validations/clinicalValidators.js';
+import { clinicalValidators } from '../../config/validation-clinical.js';
 
 const router = express.Router();
 
