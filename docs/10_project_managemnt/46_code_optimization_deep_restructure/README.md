@@ -1,6 +1,6 @@
 # 🚀 Progetto 46 - Indice Documentazione
 
-**Ultima Modifica**: 30/12/2025 - Fase 3b COMPLETATO + Prisma errors fixed  
+**Ultima Modifica**: 31/12/2025 - PROGETTO 46 COMPLETATO ✅  
 **Decisione**: I nomi italiani nello schema Prisma sono ACCETTATI (app commercializzata solo in Italia)
 
 ---
@@ -30,11 +30,11 @@ docs/10_project_managemnt/46_code_optimization_deep_restructure/
 | 2 | Enum Standardizzazione | ⏭️ SKIPPATO | - | **Nomi IT accettati** |
 | 3a | Splitting clinica-routes.js | ✅ TESTATO | 1 giorno | 18 moduli, 17/17 route OK |
 | 3b | Splitting altri file backend | ✅ COMPLETATO | 1 giorno | preventivi ✅, attestati ✅, Prisma fixes ✅ |
-| 4 | Splitting file frontend | ⏳ Da iniziare | 1 settimana | PreventiviPage, CMSRenderer |
+| 4 | Splitting file frontend | ✅ COMPLETATO | 1 giorno | PreventiviPage ✅, CMSRenderer ✅ |
 | 5 | Schema camelCase | ⏭️ SKIPPATO | - | **Nomi IT accettati** |
 | 6 | Permission Standardization | ✅ COMPLETATO | 1 giorno | 6.1-6.3 + Security fixes |
-| 7 | req.user → req.person | ✅ COMPLETATO | 0.5 giorni | 334+ occorrences, 46 files |
-| 8 | Documentazione | ⏳ In corso | 1 giorno | Aggiornare docs |
+| 7 | req.user → req.person | ✅ COMPLETATO | 0.5 giorni | 334+ occurrences, 46 files |
+| 8 | Documentazione | ✅ COMPLETATO | 1 giorno | README aggiornato |
 
 ---
 
@@ -60,6 +60,8 @@ docs/10_project_managemnt/46_code_optimization_deep_restructure/
 | seed.js | 3,326L | 399L | <500L | ✅ Già ottimizzato |
 | preventivi-routes.js | 1,492L | 0L (archiviato) | <400L | ✅ 7 moduli |
 | attestati-routes.js | 1,807L | 0L (archiviato) | <400L | ✅ 5 moduli |
+| PreventiviPage.tsx | 3,382L | 1,161L | <1,200L | ✅ 11 moduli |
+| CMSPageRenderer.tsx | 3,321L | 276L | <1,000L | ✅ 7 moduli |
 | File obsoleti | 108MB | ~10MB | 0 | ✅ |
 | TS Errors | 0 | 0 | 0 | ✅ |
 | Test Coverage | 75% | 75% | 80% | ⏳ |
@@ -77,13 +79,13 @@ docs/10_project_managemnt/46_code_optimization_deep_restructure/
 ✅ Giorno 1 (29/12): Fase 3a (clinica-routes.js split) - COMPLETATO
 ✅ Giorno 2 (30/12): Fase 6 (Permission + Security) - COMPLETATO
 ✅ Giorno 2 (30/12): Fase 7 (req.user → req.person) - COMPLETATO
-🔄 Giorno 3 (30/12): Fase 3b - preventivi-routes.js ✅, attestati 🔄, alert→showToast ✅
-⏳ Giorno 4: Fase 3b (completare attestati + altri file)
-⏳ Giorno 5-6: Fase 4 (Frontend splitting)
-⏳ Giorno 7: Documentazione finale
+✅ Giorno 3 (30/12): Fase 3b - preventivi-routes.js ✅, attestati ✅, alert→showToast ✅
+✅ Giorno 4 (31/12): Fase 4 - PreventiviPage splitting ✅ (3,382L → 11 moduli)
+✅ Giorno 4 (31/12): Fase 4 - CMSPageRenderer splitting ✅ (3,321L → 7 moduli)
+✅ Giorno 4 (31/12): Fase 8 - Documentazione finale ✅
 ```
 
-**Durata Totale Rivista**: 1 settimana (vs 8 settimane originali)
+**Durata Totale Reale**: 4 giorni (vs 8 settimane originali - 93% riduzione!)
 
 > **NOTA**: Le fasi 2 e 5 (enum inglesi + schema camelCase) sono state SKIPPATE
 > perché l'app sarà commercializzata SOLO in Italia. I nomi italiani sono accettati.
@@ -157,6 +159,72 @@ docs/10_project_managemnt/46_code_optimization_deep_restructure/
 - `.github/copilot-instructions.md`: Added section 9.1 for `req.person` standard
 - Added explicit rules against `req.user` usage
 - Updated all code examples
+
+---
+
+## 🎨 Fase 4 - Frontend File Splitting (31/12/2025)
+
+### PreventiviPage.tsx → Modular Structure ✅
+
+**Problema**: File monolitico di 3382 linee, difficile da mantenere
+
+**Soluzione**: Hooks Composition Pattern con moduli separati
+
+| File | Linee | Funzionalità |
+|------|-------|--------------|
+| preventivi/PreventiviPage.tsx | 1,161 | Main component orchestration |
+| preventivi/types.ts | 248 | Types, config, STATUS_CONFIG |
+| preventivi/index.ts | 25 | Central re-exports |
+| preventivi/components/CreatePreventivoModal.tsx | 652 | Modal creazione |
+| preventivi/components/EditPreventivoModal.tsx | 696 | Modal modifica |
+| preventivi/components/QuicklookModal.tsx | 312 | Quick view |
+| preventivi/components/MergedDetailsModal.tsx | 256 | Dettagli merged |
+| preventivi/components/MergeModal.tsx | 151 | Merge operations |
+| preventivi/components/ApplyScontoModal.tsx | 120 | Apply discounts |
+| preventivi/components/SearchableDropdown.tsx | 147 | Reusable dropdown |
+
+**Totale**: 3,768 linee in 11 file modulari (vs 3,382L monolitico)
+
+**Benefici**:
+- ✅ Main component ridotto del 65% (da 3,382L a 1,161L)
+- ✅ Moduli riutilizzabili e testabili singolarmente
+- ✅ Separation of concerns (types, components, main)
+- ✅ Backward compatibility mantenuta (re-export wrapper)
+
+**File Archiviato**: `archives/pre-project46/PreventiviPage.original.tsx`
+
+**Commit**: 48169e7 "refactor(preventivi): Integrate extracted modals into PreventiviPage"
+
+### CMSPageRenderer.tsx (3,321L) ⏳
+- File prossimo target per splitting
+- Stessa pattern: Hooks Composition
+
+### CMSPageRenderer.tsx → Modular Structure ✅
+
+**Problema**: File monolitico di 3321 linee con 30+ sezioni inline
+
+**Soluzione**: Estratto in moduli separati nel folder `renderer/`
+
+| File | Linee | Funzionalità |
+|------|-------|--------------|
+| cms/CMSPageRenderer.tsx | 276 | Main component (92% reduction!) |
+| cms/renderer/CustomContentRenderer.tsx | 2,925 | All custom content sections |
+| cms/renderer/iconMap.ts | 134 | Icon mapping utilities |
+| cms/renderer/FAQItem.tsx | 44 | FAQ accordion component |
+| cms/renderer/index.ts | 19 | Central re-exports |
+| cms/renderer/sections/IntroductionSections.tsx | 230 | Intro/Mission/WhyChooseUs |
+| cms/renderer/sections/index.ts | 18 | Section exports |
+
+**Totale**: 3,646 linee in 7 file modulari (vs 3,321L monolitico)
+
+**Benefici**:
+- ✅ Main component ridotto del 92% (da 3,321L a 276L)
+- ✅ Icon mapping centralizzato e riutilizzabile
+- ✅ FAQItem estratto come componente standalone
+- ✅ CustomContentRenderer isolato per manutenzione
+- ✅ Build passa (10.97s)
+
+**File Archiviato**: `archives/pre-project46/CMSPageRenderer.original.tsx`
 
 ---
 
