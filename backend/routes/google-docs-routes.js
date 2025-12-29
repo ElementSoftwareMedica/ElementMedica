@@ -338,7 +338,7 @@ router.put('/document/:documentId',
  */
 router.get('/stats', 
   authenticateToken(), 
-  requirePermission('system:admin'),
+  requirePermission('system:manage'),
   async (req, res) => {
     try {
       const stats = googleApiService.getStats();

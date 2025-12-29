@@ -22,7 +22,7 @@ const { authenticate: authenticateToken, authorize: requirePermission } = middle
  * GET /api/v1/registri-presenze
  * Get all attendance registers
  */
-router.get('/', authenticateToken(), requirePermission('read:documents'), async (req, res) => {
+router.get('/', authenticateToken(), requirePermission('documents:read'), async (req, res) => {
   try {
     const { scheduleId, sessionId, formatoreId } = req.query;
     const tenantId = req.user.tenantId;
@@ -90,7 +90,7 @@ router.get('/', authenticateToken(), requirePermission('read:documents'), async 
  */
 router.post('/generate',
   authenticateToken(),
-  requirePermission('create:documents'),
+  requirePermission('documents:create'),
   [
     body('sessionId').optional().isString(),
     body('scheduleId').optional().isString(),
@@ -406,7 +406,7 @@ router.post('/generate',
  */
 router.put('/:id/attendance',
   authenticateToken(),
-  requirePermission('create:documents'),
+  requirePermission('documents:create'),
   [
     body('attendanceData').isArray({ min: 1 }).withMessage('Attendance data is required'),
     body('attendanceData.*.personId').notEmpty().withMessage('Person ID is required'),
@@ -481,7 +481,7 @@ router.put('/:id/attendance',
  * DELETE /api/v1/registri-presenze/:id
  * Delete register (soft delete)
  */
-router.delete('/:id', authenticateToken(), requirePermission('delete:documents'), async (req, res) => {
+router.delete('/:id', authenticateToken(), requirePermission('documents:delete'), async (req, res) => {
   try {
     const { id } = req.params;
     const tenantId = req.user.tenantId;
@@ -522,7 +522,7 @@ router.delete('/:id', authenticateToken(), requirePermission('delete:documents')
  * GET /api/v1/registri-presenze/:id/download
  * Download register PDF
  */
-router.get('/:id/download', authenticateToken(), requirePermission('read:documents'), async (req, res) => {
+router.get('/:id/download', authenticateToken(), requirePermission('documents:read'), async (req, res) => {
   try {
     const { id } = req.params;
     const tenantId = req.user.tenantId;
@@ -554,7 +554,7 @@ router.get('/:id/download', authenticateToken(), requirePermission('read:documen
  */
 router.get('/schedule/:scheduleId/download-zip',
   authenticateToken(),
-  requirePermission('read:documents'),
+  requirePermission('documents:read'),
   async (req, res) => {
     try {
       const { scheduleId } = req.params;
@@ -655,7 +655,7 @@ router.get('/schedule/:scheduleId/download-zip',
  * GET /api/v1/registri-presenze/:id
  * Get single attendance register
  */
-router.get('/:id', authenticateToken(), requirePermission('read:documents'), async (req, res) => {
+router.get('/:id', authenticateToken(), requirePermission('documents:read'), async (req, res) => {
   try {
     const { id } = req.params;
     const tenantId = req.user.tenantId;

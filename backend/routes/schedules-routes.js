@@ -31,7 +31,7 @@ const validateSchedule = [
 ];
 
 // Get all schedules
-router.get('/', authenticateToken(), requirePermission('read:schedules'), roleDataFilter, filterResponseFields, async (req, res) => {
+router.get('/', authenticateToken(), requirePermission('schedules:read'), roleDataFilter, filterResponseFields, async (req, res) => {
   try {
     const person = req.person || req.user;
 
@@ -181,7 +181,7 @@ router.get('/', authenticateToken(), requirePermission('read:schedules'), roleDa
  * - companyId: filtra per azienda
  * - personId: filtra per dipendente
  */
-router.get('/expiring-courses', authenticateToken(), requirePermission('read:schedules'), roleDataFilter, filterResponseFields, async (req, res) => {
+router.get('/expiring-courses', authenticateToken(), requirePermission('schedules:read'), roleDataFilter, filterResponseFields, async (req, res) => {
   try {
     const { tenantId } = req.user;
     const person = req.person || req.user;
@@ -484,7 +484,7 @@ router.get('/expiring-courses', authenticateToken(), requirePermission('read:sch
  * - courseType: tipo corso
  * - completedDate: data esecuzione corso
  */
-router.post('/import-expiring-courses', authenticateToken(), requirePermission('write:schedules'), async (req, res) => {
+router.post('/import-expiring-courses', authenticateToken(), requirePermission('schedules:update'), async (req, res) => {
   try {
     const { tenantId } = req.user;
     const { records } = req.body;
@@ -663,7 +663,7 @@ router.post('/import-expiring-courses', authenticateToken(), requirePermission('
 });
 
 // Get schedule by ID
-router.get('/:id', authenticateToken(), requirePermission('read:schedules'), roleDataFilter, filterResponseFields, async (req, res) => {
+router.get('/:id', authenticateToken(), requirePermission('schedules:read'), roleDataFilter, filterResponseFields, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -709,7 +709,7 @@ router.get('/:id', authenticateToken(), requirePermission('read:schedules'), rol
 });
 
 // Get schedules with attestati
-router.get('/with-attestati', authenticateToken(), requirePermission('read:schedules'), roleDataFilter, filterResponseFields, async (req, res) => {
+router.get('/with-attestati', authenticateToken(), requirePermission('schedules:read'), roleDataFilter, filterResponseFields, async (req, res) => {
   try {
     const schedules = await prisma.courseSchedule.findMany({
       where: {
@@ -761,7 +761,7 @@ router.post('/',
     next();
   },
   authenticateToken(),
-  requirePermission('create:schedules'),
+  requirePermission('schedules:create'),
   validateSchedule,
   async (req, res) => {
     const {
@@ -974,7 +974,7 @@ router.post('/',
   });
 
 // Update schedule
-router.put('/:id', authenticateToken(), requirePermission('update:schedules'), async (req, res) => {
+router.put('/:id', authenticateToken(), requirePermission('schedules:update'), async (req, res) => {
   const {
     courseId,
     startDate,
@@ -1198,7 +1198,7 @@ router.put('/:id', authenticateToken(), requirePermission('update:schedules'), a
 });
 
 // Soft delete schedule
-router.delete('/:id', authenticateToken(), requirePermission('delete:schedules'), async (req, res) => {
+router.delete('/:id', authenticateToken(), requirePermission('schedules:delete'), async (req, res) => {
   try {
     const { id } = req.params;
 

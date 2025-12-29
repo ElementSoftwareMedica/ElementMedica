@@ -121,7 +121,7 @@ const ENTITY_FIELDS = {
  */
 router.get('/roles', 
   authenticateToken(),
-  requirePermission(['ROLE_MANAGEMENT', 'SYSTEM_SETTINGS']),
+  requirePermission(['roles:manage', 'system:settings']),
   async (req, res) => {
     try {
       // Ottieni tutti i tipi di ruolo disponibili dall'enum RoleType
@@ -217,7 +217,7 @@ router.get('/roles',
  */
 router.get('/permissions',
   authenticateToken(),
-  requirePermission(['ROLE_MANAGEMENT', 'SYSTEM_SETTINGS']),
+  requirePermission(['roles:manage', 'system:settings']),
   async (req, res) => {
     try {
       // Permessi disponibili dall'enum PersonPermission
@@ -350,7 +350,7 @@ router.get('/permissions',
  */
 router.get('/entity-fields',
   authenticateToken(),
-  requirePermission(['users.manage_roles', 'system.settings']),
+  requirePermission(['roles:manage', 'system:settings']),
   async (req, res) => {
     try {
       res.json({
@@ -380,7 +380,7 @@ router.get('/entity-fields',
  */
 router.post('/roles/:roleType/permissions',
   authenticateToken(),
-  requirePermission(['ROLE_MANAGEMENT', 'USER_MANAGEMENT']),
+  requirePermission(['roles:manage', 'users:manage']),
   [
     body('personId').notEmpty().withMessage('ID persona richiesto'),
     body('permissions').isArray().withMessage('Permessi devono essere un array'),
@@ -482,7 +482,7 @@ router.post('/roles/:roleType/permissions',
  */
 router.put('/users/:personId/role',
   authenticateToken(),
-  requirePermission(['ROLE_MANAGEMENT', 'USER_MANAGEMENT']),
+  requirePermission(['roles:manage', 'users:manage']),
   [
     body('roleType').notEmpty().withMessage('Tipo ruolo richiesto'),
     body('permissions').optional().isArray().withMessage('Permessi devono essere un array'),
@@ -585,7 +585,7 @@ router.put('/users/:personId/role',
  */
 router.delete('/users/:personId/role/:roleId',
   authenticateToken(),
-  requirePermission(['ROLE_MANAGEMENT', 'USER_MANAGEMENT']),
+  requirePermission(['roles:manage', 'users:manage']),
   async (req, res) => {
     try {
       const { personId, roleId } = req.params;
@@ -646,7 +646,7 @@ router.delete('/users/:personId/role/:roleId',
  */
 router.get('/users',
   authenticateToken(),
-  requirePermission(['USER_MANAGEMENT', 'ROLE_MANAGEMENT']),
+  requirePermission(['users:manage', 'roles:manage']),
   async (req, res) => {
     try {
       const users = await prisma.person.findMany({

@@ -14,7 +14,7 @@ const prisma = new PrismaClient();
 const { authenticate: authenticateToken, authorize: requirePermission } = middleware;
 
 // GET /api/documents/statistics - Aggregate statistics (BEFORE /:id route)
-router.get('/statistics', authenticateToken(), requirePermission('read:documents'), async (req, res) => {
+router.get('/statistics', authenticateToken(), requirePermission('documents:read'), async (req, res) => {
   try {
     const tenantId = req.person.tenantId;
 
@@ -38,7 +38,7 @@ router.get('/statistics', authenticateToken(), requirePermission('read:documents
 });
 
 // GET /api/documents - List generated documents
-router.get('/', authenticateToken(), requirePermission('read:documents'), async (req, res) => {
+router.get('/', authenticateToken(), requirePermission('documents:read'), async (req, res) => {
   try {
     const {
       templateId,
@@ -119,7 +119,7 @@ router.get('/', authenticateToken(), requirePermission('read:documents'), async 
 });
 
 // GET /api/documents/:id - Get single document metadata
-router.get('/:id', authenticateToken(), requirePermission('read:documents'), async (req, res) => {
+router.get('/:id', authenticateToken(), requirePermission('documents:read'), async (req, res) => {
   try {
     const { id } = req.params;
     const tenantId = req.person.tenantId;
@@ -161,7 +161,7 @@ router.get('/:id', authenticateToken(), requirePermission('read:documents'), asy
 });
 
 // GET /api/documents/:id/download - Download document file
-router.get('/:id/download', authenticateToken(), requirePermission('read:documents'), async (req, res) => {
+router.get('/:id/download', authenticateToken(), requirePermission('documents:read'), async (req, res) => {
   try {
     const { id } = req.params;
     const tenantId = req.person.tenantId;
@@ -225,7 +225,7 @@ router.get('/:id/download', authenticateToken(), requirePermission('read:documen
 });
 
 // GET /api/documents/batch/:batchId/status - Get batch generation status
-router.get('/batch/:batchId/status', authenticateToken(), requirePermission('read:documents'), async (req, res) => {
+router.get('/batch/:batchId/status', authenticateToken(), requirePermission('documents:read'), async (req, res) => {
   try {
     const { batchId } = req.params;
     const tenantId = req.person.tenantId;
@@ -258,7 +258,7 @@ router.get('/batch/:batchId/status', authenticateToken(), requirePermission('rea
 });
 
 // DELETE /api/documents/:id - Soft delete document
-router.delete('/:id', authenticateToken(), requirePermission('delete:documents'), async (req, res) => {
+router.delete('/:id', authenticateToken(), requirePermission('documents:delete'), async (req, res) => {
   try {
     const { id } = req.params;
     const tenantId = req.person.tenantId;
@@ -306,7 +306,7 @@ router.delete('/:id', authenticateToken(), requirePermission('delete:documents')
 });
 
 // POST /api/documents/:id/resend - Resend document via email
-router.post('/:id/resend', authenticateToken(), requirePermission('send:documents'), async (req, res) => {
+router.post('/:id/resend', authenticateToken(), requirePermission('documents:send'), async (req, res) => {
   try {
     const { id } = req.params;
     const { email, subject, message } = req.body;

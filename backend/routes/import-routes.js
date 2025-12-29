@@ -138,7 +138,7 @@ router.post('/companies',
  */
 router.post('/companies/:companyId/sites',
   authenticateToken(),
-  requirePermission('companies:manage_sites'),
+  requirePermission('companies:manage'),
   auditLog('CREATE_COMPANY_SITE'),
   async (req, res) => {
     try {
@@ -301,7 +301,7 @@ router.post('/employees',
  */
 router.post('/employees/bulk-assign',
   authenticateToken(),
-  requirePermission('persons:assign_companies'),
+  requirePermission('companies:manage'),
   auditLog('BULK_ASSIGN_EMPLOYEES'),
   async (req, res) => {
     try {

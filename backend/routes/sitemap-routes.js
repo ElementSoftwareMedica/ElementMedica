@@ -81,7 +81,7 @@ router.get('/robots.txt', async (req, res) => {
  */
 router.post('/api/v1/sitemap/regenerate',
   authenticate,
-  requirePermissions('GENERATE_SITEMAP'),
+  requirePermissions('sitemap:generate'),
   auditLog('REGENERATE_SITEMAP'),
   async (req, res) => {
     try {
@@ -112,7 +112,7 @@ router.post('/api/v1/sitemap/regenerate',
  */
 router.post('/api/v1/sitemap/regenerate/pages',
   authenticate,
-  requirePermissions('GENERATE_SITEMAP'),
+  requirePermissions('sitemap:generate'),
   auditLog('REGENERATE_SITEMAP_PAGES'),
   async (req, res) => {
     try {
@@ -145,7 +145,7 @@ router.post('/api/v1/sitemap/regenerate/pages',
  */
 router.post('/api/v1/sitemap/regenerate/courses',
   authenticate,
-  requirePermissions('GENERATE_SITEMAP'),
+  requirePermissions('sitemap:generate'),
   auditLog('REGENERATE_SITEMAP_COURSES'),
   async (req, res) => {
     try {
@@ -178,7 +178,7 @@ router.post('/api/v1/sitemap/regenerate/courses',
  */
 router.get('/api/v1/sitemap/stats',
   authenticate,
-  requirePermissions('VIEW_SEO'),
+  requirePermissions('seo:read'),
   async (req, res) => {
     try {
       const tenantId = req.user.tenantId;
@@ -205,7 +205,7 @@ router.get('/api/v1/sitemap/stats',
  */
 router.delete('/api/v1/sitemap/:entityType/:entityId',
   authenticate,
-  requirePermissions('MANAGE_SEO'),
+  requirePermissions('seo:manage'),
   auditLog('DELETE_SITEMAP_ENTRY'),
   [
     param('entityType').isIn(['page', 'course']),

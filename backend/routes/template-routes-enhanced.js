@@ -27,7 +27,7 @@ const getAuthUser = (req) => ({
  * List all templates with filters
  * Query params: type, category, isActive, search, page, limit
  */
-router.get('/', authenticateToken(), requirePermission('read:templates'), async (req, res) => {
+router.get('/', authenticateToken(), requirePermission('templates:read'), async (req, res) => {
   try {
     const { tenantId, userId } = getAuthUser(req);
     const {
@@ -116,7 +116,7 @@ router.get('/', authenticateToken(), requirePermission('read:templates'), async 
  * GET /api/templates/:id
  * Get single template with full details and version history
  */
-router.get('/:id', authenticateToken(), requirePermission('read:templates'), async (req, res) => {
+router.get('/:id', authenticateToken(), requirePermission('templates:read'), async (req, res) => {
   try {
     const { tenantId } = getAuthUser(req);
     const { id } = req.params;
@@ -193,7 +193,7 @@ router.get('/:id', authenticateToken(), requirePermission('read:templates'), asy
  * POST /api/templates
  * Create new template (auto-creates version 1)
  */
-router.post('/', authenticateToken(), requirePermission('read:templates'), requirePermission('templates:write'), async (req, res) => {
+router.post('/', authenticateToken(), requirePermission('templates:read'), requirePermission('templates:update'), async (req, res) => {
   try {
     const { tenantId, userId } = getAuthUser(req);
     const {
@@ -297,7 +297,7 @@ router.post('/', authenticateToken(), requirePermission('read:templates'), requi
  * PUT /api/templates/:id
  * Update template (auto-increments version)
  */
-router.put('/:id', authenticateToken(), requirePermission('read:templates'), requirePermission('templates:write'), async (req, res) => {
+router.put('/:id', authenticateToken(), requirePermission('templates:read'), requirePermission('templates:update'), async (req, res) => {
   try {
     const { tenantId, userId } = getAuthUser(req);
     const { id } = req.params;
@@ -439,7 +439,7 @@ router.put('/:id', authenticateToken(), requirePermission('read:templates'), req
  * DELETE /api/templates/:id
  * Soft delete template
  */
-router.delete('/:id', authenticateToken(), requirePermission('read:templates'), requirePermission('templates:delete'), async (req, res) => {
+router.delete('/:id', authenticateToken(), requirePermission('templates:read'), requirePermission('templates:delete'), async (req, res) => {
   try {
     const { tenantId } = getAuthUser(req);
     const { id } = req.params;
@@ -490,7 +490,7 @@ router.delete('/:id', authenticateToken(), requirePermission('read:templates'), 
  * POST /api/templates/:id/duplicate
  * Duplicate template with new name
  */
-router.post('/:id/duplicate', authenticateToken(), requirePermission('read:templates'), requirePermission('templates:write'), async (req, res) => {
+router.post('/:id/duplicate', authenticateToken(), requirePermission('templates:read'), requirePermission('templates:update'), async (req, res) => {
   try {
     const { tenantId, userId } = getAuthUser(req);
     const { id } = req.params;
@@ -590,7 +590,7 @@ router.post('/:id/duplicate', authenticateToken(), requirePermission('read:templ
  * GET /api/templates/:id/versions
  * Get all versions of a template
  */
-router.get('/:id/versions', authenticateToken(), requirePermission('read:templates'), async (req, res) => {
+router.get('/:id/versions', authenticateToken(), requirePermission('templates:read'), async (req, res) => {
   try {
     const { tenantId } = getAuthUser(req);
     const { id } = req.params;
@@ -630,7 +630,7 @@ router.get('/:id/versions', authenticateToken(), requirePermission('read:templat
  * POST /api/templates/:id/restore-version
  * Restore a specific version (creates new version with old content)
  */
-router.post('/:id/restore-version', authenticateToken(), requirePermission('read:templates'), requirePermission('templates:write'), async (req, res) => {
+router.post('/:id/restore-version', authenticateToken(), requirePermission('templates:read'), requirePermission('templates:update'), async (req, res) => {
   try {
     const { tenantId, userId } = getAuthUser(req);
     const { id } = req.params;

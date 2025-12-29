@@ -118,7 +118,7 @@ router.get('/:id', requirePermission('tariffari:read'), async (req, res) => {
  * POST /api/v1/tariffari-aziendali
  * Crea nuovo tariffario
  */
-router.post('/', requirePermission('tariffari:write'), async (req, res) => {
+router.post('/', requirePermission('tariffari:update'), async (req, res) => {
     try {
         const tariffario = await TariffarioAziendaleService.create(
             req.body,
@@ -142,7 +142,7 @@ router.post('/', requirePermission('tariffari:write'), async (req, res) => {
  * PUT /api/v1/tariffari-aziendali/:id
  * Aggiorna tariffario
  */
-router.put('/:id', requirePermission('tariffari:write'), async (req, res) => {
+router.put('/:id', requirePermission('tariffari:update'), async (req, res) => {
     try {
         const tariffario = await TariffarioAziendaleService.update(
             req.params.id,
@@ -166,7 +166,7 @@ router.put('/:id', requirePermission('tariffari:write'), async (req, res) => {
  * DELETE /api/v1/tariffari-aziendali/:id
  * Elimina tariffario (soft delete)
  */
-router.delete('/:id', requirePermission('tariffari:write'), async (req, res) => {
+router.delete('/:id', requirePermission('tariffari:update'), async (req, res) => {
     try {
         await TariffarioAziendaleService.delete(req.params.id, req.user.tenantId);
         res.json({
@@ -186,7 +186,7 @@ router.delete('/:id', requirePermission('tariffari:write'), async (req, res) => 
  * POST /api/v1/tariffari-aziendali/:id/clone
  * Clona un tariffario per un'azienda
  */
-router.post('/:id/clone', requirePermission('tariffari:write'), async (req, res) => {
+router.post('/:id/clone', requirePermission('tariffari:update'), async (req, res) => {
     try {
         const clone = await TariffarioAziendaleService.clone(
             req.params.id,
@@ -215,7 +215,7 @@ router.post('/:id/clone', requirePermission('tariffari:write'), async (req, res)
  * POST /api/v1/tariffari-aziendali/:id/voci
  * Aggiunge una voce al tariffario
  */
-router.post('/:id/voci', requirePermission('tariffari:write'), async (req, res) => {
+router.post('/:id/voci', requirePermission('tariffari:update'), async (req, res) => {
     try {
         const voce = await TariffarioAziendaleService.addVoce(
             req.params.id,
@@ -239,7 +239,7 @@ router.post('/:id/voci', requirePermission('tariffari:write'), async (req, res) 
  * PUT /api/v1/tariffari-aziendali/:id/voci/:voceId
  * Aggiorna una voce del tariffario
  */
-router.put('/:id/voci/:voceId', requirePermission('tariffari:write'), async (req, res) => {
+router.put('/:id/voci/:voceId', requirePermission('tariffari:update'), async (req, res) => {
     try {
         const voce = await TariffarioAziendaleService.updateVoce(
             req.params.voceId,
@@ -263,7 +263,7 @@ router.put('/:id/voci/:voceId', requirePermission('tariffari:write'), async (req
  * DELETE /api/v1/tariffari-aziendali/:id/voci/:voceId
  * Elimina una voce del tariffario
  */
-router.delete('/:id/voci/:voceId', requirePermission('tariffari:write'), async (req, res) => {
+router.delete('/:id/voci/:voceId', requirePermission('tariffari:update'), async (req, res) => {
     try {
         await TariffarioAziendaleService.deleteVoce(req.params.voceId, req.user.tenantId);
         res.json({
@@ -287,7 +287,7 @@ router.delete('/:id/voci/:voceId', requirePermission('tariffari:write'), async (
  * POST /api/v1/voci-tariffario/:voceId/fasce
  * Aggiunge una fascia dipendenti a una voce
  */
-router.post('/voci/:voceId/fasce', requirePermission('tariffari:write'), async (req, res) => {
+router.post('/voci/:voceId/fasce', requirePermission('tariffari:update'), async (req, res) => {
     try {
         const fascia = await TariffarioAziendaleService.addFascia(
             req.params.voceId,
@@ -311,7 +311,7 @@ router.post('/voci/:voceId/fasce', requirePermission('tariffari:write'), async (
  * PUT /api/v1/voci-tariffario/:voceId/fasce/:fasciaId
  * Aggiorna una fascia dipendenti
  */
-router.put('/voci/:voceId/fasce/:fasciaId', requirePermission('tariffari:write'), async (req, res) => {
+router.put('/voci/:voceId/fasce/:fasciaId', requirePermission('tariffari:update'), async (req, res) => {
     try {
         const fascia = await TariffarioAziendaleService.updateFascia(
             req.params.fasciaId,
@@ -335,7 +335,7 @@ router.put('/voci/:voceId/fasce/:fasciaId', requirePermission('tariffari:write')
  * DELETE /api/v1/voci-tariffario/:voceId/fasce/:fasciaId
  * Elimina una fascia dipendenti
  */
-router.delete('/voci/:voceId/fasce/:fasciaId', requirePermission('tariffari:write'), async (req, res) => {
+router.delete('/voci/:voceId/fasce/:fasciaId', requirePermission('tariffari:update'), async (req, res) => {
     try {
         await TariffarioAziendaleService.deleteFascia(req.params.fasciaId, req.user.tenantId);
         res.json({

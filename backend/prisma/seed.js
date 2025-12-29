@@ -10,93 +10,15 @@
  * I template (CMS, Form, Document) vengono importati da backup separatamente.
  * 
  * @module prisma/seed
- * @version 2.0.0 - Simplified
+ * @version 3.0.0 - E2E Migration (formato permessi resource:action)
  */
 
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { PrismaClient } from '@prisma/client';
+import { ALL_PERMISSIONS } from '../constants/permissions.js';
 
 const prisma = new PrismaClient();
-
-// ============================================
-// CONSTANTS
-// ============================================
-
-/**
- * Lista completa di tutti i permessi disponibili nel sistema
- * Formato: ACTION_RESOURCE (es. CREATE_USERS, VIEW_COMPANIES)
- */
-const ALL_PERMISSIONS = [
-  // Admin & System
-  'ADMIN_PANEL', 'SYSTEM_SETTINGS', 'TENANT_MANAGEMENT', 'USER_MANAGEMENT',
-  
-  // Roles & Permissions
-  'ASSIGN_ROLES', 'REVOKE_ROLES', 'ROLE_CREATE', 'ROLE_DELETE', 'ROLE_EDIT', 'ROLE_MANAGEMENT',
-  'VIEW_ROLES', 'CREATE_ROLES', 'EDIT_ROLES', 'DELETE_ROLES',
-  
-  // Users & Persons
-  'VIEW_USERS', 'CREATE_USERS', 'EDIT_USERS', 'DELETE_USERS', 'MANAGE_USERS',
-  'VIEW_PERSONS', 'CREATE_PERSONS', 'EDIT_PERSONS', 'DELETE_PERSONS',
-  'VIEW_EMPLOYEES', 'CREATE_EMPLOYEES', 'EDIT_EMPLOYEES', 'DELETE_EMPLOYEES',
-  'VIEW_TRAINERS', 'CREATE_TRAINERS', 'EDIT_TRAINERS', 'DELETE_TRAINERS',
-  
-  // Companies
-  'VIEW_COMPANIES', 'CREATE_COMPANIES', 'EDIT_COMPANIES', 'DELETE_COMPANIES',
-  
-  // Courses & Schedules
-  'VIEW_COURSES', 'CREATE_COURSES', 'EDIT_COURSES', 'DELETE_COURSES',
-  'VIEW_SCHEDULES', 'CREATE_SCHEDULES', 'EDIT_SCHEDULES', 'DELETE_SCHEDULES',
-  'MANAGE_ENROLLMENTS',
-  
-  // Documents
-  'VIEW_DOCUMENTS', 'CREATE_DOCUMENTS', 'EDIT_DOCUMENTS', 'DELETE_DOCUMENTS', 'DOWNLOAD_DOCUMENTS',
-  
-  // Templates
-  'VIEW_TEMPLATES', 'CREATE_TEMPLATES', 'EDIT_TEMPLATES', 'DELETE_TEMPLATES', 'MANAGE_TEMPLATES',
-  
-  // CMS
-  'VIEW_CMS', 'CREATE_CMS', 'EDIT_CMS', 'DELETE_CMS',
-  'VIEW_CMS_PAGES', 'CREATE_CMS_PAGES', 'EDIT_CMS_PAGES', 'DELETE_CMS_PAGES', 'PUBLISH_CMS_PAGES',
-  'VIEW_CMS_MEDIA', 'CREATE_CMS_MEDIA', 'EDIT_CMS_MEDIA', 'DELETE_CMS_MEDIA', 'MANAGE_CMS_MEDIA',
-  'VIEW_CMS_NAVIGATION', 'EDIT_CMS_NAVIGATION', 'MANAGE_CMS_NAVIGATION',
-  'VIEW_CMS_VERSIONS', 'RESTORE_CMS_VERSIONS',
-  'VIEW_PUBLIC_CMS', 'CREATE_PUBLIC_CMS', 'EDIT_PUBLIC_CMS', 'DELETE_PUBLIC_CMS', 'MANAGE_PUBLIC_CMS',
-  
-  // Forms & Submissions
-  'VIEW_FORM_TEMPLATES', 'CREATE_FORM_TEMPLATES', 'EDIT_FORM_TEMPLATES', 'DELETE_FORM_TEMPLATES', 'MANAGE_FORM_TEMPLATES',
-  'VIEW_FORM_SUBMISSIONS', 'CREATE_FORM_SUBMISSIONS', 'EDIT_FORM_SUBMISSIONS', 'DELETE_FORM_SUBMISSIONS', 'MANAGE_FORM_SUBMISSIONS', 'EXPORT_FORM_SUBMISSIONS',
-  'VIEW_SUBMISSIONS', 'CREATE_SUBMISSIONS', 'EDIT_SUBMISSIONS', 'DELETE_SUBMISSIONS', 'MANAGE_SUBMISSIONS', 'EXPORT_SUBMISSIONS',
-  
-  // Preventivi & Invoices
-  'VIEW_PREVENTIVI', 'CREATE_PREVENTIVI', 'EDIT_PREVENTIVI', 'DELETE_PREVENTIVI', 'MANAGE_PREVENTIVI', 'SEND_PREVENTIVI', 'GENERATE_PREVENTIVI_PDF',
-  'VIEW_INVOICES', 'CREATE_INVOICES', 'EDIT_INVOICES', 'DELETE_INVOICES',
-  'VIEW_QUOTES', 'CREATE_QUOTES', 'EDIT_QUOTES', 'DELETE_QUOTES',
-  'VIEW_CODICI_SCONTO', 'CREATE_CODICI_SCONTO', 'EDIT_CODICI_SCONTO', 'DELETE_CODICI_SCONTO', 'MANAGE_CODICI_SCONTO',
-  
-  // GDPR & Audit
-  'VIEW_GDPR', 'CREATE_GDPR', 'EDIT_GDPR', 'DELETE_GDPR',
-  'VIEW_GDPR_DATA', 'EXPORT_GDPR_DATA', 'DELETE_GDPR_DATA', 'MANAGE_CONSENTS',
-  'VIEW_AUDIT_LOGS', 'CREATE_AUDIT_LOGS', 'EDIT_AUDIT_LOGS', 'DELETE_AUDIT_LOGS', 'EXPORT_AUDIT_LOGS', 'MANAGE_AUDIT_LOGS',
-  
-  // Reports & Analytics
-  'VIEW_REPORTS', 'CREATE_REPORTS', 'EDIT_REPORTS', 'DELETE_REPORTS', 'EXPORT_REPORTS',
-  
-  // Notifications
-  'VIEW_NOTIFICATIONS', 'CREATE_NOTIFICATIONS', 'EDIT_NOTIFICATIONS', 'DELETE_NOTIFICATIONS', 'MANAGE_NOTIFICATIONS', 'SEND_NOTIFICATIONS',
-  
-  // API & SEO
-  'VIEW_API_KEYS', 'CREATE_API_KEYS', 'EDIT_API_KEYS', 'DELETE_API_KEYS', 'MANAGE_API_KEYS', 'REGENERATE_API_KEYS',
-  'VIEW_SEO', 'CREATE_SEO', 'EDIT_SEO', 'DELETE_SEO', 'MANAGE_SEO', 'GENERATE_SITEMAP',
-  
-  // Hierarchy & Administration
-  'VIEW_HIERARCHY', 'CREATE_HIERARCHY', 'EDIT_HIERARCHY', 'DELETE_HIERARCHY', 'MANAGE_HIERARCHY', 'HIERARCHY_MANAGEMENT',
-  'VIEW_ADMINISTRATION', 'CREATE_ADMINISTRATION', 'EDIT_ADMINISTRATION', 'DELETE_ADMINISTRATION',
-  'VIEW_TENANTS', 'CREATE_TENANTS', 'EDIT_TENANTS', 'DELETE_TENANTS',
-  
-  // Public Content
-  'READ_PUBLIC_CONTENT', 'MANAGE_PUBLIC_CONTENT'
-];
 
 // ============================================
 // SEED FUNCTIONS
@@ -236,6 +158,7 @@ async function seedAdminPermissions(adminUser) {
 
   let added = 0;
   let existing = 0;
+  let errors = 0;
 
   for (const permission of ALL_PERMISSIONS) {
     try {
@@ -269,11 +192,18 @@ async function seedAdminPermissions(adminUser) {
         existing++;
       }
     } catch (error) {
-      // Ignora errori di duplicati
+      errors++;
+      if (errors <= 5) {
+        console.log(`  ⚠️ Error for ${permission}: ${error.message}`);
+      }
     }
   }
 
-  console.log(`  ✅ Permissions: ${added} added, ${existing} existing (total: ${ALL_PERMISSIONS.length})`);
+  if (errors > 5) {
+    console.log(`  ⚠️ ... and ${errors - 5} more errors`);
+  }
+
+  console.log(`  ✅ Permissions: ${added} added, ${existing} existing, ${errors} errors (total: ${ALL_PERMISSIONS.length})`);
 }
 
 /**

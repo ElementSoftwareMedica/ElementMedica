@@ -20,7 +20,7 @@ router.use(tenantMiddleware);
  */
 router.get('/entities',
   authenticate(),
-  enhancedRoleService.requirePermission('ROLE_MANAGEMENT'), // Re-enabled (Phase 1 Security)
+  enhancedRoleService.requirePermission('roles:manage'), // Re-enabled (Phase 1 Security)
   async (req, res) => {
     try {
       const entities = [
@@ -660,7 +660,7 @@ router.get('/entities',
  * @access Admin
  */
 router.get('/resources',
-  enhancedRoleService.requirePermission('roles.read'),
+  enhancedRoleService.requirePermission('roles:read'),
   async (req, res) => {
     try {
       const resources = {
@@ -725,7 +725,7 @@ router.get('/resources',
  */
 router.get('/scopes',
   authenticate(),
-  enhancedRoleService.requirePermission('roles.read'),
+  enhancedRoleService.requirePermission('roles:read'),
   async (req, res) => {
     try {
       const scopes = {
@@ -772,7 +772,7 @@ router.get('/scopes',
  */
 router.get('/conditions',
   authenticate(),
-  enhancedRoleService.requirePermission('roles.read'),
+  enhancedRoleService.requirePermission('roles:read'),
   async (req, res) => {
     try {
       const conditions = {
@@ -819,7 +819,7 @@ router.get('/conditions',
  */
 router.post('/validate',
   authenticate(),
-  enhancedRoleService.requirePermission('roles.manage'),
+  enhancedRoleService.requirePermission('roles:manage'),
   async (req, res) => {
     try {
       const { resource, action, scope, allowedFields, conditions } = req.body;
@@ -898,7 +898,7 @@ router.get('/health', (req, res) => {
  */
 router.get('/test',
   authenticate(),
-  enhancedRoleService.requirePermission('roles.read'),
+  enhancedRoleService.requirePermission('roles:read'),
   async (req, res) => {
     try {
       logger.info('[ADVANCED_PERMISSIONS] Test endpoint called successfully');
@@ -929,7 +929,7 @@ router.get('/test',
  */
 router.get('/roles/:roleId',
   authenticate(),
-  enhancedRoleService.requirePermission('roles.read'),
+  enhancedRoleService.requirePermission('roles:read'),
   async (req, res) => {
     try {
       const { roleId } = req.params;
@@ -1100,7 +1100,7 @@ router.get('/roles/:roleId',
  */
 router.get('/preview',
   authenticate(),
-  enhancedRoleService.requirePermission('roles.read'),
+  enhancedRoleService.requirePermission('roles:read'),
   async (req, res) => {
     try {
       const { resource, action, scope, allowedFields, conditions, roleType } = req.query;

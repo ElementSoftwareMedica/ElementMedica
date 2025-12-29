@@ -40,7 +40,7 @@ const getAuthUser = (req) => ({
  * GET /api/v1/google/auth/url
  * Generate Google OAuth2 authorization URL
  */
-router.get('/auth/url', authenticateToken(), requirePermission('MANAGE_TEMPLATES'), async (req, res) => {
+router.get('/auth/url', authenticateToken(), requirePermission('templates:manage'), async (req, res) => {
   try {
     const { userId, tenantId } = getAuthUser(req);
 
@@ -94,7 +94,7 @@ router.get('/auth/url', authenticateToken(), requirePermission('MANAGE_TEMPLATES
  * POST /api/v1/google/auth/callback
  * Handle OAuth2 callback and exchange code for tokens
  */
-router.post('/auth/callback', authenticateToken(), requirePermission('MANAGE_TEMPLATES'), async (req, res) => {
+router.post('/auth/callback', authenticateToken(), requirePermission('templates:manage'), async (req, res) => {
   try {
     const { userId, tenantId } = getAuthUser(req);
     const { code, state } = req.body;
@@ -173,7 +173,7 @@ router.post('/auth/callback', authenticateToken(), requirePermission('MANAGE_TEM
  * GET /api/v1/google/status
  * Get current Google connection status
  */
-router.get('/status', authenticateToken(), requirePermission('VIEW_TEMPLATES'), async (req, res) => {
+router.get('/status', authenticateToken(), requirePermission('templates:read'), async (req, res) => {
   try {
     const { userId, tenantId } = getAuthUser(req);
 
@@ -210,7 +210,7 @@ router.get('/status', authenticateToken(), requirePermission('VIEW_TEMPLATES'), 
  * DELETE /api/v1/google/disconnect
  * Disconnect Google account and revoke tokens
  */
-router.delete('/disconnect', authenticateToken(), requirePermission('MANAGE_TEMPLATES'), async (req, res) => {
+router.delete('/disconnect', authenticateToken(), requirePermission('templates:manage'), async (req, res) => {
   try {
     const { userId, tenantId } = getAuthUser(req);
 
@@ -249,7 +249,7 @@ router.delete('/disconnect', authenticateToken(), requirePermission('MANAGE_TEMP
  * POST /api/v1/google/import-docs
  * Import Google Docs document and convert to template data
  */
-router.post('/import-docs', authenticateToken(), requirePermission('CREATE_TEMPLATES'), async (req, res) => {
+router.post('/import-docs', authenticateToken(), requirePermission('templates:create'), async (req, res) => {
   try {
     const { userId, tenantId } = getAuthUser(req);
     const { documentId, convertToHtml = true } = req.body;
@@ -339,7 +339,7 @@ router.post('/import-docs', authenticateToken(), requirePermission('CREATE_TEMPL
  * POST /api/v1/google/import-slides
  * Import Google Slides presentation and convert to template data
  */
-router.post('/import-slides', authenticateToken(), requirePermission('CREATE_TEMPLATES'), async (req, res) => {
+router.post('/import-slides', authenticateToken(), requirePermission('templates:create'), async (req, res) => {
   try {
     const { userId, tenantId } = getAuthUser(req);
     const { presentationId, convertToHtml = true } = req.body;
@@ -429,7 +429,7 @@ router.post('/import-slides', authenticateToken(), requirePermission('CREATE_TEM
  * POST /api/v1/google/generate
  * Generate document from template with placeholder replacement
  */
-router.post('/generate', authenticateToken(), requirePermission('CREATE_TEMPLATES'), async (req, res) => {
+router.post('/generate', authenticateToken(), requirePermission('templates:create'), async (req, res) => {
   try {
     const { userId, tenantId } = getAuthUser(req);
     const { templateId, type, data } = req.body;

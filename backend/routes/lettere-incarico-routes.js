@@ -22,7 +22,7 @@ const { authenticate: authenticateToken, authorize: requirePermission } = middle
  * GET /api/v1/lettere-incarico
  * Get all letters of engagement
  */
-router.get('/', authenticateToken(), requirePermission('read:documents'), async (req, res) => {
+router.get('/', authenticateToken(), requirePermission('documents:read'), async (req, res) => {
   try {
     const { scheduleId, trainerId } = req.query;
     const tenantId = req.user.tenantId;
@@ -76,7 +76,7 @@ router.get('/', authenticateToken(), requirePermission('read:documents'), async 
  */
 router.post('/generate',
   authenticateToken(),
-  requirePermission('create:documents'),
+  requirePermission('documents:create'),
   [
     body('scheduleId').notEmpty().withMessage('Schedule ID is required'),
     body('trainerId').notEmpty().withMessage('Trainer ID is required'),
@@ -505,7 +505,7 @@ router.post('/generate',
  */
 router.post('/generate-batch',
   authenticateToken(),
-  requirePermission('create:documents'),
+  requirePermission('documents:create'),
   [
     body('scheduleId').notEmpty().withMessage('Schedule ID is required'),
     body('trainerIds').isArray({ min: 1 }).withMessage('At least one trainer ID is required'),
@@ -601,7 +601,7 @@ router.post('/generate-batch',
  * DELETE /api/v1/lettere-incarico/:id
  * Delete letter (soft delete)
  */
-router.delete('/:id', authenticateToken(), requirePermission('delete:documents'), async (req, res) => {
+router.delete('/:id', authenticateToken(), requirePermission('documents:delete'), async (req, res) => {
   try {
     const { id } = req.params;
     const tenantId = req.user.tenantId;
@@ -642,7 +642,7 @@ router.delete('/:id', authenticateToken(), requirePermission('delete:documents')
  * GET /api/v1/lettere-incarico/:id/download
  * Download letter PDF
  */
-router.get('/:id/download', authenticateToken(), requirePermission('read:documents'), async (req, res) => {
+router.get('/:id/download', authenticateToken(), requirePermission('documents:read'), async (req, res) => {
   try {
     const { id } = req.params;
     const tenantId = req.user.tenantId;
@@ -674,7 +674,7 @@ router.get('/:id/download', authenticateToken(), requirePermission('read:documen
  */
 router.get('/schedule/:scheduleId/download-zip',
   authenticateToken(),
-  requirePermission('read:documents'),
+  requirePermission('documents:read'),
   async (req, res) => {
     try {
       const { scheduleId } = req.params;
@@ -774,7 +774,7 @@ router.get('/schedule/:scheduleId/download-zip',
  * GET /api/v1/lettere-incarico/:id
  * Get single letter of engagement
  */
-router.get('/:id', authenticateToken(), requirePermission('read:documents'), async (req, res) => {
+router.get('/:id', authenticateToken(), requirePermission('documents:read'), async (req, res) => {
   try {
     const { id } = req.params;
     const tenantId = req.user.tenantId;

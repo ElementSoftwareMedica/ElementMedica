@@ -79,7 +79,7 @@ function translateCourseType(type) {
  * GET /api/v1/attestati
  * Get all certificates with optional filters
  */
-router.get('/', authenticateToken(), requirePermission('read:documents'), async (req, res) => {
+router.get('/', authenticateToken(), requirePermission('documents:read'), async (req, res) => {
   try {
     const { scheduleId, year } = req.query;
     let personId = req.query.personId;
@@ -204,7 +204,7 @@ router.get('/', authenticateToken(), requirePermission('read:documents'), async 
 router.post(
   '/generate',
   authenticateToken(),
-  requirePermission('create:documents'),
+  requirePermission('documents:create'),
   [
     body('scheduleId').isUUID().withMessage('Valid schedule ID required'),
     body('personId').isUUID().withMessage('Valid person ID required'),
@@ -592,7 +592,7 @@ router.post(
 router.post(
   '/generate-batch',
   authenticateToken(),
-  requirePermission('create:documents'),
+  requirePermission('documents:create'),
   [
     body('scheduleId').isUUID().withMessage('Valid schedule ID required'),
     body('personIds').isArray({ min: 1 }).withMessage('At least one person ID required'),
@@ -1260,7 +1260,7 @@ router.post(
  * Soft delete multiple certificates
  * ⚠️ IMPORTANTE: Deve essere PRIMA di /:id per non essere catturato come parametro
  */
-router.post('/delete-batch', authenticateToken(), requirePermission('delete:documents'), async (req, res) => {
+router.post('/delete-batch', authenticateToken(), requirePermission('documents:delete'), async (req, res) => {
   try {
     const { ids } = req.body;
     const tenantId = req.user.tenantId;
@@ -1318,7 +1318,7 @@ router.post('/delete-batch', authenticateToken(), requirePermission('delete:docu
  * Download certificate PDF
  * ⚠️ IMPORTANTE: Deve essere PRIMA di /:id per non essere catturato come parametro
  */
-router.get('/:id/download', authenticateToken(), requirePermission('read:documents'), async (req, res) => {
+router.get('/:id/download', authenticateToken(), requirePermission('documents:read'), async (req, res) => {
   try {
     const { id } = req.params;
     const tenantId = req.user.tenantId;
@@ -1485,7 +1485,7 @@ router.get('/:id/download', authenticateToken(), requirePermission('read:documen
  * ⚠️ IMPORTANTE: Questa route è posizionata DOPO tutte le route specifiche
  * per evitare che catturi path come /generate-batch come se fossero ID
  */
-router.get('/:id', authenticateToken(), requirePermission('read:documents'), async (req, res) => {
+router.get('/:id', authenticateToken(), requirePermission('documents:read'), async (req, res) => {
   try {
     const { id } = req.params;
     const tenantId = req.user.tenantId;
@@ -1532,7 +1532,7 @@ router.get('/:id', authenticateToken(), requirePermission('read:documents'), asy
  * DELETE /api/v1/attestati/:id
  * Soft delete certificate
  */
-router.delete('/:id', authenticateToken(), requirePermission('delete:documents'), async (req, res) => {
+router.delete('/:id', authenticateToken(), requirePermission('documents:delete'), async (req, res) => {
   try {
     const { id } = req.params;
     const tenantId = req.user.tenantId;
@@ -1581,7 +1581,7 @@ router.delete('/:id', authenticateToken(), requirePermission('delete:documents')
 router.post(
   '/download-zip-batch',
   authenticateToken(),
-  requirePermission('read:documents'),
+  requirePermission('documents:read'),
   [
     body('attestatoIds').isArray({ min: 1 }).withMessage('At least one certificate ID required'),
     body('attestatoIds.*').isUUID().withMessage('All certificate IDs must be valid UUIDs')
@@ -1744,7 +1744,7 @@ router.post(
 router.post(
   '/:id/send-email',
   authenticateToken(),
-  requirePermission('create:documents'),
+  requirePermission('documents:create'),
   [
     body('recipientEmail').optional().isEmail().withMessage('Valid email required'),
     body('subject').optional().isString().withMessage('Subject must be string'),

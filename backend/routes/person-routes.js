@@ -24,7 +24,7 @@ const validatePerson = [
 // GET /api/persons/employees - Ottieni tutti i dipendenti
 router.get('/employees',
   authenticateToken(),
-  requirePermission('persons:view_employees'),
+  requirePermission('employees:read'),
   roleDataFilter,
   filterResponseFields,
   auditLog('VIEW_EMPLOYEES'),
@@ -34,7 +34,7 @@ router.get('/employees',
 // GET /api/persons/trainers - Ottieni tutti i formatori
 router.get('/trainers',
   authenticateToken(),
-  requirePermission('persons:view_trainers'),
+  requirePermission('trainers:read'),
   roleDataFilter,
   filterResponseFields,
   auditLog('VIEW_TRAINERS'),
@@ -143,7 +143,7 @@ router.post('/',
 // PUT /api/persons/:id - Aggiorna persona
 router.put('/:id',
   authenticateToken(),
-  requirePermission('persons:edit'),
+  requirePermission('persons:update'),
   validatePerson,
   auditLog('UPDATE_PERSON'),
   personController.updatePerson
@@ -160,7 +160,7 @@ router.delete('/:id',
 // POST /api/persons/:id/roles - Aggiungi ruolo a persona
 router.post('/:id/roles',
   authenticateToken(),
-  requirePermission('manage:roles'),
+  requirePermission('roles:manage'),
   body('roleType').isIn(['EMPLOYEE', 'TRAINER', 'ADMIN', 'COMPANY_ADMIN', 'MANAGER']).withMessage('Invalid role type'),
   auditLog('ADD_PERSON_ROLE'),
   personController.addRole
@@ -169,7 +169,7 @@ router.post('/:id/roles',
 // DELETE /api/persons/:id/roles/:roleType - Rimuovi ruolo da persona
 router.delete('/:id/roles/:roleType',
   authenticateToken(),
-  requirePermission('manage:roles'),
+  requirePermission('roles:manage'),
   auditLog('REMOVE_PERSON_ROLE'),
   personController.removeRole
 );
@@ -177,7 +177,7 @@ router.delete('/:id/roles/:roleType',
 // PUT /api/persons/:id/status - Attiva/disattiva persona
 router.put('/:id/status',
   authenticateToken(),
-  requirePermission('persons:edit'),
+  requirePermission('persons:update'),
   body('isActive').isBoolean().withMessage('isActive must be a boolean'),
   auditLog('UPDATE_PERSON_STATUS'),
   personController.togglePersonStatus
@@ -186,7 +186,7 @@ router.put('/:id/status',
 // POST /api/persons/:id/reset-password - Reset password persona
 router.post('/:id/reset-password',
   authenticateToken(),
-  requirePermission('persons:edit'),
+  requirePermission('persons:update'),
   auditLog('RESET_PERSON_PASSWORD'),
   personController.resetPersonPassword
 );

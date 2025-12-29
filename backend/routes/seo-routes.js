@@ -24,7 +24,7 @@ const router = express.Router();
  */
 router.get('/config/:entityType/:entityId',
   authenticate,
-  requirePermissions('VIEW_SEO'),
+  requirePermissions('seo:read'),
   [
     param('entityType').isIn(['page', 'course']).withMessage('Entity type must be page or course'),
     param('entityId').isUUID().withMessage('Invalid entity ID')
@@ -72,7 +72,7 @@ router.get('/config/:entityType/:entityId',
  */
 router.post('/config',
   authenticate,
-  requirePermissions('MANAGE_SEO'),
+  requirePermissions('seo:manage'),
   auditLog('CREATE_SEO_CONFIG'),
   [
     body('entityType').isIn(['page', 'course']).withMessage('Entity type must be page or course'),
@@ -174,7 +174,7 @@ router.post('/config',
  */
 router.delete('/config/:seoConfigId',
   authenticate,
-  requirePermissions('DELETE_SEO'),
+  requirePermissions('seo:delete'),
   auditLog('DELETE_SEO_CONFIG'),
   [
     param('seoConfigId').isUUID().withMessage('Invalid SEO config ID')
@@ -229,7 +229,7 @@ router.delete('/config/:seoConfigId',
  */
 router.post('/preview',
   authenticate,
-  requirePermissions('VIEW_SEO'),
+  requirePermissions('seo:read'),
   [
     body('title').notEmpty(),
     body('description').notEmpty()
@@ -268,7 +268,7 @@ router.post('/preview',
  */
 router.get('/structured-data/organization',
   authenticate,
-  requirePermissions('VIEW_SEO'),
+  requirePermissions('seo:read'),
   async (req, res) => {
     try {
       const tenant = await prisma.tenant.findUnique({
@@ -304,7 +304,7 @@ router.get('/structured-data/organization',
  */
 router.get('/structured-data/course/:courseId',
   authenticate,
-  requirePermissions('VIEW_SEO'),
+  requirePermissions('seo:read'),
   [
     param('courseId').isUUID()
   ],

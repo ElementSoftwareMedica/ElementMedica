@@ -13,7 +13,7 @@ const prisma = new PrismaClient();
  * @desc Get all users with their roles and permissions
  * @access Admin only
  */
-router.get('/users', authenticateToken(), requirePermission(['users.view', 'system.admin']), async (req, res) => {
+router.get('/users', authenticateToken(), requirePermission(['users:read', 'system:manage']), async (req, res) => {
   try {
     const users = await prisma.person.findMany({
       where: {tenantId: req.user.tenantId,},
@@ -64,7 +64,7 @@ router.get('/users', authenticateToken(), requirePermission(['users.view', 'syst
  * @desc Get all available permissions
  * @access Admin only
  */
-router.get('/permissions', authenticateToken(), requirePermission(['system.admin']), async (req, res) => {
+router.get('/permissions', authenticateToken(), requirePermission(['system:manage']), async (req, res) => {
   try {
     const permissions = await prisma.permission.findMany({
       select: {
@@ -111,7 +111,7 @@ router.get('/permissions', authenticateToken(), requirePermission(['system.admin
  * @desc Get all available roles with their permissions
  * @access Admin only
  */
-router.get('/roles', authenticateToken(), requirePermission(['system.admin']), async (req, res) => {
+router.get('/roles', authenticateToken(), requirePermission(['system:manage']), async (req, res) => {
   try {
     // Get all role types from enum
     const roleTypes = ['ADMIN', 'SUPER_ADMIN', 'EMPLOYEE', 'MANAGER', 'TRAINER'];
@@ -164,7 +164,7 @@ router.get('/roles', authenticateToken(), requirePermission(['system.admin']), a
  * @desc Update user permissions
  * @access Admin only
  */
-router.put('/users/:personId/permissions', authenticateToken(), requirePermission(['system.admin']), async (req, res) => {
+router.put('/users/:personId/permissions', authenticateToken(), requirePermission(['system:manage']), async (req, res) => {
   try {
     const { personId } = req.params;
     const { permissions } = req.body;
@@ -206,7 +206,7 @@ router.put('/users/:personId/permissions', authenticateToken(), requirePermissio
  * @desc Update role permissions
  * @access Admin only
  */
-router.put('/roles/:id', authenticateToken(), requirePermission(['system.admin']), async (req, res) => {
+router.put('/roles/:id', authenticateToken(), requirePermission(['system:manage']), async (req, res) => {
   try {
     const { id: roleType } = req.params;
     const { permissions } = req.body;

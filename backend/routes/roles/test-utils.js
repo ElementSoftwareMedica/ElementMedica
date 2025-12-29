@@ -65,7 +65,7 @@ router.get('/auth-test-debug', authenticate, async (req, res) => {
  */
 router.post('/cleanup',
   authenticate,
-  enhancedRoleService.requirePermission('system.maintenance'),
+  enhancedRoleService.requirePermission('system:manage'),
   async (req, res) => {
     try {
       const tenantId = req.tenant.id;

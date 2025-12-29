@@ -92,7 +92,7 @@ function getFeatureDescription(featureId) {
  */
 router.get('/',
   authMiddleware,
-  requirePermission('USER_MANAGEMENT'),
+  requirePermission('users:manage'),
   async (req, res) => {
     try {
       const { tenantId, personId, page = 1, limit = 100 } = req.query;
@@ -271,7 +271,7 @@ router.post('/switch-tenant', authMiddleware, async (req, res) => {
  */
 router.get('/persons/:personId/tenants',
   authMiddleware,
-  requirePermission('USER_MANAGEMENT'),
+  requirePermission('users:manage'),
   async (req, res) => {
     try {
       const { personId } = req.params;
@@ -322,7 +322,7 @@ router.get('/persons/:personId/tenants',
  */
 router.post('/persons/:personId/tenants',
   authMiddleware,
-  requirePermission('TENANT_MANAGEMENT'),
+  requirePermission('tenants:manage'),
   async (req, res) => {
     try {
       const { personId } = req.params;
@@ -399,7 +399,7 @@ router.post('/persons/:personId/tenants',
  */
 router.put('/persons/:personId/tenants/:tenantId',
   authMiddleware,
-  requirePermission('TENANT_MANAGEMENT'),
+  requirePermission('tenants:manage'),
   async (req, res) => {
     try {
       const { personId, tenantId } = req.params;
@@ -463,7 +463,7 @@ router.put('/persons/:personId/tenants/:tenantId',
  */
 router.delete('/persons/:personId/tenants/:tenantId',
   authMiddleware,
-  requirePermission('TENANT_MANAGEMENT'),
+  requirePermission('tenants:manage'),
   async (req, res) => {
     try {
       const { personId, tenantId } = req.params;
@@ -503,7 +503,7 @@ router.delete('/persons/:personId/tenants/:tenantId',
  */
 router.put('/persons/:personId/primary-tenant',
   authMiddleware,
-  requirePermission('TENANT_MANAGEMENT'),
+  requirePermission('tenants:manage'),
   async (req, res) => {
     try {
       const { personId } = req.params;
@@ -550,7 +550,7 @@ router.put('/persons/:personId/primary-tenant',
  */
 router.get('/tenants/:tenantId/persons',
   authMiddleware,
-  requirePermission('USER_MANAGEMENT'),
+  requirePermission('users:manage'),
   async (req, res) => {
     try {
       const { tenantId } = req.params;
@@ -597,7 +597,7 @@ router.get('/tenants/:tenantId/persons',
  */
 router.get('/:accessId',
   authMiddleware,
-  requirePermission('USER_MANAGEMENT'),
+  requirePermission('users:manage'),
   async (req, res) => {
     try {
       const { accessId } = req.params;
@@ -648,7 +648,7 @@ router.get('/:accessId',
  */
 router.put('/:accessId',
   authMiddleware,
-  requirePermission('USER_MANAGEMENT'),
+  requirePermission('users:manage'),
   async (req, res) => {
     try {
       const { accessId } = req.params;
@@ -722,7 +722,7 @@ router.put('/:accessId',
  */
 router.delete('/:accessId',
   authMiddleware,
-  requirePermission('USER_MANAGEMENT'),
+  requirePermission('users:manage'),
   async (req, res) => {
     try {
       const { accessId } = req.params;
@@ -796,7 +796,7 @@ router.delete('/:accessId',
  */
 router.post('/',
   authMiddleware,
-  requirePermission('USER_MANAGEMENT'),
+  requirePermission('users:manage'),
   async (req, res) => {
     try {
       const { personId, tenantId, accessLevel = 'READ', enabledFeatures = [] } = req.body;
@@ -902,7 +902,7 @@ router.post('/',
  */
 router.post('/migrate',
   authMiddleware,
-  requirePermission('SYSTEM_SETTINGS'),
+  requirePermission('system:settings'),
   async (req, res) => {
     try {
       const result = await personTenantAccessService.migrateExistingUsers(req.person.id);

@@ -50,7 +50,7 @@ router.get('/:id',
  * Body: { formTemplateId, courseId?, riskLevel?, courseType?, testType, isRequired, order, passingScore, timeLimit }
  */
 router.post('/',
-    requirePermissions(['courses:write']),
+    requirePermissions(['courses:update']),
     courseTestsController.createCourseTestAssignment
 );
 
@@ -59,7 +59,7 @@ router.post('/',
  * Aggiorna un'associazione test-corso
  */
 router.put('/:id',
-    requirePermissions(['courses:write']),
+    requirePermissions(['courses:update']),
     courseTestsController.updateCourseTestAssignment
 );
 
@@ -68,7 +68,7 @@ router.put('/:id',
  * Elimina un'associazione test-corso (soft delete)
  */
 router.delete('/:id',
-    requirePermissions(['courses:write']),
+    requirePermissions(['courses:update']),
     courseTestsController.deleteCourseTestAssignment
 );
 

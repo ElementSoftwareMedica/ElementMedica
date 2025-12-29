@@ -60,7 +60,7 @@ const upload = multer({
 router.post(
   '/upload',
   authenticate,
-  requirePermissions('MANAGE_CMS_MEDIA'),
+  requirePermissions('cms.media:manage'),
   upload.array('files', 10), // Max 10 files contemporaneamente
   async (req, res) => {
     try {
@@ -141,7 +141,7 @@ router.post(
 router.get(
   '/',
   authenticate,
-  requirePermissions('VIEW_CMS_MEDIA'),
+  requirePermissions('cms.media:read'),
   async (req, res) => {
     try {
       const { tenantId } = req.user;
@@ -194,7 +194,7 @@ router.get(
 router.get(
   '/:id',
   authenticate,
-  requirePermissions('VIEW_CMS_MEDIA'),
+  requirePermissions('cms.media:read'),
   async (req, res) => {
     try {
       const { tenantId } = req.user;
@@ -261,7 +261,7 @@ router.get(
 router.patch(
   '/:id',
   authenticate,
-  requirePermissions('EDIT_CMS_MEDIA'),
+  requirePermissions('cms.media:update'),
   async (req, res) => {
     try {
       const { tenantId } = req.user;
@@ -323,7 +323,7 @@ router.patch(
 router.delete(
   '/:id',
   authenticate,
-  requirePermissions('DELETE_CMS_MEDIA'),
+  requirePermissions('cms.media:delete'),
   async (req, res) => {
     try {
       const { tenantId } = req.user;
@@ -367,7 +367,7 @@ router.delete(
 router.get(
   '/folders/list',
   authenticate,
-  requirePermissions('VIEW_CMS_MEDIA'),
+  requirePermissions('cms.media:read'),
   async (req, res) => {
     try {
       const { tenantId } = req.user;
@@ -408,7 +408,7 @@ router.get(
 router.post(
   '/folders',
   authenticate,
-  requirePermissions('MANAGE_CMS_MEDIA'),
+  requirePermissions('cms.media:manage'),
   async (req, res) => {
     try {
       const { tenantId } = req.user;
@@ -458,7 +458,7 @@ router.post(
 router.delete(
   '/folders/:id',
   authenticate,
-  requirePermissions('MANAGE_CMS_MEDIA'),
+  requirePermissions('cms.media:manage'),
   async (req, res) => {
     try {
       const { tenantId } = req.user;

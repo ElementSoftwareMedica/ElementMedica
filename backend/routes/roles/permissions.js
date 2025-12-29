@@ -52,7 +52,7 @@ function validateAndFilterPermissions(permissions) {
 router.get('/permissions',
   authenticate,
   tenantAuth,
-  requirePermission('roles.read'),
+  requirePermission('roles:read'),
   async (req, res) => {
     try {
       console.log('🔍 Getting all available permissions');
@@ -180,7 +180,7 @@ router.get('/permissions',
 router.get('/:roleType/permissions',
   authenticate,
   tenantAuth,
-  requirePermission('roles.read'),
+  requirePermission('roles:read'),
   async (req, res) => {
     try {
       let { roleType } = req.params;
@@ -478,7 +478,7 @@ router.put('/:roleType/permissions',
     logger.info('🔍 BEFORE requirePermission middleware - url:', req.url);
     next();
   },
-  requirePermission('ROLE_MANAGEMENT'),
+  requirePermission('roles:manage'),
   async (req, res) => {
     try {
       logger.info('🔍 INSIDE PUT /:roleType/permissions endpoint - START');

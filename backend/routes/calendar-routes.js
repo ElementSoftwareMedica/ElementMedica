@@ -58,7 +58,7 @@ const handleValidationErrors = (req, res, next) => {
  */
 router.get('/appointment/:id/ics',
     requireAuth,
-    requirePermission('appointments:read'),
+    requirePermission('clinica.appuntamenti:read'),
     [
         param('id').isUUID()
     ],
@@ -106,7 +106,7 @@ router.get('/appointment/:id/ics',
  */
 router.get('/doctor/:id/feed',
     requireAuth,
-    requirePermission('appointments:read'),
+    requirePermission('clinica.appuntamenti:read'),
     [
         param('id').isUUID(),
         query('startDate').optional().isISO8601(),
@@ -146,7 +146,7 @@ router.get('/doctor/:id/feed',
  */
 router.get('/patient/:id/feed',
     requireAuth,
-    requirePermission('appointments:read'),
+    requirePermission('clinica.appuntamenti:read'),
     [
         param('id').isUUID(),
         query('startDate').optional().isISO8601(),
@@ -261,7 +261,7 @@ router.get('/google/calendars',
  */
 router.post('/google/sync',
     requireAuth,
-    requirePermission('appointments:read'),
+    requirePermission('clinica.appuntamenti:read'),
     async (req, res) => {
         try {
             const { appointmentId } = req.body;
@@ -309,7 +309,7 @@ router.post('/google/sync',
  */
 router.delete('/google/sync/:appointmentId',
     requireAuth,
-    requirePermission('appointments:read'),
+    requirePermission('clinica.appuntamenti:read'),
     [
         param('appointmentId').isUUID()
     ],

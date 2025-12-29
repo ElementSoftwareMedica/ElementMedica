@@ -2,35 +2,37 @@
  * RBAC Service
  * Business logic for Role-Based Access Control
  * Handles permission checks, role verification, and hierarchical access control
+ * 
+ * @version 2.0.0 - E2E Migration (formato standard resource:action)
  */
 
 import logger from '../utils/logger.js';
 import prisma from '../config/prisma-optimization.js';
+import { matchPermission } from '../constants/permissions.js';
 
 export class RBACService {
     /**
      * Check if person has specific permission
      * Permissions are loaded from database via PersonRole -> RolePermission
+     * 
+     * FORMATO STANDARD: resource:action (es. companies:read, clinica.visite:update)
+     * 
+     * @param {string} personId - ID della persona
+     * @param {string} permission - Permesso in formato resource:action
+     * @param {string|null} resourceId - ID risorsa opzionale per permission granulari
+     * @returns {Promise<boolean>}
      */
     static async hasPermission(personId, permission, resourceId = null) {
         try {
             // Get mapped permissions from database
             const permissions = await this.getPersonPermissions(personId);
+            const userPermissions = Object.keys(permissions);
 
-            // Check if permission exists in mapped format
-            if (permissions[permission]) {
-                return true;
-            }
-
-            // Check for wildcard patterns (e.g., 'companies:*' matches 'companies:read')
-            const [resource, action] = permission.split(':');
-            if (resource && permissions[`${resource}:*`]) {
-                return true;
-            }
-
-            // Check for all permissions wildcard
-            if (permissions['*'] || permissions['all:*']) {
-                return true;
+            // Check if any user permission matches the required permission
+            for (const userPerm of userPermissions) {
+                if (matchPermission(userPerm, permission)) {
+                    return true;
+                }
             }
 
             return false;

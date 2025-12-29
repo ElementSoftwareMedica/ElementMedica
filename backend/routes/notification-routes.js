@@ -60,7 +60,7 @@ const handleValidationErrors = (req, res, next) => {
  */
 router.post('/send',
     requireAuth,
-    requirePermission('notifications:write'),
+    requirePermission('notifications:update'),
     [
         body('type').isIn(['appointment_confirmation', 'appointment_reminder', 'referto', 'invoice', 'generic']),
         body('entityId').optional().isUUID(),
@@ -249,7 +249,7 @@ router.get('/config',
  */
 router.put('/config',
     requireAuth,
-    requirePermission('settings:write'),
+    requirePermission('settings:update'),
     [
         body('enabled').optional().isBoolean(),
         body('reminders').optional().isObject(),
@@ -293,7 +293,7 @@ router.put('/config',
  */
 router.post('/test',
     requireAuth,
-    requirePermission('notifications:write'),
+    requirePermission('notifications:update'),
     [
         body('to').isEmail(),
         body('template').optional().isString()
@@ -378,7 +378,7 @@ router.get('/status',
  */
 router.post('/trigger',
     requireAuth,
-    requirePermission('admin'),
+    requirePermission('admin:access'),
     async (req, res) => {
         try {
             if (process.env.NODE_ENV === 'production') {
@@ -525,7 +525,7 @@ router.post('/sms/preview',
  */
 router.post('/sms/send',
     requireAuth,
-    requirePermission('notifications:write'),
+    requirePermission('notifications:update'),
     [
         body('to').isString().matches(/^\+?[0-9]{10,15}$/),
         body('template').isString(),
@@ -573,7 +573,7 @@ router.post('/sms/send',
  */
 router.post('/whatsapp/send',
     requireAuth,
-    requirePermission('notifications:write'),
+    requirePermission('notifications:update'),
     [
         body('to').isString().matches(/^\+?[0-9]{10,15}$/),
         body('template').isString(),
@@ -621,7 +621,7 @@ router.post('/whatsapp/send',
  */
 router.put('/opt-out',
     requireAuth,
-    requirePermission('notifications:write'),
+    requirePermission('notifications:update'),
     [
         body('patientId').isUUID(),
         body('smsOptOut').optional().isBoolean(),

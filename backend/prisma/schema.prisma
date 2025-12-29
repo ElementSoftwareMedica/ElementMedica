@@ -1062,7 +1062,7 @@ model PersonRole {
 model RolePermission {
   id              String           @id @default(uuid())
   personRoleId    String
-  permission      PersonPermission
+  permission      String           // Formato: resource:action (es. companies:read)
   isGranted       Boolean          @default(true)
   grantedAt       DateTime         @default(now()) @db.Timestamp(6)
   grantedBy       String?
@@ -1073,6 +1073,7 @@ model RolePermission {
   @@unique([personRoleId, permission])
   @@index([grantedBy])
   @@index([personRoleId])
+  @@index([permission])
   @@map("role_permissions")
 }
 

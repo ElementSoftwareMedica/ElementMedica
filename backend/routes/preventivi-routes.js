@@ -68,7 +68,7 @@ const validate = (req, res, next) => {
  */
 router.get('/',
   authenticate,
-  requirePermissions(['read:preventivi']),
+  requirePermissions(['preventivi:read']),
   [
     query('page').optional().isInt({ min: 1 }).toInt(),
     query('limit').optional().isInt({ min: 1, max: 100 }).toInt(),
@@ -229,7 +229,7 @@ router.get('/',
  */
 router.post('/',
   authenticate,
-  requirePermissions(['create:preventivi']),
+  requirePermissions(['preventivi:create']),
   auditLog('preventivi', 'CREATE'),
   (req, res, next) => {
     console.log('=== POST /api/preventivi - BEFORE VALIDATION ===');
@@ -472,7 +472,7 @@ router.post('/',
  */
 router.put('/:id/stato',
   authenticate,
-  requirePermissions(['edit:preventivi']),
+  requirePermissions(['preventivi:update']),
   auditLog('preventivi', 'UPDATE_STATO'),
   [
     param('id').isUUID(),
@@ -579,7 +579,7 @@ router.put('/:id/stato',
  */
 router.post('/:id/applica-sconto',
   authenticate,
-  requirePermissions(['update:preventivi']),
+  requirePermissions(['preventivi:update']),
   auditLog('preventivi', 'APPLY_DISCOUNT'),
   [
     param('id').isUUID(),
@@ -710,7 +710,7 @@ router.post('/:id/applica-sconto',
  */
 router.delete('/:id/sconti/:scontoId',
   authenticate,
-  requirePermissions(['update:preventivi']),
+  requirePermissions(['preventivi:update']),
   auditLog('preventivi', 'REMOVE_DISCOUNT'),
   [
     param('id').isUUID(),
@@ -796,7 +796,7 @@ router.delete('/:id/sconti/:scontoId',
  */
 router.get('/:id/pdf',
   authenticate,
-  requirePermissions(['read:preventivi']),
+  requirePermissions(['preventivi:read']),
   [
     param('id').isUUID()
   ],
@@ -893,7 +893,7 @@ router.get('/:id/pdf',
  */
 router.get('/:id',
   authenticate,
-  requirePermissions(['read:preventivi']),
+  requirePermissions(['preventivi:read']),
   [
     param('id').isUUID()
   ],
@@ -966,7 +966,7 @@ router.get('/:id',
  */
 router.put('/:id',
   authenticate,
-  requirePermissions(['update:preventivi']),
+  requirePermissions(['preventivi:update']),
   auditLog('preventivi', 'UPDATE'),
   [
     param('id').isUUID(),
@@ -1105,7 +1105,7 @@ router.put('/:id',
  */
 router.delete('/:id',
   authenticate,
-  requirePermissions(['delete:preventivi']),
+  requirePermissions(['preventivi:delete']),
   auditLog('preventivi', 'DELETE'),
   [
     param('id').isUUID()
@@ -1189,7 +1189,7 @@ router.delete('/:id',
  */
 router.post('/merge',
   authenticate,
-  requirePermissions(['create:preventivi', 'edit:preventivi']),
+  requirePermissions(['preventivi:create', 'preventivi:update']),
   auditLog('preventivi', 'MERGE'),
   [
     body('preventiviIds').isArray({ min: 2 }).withMessage('Seleziona almeno 2 preventivi da unire'),
@@ -1390,7 +1390,7 @@ router.post('/merge',
  */
 router.post('/:id/unmerge',
   authenticate,
-  requirePermissions(['edit:preventivi']),
+  requirePermissions(['preventivi:update']),
   auditLog('preventivi', 'UNMERGE'),
   [
     param('id').isUUID()

@@ -256,7 +256,7 @@ router.get('/settings/config',
  */
 router.put('/settings/config',
     authMiddleware,
-    requirePermission('SYSTEM_SETTINGS'),
+    requirePermission('system:settings'),
     tenantMiddleware,
     async (req, res) => {
         try {
@@ -328,7 +328,7 @@ router.put('/settings/config',
  */
 router.post('/settings/config/reset',
     authMiddleware,
-    requirePermission('SYSTEM_SETTINGS'),
+    requirePermission('system:settings'),
     tenantMiddleware,
     async (req, res) => {
         try {

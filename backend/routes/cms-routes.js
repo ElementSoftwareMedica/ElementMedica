@@ -27,7 +27,7 @@ const router = express.Router();
  * GET /api/v1/cms/pages
  * Lista tutte le pagine CMS
  */
-router.get('/pages', authenticate, requirePermissions('VIEW_CMS_PAGES'), [
+router.get('/pages', authenticate, requirePermissions('cms.pages:read'), [
   query('status').optional().isIn(['draft', 'published', 'scheduled']),
   query('search').optional().isString().trim(),
   query('page').optional().isInt({ min: 1 }).toInt(),
@@ -166,7 +166,7 @@ router.get('/pages/slug/:slug', [
  * GET /api/v1/cms/pages/:id
  * Ottieni singola pagina CMS per ID (autenticato)
  */
-router.get('/pages/:id', authenticate, requirePermissions('VIEW_CMS_PAGES'), [
+router.get('/pages/:id', authenticate, requirePermissions('cms.pages:read'), [
   param('id').isString()
 ], async (req, res) => {
   try {
@@ -203,7 +203,7 @@ router.get('/pages/:id', authenticate, requirePermissions('VIEW_CMS_PAGES'), [
  * POST /api/v1/cms/pages
  * Crea nuova pagina CMS
  */
-router.post('/pages', authenticate, requirePermissions('CREATE_CMS_PAGES'), [
+router.post('/pages', authenticate, requirePermissions('cms.pages:create'), [
   body('slug').isString().trim().notEmpty(),
   body('title').isString().trim().notEmpty(),
   body('content').optional().isObject(),
@@ -256,7 +256,7 @@ router.post('/pages', authenticate, requirePermissions('CREATE_CMS_PAGES'), [
  * PATCH /api/v1/cms/pages/:id
  * Aggiorna pagina CMS
  */
-router.patch('/pages/:id', authenticate, requirePermissions('EDIT_CMS_PAGES'), [
+router.patch('/pages/:id', authenticate, requirePermissions('cms.pages:update'), [
   param('id').isString(),
   body('slug').optional().isString().trim(),
   body('title').optional().isString().trim(),
@@ -321,7 +321,7 @@ router.patch('/pages/:id', authenticate, requirePermissions('EDIT_CMS_PAGES'), [
  * POST /api/v1/cms/pages/:id/publish
  * Pubblica pagina CMS
  */
-router.post('/pages/:id/publish', authenticate, requirePermissions('PUBLISH_CMS_PAGES'), [
+router.post('/pages/:id/publish', authenticate, requirePermissions('cms.pages:publish'), [
   param('id').isString()
 ], async (req, res) => {
   try {
@@ -348,7 +348,7 @@ router.post('/pages/:id/publish', authenticate, requirePermissions('PUBLISH_CMS_
  * POST /api/v1/cms/pages/:id/unpublish
  * Unpublish pagina CMS
  */
-router.post('/pages/:id/unpublish', authenticate, requirePermissions('EDIT_CMS_PAGES'), [
+router.post('/pages/:id/unpublish', authenticate, requirePermissions('cms.pages:update'), [
   param('id').isString()
 ], async (req, res) => {
   try {
@@ -375,7 +375,7 @@ router.post('/pages/:id/unpublish', authenticate, requirePermissions('EDIT_CMS_P
  * DELETE /api/v1/cms/pages/:id
  * Elimina pagina CMS (soft delete)
  */
-router.delete('/pages/:id', authenticate, requirePermissions('DELETE_CMS_PAGES'), [
+router.delete('/pages/:id', authenticate, requirePermissions('cms.pages:delete'), [
   param('id').isString()
 ], async (req, res) => {
   try {
@@ -402,7 +402,7 @@ router.delete('/pages/:id', authenticate, requirePermissions('DELETE_CMS_PAGES')
  * POST /api/v1/cms/pages/:id/duplicate
  * Duplica pagina CMS
  */
-router.post('/pages/:id/duplicate', authenticate, requirePermissions('CREATE_CMS_PAGES'), [
+router.post('/pages/:id/duplicate', authenticate, requirePermissions('cms.pages:create'), [
   param('id').isString()
 ], async (req, res) => {
   try {
@@ -472,7 +472,7 @@ const upload = multer({
 /**
  * GET /api/cms/courses - Ottieni tutti i corsi per gestione CMS
  */
-router.get('/courses', authenticate, requirePermissions('VIEW_CMS'), [
+router.get('/courses', authenticate, requirePermissions('cms:read'), [
   query('page').optional().isInt({ min: 1 }).toInt(),
   query('limit').optional().isInt({ min: 1, max: 50 }).toInt(),
   query('search').optional().isString().trim(),
@@ -578,7 +578,7 @@ router.get('/courses', authenticate, requirePermissions('VIEW_CMS'), [
 /**
  * GET /api/cms/courses/:id - Ottieni dettaglio corso per modifica CMS
  */
-router.get('/courses/:id', authenticate, requirePermissions('VIEW_CMS'), [
+router.get('/courses/:id', authenticate, requirePermissions('cms:read'), [
   param('id').isUUID()
 ], async (req, res) => {
   try {
@@ -653,7 +653,7 @@ router.get('/courses/:id', authenticate, requirePermissions('VIEW_CMS'), [
 /**
  * PUT /api/cms/courses/:id/content - Aggiorna contenuti pubblici del corso
  */
-router.put('/courses/:id/content', authenticate, requirePermissions('CMS_EDIT_COURSES'), [
+router.put('/courses/:id/content', authenticate, requirePermissions('cms:update'), [
   param('id').isUUID(),
   body('shortDescription').optional().isString().trim().isLength({ max: 500 }),
   body('fullDescription').optional().isString().trim().isLength({ max: 5000 }),
@@ -765,7 +765,7 @@ router.put('/courses/:id/content', authenticate, requirePermissions('CMS_EDIT_CO
 /**
  * POST /api/cms/upload/image - Upload immagine per CMS
  */
-router.post('/upload/image', authenticate, requirePermissions('CMS_MANAGE_MEDIA'), upload.single('image'), async (req, res) => {
+router.post('/upload/image', authenticate, requirePermissions('cms.media:manage'), upload.single('image'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({
@@ -834,7 +834,7 @@ router.post('/upload/image', authenticate, requirePermissions('CMS_MANAGE_MEDIA'
 /**
  * GET /api/cms/media - Ottieni lista media caricati
  */
-router.get('/media', authenticate, requirePermissions('VIEW_CMS'), [
+router.get('/media', authenticate, requirePermissions('cms:read'), [
   query('page').optional().isInt({ min: 1 }).toInt(),
   query('limit').optional().isInt({ min: 1, max: 50 }).toInt()
 ], async (req, res) => {
@@ -921,7 +921,7 @@ router.get('/media', authenticate, requirePermissions('VIEW_CMS'), [
 /**
  * DELETE /api/cms/media/:id - Elimina media
  */
-router.delete('/media/:id', authenticate, requirePermissions('CMS_MANAGE_MEDIA'), [
+router.delete('/media/:id', authenticate, requirePermissions('cms.media:manage'), [
   param('id').isUUID()
 ], async (req, res) => {
   try {
@@ -1008,7 +1008,7 @@ router.delete('/media/:id', authenticate, requirePermissions('CMS_MANAGE_MEDIA')
 /**
  * GET /api/cms/public-content - Ottieni contenuto pubblico del sito
  */
-router.get('/public-content', authenticate, requirePermissions('VIEW_CMS'), async (req, res) => {
+router.get('/public-content', authenticate, requirePermissions('cms:read'), async (req, res) => {
   try {
     const tenantId = req.user.tenantId;
 
@@ -1098,7 +1098,7 @@ router.get('/public-content', authenticate, requirePermissions('VIEW_CMS'), asyn
 /**
  * PUT /api/cms/public-content - Aggiorna contenuto pubblico del sito
  */
-router.put('/public-content', authenticate, requirePermissions('EDIT_CMS'), [
+router.put('/public-content', authenticate, requirePermissions('cms:update'), [
   body('homepage').isObject(),
   body('services').isObject(),
   body('contacts').isObject(),

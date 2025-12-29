@@ -343,7 +343,7 @@ router.get('/:id/stats', async (req, res) => {
  * @access Tenant Admin with user management permissions
  */
 router.post('/:id/users/:personId/roles',
-  enhancedRoleService.requirePermission('users.manage_roles'),
+  enhancedRoleService.requirePermission('roles:manage'),
   async (req, res) => {
     try {
       const { id: tenantId, personId } = req.params;
@@ -385,7 +385,7 @@ router.post('/:id/users/:personId/roles',
  * @access Tenant Admin with user management permissions
  */
 router.delete('/:id/users/:personId/roles/:roleType',
-  enhancedRoleService.requirePermission('users.manage_roles'),
+  enhancedRoleService.requirePermission('roles:manage'),
   async (req, res) => {
     try {
       const { id: tenantId, personId, roleType } = req.params;

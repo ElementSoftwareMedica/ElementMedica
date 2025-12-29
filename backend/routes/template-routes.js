@@ -33,7 +33,7 @@ const getAuthUser = (req) => ({
  * GET /api/v1/templates
  * List all templates with filtering and pagination
  */
-router.get('/', authenticateToken(), requirePermission('VIEW_TEMPLATES'), async (req, res) => {
+router.get('/', authenticateToken(), requirePermission('templates:read'), async (req, res) => {
   try {
     const { tenantId, userId } = getAuthUser(req);
     const {
@@ -122,7 +122,7 @@ router.get('/', authenticateToken(), requirePermission('VIEW_TEMPLATES'), async 
  * GET /api/v1/templates/default/:type
  * Get default template for a specific type
  */
-router.get('/default/:type', authenticateToken(), requirePermission('VIEW_TEMPLATES'), async (req, res) => {
+router.get('/default/:type', authenticateToken(), requirePermission('templates:read'), async (req, res) => {
   try {
     const { tenantId } = getAuthUser(req);
     const { type } = req.params;
@@ -169,7 +169,7 @@ router.get('/default/:type', authenticateToken(), requirePermission('VIEW_TEMPLA
  * Get a single template by ID
  * IMPORTANT: This route MUST come AFTER /default/:type to avoid route conflicts
  */
-router.get('/:id', authenticateToken(), requirePermission('VIEW_TEMPLATES'), async (req, res) => {
+router.get('/:id', authenticateToken(), requirePermission('templates:read'), async (req, res) => {
   try {
     const { tenantId } = getAuthUser(req);
     const { id } = req.params;
@@ -244,7 +244,7 @@ router.get('/:id', authenticateToken(), requirePermission('VIEW_TEMPLATES'), asy
  * POST /api/v1/templates
  * Create a new template
  */
-router.post('/', authenticateToken(), requirePermission('CREATE_TEMPLATES'), async (req, res) => {
+router.post('/', authenticateToken(), requirePermission('templates:create'), async (req, res) => {
   try {
     const { tenantId, userId } = getAuthUser(req);
     const {
@@ -418,7 +418,7 @@ router.post('/', authenticateToken(), requirePermission('CREATE_TEMPLATES'), asy
  * PUT /api/v1/templates/:id
  * Update an existing template
  */
-router.put('/:id', authenticateToken(), requirePermission('EDIT_TEMPLATES'), async (req, res) => {
+router.put('/:id', authenticateToken(), requirePermission('templates:update'), async (req, res) => {
   try {
     const { tenantId, userId } = getAuthUser(req);
     const { id } = req.params;
@@ -663,7 +663,7 @@ router.put('/:id', authenticateToken(), requirePermission('EDIT_TEMPLATES'), asy
  * PUT /api/v1/templates/:id/set-default
  * Set a template as the default for its type
  */
-router.put('/:id/set-default', authenticateToken(), requirePermission('EDIT_TEMPLATES'), async (req, res) => {
+router.put('/:id/set-default', authenticateToken(), requirePermission('templates:update'), async (req, res) => {
   try {
     const { tenantId, userId } = getAuthUser(req);
     const { id } = req.params;
@@ -717,7 +717,7 @@ router.put('/:id/set-default', authenticateToken(), requirePermission('EDIT_TEMP
  * DELETE /api/v1/templates/:id
  * Soft delete a template
  */
-router.delete('/:id', authenticateToken(), requirePermission('DELETE_TEMPLATES'), async (req, res) => {
+router.delete('/:id', authenticateToken(), requirePermission('templates:delete'), async (req, res) => {
   try {
     const { tenantId } = getAuthUser(req);
     const { id } = req.params;
@@ -772,7 +772,7 @@ router.delete('/:id', authenticateToken(), requirePermission('DELETE_TEMPLATES')
  * POST /api/v1/templates/:id/duplicate
  * Duplicate an existing template
  */
-router.post('/:id/duplicate', authenticateToken(), requirePermission('CREATE_TEMPLATES'), async (req, res) => {
+router.post('/:id/duplicate', authenticateToken(), requirePermission('templates:create'), async (req, res) => {
   try {
     const { tenantId, userId } = getAuthUser(req);
     const { id } = req.params;
@@ -872,7 +872,7 @@ router.post('/:id/duplicate', authenticateToken(), requirePermission('CREATE_TEM
  * GET /api/templates/:id/versions
  * Get all versions of a template
  */
-router.get('/:id/versions', authenticateToken(), requirePermission('VIEW_TEMPLATES'), async (req, res) => {
+router.get('/:id/versions', authenticateToken(), requirePermission('templates:read'), async (req, res) => {
   try {
     const { tenantId } = getAuthUser(req);
     const { id } = req.params;
@@ -912,7 +912,7 @@ router.get('/:id/versions', authenticateToken(), requirePermission('VIEW_TEMPLAT
  * POST /api/templates/:id/restore-version
  * Restore a specific version (creates new version with old content)
  */
-router.post('/:id/restore-version', authenticateToken(), requirePermission('EDIT_TEMPLATES'), async (req, res) => {
+router.post('/:id/restore-version', authenticateToken(), requirePermission('templates:update'), async (req, res) => {
   try {
     const { tenantId, userId } = getAuthUser(req);
     const { id } = req.params;
