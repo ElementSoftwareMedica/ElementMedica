@@ -21,20 +21,19 @@ import mediciRouter from './medici.routes.js';
 import strumentiRouter from './strumenti.routes.js';
 import visiteRouter from './visite.routes.js';
 import refertiRouter from './referti.routes.js';
+import sediRouter from './sedi.routes.js';
+import bundleRouter from './bundle.routes.js';
+import convenzioniRouter from './convenzioni.routes.js';
+import manutenzioniRouter from './manutenzioni.routes.js';
 // Future imports - will be added as files are created:
-// import sediRouter from './sedi.routes.js';
-// import mediciRouter from './medici.routes.js';
-// import strumentiRouter from './strumenti.routes.js';
 // import appuntamentiRouter from './appuntamenti.routes.js';
-// import visiteRouter from './visite.routes.js';
-// import refertiRouter from './referti.routes.js';
 // import slotsRouter from './slots.routes.js';
+// import listiniRouter from './listini.routes.js';
 // import scontiRouter from './sconti.routes.js';
 // import orariRouter from './orari.routes.js';
 // import templateCampiRouter from './template-campi.routes.js';
 // import documentiRouter from './documenti.routes.js';
 // import fattureRouter from './fatture.routes.js';
-// import manutenzioniRouter from './manutenzioni.routes.js';
 
 const router = express.Router();
 const { authenticate: authenticateToken } = middleware;
@@ -74,24 +73,20 @@ router.use('/medici', mediciRouter);
 router.use('/strumenti', strumentiRouter);
 router.use('/visite', visiteRouter);
 router.use('/referti', refertiRouter);
+router.use('/sedi', sediRouter);
+router.use('/bundle', bundleRouter);
+router.use('/convenzioni', convenzioniRouter);
+router.use('/manutenzioni', manutenzioniRouter);
 
 // Future mounts - will be enabled as files are created:
-// router.use('/sedi', sediRouter);
-// router.use('/bundle', bundleRouter);
-// router.use('/convenzioni', convenzioniRouter);
+// router.use('/appuntamenti', appuntamentiRouter);
 // router.use('/slots', slotsRouter);
 // router.use('/listini', listiniRouter);
-// router.use('/strumenti', strumentiRouter);
-// router.use('/appuntamenti', appuntamentiRouter);
-// router.use('/visite', visiteRouter);
-// router.use('/referti', refertiRouter);
-// router.use('/slots', slotsRouter);
 // router.use('/sconti', scontiRouter);
 // router.use('/orari-ambulatorio', orariRouter);
 // router.use('/template-campi', templateCampiRouter);
 // router.use('/documenti', documentiRouter);
 // router.use('/fatture', fattureRouter);
-// router.use('/manutenzioni', manutenzioniRouter);
 
 // ============================================
 // ERROR HANDLER
