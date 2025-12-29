@@ -124,10 +124,10 @@ const Invoices: React.FC<InvoicesProps> = ({
       // const res = await axios.delete('/api/invoices/${id}');
       setInvoices(invoices.filter(i => i.id !== id));
       if (close) setTimeout(close, 100);
-      alert('Fattura eliminata con successo');
+      showToast({ type: 'success', title: 'Successo', message: 'Fattura eliminata con successo' });
     } catch (err: any) {
       const userMessage = sanitizeErrorMessage(err, 'Errore durante l\'eliminazione della fattura');
-      alert(userMessage);
+      showToast({ type: 'error', title: 'Errore', message: userMessage });
     }
   };
 

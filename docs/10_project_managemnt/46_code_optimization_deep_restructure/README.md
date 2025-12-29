@@ -1,6 +1,6 @@
 # 🚀 Progetto 46 - Indice Documentazione
 
-**Ultima Modifica**: 29/12/2025 - Fase 3a COMPLETATA con test  
+**Ultima Modifica**: 30/12/2025 - Fase 6 COMPLETATA (Permission + Backward Compat)  
 **Decisione**: I nomi italiani nello schema Prisma sono ACCETTATI (app commercializzata solo in Italia)
 
 ---
@@ -13,9 +13,8 @@ docs/10_project_managemnt/46_code_optimization_deep_restructure/
 ├── PLANNING_E2E_OTTIMIZZAZIONE.md      # Piano generale 8 fasi
 ├── FASE_2_ENUM_STANDARDIZZAZIONE.md    # Dettaglio conversione enum (SKIPPATO - nomi IT OK)
 ├── FASE_3_SPLITTING_FILE_GRANDI.md     # Dettaglio splitting file
-├── FASE_4_PERMESSI_ALLINEAMENTO.md     # (TODO) Standardizzazione permessi
+├── FASE_6_PERMISSION_STANDARDIZATION.md # Standardizzazione permessi ✅ COMPLETATO
 ├── FASE_5_FILE_OBSOLETI.md             # (TODO) Pulizia file
-├── FASE_6_SCHEMA_CAMELCASE.md          # (SKIPPATO - nomi IT OK)
 ├── FASE_7_TESTING_VALIDAZIONE.md       # (TODO) Test suite completa
 └── FASE_8_DOCUMENTAZIONE.md            # (TODO) Documentazione finale
 ```
@@ -33,7 +32,7 @@ docs/10_project_managemnt/46_code_optimization_deep_restructure/
 | 3b | Splitting altri file backend | ⏳ Da iniziare | 1 settimana | seed.js, preventivi, etc. |
 | 4 | Splitting file frontend | ⏳ Da iniziare | 1 settimana | PreventiviPage, CMSRenderer |
 | 5 | Schema camelCase | ⏭️ SKIPPATO | - | **Nomi IT accettati** |
-| 6 | Testing & Validazione | ⏳ Da iniziare | 3 giorni | Test dopo split |
+| 6 | Permission Standardization | ✅ COMPLETATO | 1 giorno | 6.1-6.3 + Security fixes |
 | 7 | Documentazione | ⏳ Da iniziare | 1 giorno | Aggiornare docs |
 
 ---
@@ -43,10 +42,11 @@ docs/10_project_managemnt/46_code_optimization_deep_restructure/
 1. ~~Schema Prisma in camelCase~~ → **Nomi italiani accettati**
 2. ~~Enum in Inglese PascalCase~~ → **Enum italiani OK per mercato IT**
 3. **File Grandi Splittati** - Da 11,000+ linee a <500 ✅ clinica-routes fatto
-4. **Permessi Allineati** - Formato uniforme
+4. **Permessi Allineati** - Formato uniforme ✅ `resource:action` ovunque
 5. **File Obsoleti Rimossi** - 108MB+ di backup archiviati ✅
 6. **Zero Errori TypeScript** - Strict mode ✅
 7. **Test Coverage 80%+** - Da 75% attuale
+8. **Backward Compat Rimosso** - req.person standard ✅ (31+ istanze)
 
 ---
 
@@ -60,6 +60,8 @@ docs/10_project_managemnt/46_code_optimization_deep_restructure/
 | File obsoleti | 108MB | ~10MB | 0 | ✅ |
 | TS Errors | 0 | 0 | 0 | ✅ |
 | Test Coverage | 75% | 75% | 80% | ⏳ |
+| Backward Compat | 31+ | 0 | 0 | ✅ |
+| Security Bypass | 1 CRITICAL | 0 | 0 | ✅ |
 
 ---
 
@@ -70,14 +72,46 @@ docs/10_project_managemnt/46_code_optimization_deep_restructure/
 ✅ Giorno 1 (29/12): Fase 3a (clinica-routes.js split) - COMPLETATO
 🔄 Giorno 2-3: Fase 3b (altri file backend) - IN CORSO
 ⏳ Giorno 4-5: Fase 4 (Frontend splitting)
-⏳ Giorno 6: Testing & Validazione
+✅ Giorno 2 (30/12): Fase 6 (Permission + Security) - COMPLETATO
 ⏳ Giorno 7: Documentazione finale
 ```
 
 **Durata Totale Rivista**: 1 settimana (vs 8 settimane originali)
 
-> **NOTA**: Le fasi 2 e 6 (enum inglesi + schema camelCase) sono state SKIPPATE
+> **NOTA**: Le fasi 2 e 5 (enum inglesi + schema camelCase) sono state SKIPPATE
 > perché l'app sarà commercializzata SOLO in Italia. I nomi italiani sono accettati.
+
+---
+
+## 🔒 Fase 6 - Security & Permission Fixes (30/12/2025)
+
+### CRITICAL: Advanced Permissions Bypass FIX
+- **Problema**: `advanced-permissions.js` aveva un BYPASS COMPLETO che permetteva TUTTE le richieste
+- **Impatto**: 25 file di route usavano `checkAdvancedPermission` che era bypassato
+- **Fix**: Implementato controllo corretto con `RBACService.hasPermission()` e formato `resource:action`
+
+### Auth Pattern Standardization
+| File | Istanze Fixate |
+|------|----------------|
+| middleware/advanced-permissions.js | 3 |
+| middleware/virtualEntityMiddleware.js | 1 |
+| middleware/auth.js | 1 |
+| routes/companies-routes.js | 4 |
+| routes/company-sites-routes.js | 5 |
+| routes/reparto-routes.js | 7 |
+| routes/attestati-routes.js | 1 |
+| routes/dashboard-routes.js | 3 |
+| routes/courses-routes.js | 1 |
+| routes/sopralluogo-routes.js | 5 |
+| routes/dvr-routes.js | 5 |
+| routes/schedules-routes.js | 2 |
+| routes/employees-routes.js | 5 |
+| **TOTALE** | **31+** |
+
+### Code Quality Improvements
+- **Console.log Cleanup**: Rimossi 34 console.log/error da production code
+- **Frontend Notifications**: 10 alert() → showToast() per UX consistente
+- **All TS Errors**: 0
 
 ---
 

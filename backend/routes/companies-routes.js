@@ -112,7 +112,7 @@ router.get('/',
   filterResponseFields,
   async (req, res) => {
     try {
-      const person = req.person || req.user;
+      const person = req.person;
       const permissionContext = req.permissionContext;
 
       let whereClause = {};
@@ -300,7 +300,7 @@ router.post('/',
       }
 
       // Check for duplicate P.IVA if provided
-      const person = req.person || req.user;
+      const person = req.person;
       let company;
       if (mainCompanyData.piva) {
         // Prima cerca aziende attive con stessa P.IVA nel tenant corrente
@@ -462,7 +462,7 @@ router.put('/:id',
       }
 
       // Check for duplicate P.IVA if provided and update existing company
-      const person = req.person || req.user;
+      const person = req.person;
 
       // Assicurati che l'azienda esista
       const existingCompany = await prisma.company.findUnique({ where: { id } });
@@ -680,7 +680,7 @@ router.post('/import',
       // Mappe per tenere traccia delle aziende per P.IVA e Codice Fiscale
       const companiesByPiva = new Map();
       const companiesByCF = new Map();
-      const person = req.person || req.user;
+      const person = req.person;
 
       for (let i = 0; i < companies.length; i++) {
         const companyData = companies[i];

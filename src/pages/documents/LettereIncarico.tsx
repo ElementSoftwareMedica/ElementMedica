@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import { apiGet, apiDelete } from '../../services/api';
 import { Button } from '../../design-system/atoms/Button';
+import { useToast } from '../../hooks/useToast';
 import { SearchBar } from '../../design-system/molecules';
 import { SearchBarControls } from '../../design-system/molecules/SearchBarControls';
 import ResizableTable from '../../components/shared/ResizableTable';
@@ -103,6 +104,7 @@ const LettereIncarico: React.FC<LettereIncaricoProps> = ({
   showGenerateModal,
   setShowGenerateModal
 }) => {
+  const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lettere, setLettere] = useState<LetteraIncarico[]>([]);
@@ -130,13 +132,13 @@ const LettereIncarico: React.FC<LettereIncaricoProps> = ({
       setLettere(lettere.filter(l => l.id !== id));
       if (close) setTimeout(close, 100);
     } catch (err: any) {
-      alert('Errore durante l\'eliminazione: ' + (err?.message || err));
+      showToast({ type: 'error', title: 'Errore', message: 'Errore durante l\'eliminazione: ' + (err?.message || err) });
     }
   };
 
   const handleDeleteMultipleLettere = async () => {
     if (selectedIds.length === 0) {
-      alert('Nessuna lettera selezionata');
+      showToast({ type: 'warning', title: 'Attenzione', message: 'Nessuna lettera selezionata' });
       return;
     }
     try {
@@ -145,7 +147,7 @@ const LettereIncarico: React.FC<LettereIncaricoProps> = ({
       setLettere(lettere.filter(l => !selectedIds.includes(l.id)));
       setSelectedIds([]);
     } catch (err) {
-      alert('Errore durante l\'eliminazione multipla');
+      showToast({ type: 'error', title: 'Errore', message: 'Errore durante l\'eliminazione multipla' });
     }
   };
   

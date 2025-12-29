@@ -138,7 +138,7 @@ router.use(convertCourseTypes);
 // GET /courses - Get all courses for user's company
 router.get('/', authenticate, roleDataFilter, filterResponseFields, async (req, res) => {
   try {
-    const person = req.person || req.user;
+    const person = req.person;
 
     // Verifica se l'utente è EMPLOYEE (ha solo il ruolo EMPLOYEE, non altri ruoli admin)
     const personRoles = await prisma.personRole.findMany({

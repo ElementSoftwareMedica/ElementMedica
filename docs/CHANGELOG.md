@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2025-01-XX - Project 46 Optimization
+
+### 🔒 Security - CRITICAL FIXES
+
+#### Advanced Permissions Bypass FIX
+- **CRITICAL**: Fixed complete bypass in `advanced-permissions.js` that allowed ALL requests without checking permissions
+- 25 route files were affected by this bypass
+- Now properly uses `RBACService.hasPermission()` with `resource:action` format
+- All permission checks now use the standardized format
+
+#### Auth Pattern Standardization
+- Removed ALL `req.person || req.user` backward compatibility patterns (31+ instances)
+- Standardized to `req.person` only across all middleware and routes
+- Files updated:
+  - `middleware/advanced-permissions.js` (3 instances)
+  - `middleware/virtualEntityMiddleware.js` (1 instance)
+  - `middleware/auth.js` (1 instance)
+  - `routes/companies-routes.js` (4 instances)
+  - `routes/company-sites-routes.js` (5 instances)
+  - `routes/reparto-routes.js` (7 instances)
+  - `routes/attestati-routes.js` (1 instance)
+  - `routes/dashboard-routes.js` (3 instances)
+  - `routes/courses-routes.js` (1 instance)
+  - `routes/sopralluogo-routes.js` (5 instances)
+  - `routes/dvr-routes.js` (5 instances)
+  - `routes/schedules-routes.js` (2 instances)
+  - `routes/employees-routes.js` (5 instances)
+
+### 🧹 Code Quality
+
+#### Console.log Cleanup
+- Removed 24 `console.log` and 10 `console.error` debug statements from `schedules-routes.js`
+- Removed debug logging from `virtualEntityMiddleware.js`
+- Production code now uses proper `logger` utility only
+- Scripts and test files still use console.log (appropriate for CLI output)
+
+#### Frontend Notification Standardization
+- Migrated 10 `alert()` calls to `showToast()` pattern
+- Files updated:
+  - `src/pages/documents/DocumentListPage.tsx`
+  - `src/pages/documents/LettereIncarico.tsx`
+  - `src/pages/documents/Attestati.tsx`
+  - `src/pages/DocumentsCorsi.tsx`
+  - `src/pages/finance/Invoices.tsx`
+- Consistent toast notifications with proper type (error/success/warning)
+
 ### Added
 - Additional project documentation 
 - Enhanced type organization with separate files for different entities

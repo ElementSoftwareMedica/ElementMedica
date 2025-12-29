@@ -17,7 +17,7 @@ router.get('/site/:siteId',
   async (req, res) => {
     try {
       const { siteId } = req.params;
-      const person = req.person || req.user;
+      const person = req.person;
       
       // Verifica che la sede esista
       const site = await prisma.companySite.findUnique({
@@ -90,7 +90,7 @@ router.get('/:id',
   async (req, res) => {
     try {
       const { id } = req.params;
-      const person = req.person || req.user;
+      const person = req.person;
       
       const dvr = await prisma.dVR.findUnique({ 
         where: { 
@@ -141,7 +141,7 @@ router.post('/',
   }),
   async (req, res) => {
     try {
-      const person = req.person || req.user;
+      const person = req.person;
       const { siteId, effettuatoDa, dataEsecuzione, dataScadenza, rischiRilevati, note } = req.body;
       
       // Validate required fields
@@ -227,7 +227,7 @@ router.put('/:id',
   async (req, res) => {
     try {
       const { id } = req.params;
-      const person = req.person || req.user;
+      const person = req.person;
       const updateData = { ...req.body };
       
       // Convert date strings to Date objects if present
@@ -315,7 +315,7 @@ router.delete('/:id',
   async (req, res) => {
     try {
       const { id } = req.params;
-      const person = req.person || req.user;
+      const person = req.person;
       
       // Check if DVR exists
       const existingDVR = await prisma.dVR.findUnique({ 

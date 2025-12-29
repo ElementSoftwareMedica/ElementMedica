@@ -16,7 +16,7 @@ router.get('/company/:companyId',
   async (req, res) => {
     try {
       const { companyId } = req.params;
-      const person = req.person || req.user;
+      const person = req.person;
       
       // Verifica che la company esista e che l'utente abbia accesso
       const company = await prisma.company.findUnique({
@@ -97,7 +97,7 @@ router.get('/:id',
   async (req, res) => {
     try {
       const { id } = req.params;
-      const person = req.person || req.user;
+      const person = req.person;
       
       const site = await prisma.companySite.findUnique({ 
         where: { 
@@ -171,7 +171,7 @@ router.post('/',
   // checkAdvancedPermission('companies', 'create'), // Temporaneamente disabilitato per debug
   async (req, res) => {
     try {
-      const person = req.person || req.user;
+      const person = req.person;
       const { companyId, siteName, ...siteData } = req.body;
       
       // Validate required fields
@@ -305,7 +305,7 @@ router.put('/:id',
   async (req, res) => {
     try {
       const { id } = req.params;
-      const person = req.person || req.user;
+      const person = req.person;
       const updateData = req.body;
       
       // Check if site exists
@@ -435,7 +435,7 @@ router.delete('/:id',
   async (req, res) => {
     try {
       const { id } = req.params;
-      const person = req.person || req.user;
+      const person = req.person;
       
       // Check if site exists
       const existingSite = await prisma.companySite.findUnique({ 

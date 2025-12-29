@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import { apiGet, apiDelete } from '../../services/api';
 import { Button } from '../../design-system/atoms/Button';
+import { useToast } from '../../hooks/useToast';
 import { SearchBar } from '../../design-system/molecules';
 import { SearchBarControls } from '../../design-system/molecules/SearchBarControls';
 import ResizableTable from '../../components/shared/ResizableTable';
@@ -109,6 +110,7 @@ const Attestati: React.FC<AttestatiProps> = ({
   showGenerateModal,
   setShowGenerateModal
 }) => {
+  const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [attestati, setAttestati] = useState<Attestato[]>([]);
@@ -137,13 +139,13 @@ const Attestati: React.FC<AttestatiProps> = ({
       if (close) setTimeout(close, 100);
     } catch (err: any) {
       const userMessage = sanitizeErrorMessage(err, 'Errore durante l\'eliminazione dell\'attestato');
-      alert(userMessage);
+      showToast({ type: 'error', title: 'Errore', message: userMessage });
     }
   };
 
   const handleDeleteMultipleAttestati = async () => {
     if (selectedIds.length === 0) {
-      alert('Nessun attestato selezionato');
+      showToast({ type: 'warning', title: 'Attenzione', message: 'Nessun attestato selezionato' });
       return;
     }
     try {
@@ -154,7 +156,7 @@ const Attestati: React.FC<AttestatiProps> = ({
       setSelectedIds([]);
     } catch (err) {
       const userMessage = sanitizeErrorMessage(err, 'Errore durante l\'eliminazione multipla degli attestati');
-      alert(userMessage);
+      showToast({ type: 'error', title: 'Errore', message: userMessage });
     }
   };
   

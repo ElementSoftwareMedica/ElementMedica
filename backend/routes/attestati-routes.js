@@ -84,7 +84,7 @@ router.get('/', authenticateToken(), requirePermission('documents:read'), async 
     const { scheduleId, year } = req.query;
     let personId = req.query.personId;
     const tenantId = req.user.tenantId;
-    const person = req.person || req.user;
+    const person = req.person;
 
     // Verifica se l'utente è EMPLOYEE (ha solo il ruolo EMPLOYEE, non altri ruoli admin)
     const personRoles = await prisma.personRole.findMany({

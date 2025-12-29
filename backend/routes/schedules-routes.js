@@ -33,7 +33,7 @@ const validateSchedule = [
 // Get all schedules
 router.get('/', authenticateToken(), requirePermission('schedules:read'), roleDataFilter, filterResponseFields, async (req, res) => {
   try {
-    const person = req.person || req.user;
+    const person = req.person;
 
     // Verifica se l'utente è EMPLOYEE (ha solo il ruolo EMPLOYEE, non altri ruoli admin)
     const personRoles = await prisma.personRole.findMany({
@@ -184,7 +184,7 @@ router.get('/', authenticateToken(), requirePermission('schedules:read'), roleDa
 router.get('/expiring-courses', authenticateToken(), requirePermission('schedules:read'), roleDataFilter, filterResponseFields, async (req, res) => {
   try {
     const { tenantId } = req.user;
-    const person = req.person || req.user;
+    const person = req.person;
     const expiredDays = parseInt(req.query.expiredDays) || 30;
     const expiringDays = parseInt(req.query.expiringDays) || 60;
     const { companyId } = req.query;
@@ -462,7 +462,6 @@ router.get('/expiring-courses', authenticateToken(), requirePermission('schedule
       personId: req.person?.id,
       tenantId: req.user?.tenantId
     });
-    console.error('EXPIRING COURSES ERROR DETAILS:', error);
     res.status(500).json({
       error: 'Internal server error',
       message: 'Failed to get expiring courses',
@@ -748,18 +747,6 @@ router.get('/with-attestati', authenticateToken(), requirePermission('schedules:
 
 // Create new schedule
 router.post('/',
-  // 🔧 DEBUG: Log PRIMA di tutti i middleware per vedere se arriva la richiesta
-  (req, res, next) => {
-    console.log('[POST /schedules] ========================================');
-    console.log('[POST /schedules] 🎯 REQUEST INTERCEPTED');
-    console.log('[POST /schedules] Method:', req.method);
-    console.log('[POST /schedules] URL:', req.url);
-    console.log('[POST /schedules] Content-Type:', req.headers['content-type']);
-    console.log('[POST /schedules] Body present:', !!req.body);
-    console.log('[POST /schedules] Body keys:', req.body ? Object.keys(req.body) : 'NO BODY');
-    console.log('[POST /schedules] ========================================');
-    next();
-  },
   authenticateToken(),
   requirePermission('schedules:create'),
   validateSchedule,
@@ -781,29 +768,9 @@ router.post('/',
     } = req.body;
 
     try {
-      // 🔍 DEBUG: Log payload ricevuto
-      console.log('[POST /schedules] Payload ricevuto:', JSON.stringify({
-        courseId,
-        courseIdType: typeof courseId,
-        startDate,
-        endDate,
-        location,
-        maxParticipants,
-        deliveryMode,
-        datesCount: dates?.length,
-        companyIdsCount: companyIds?.length,
-        personIdsCount: personIds?.length,
-        attendanceCount: attendance?.length,
-        sampleDate: dates?.[0],
-        sampleCompanyId: companyIds?.[0],
-        samplePersonId: personIds?.[0],
-        sampleAttendance: attendance?.[0]
-      }, null, 2));
-
       // Validate main company ID
       const mainCompanyId = Array.isArray(companyIds) && companyIds.length > 0 ? companyIds[0] : null;
       if (!mainCompanyId) {
-        console.error('[POST /schedules] ❌ Validation error: No companyId provided');
         return res.status(400).json({
           error: 'Validation error',
           message: 'At least one companyId is required'
@@ -813,15 +780,11 @@ router.post('/',
       // Get tenantId from authenticated person
       const tenantId = req.person?.tenantId || req.tenant?.id || req.tenantId;
       if (!tenantId) {
-        console.error('[POST /schedules] ❌ Validation error: No tenantId found');
-        console.error('[POST /schedules] req.person:', req.person);
-        console.error('[POST /schedules] req.tenant:', req.tenant);
         return res.status(400).json({
           error: 'Validation error',
           message: 'Tenant ID is required'
         });
       }
-      console.log('[POST /schedules] ✅ TenantId found:', tenantId);
 
       // Map deliveryMode from frontend format to database enum
       const deliveryModeMap = {
@@ -831,7 +794,6 @@ router.post('/',
         'self-paced': 'SELF_PACED'
       };
       const mappedDeliveryMode = deliveryMode ? deliveryModeMap[deliveryMode.toLowerCase()] || deliveryMode.toUpperCase().replace('-', '_') : null;
-      console.log('[POST /schedules] DeliveryMode mapping:', { original: deliveryMode, mapped: mappedDeliveryMode });
 
       // Build schedule data
       const scheduleData = {
@@ -848,12 +810,6 @@ router.post('/',
       };
 
       // 1. Create the main schedule
-      console.log('[POST /schedules] 📝 Creating schedule with data:', {
-        ...scheduleData,
-        courseId,
-        tenantId
-      });
-
       const schedule = await prisma.courseSchedule.create({
         data: {
           ...scheduleData,
@@ -865,8 +821,6 @@ router.post('/',
           }
         },
       });
-
-      console.log('[POST /schedules] ✅ Schedule created:', schedule.id);
 
       // 2. Create sessions (dates)
       if (Array.isArray(dates)) {
@@ -917,7 +871,6 @@ router.post('/',
       // 5. Store attendance data on schedule (JSON field)
       // L'attendance arriva come array di { date, employee_ids: [...] }
       if (attendance && Array.isArray(attendance) && attendance.length > 0) {
-        console.log('[POST /schedules] 📋 Saving attendance:', JSON.stringify(attendance, null, 2));
         await prisma.courseSchedule.update({
           where: { id: schedule.id },
           data: {
@@ -944,11 +897,6 @@ router.post('/',
 
       res.status(201).json(fullSchedule);
     } catch (error) {
-      console.error('[POST /schedules] ❌ ERROR:', error);
-      console.error('[POST /schedules] Error message:', error.message);
-      console.error('[POST /schedules] Error code:', error.code);
-      console.error('[POST /schedules] Stack:', error.stack);
-
       logger.error('Failed to create schedule', {
         component: 'schedules-routes',
         action: 'createSchedule',
@@ -995,12 +943,6 @@ router.put('/:id', authenticateToken(), requirePermission('schedules:update'), a
   try {
     const { id } = req.params;
 
-    console.log('[PUT /schedules] 🔧 Update request for schedule:', id);
-    console.log('[PUT /schedules] 📦 Full request body:', JSON.stringify(req.body, null, 2));
-    console.log('[PUT /schedules] Status value:', status, 'Type:', typeof status);
-    console.log('[PUT /schedules] Attendance payload:', JSON.stringify(attendance, null, 2));
-    console.log('[PUT /schedules] PersonIds:', personIds);
-
     // Check if schedule exists
     const existingSchedule = await prisma.courseSchedule.findUnique({
       where: {
@@ -1034,7 +976,6 @@ router.put('/:id', authenticateToken(), requirePermission('schedules:update'), a
       };
       const mappedDeliveryMode = deliveryMode ? deliveryModeMap[deliveryMode.toLowerCase()] || deliveryMode.toUpperCase().replace('-', '_') : null;
       updateData.deliveryMode = mappedDeliveryMode;
-      console.log('[PUT /schedules] DeliveryMode mapping:', { original: deliveryMode, mapped: mappedDeliveryMode });
     }
 
     // ✅ FIX: Map status from frontend format to database EnrollmentStatus enum
@@ -1056,7 +997,6 @@ router.put('/:id', authenticateToken(), requirePermission('schedules:update'), a
       const normalizedStatus = String(status).toLowerCase();
       const mappedStatus = statusMap[normalizedStatus] || status.toUpperCase();
       updateData.status = mappedStatus;
-      console.log('[PUT /schedules] Status mapping:', { original: status, mapped: mappedStatus });
     }
 
     if (attendance !== undefined) updateData.attendance = attendance;
@@ -1066,8 +1006,6 @@ router.put('/:id', authenticateToken(), requirePermission('schedules:update'), a
     if (source !== undefined && ['INTERNAL', 'EXTERNAL', 'IMPORT'].includes(source)) {
       updateData.source = source;
     }
-
-    console.log('[PUT /schedules] Update data being sent to Prisma:', JSON.stringify(updateData, null, 2));
 
     const schedule = await prisma.courseSchedule.update({
       where: { id },
@@ -1111,7 +1049,6 @@ router.put('/:id', authenticateToken(), requirePermission('schedules:update'), a
       await prisma.scheduleCompany.deleteMany({ where: { scheduleId: schedule.id } });
       // Create new associations
       const tenantId = req.person?.tenantId || req.tenant?.id || req.tenantId;
-      console.log('[PUT /schedules] TenantId per ScheduleCompany:', tenantId);
       for (const companyId of companyIds) {
         await prisma.scheduleCompany.create({
           data: {
@@ -1169,10 +1106,6 @@ router.put('/:id', authenticateToken(), requirePermission('schedules:update'), a
 
     res.json(fullSchedule);
   } catch (error) {
-    console.error('[PUT /schedules] ❌ ERROR:', error.message);
-    console.error('[PUT /schedules] ❌ ERROR Stack:', error.stack);
-    console.error('[PUT /schedules] ❌ ERROR Code:', error.code);
-
     logger.error('Failed to update schedule', {
       component: 'schedules-routes',
       action: 'updateSchedule',

@@ -8,19 +8,15 @@ import { logger } from '../utils/logger.js';
 
 /**
  * Middleware per verificare i permessi su entità virtuali
+ * UPDATED: Usa req.person (standard unificato) e rimossi console.log
  */
 export function checkVirtualEntityPermission(virtualEntityName, action) {
   return async (req, res, next) => {
     try {
-      console.log(`🔍 [MIDDLEWARE] checkVirtualEntityPermission chiamato: entity=${virtualEntityName}, action=${action}`);
+      const personId = req.person?.id;
+      const tenantId = req.person?.tenantId;
       
-      const userId = req.user?.id;
-      const tenantId = req.user?.tenantId; // Corretto: usa req.user.tenantId invece di req.tenant?.id
-      
-      console.log(`🔍 [MIDDLEWARE] userId=${userId}, tenantId=${tenantId}`);
-
-      if (!userId || !tenantId) {
-        console.log(`❌ [MIDDLEWARE] Utente o tenant non autenticato`);
+      if (!personId || !tenantId) {
         return res.status(401).json({
           success: false,
           message: 'Utente o tenant non autenticato'
@@ -28,19 +24,15 @@ export function checkVirtualEntityPermission(virtualEntityName, action) {
       }
 
       // Verifica se l'utente ha il permesso sull'entità virtuale
-      console.log(`🔍 [MIDDLEWARE] Chiamando hasVirtualEntityPermission...`);
       const hasPermission = await hasVirtualEntityPermission(
-        userId, 
+        personId, 
         virtualEntityName, 
         action, 
         tenantId
       );
-      
-      console.log(`🔍 [MIDDLEWARE] hasVirtualEntityPermission risultato: ${hasPermission}`);
 
       if (!hasPermission) {
-        console.log(`❌ [MIDDLEWARE] Accesso negato per utente ${userId} su entità virtuale ${virtualEntityName} (azione: ${action})`);
-        logger.warn(`Accesso negato per utente ${userId} su entità virtuale ${virtualEntityName} (azione: ${action})`);
+        logger.warn(`Accesso negato per utente ${personId} su entità virtuale ${virtualEntityName} (azione: ${action})`);
         return res.status(403).json({
           success: false,
           message: `Permesso negato per l'azione ${action} su ${virtualEntityName}`

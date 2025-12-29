@@ -241,42 +241,42 @@ export const requireAuth = authenticate;
  */
 export function requirePermission(permission) {
   return async (req, res, next) => {
-    if (!req.person && !req.user) {
+    if (!req.person) {
       return res.status(401).json({
         error: 'Authentication required',
         code: 'AUTH_REQUIRED'
       });
     }
 
-    const user = req.person || req.user;
+    const person = req.person;
 
     // Check if user has the required permission
     // Handle permissions as either array or object format
     let hasPermission = false;
 
-    if (user.permissions) {
-      if (Array.isArray(user.permissions)) {
+    if (person.permissions) {
+      if (Array.isArray(person.permissions)) {
         // Array format: ['companies:read', 'employees:write', '*']
-        hasPermission = user.permissions.includes(permission) ||
-          user.permissions.includes('*');
-      } else if (typeof user.permissions === 'object') {
+        hasPermission = person.permissions.includes(permission) ||
+          person.permissions.includes('*');
+      } else if (typeof person.permissions === 'object') {
         // Object format: { 'companies:read': true, '*': true }
-        hasPermission = user.permissions[permission] === true ||
-          user.permissions['*'] === true ||
-          user.permissions['all:*'] === true;
+        hasPermission = person.permissions[permission] === true ||
+          person.permissions['*'] === true ||
+          person.permissions['all:*'] === true;
       }
     }
 
     // Also check roles for admin access
-    if (!hasPermission && user.roles) {
-      hasPermission = user.roles.includes('ADMIN') ||
-        user.roles.includes('SUPER_ADMIN');
+    if (!hasPermission && person.roles) {
+      hasPermission = person.roles.includes('ADMIN') ||
+        person.roles.includes('SUPER_ADMIN');
     }
 
     // Check globalRole as well
-    if (!hasPermission && user.globalRole) {
-      hasPermission = user.globalRole === 'ADMIN' ||
-        user.globalRole === 'SUPER_ADMIN';
+    if (!hasPermission && person.globalRole) {
+      hasPermission = person.globalRole === 'ADMIN' ||
+        person.globalRole === 'SUPER_ADMIN';
     }
 
     if (!hasPermission) {

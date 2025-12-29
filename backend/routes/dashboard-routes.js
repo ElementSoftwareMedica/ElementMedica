@@ -15,7 +15,7 @@ const router = express.Router();
 // Get dashboard stats - endpoint ottimizzato per contatori
 router.get('/stats', authenticate, tenantMiddleware, async (req, res) => {
   try {
-    const person = req.person || req.user;
+    const person = req.person;
     const tenantId = req.tenantId || person?.tenantId;
     
     logger.info('Getting dashboard stats', { 
@@ -84,7 +84,7 @@ router.get('/stats', authenticate, tenantMiddleware, async (req, res) => {
 // Get companies list - versione semplificata per dashboard
 router.get('/companies', authenticate, tenantMiddleware, async (req, res) => {
   try {
-    const person = req.person || req.user;
+    const person = req.person;
     const tenantId = req.tenantId || person?.tenantId;
     
     logger.info('Getting companies for dashboard', { 
@@ -138,7 +138,7 @@ router.get('/companies', authenticate, tenantMiddleware, async (req, res) => {
 // Get employees list - versione semplificata per dashboard
 router.get('/employees', authenticate, tenantMiddleware, async (req, res) => {
   try {
-    const person = req.person || req.user;
+    const person = req.person;
     const tenantId = req.tenantId || person?.tenantId;
     
     logger.info('Getting employees for dashboard', { 

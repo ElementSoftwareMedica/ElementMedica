@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import EntityListLayout from '../components/layouts/EntityListLayout';
 import TabNavigation from '../components/shared/TabNavigation';
+import { useToast } from '../hooks/useToast';
 import RegistriPresenze from './documents/RegistriPresenze';
 import LettereIncarico from './documents/LettereIncarico';
 import Attestati from './documents/Attestati';
@@ -32,6 +33,7 @@ const tabConfig = {
 
 const DocumentsCorsi: React.FC = () => {
   const { user } = useAuth();
+  const { showToast } = useToast();
 
   // Verifica se l'utente è EMPLOYEE (non ha ruoli admin/trainer)
   const isEmployee = useMemo(() => {
@@ -54,7 +56,7 @@ const DocumentsCorsi: React.FC = () => {
     if (activeTab === 'attestati') {
       setShowGenerateModal(true);
     } else {
-      alert(`Aggiunta di ${activeTab === 'registri' ? 'registro' : 'lettera di incarico'} non implementata`);
+      showToast({ type: 'warning', title: 'Attenzione', message: `Aggiunta di ${activeTab === 'registri' ? 'registro' : 'lettera di incarico'} non implementata` });
     }
   };
 

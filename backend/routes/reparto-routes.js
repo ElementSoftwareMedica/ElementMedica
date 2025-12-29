@@ -17,7 +17,7 @@ router.get('/site/:siteId',
   async (req, res) => {
     try {
       const { siteId } = req.params;
-      const person = req.person || req.user;
+      const person = req.person;
       
       // Verifica che la sede esista
       const site = await prisma.companySite.findUnique({
@@ -107,7 +107,7 @@ router.get('/:id',
   async (req, res) => {
     try {
       const { id } = req.params;
-      const person = req.person || req.user;
+      const person = req.person;
       
       const reparto = await prisma.reparto.findUnique({ 
         where: { 
@@ -176,7 +176,7 @@ router.post('/',
   }),
   async (req, res) => {
     try {
-      const person = req.person || req.user;
+      const person = req.person;
       const { siteId, nome, descrizione, codice, responsabileId } = req.body;
       
       // Validate required fields
@@ -306,7 +306,7 @@ router.put('/:id',
   async (req, res) => {
     try {
       const { id } = req.params;
-      const person = req.person || req.user;
+      const person = req.person;
       const { nome, descrizione, codice, responsabileId } = req.body;
       
       // Verifica che il reparto esista
@@ -444,7 +444,7 @@ router.delete('/:id',
   async (req, res) => {
     try {
       const { id } = req.params;
-      const person = req.person || req.user;
+      const person = req.person;
       
       // Verifica che il reparto esista
       const reparto = await prisma.reparto.findUnique({
@@ -515,7 +515,7 @@ router.post('/:id/assign-employee',
     try {
       const { id } = req.params;
       const { personId } = req.body;
-      const person = req.person || req.user;
+      const person = req.person;
       
       if (!personId) {
         return res.status(400).json({
@@ -608,7 +608,7 @@ router.post('/:id/remove-employee',
     try {
       const { id } = req.params;
       const { personId } = req.body;
-      const person = req.person || req.user;
+      const person = req.person;
       
       if (!personId) {
         return res.status(400).json({

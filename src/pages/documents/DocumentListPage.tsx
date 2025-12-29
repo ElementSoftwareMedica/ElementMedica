@@ -137,7 +137,7 @@ const DocumentListPage: React.FC = () => {
     try {
       await documentService.download(id);
     } catch (err: any) {
-      alert(`Errore durante il download: ${err.message}`);
+      showToast({ type: 'error', title: 'Errore', message: `Errore durante il download: ${err.message}` });
     }
   };
 
