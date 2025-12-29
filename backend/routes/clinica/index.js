@@ -19,6 +19,8 @@ import ambulatoriRouter from './ambulatori.routes.js';
 import prestazioniRouter from './prestazioni.routes.js';
 import mediciRouter from './medici.routes.js';
 import strumentiRouter from './strumenti.routes.js';
+import visiteRouter from './visite.routes.js';
+import refertiRouter from './referti.routes.js';
 // Future imports - will be added as files are created:
 // import sediRouter from './sedi.routes.js';
 // import mediciRouter from './medici.routes.js';
@@ -70,10 +72,15 @@ router.use('/ambulatori', ambulatoriRouter);
 router.use('/prestazioni', prestazioniRouter);
 router.use('/medici', mediciRouter);
 router.use('/strumenti', strumentiRouter);
+router.use('/visite', visiteRouter);
+router.use('/referti', refertiRouter);
 
 // Future mounts - will be enabled as files are created:
 // router.use('/sedi', sediRouter);
-// router.use('/visite', visiteRouter);
+// router.use('/bundle', bundleRouter);
+// router.use('/convenzioni', convenzioniRouter);
+// router.use('/slots', slotsRouter);
+// router.use('/listini', listiniRouter);
 // router.use('/strumenti', strumentiRouter);
 // router.use('/appuntamenti', appuntamentiRouter);
 // router.use('/visite', visiteRouter);
