@@ -13,12 +13,14 @@ import logger from '../../utils/logger.js';
 import { CLINICAL_ENUMS } from '../../config/validation-clinical.js';
 import middleware from '../../auth/middleware.js';
 
-// Import sub-routers
+// Import sub-routers (modular)
 import poliambulatoriRouter from './poliambulatori.routes.js';
 import ambulatoriRouter from './ambulatori.routes.js';
+import prestazioniRouter from './prestazioni.routes.js';
+import mediciRouter from './medici.routes.js';
+import strumentiRouter from './strumenti.routes.js';
 // Future imports - will be added as files are created:
 // import sediRouter from './sedi.routes.js';
-// import prestazioniRouter from './prestazioni.routes.js';
 // import mediciRouter from './medici.routes.js';
 // import strumentiRouter from './strumenti.routes.js';
 // import appuntamentiRouter from './appuntamenti.routes.js';
@@ -65,11 +67,13 @@ router.get('/enums', authenticateToken(), (req, res) => {
 
 router.use('/poliambulatori', poliambulatoriRouter);
 router.use('/ambulatori', ambulatoriRouter);
+router.use('/prestazioni', prestazioniRouter);
+router.use('/medici', mediciRouter);
+router.use('/strumenti', strumentiRouter);
 
 // Future mounts - will be enabled as files are created:
 // router.use('/sedi', sediRouter);
-// router.use('/prestazioni', prestazioniRouter);
-// router.use('/medici', mediciRouter);
+// router.use('/visite', visiteRouter);
 // router.use('/strumenti', strumentiRouter);
 // router.use('/appuntamenti', appuntamentiRouter);
 // router.use('/visite', visiteRouter);
