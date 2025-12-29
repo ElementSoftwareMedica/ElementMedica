@@ -21,6 +21,7 @@ letsencrypt-webroot/
 logs/
 backend/logs/
 backups/
+archives/
 
 # Uploads & runtime data
 uploads/
