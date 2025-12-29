@@ -996,6 +996,9 @@ model Person {
   // Riconoscimenti convenzioni (come paziente)
   riconoscimentiRicevuti RiconoscimentoErogato[] @relation("RiconoscimentiPaziente")
 
+  // Slot disponibilità (come medico)
+  slotDisponibilita SlotDisponibilita[] @relation("SlotMedico")
+
   @@index([email])
   @@index([username])
   @@index([companyId])
@@ -2438,6 +2441,12 @@ enum StatoManutenzione {
   RIMANDATA
 }
 
+enum StatoSlot {
+  LIBERO
+  PRENOTATO
+  BLOCCATO
+}
+
 enum StatoAppuntamento {
   PRENOTATO
   CONFERMATO
@@ -2732,6 +2741,7 @@ model Ambulatorio {
   prestazioniAmbulatorio AmbulatorioPrestazione[]
   appuntamenti           Appuntamento[]
   visite                 Visita[]
+  slotDisponibilita      SlotDisponibilita[]
 
   @@unique([poliambulatorioId, codice])
   @@index([tenantId])
@@ -2797,6 +2807,7 @@ model Prestazione {
   bundlePrestazioni  OffertaBundlePrestazione[] // Tariffario: bundle/offerte
   riconoscimenti     RiconoscimentoConvenzione[] // Riconoscimenti convenzioni
   vociTariffario     VoceTariffario[]            // Voci tariffario aziende
+  slotDisponibilita  SlotDisponibilita[]         // Slot disponibilità
 
   @@unique([tenantId, codice])
   @@index([tenantId])
@@ -3343,25 +3354,36 @@ model RiconoscimentoErogato {
 }
 
 model SlotDisponibilita {
-  id            String    @id @default(uuid())
-  ambulatorioId String
-  medicoId      String
-  prestazioneId String?
-  data          DateTime  @db.Date
-  oraInizio     String
-  oraFine       String
-  disponibile   Boolean   @default(true)
-  motivoBlocco  String?
-  tenantId      String
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  deletedAt     DateTime?
+  id             String     @id @default(uuid())
+  ambulatorioId  String
+  medicoId       String
+  prestazioneId  String?
+  appuntamentoId String?
+  data           DateTime   @db.Date
+  oraInizio      String
+  oraFine        String
+  stato          StatoSlot  @default(LIBERO)
+  disponibile    Boolean    @default(true)
+  motivoBlocco   String?
+  note           String?
+  tenantId       String
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  deletedAt      DateTime?
+
+  // Relations
+  ambulatorio  Ambulatorio   @relation(fields: [ambulatorioId], references: [id], onDelete: Cascade)
+  medico       Person        @relation("SlotMedico", fields: [medicoId], references: [id], onDelete: Cascade)
+  prestazione  Prestazione?  @relation(fields: [prestazioneId], references: [id], onDelete: SetNull)
+  appuntamento Appuntamento? @relation(fields: [appuntamentoId], references: [id], onDelete: SetNull)
 
   @@index([tenantId])
   @@index([ambulatorioId])
   @@index([medicoId])
   @@index([data])
+  @@index([stato])
   @@index([data, medicoId])
+  @@index([tenantId, stato, deletedAt])
   @@map("slot_disponibilita")
 }
 
@@ -3391,8 +3413,9 @@ model Appuntamento {
   deletedAt          DateTime?
   createdBy          String?
 
-  ambulatorio Ambulatorio @relation(fields: [ambulatorioId], references: [id])
-  prestazione Prestazione @relation(fields: [prestazioneId], references: [id])
+  ambulatorio Ambulatorio        @relation(fields: [ambulatorioId], references: [id])
+  prestazione Prestazione        @relation(fields: [prestazioneId], references: [id])
+  slots       SlotDisponibilita[]
   visita      Visita?
 
   @@unique([tenantId, numeroPrenotazione])

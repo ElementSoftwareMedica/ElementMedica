@@ -195,12 +195,12 @@ const TemplateCampoVisitaService = {
      * @param {boolean} [options.onlyActive=true] - Solo campi attivi
      * @returns {Promise<Array>} Lista campi
      */
-    async getByPrestazione(prestazioneId, tenantId, options = {}) {
+    async getByTipoPrestazione(tipoPrestazione, tenantId, options = {}) {
         try {
             const { onlyActive = true } = options;
 
             const whereClause = {
-                prestazioneId,
+                tipoPrestazione,
                 tenantId,
                 deletedAt: null
             };
@@ -211,17 +211,12 @@ const TemplateCampoVisitaService = {
 
             const campi = await prisma.templateCampoVisita.findMany({
                 where: whereClause,
-                orderBy: { ordine: 'asc' },
-                include: {
-                    prestazione: {
-                        select: { id: true, nome: true, codice: true }
-                    }
-                }
+                orderBy: { nome: 'asc' }
             });
 
             return campi.map(c => this._formatCampo(c));
         } catch (error) {
-            logger.error({ error: error.message, prestazioneId }, 'Errore recupero campi per prestazione');
+            logger.error({ error: error.message, tipoPrestazione }, 'Errore recupero campi per tipo prestazione');
             throw error;
         }
     },
@@ -262,12 +257,16 @@ const TemplateCampoVisitaService = {
             if (filters.search) {
                 whereClause.OR = [
                     { nome: { contains: filters.search, mode: 'insensitive' } },
-                    { etichetta: { contains: filters.search, mode: 'insensitive' } }
+                    { codice: { contains: filters.search, mode: 'insensitive' } }
                 ];
             }
 
-            if (filters.prestazioneId) {
-                whereClause.prestazioneId = filters.prestazioneId;
+            if (filters.tipoPrestazione) {
+                whereClause.tipoPrestazione = filters.tipoPrestazione;
+            }
+
+            if (filters.specializzazione) {
+                whereClause.specializzazione = filters.specializzazione;
             }
 
             const [campi, total] = await Promise.all([
@@ -276,14 +275,9 @@ const TemplateCampoVisitaService = {
                     skip,
                     take: limit,
                     orderBy: [
-                        { prestazioneId: 'asc' },
-                        { ordine: 'asc' }
-                    ],
-                    include: {
-                        prestazione: {
-                            select: { id: true, nome: true, codice: true }
-                        }
-                    }
+                        { tipoPrestazione: 'asc' },
+                        { nome: 'asc' }
+                    ]
                 }),
                 prisma.templateCampoVisita.count({ where: whereClause })
             ]);

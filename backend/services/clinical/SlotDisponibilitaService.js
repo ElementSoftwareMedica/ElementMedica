@@ -39,7 +39,7 @@ export class SlotDisponibilitaService {
                     data: new Date(data.data),
                     oraInizio: data.oraInizio,
                     oraFine: data.oraFine,
-                    stato: data.stato || 'libero',
+                    stato: data.stato?.toUpperCase() || 'LIBERO',
                     note: data.note || null
                 },
                 include: {
@@ -177,7 +177,7 @@ export class SlotDisponibilitaService {
                             data: new Date(d).toISOString().split('T')[0],
                             oraInizio,
                             oraFine,
-                            stato: 'libero'
+                            stato: 'LIBERO'
                         });
 
                         currentTime += durataMinuti;
@@ -296,7 +296,7 @@ export class SlotDisponibilitaService {
             const where = {
                 tenantId,
                 deletedAt: null,
-                stato: 'libero',
+                stato: 'LIBERO',
                 data: {
                     gte: new Date(dataInizio || new Date()),
                     ...(dataFine && { lte: new Date(dataFine) })
@@ -555,14 +555,14 @@ export class SlotDisponibilitaService {
                 throw new Error('Slot non trovato');
             }
 
-            if (slot.stato !== 'libero') {
+            if (slot.stato !== 'LIBERO') {
                 throw new Error('Slot non disponibile');
             }
 
             const updated = await prisma.slotDisponibilita.update({
                 where: { id },
                 data: {
-                    stato: 'prenotato',
+                    stato: 'PRENOTATO',
                     appuntamentoId
                 }
             });
@@ -607,7 +607,7 @@ export class SlotDisponibilitaService {
             const updated = await prisma.slotDisponibilita.update({
                 where: { id },
                 data: {
-                    stato: 'libero',
+                    stato: 'LIBERO',
                     appuntamentoId: null
                 }
             });
@@ -649,15 +649,15 @@ export class SlotDisponibilitaService {
                 throw new Error('Slot non trovato');
             }
 
-            if (slot.stato === 'prenotato') {
+            if (slot.stato === 'PRENOTATO') {
                 throw new Error('Impossibile bloccare uno slot prenotato');
             }
 
             const updated = await prisma.slotDisponibilita.update({
                 where: { id },
                 data: {
-                    stato: 'bloccato',
-                    note
+                    stato: 'BLOCCATO',
+                    motivoBlocco: note
                 }
             });
 
@@ -905,7 +905,7 @@ export class SlotDisponibilitaService {
             const where = {
                 tenantId,
                 deletedAt: null,
-                stato: 'libero',
+                stato: 'LIBERO',
                 data: { gte: startDate },
                 OR: [
                     { prestazioneId },

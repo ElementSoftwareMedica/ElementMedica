@@ -32,7 +32,7 @@ const { authenticate: authenticateToken } = middleware;
 
 // Services
 import OffertaBundleService from '../../services/clinical/OffertaBundleService.js';
-import personTenantAccessService from '../../services/PersonTenantAccessService.js';
+import { personTenantAccessService } from '../../services/PersonTenantAccessService.js';
 
 const router = express.Router();
 
