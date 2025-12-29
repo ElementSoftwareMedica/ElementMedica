@@ -15,9 +15,9 @@
 
 import express from 'express';
 import logger from '../../utils/logger.js';
-import { FatturaSanitariaService } from '../../services/clinica/FatturaSanitariaService.js';
+import FatturaSanitariaService from '../../services/clinical/FatturaSanitariaService.js';
 import middleware from '../../auth/middleware.js';
-import { checkAdvancedPermission } from '../../middleware/permissionMiddleware.js';
+import { checkAdvancedPermission } from '../../middleware/advanced-permissions.js';
 import { auditClinico, getEffectiveTenantId } from './utils/clinica-utils.js';
 
 const router = express.Router();

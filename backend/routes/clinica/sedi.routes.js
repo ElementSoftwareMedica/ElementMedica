@@ -27,7 +27,7 @@
 import express from 'express';
 import middleware from '../../auth/middleware.js';
 import { checkAdvancedPermission } from '../../middleware/advanced-permissions.js';
-import prisma from '../../config/database.js';
+import prisma from '../../config/prisma-optimization.js';
 import logger from '../../utils/logger.js';
 import { auditClinico, getEffectiveTenantId } from './utils/clinica-utils.js';
 

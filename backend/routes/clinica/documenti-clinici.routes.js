@@ -20,9 +20,9 @@
 import express from 'express';
 import fs from 'fs/promises';
 import logger from '../../utils/logger.js';
-import { DocumentoClinicoService } from '../../services/clinica/DocumentoClinicoService.js';
+import DocumentoClinicoService from '../../services/clinical/DocumentoClinicoService.js';
 import middleware from '../../auth/middleware.js';
-import { createUploadConfig, multerErrorHandler } from '../../middleware/uploadMiddleware.js';
+import { createUploadConfig, multerErrorHandler } from '../../config/multer.js';
 import { auditClinico, getEffectiveTenantId } from './utils/clinica-utils.js';
 
 const router = express.Router();

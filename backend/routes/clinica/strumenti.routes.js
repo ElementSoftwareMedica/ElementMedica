@@ -11,7 +11,7 @@
 import express from 'express';
 import logger from '../../utils/logger.js';
 import middleware from '../../auth/middleware.js';
-import { checkAdvancedPermission } from '../../middleware/advancedPermissions.js';
+import { checkAdvancedPermission } from '../../middleware/advanced-permissions.js';
 import { CLINICAL_ENUMS, clinicalValidators } from '../../config/validation-clinical.js';
 import { StrumentoService } from '../../services/clinical/StrumentoService.js';
 import { getEffectiveTenantId } from '../../utils/tenantHelper.js';

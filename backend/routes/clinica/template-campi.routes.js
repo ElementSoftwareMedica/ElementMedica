@@ -21,9 +21,9 @@
 
 import express from 'express';
 import logger from '../../utils/logger.js';
-import { TemplateCampoVisitaService } from '../../services/clinica/TemplateCampoVisitaService.js';
+import TemplateCampoVisitaService from '../../services/clinical/TemplateCampoVisitaService.js';
 import middleware from '../../auth/middleware.js';
-import { clinicalValidators } from '../../validation/clinical-validators.js';
+import { clinicalValidators } from '../../config/validation-clinical.js';
 import { auditClinico, getEffectiveTenantId } from './utils/clinica-utils.js';
 
 const router = express.Router();

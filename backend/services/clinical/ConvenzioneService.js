@@ -115,7 +115,6 @@ export class ConvenzioneService {
 
             const convenzione = await prisma.convenzione.findFirst({
                 where,
-            },
                 include: {
                 listiniPrezzo: {
                     where: { deletedAt: null },

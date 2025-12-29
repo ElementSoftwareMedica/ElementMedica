@@ -24,10 +24,10 @@
 
 import express from 'express';
 import logger from '../../utils/logger.js';
-import { OrarioAmbulatorioService } from '../../services/clinica/OrarioAmbulatorioService.js';
+import { OrarioAmbulatorioService } from '../../services/clinical/OrarioAmbulatorioService.js';
 import middleware from '../../auth/middleware.js';
-import { checkAdvancedPermission } from '../../middleware/permissionMiddleware.js';
-import { clinicalValidators } from '../../validation/clinical-validators.js';
+import { checkAdvancedPermission } from '../../middleware/advanced-permissions.js';
+import { clinicalValidators } from '../../config/validation-clinical.js';
 import { auditClinico, getEffectiveTenantId } from './utils/clinica-utils.js';
 
 const router = express.Router();

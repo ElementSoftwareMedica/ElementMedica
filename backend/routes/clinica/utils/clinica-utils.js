@@ -10,6 +10,9 @@ import logger from '../../../utils/logger.js';
 import { BRANCH_TYPES } from '../../../utils/branchHelper.js';
 import { getEffectiveTenantId } from '../../../utils/tenantHelper.js';
 
+// Re-export getEffectiveTenantId for convenience
+export { getEffectiveTenantId } from '../../../utils/tenantHelper.js';
+
 // ============================================
 // PROJECT 45: Branch Type Helper
 // ============================================

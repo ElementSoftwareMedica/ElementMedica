@@ -9,10 +9,10 @@
  */
 
 import express from 'express';
-import prisma from '../../config/prisma.js';
+import prisma from '../../config/prisma-optimization.js';
 import logger from '../../utils/logger.js';
 import middleware from '../../auth/middleware.js';
-import { checkAdvancedPermission } from '../../middleware/advancedPermissions.js';
+import { checkAdvancedPermission } from '../../middleware/advanced-permissions.js';
 import { clinicalValidators } from '../../config/validation-clinical.js';
 import { getEffectiveTenantId } from '../../utils/tenantHelper.js';
 import { auditClinico } from './utils/clinica-utils.js';
