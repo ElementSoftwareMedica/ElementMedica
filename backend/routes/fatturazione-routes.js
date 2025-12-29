@@ -12,7 +12,7 @@ import express from 'express';
 import { body, param, query } from 'express-validator';
 import logger from '../utils/logger.js';
 import middleware from '../auth/middleware.js';
-import { checkAdvancedPermission } from '../middleware/advanced-permissions.js';
+import { checkPermissions } from '../middleware/permissions.js';
 import FatturaSanitariaService, { STATI_FATTURA, METODI_PAGAMENTO } from '../services/clinical/FatturaSanitariaService.js';
 
 const router = express.Router();
@@ -82,7 +82,7 @@ router.get('/enums', authenticateToken, (req, res) => {
  */
 router.get('/',
     authenticateToken,
-    checkAdvancedPermission('VIEW_FATTURE_SANITARIE'),
+    checkPermissions(['fatture_sanitarie:read', 'fatture_sanitarie:manage']),
     auditFatturazione('list_fatture'),
     [
         query('page').optional().isInt({ min: 1 }),
@@ -135,7 +135,7 @@ router.get('/',
  */
 router.get('/stats',
     authenticateToken,
-    checkAdvancedPermission('VIEW_FATTURE_SANITARIE'),
+    checkPermissions(['fatture_sanitarie:read', 'fatture_sanitarie:manage']),
     auditFatturazione('stats_fatture'),
     [
         query('dataInizio').optional().isISO8601(),
@@ -176,7 +176,7 @@ router.get('/stats',
  */
 router.get('/:id',
     authenticateToken,
-    checkAdvancedPermission('VIEW_FATTURE_SANITARIE'),
+    checkPermissions(['fatture_sanitarie:read', 'fatture_sanitarie:manage']),
     auditFatturazione('view_fattura'),
     param('id').isUUID(),
     async (req, res) => {
@@ -215,7 +215,7 @@ router.get('/:id',
  */
 router.post('/',
     authenticateToken,
-    checkAdvancedPermission('CREATE_FATTURE_SANITARIE'),
+    checkPermissions(['fatture_sanitarie:create', 'fatture_sanitarie:manage']),
     auditFatturazione('create_fattura'),
     [
         body('pazienteId').isUUID().withMessage('ID paziente non valido'),
@@ -272,7 +272,7 @@ router.post('/',
  */
 router.post('/from-visita/:visitaId',
     authenticateToken,
-    checkAdvancedPermission('CREATE_FATTURE_SANITARIE'),
+    checkPermissions(['fatture_sanitarie:create', 'fatture_sanitarie:manage']),
     auditFatturazione('create_fattura_from_visita'),
     param('visitaId').isUUID(),
     async (req, res) => {
@@ -318,7 +318,7 @@ router.post('/from-visita/:visitaId',
  */
 router.put('/:id',
     authenticateToken,
-    checkAdvancedPermission('EDIT_FATTURE_SANITARIE'),
+    checkPermissions(['fatture_sanitarie:update', 'fatture_sanitarie:manage']),
     auditFatturazione('update_fattura'),
     [
         param('id').isUUID(),
@@ -387,7 +387,7 @@ router.put('/:id',
  */
 router.post('/:id/pagamento',
     authenticateToken,
-    checkAdvancedPermission('EDIT_FATTURE_SANITARIE'),
+    checkPermissions(['fatture_sanitarie:update', 'fatture_sanitarie:manage']),
     auditFatturazione('register_payment'),
     [
         param('id').isUUID(),
@@ -441,7 +441,7 @@ router.post('/:id/pagamento',
  */
 router.post('/:id/annulla',
     authenticateToken,
-    checkAdvancedPermission('DELETE_FATTURE_SANITARIE'),
+    checkPermissions(['fatture_sanitarie:delete', 'fatture_sanitarie:manage']),
     auditFatturazione('cancel_fattura'),
     [
         param('id').isUUID(),
@@ -491,7 +491,7 @@ router.post('/:id/annulla',
  */
 router.delete('/:id',
     authenticateToken,
-    checkAdvancedPermission('DELETE_FATTURE_SANITARIE'),
+    checkPermissions(['fatture_sanitarie:delete', 'fatture_sanitarie:manage']),
     auditFatturazione('delete_fattura'),
     param('id').isUUID(),
     async (req, res) => {
@@ -532,7 +532,7 @@ router.delete('/:id',
  */
 router.get('/paziente/:pazienteId',
     authenticateToken,
-    checkAdvancedPermission('VIEW_FATTURE_SANITARIE'),
+    checkPermissions(['fatture_sanitarie:read', 'fatture_sanitarie:manage']),
     auditFatturazione('list_fatture_paziente'),
     [
         param('pazienteId').isUUID(),
@@ -582,7 +582,7 @@ router.get('/paziente/:pazienteId',
  */
 router.get('/report/prestazioni',
     authenticateToken,
-    checkAdvancedPermission('VIEW_FATTURE_SANITARIE'),
+    checkPermissions(['fatture_sanitarie:read', 'fatture_sanitarie:manage']),
     auditFatturazione('report_prestazioni'),
     [
         query('dataInizio').optional().isISO8601(),
@@ -622,7 +622,7 @@ router.get('/report/prestazioni',
  */
 router.get('/report/medici',
     authenticateToken,
-    checkAdvancedPermission('VIEW_FATTURE_SANITARIE'),
+    checkPermissions(['fatture_sanitarie:read', 'fatture_sanitarie:manage']),
     auditFatturazione('report_medici'),
     [
         query('dataInizio').optional().isISO8601(),
@@ -662,7 +662,7 @@ router.get('/report/medici',
  */
 router.get('/report/daily',
     authenticateToken,
-    checkAdvancedPermission('VIEW_FATTURE_SANITARIE'),
+    checkPermissions(['fatture_sanitarie:read', 'fatture_sanitarie:manage']),
     auditFatturazione('report_daily'),
     [
         query('dataInizio').optional().isISO8601(),
@@ -702,7 +702,7 @@ router.get('/report/daily',
  */
 router.get('/report/comparison',
     authenticateToken,
-    checkAdvancedPermission('VIEW_FATTURE_SANITARIE'),
+    checkPermissions(['fatture_sanitarie:read', 'fatture_sanitarie:manage']),
     auditFatturazione('report_comparison'),
     [
         query('dataInizioCorrente').isISO8601(),
@@ -750,7 +750,7 @@ router.get('/report/comparison',
  */
 router.get('/export/csv',
     authenticateToken,
-    checkAdvancedPermission('VIEW_FATTURE_SANITARIE'),
+    checkPermissions(['fatture_sanitarie:read', 'fatture_sanitarie:manage']),
     auditFatturazione('export_csv'),
     [
         query('dataInizio').optional().isISO8601(),

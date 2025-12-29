@@ -19,60 +19,60 @@ router.use(authenticate);
 /**
  * @route GET /api/v1/form-templates
  * @desc Lista tutti i template di form per il tenant
- * @access Private (VIEW_FORM_TEMPLATES)
+ * @access Private (forms:read)
  */
 router.get('/', 
-  checkPermissions(['VIEW_FORM_TEMPLATES', 'MANAGE_FORM_TEMPLATES']), 
+  checkPermissions(['forms:read', 'forms:manage']), 
   getFormTemplates
 );
 
 /**
  * @route GET /api/v1/form-templates/:id
  * @desc Recupera un template specifico
- * @access Private (VIEW_FORM_TEMPLATES)
+ * @access Private (forms:read)
  */
 router.get('/:id', 
-  checkPermissions(['VIEW_FORM_TEMPLATES', 'MANAGE_FORM_TEMPLATES']), 
+  checkPermissions(['forms:read', 'forms:manage']), 
   getFormTemplate
 );
 
 /**
  * @route POST /api/v1/form-templates
  * @desc Crea un nuovo template di form
- * @access Private (CREATE_FORM_TEMPLATES)
+ * @access Private (forms:create)
  */
 router.post('/', 
-  checkPermissions(['CREATE_FORM_TEMPLATES', 'MANAGE_FORM_TEMPLATES']), 
+  checkPermissions(['forms:create', 'forms:manage']), 
   createFormTemplate
 );
 
 /**
  * @route PUT /api/v1/form-templates/:id
  * @desc Aggiorna un template esistente
- * @access Private (EDIT_FORM_TEMPLATES)
+ * @access Private (forms:update)
  */
 router.put('/:id', 
-  checkPermissions(['EDIT_FORM_TEMPLATES', 'MANAGE_FORM_TEMPLATES']), 
+  checkPermissions(['forms:update', 'forms:manage']), 
   updateFormTemplate
 );
 
 /**
  * @route DELETE /api/v1/form-templates/:id
  * @desc Elimina un template
- * @access Private (DELETE_FORM_TEMPLATES)
+ * @access Private (forms:delete)
  */
 router.delete('/:id', 
-  checkPermissions(['DELETE_FORM_TEMPLATES', 'MANAGE_FORM_TEMPLATES']), 
+  checkPermissions(['forms:delete', 'forms:manage']), 
   deleteFormTemplate
 );
 
 /**
  * @route POST /api/v1/form-templates/:id/duplicate
  * @desc Duplica un template esistente
- * @access Private (CREATE_FORM_TEMPLATES)
+ * @access Private (forms:create)
  */
 router.post('/:id/duplicate', 
-  checkPermissions(['CREATE_FORM_TEMPLATES', 'MANAGE_FORM_TEMPLATES']), 
+  checkPermissions(['forms:create', 'forms:manage']), 
   duplicateFormTemplate
 );
 

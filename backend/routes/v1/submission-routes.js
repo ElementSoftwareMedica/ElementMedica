@@ -49,60 +49,60 @@ router.post('/', publicSubmissionLimiter, createSubmission);
 /**
  * @route GET /api/v1/submissions
  * @desc Ottieni lista submissions
- * @access Private (VIEW_FORM_SUBMISSIONS)
+ * @access Private (submissions:read)
  */
 router.get('/', 
   privateSubmissionLimiter,
   authenticateToken, 
-  checkPermissions(['VIEW_FORM_SUBMISSIONS']),
+  checkPermissions(['submissions:read', 'submissions:manage']),
   getSubmissions
 );
 
 /**
  * @route GET /api/v1/submissions/stats
  * @desc Ottieni statistiche submissions
- * @access Private (VIEW_FORM_SUBMISSIONS)
+ * @access Private (submissions:read)
  */
 router.get('/stats',
   privateSubmissionLimiter,
   authenticateToken,
-  checkPermissions(['VIEW_FORM_SUBMISSIONS']),
+  checkPermissions(['submissions:read', 'submissions:manage']),
   getSubmissionStats
 );
 
 /**
  * @route GET /api/v1/submissions/:id
  * @desc Ottieni dettaglio submission
- * @access Private (VIEW_FORM_SUBMISSIONS)
+ * @access Private (submissions:read)
  */
 router.get('/:id',
   privateSubmissionLimiter,
   authenticateToken,
-  checkPermissions(['VIEW_FORM_SUBMISSIONS']),
+  checkPermissions(['submissions:read', 'submissions:manage']),
   getSubmissionById
 );
 
 /**
  * @route PUT /api/v1/submissions/:id/status
  * @desc Aggiorna status submission
- * @access Private (EDIT_FORM_SUBMISSIONS)
+ * @access Private (submissions:update)
  */
 router.put('/:id/status',
   privateSubmissionLimiter,
   authenticateToken,
-  checkPermissions(['EDIT_FORM_SUBMISSIONS']),
+  checkPermissions(['submissions:update', 'submissions:manage']),
   updateSubmissionStatus
 );
 
 /**
  * @route DELETE /api/v1/submissions/:id
  * @desc Elimina submission (archivia)
- * @access Private (DELETE_FORM_SUBMISSIONS)
+ * @access Private (submissions:delete)
  */
 router.delete('/:id',
   privateSubmissionLimiter,
   authenticateToken,
-  checkPermissions(['DELETE_FORM_SUBMISSIONS']),
+  checkPermissions(['submissions:delete', 'submissions:manage']),
   deleteSubmission
 );
 

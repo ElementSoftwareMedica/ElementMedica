@@ -17,33 +17,33 @@ const router = express.Router();
 /**
  * @route GET /api/v1/submissions/advanced
  * @desc Lista submissions avanzate con filtri
- * @access Private (VIEW_FORM_SUBMISSIONS)
+ * @access Private (submissions:read)
  */
 router.get('/', 
   authenticate,
-  checkPermissions(['VIEW_FORM_SUBMISSIONS']), 
+  checkPermissions(['submissions:read', 'submissions:manage']), 
   getAdvancedSubmissions
 );
 
 /**
  * @route GET /api/v1/submissions/advanced/stats
  * @desc Statistiche submissions avanzate
- * @access Private (VIEW_FORM_SUBMISSIONS)
+ * @access Private (submissions:read)
  */
 router.get('/stats', 
   authenticate,
-  checkPermissions(['VIEW_FORM_SUBMISSIONS']), 
+  checkPermissions(['submissions:read', 'submissions:manage']), 
   getAdvancedSubmissionStats
 );
 
 /**
  * @route GET /api/v1/submissions/advanced/:id
  * @desc Recupera una submission specifica
- * @access Private (VIEW_FORM_SUBMISSIONS)
+ * @access Private (submissions:read)
  */
 router.get('/:id', 
   authenticate,
-  checkPermissions(['VIEW_FORM_SUBMISSIONS']), 
+  checkPermissions(['submissions:read', 'submissions:manage']), 
   getAdvancedSubmission
 );
 
@@ -58,33 +58,33 @@ router.post('/', createAdvancedSubmission);
 /**
  * @route PUT /api/v1/submissions/advanced/:id
  * @desc Aggiorna una submission
- * @access Private (MANAGE_FORM_SUBMISSIONS)
+ * @access Private (submissions:update)
  */
 router.put('/:id', 
   authenticate,
-  checkPermissions(['MANAGE_FORM_SUBMISSIONS']), 
+  checkPermissions(['submissions:update', 'submissions:manage']), 
   updateAdvancedSubmission
 );
 
 /**
  * @route DELETE /api/v1/submissions/advanced/:id
  * @desc Elimina una submission
- * @access Private (MANAGE_FORM_SUBMISSIONS)
+ * @access Private (submissions:delete)
  */
 router.delete('/:id', 
   authenticate,
-  checkPermissions(['MANAGE_FORM_SUBMISSIONS']), 
+  checkPermissions(['submissions:delete', 'submissions:manage']), 
   deleteAdvancedSubmission
 );
 
 /**
  * @route POST /api/v1/submissions/advanced/bulk-action
  * @desc Azioni bulk su multiple submissions
- * @access Private (MANAGE_FORM_SUBMISSIONS)
+ * @access Private (submissions:update)
  */
 router.post('/bulk-action', 
   authenticate,
-  checkPermissions(['MANAGE_FORM_SUBMISSIONS']), 
+  checkPermissions(['submissions:update', 'submissions:manage']), 
   bulkActionSubmissions
 );
 

@@ -72,72 +72,72 @@ router.post(
 /**
  * GET /api/v1/forms/templates
  * Lista template con filtri
- * Permission: VIEW_FORM_TEMPLATES
+ * Permission: forms:read
  */
 router.get(
   '/templates',
   authenticate,
-  checkPermissions(['VIEW_FORM_TEMPLATES', 'MANAGE_FORM_TEMPLATES']),
+  checkPermissions(['forms:read', 'forms:manage']),
   formsController.listTemplates
 );
 
 /**
  * GET /api/v1/forms/templates/:id
  * Recupera template specifico
- * Permission: VIEW_FORM_TEMPLATES
+ * Permission: forms:read
  */
 router.get(
   '/templates/:id',
   authenticate,
-  checkPermissions(['VIEW_FORM_TEMPLATES', 'MANAGE_FORM_TEMPLATES']),
+  checkPermissions(['forms:read', 'forms:manage']),
   formsController.getTemplate
 );
 
 /**
  * POST /api/v1/forms/templates
  * Crea nuovo template
- * Permission: CREATE_FORM_TEMPLATES
+ * Permission: forms:create
  */
 router.post(
   '/templates',
   authenticate,
-  checkPermissions(['CREATE_FORM_TEMPLATES', 'MANAGE_FORM_TEMPLATES']),
+  checkPermissions(['forms:create', 'forms:manage']),
   formsController.createTemplate
 );
 
 /**
  * PUT /api/v1/forms/templates/:id
  * Aggiorna template esistente
- * Permission: EDIT_FORM_TEMPLATES
+ * Permission: forms:update
  */
 router.put(
   '/templates/:id',
   authenticate,
-  checkPermissions(['EDIT_FORM_TEMPLATES', 'MANAGE_FORM_TEMPLATES']),
+  checkPermissions(['forms:update', 'forms:manage']),
   formsController.updateTemplate
 );
 
 /**
  * DELETE /api/v1/forms/templates/:id
  * Elimina template (soft delete)
- * Permission: DELETE_FORM_TEMPLATES
+ * Permission: forms:delete
  */
 router.delete(
   '/templates/:id',
   authenticate,
-  checkPermissions(['DELETE_FORM_TEMPLATES', 'MANAGE_FORM_TEMPLATES']),
+  checkPermissions(['forms:delete', 'forms:manage']),
   formsController.deleteTemplate
 );
 
 /**
  * POST /api/v1/forms/templates/:id/duplicate
  * Duplica template esistente
- * Permission: CREATE_FORM_TEMPLATES
+ * Permission: forms:create
  */
 router.post(
   '/templates/:id/duplicate',
   authenticate,
-  checkPermissions(['CREATE_FORM_TEMPLATES', 'MANAGE_FORM_TEMPLATES']),
+  checkPermissions(['forms:create', 'forms:manage']),
   formsController.duplicateTemplate
 );
 
@@ -150,73 +150,73 @@ router.post(
 /**
  * GET /api/v1/forms/submissions
  * Lista submissions con filtri
- * Permission: VIEW_SUBMISSIONS
+ * Permission: submissions:read
  */
 router.get(
   '/submissions',
   authenticate,
-  checkPermissions(['VIEW_SUBMISSIONS', 'MANAGE_SUBMISSIONS']),
+  checkPermissions(['submissions:read', 'submissions:manage']),
   formsController.listSubmissions
 );
 
 /**
  * GET /api/v1/forms/submissions/stats
  * Statistiche aggregate submissions
- * Permission: VIEW_SUBMISSIONS
+ * Permission: submissions:read
  * Note: MUST be before /:id route to avoid conflict
  */
 router.get(
   '/submissions/stats',
   authenticate,
-  checkPermissions(['VIEW_SUBMISSIONS', 'MANAGE_SUBMISSIONS']),
+  checkPermissions(['submissions:read', 'submissions:manage']),
   formsController.getSubmissionsStats
 );
 
 /**
  * GET /api/v1/forms/submissions/:id
  * Recupera submission specifica
- * Permission: VIEW_SUBMISSIONS
+ * Permission: submissions:read
  */
 router.get(
   '/submissions/:id',
   authenticate,
-  checkPermissions(['VIEW_SUBMISSIONS', 'MANAGE_SUBMISSIONS']),
+  checkPermissions(['submissions:read', 'submissions:manage']),
   formsController.getSubmission
 );
 
 /**
  * PUT /api/v1/forms/submissions/:id
  * Aggiorna submission
- * Permission: EDIT_SUBMISSIONS
+ * Permission: submissions:update
  */
 router.put(
   '/submissions/:id',
   authenticate,
-  checkPermissions(['EDIT_SUBMISSIONS', 'MANAGE_SUBMISSIONS']),
+  checkPermissions(['submissions:update', 'submissions:manage']),
   formsController.updateSubmission
 );
 
 /**
  * DELETE /api/v1/forms/submissions/:id
  * Elimina submission (soft delete → archived)
- * Permission: DELETE_SUBMISSIONS
+ * Permission: submissions:delete
  */
 router.delete(
   '/submissions/:id',
   authenticate,
-  checkPermissions(['DELETE_SUBMISSIONS', 'MANAGE_SUBMISSIONS']),
+  checkPermissions(['submissions:delete', 'submissions:manage']),
   formsController.deleteSubmission
 );
 
 /**
  * POST /api/v1/forms/submissions/bulk-action
  * Bulk action su submissions
- * Permission: EDIT_SUBMISSIONS
+ * Permission: submissions:update
  */
 router.post(
   '/submissions/bulk-action',
   authenticate,
-  checkPermissions(['EDIT_SUBMISSIONS', 'MANAGE_SUBMISSIONS']),
+  checkPermissions(['submissions:update', 'submissions:manage']),
   formsController.bulkActionSubmissions
 );
 
