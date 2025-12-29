@@ -166,7 +166,7 @@ router.post('/',
     async (req, res) => {
         try {
             const tenantId = getEffectiveTenantId(req);
-            const createdBy = req.user?.id;
+            const createdBy = req.person?.id;
 
             const tariffario = await TariffarioMedicoService.create({
                 ...req.body,

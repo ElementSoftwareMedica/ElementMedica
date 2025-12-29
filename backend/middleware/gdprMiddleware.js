@@ -22,8 +22,8 @@ export function logGdprRequest(req, res, next) {
         path: req.path,
         userAgent: req.get('User-Agent'),
         ip: req.ip,
-        userId: req.user?.id,
-        companyId: req.user?.companyId,
+        userId: req.person?.id,
+        companyId: req.person?.companyId,
         timestamp: new Date().toISOString()
     });
 
@@ -39,8 +39,8 @@ export function logGdprRequest(req, res, next) {
             path: req.path,
             statusCode: res.statusCode,
             duration: `${duration}ms`,
-            userId: req.user?.id,
-            companyId: req.user?.companyId,
+            userId: req.person?.id,
+            companyId: req.person?.companyId,
             timestamp: new Date().toISOString()
         });
 

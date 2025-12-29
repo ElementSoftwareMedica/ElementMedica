@@ -66,7 +66,7 @@ router.get('/appointment/:id/ics',
     async (req, res) => {
         try {
             const { id } = req.params;
-            const tenantId = req.user.tenantId;
+            const tenantId = req.person.tenantId;
 
             const result = await CalendarService.generateAppointmentICS(id, tenantId);
 
@@ -78,7 +78,7 @@ router.get('/appointment/:id/ics',
                 component: 'CalendarRoutes',
                 action: 'downloadICS',
                 appointmentId: id,
-                userId: req.user.id,
+                userId: req.person.id,
                 tenantId
             });
         } catch (error) {
@@ -117,7 +117,7 @@ router.get('/doctor/:id/feed',
         try {
             const { id } = req.params;
             const { startDate, endDate } = req.query;
-            const tenantId = req.user.tenantId;
+            const tenantId = req.person.tenantId;
 
             const result = await CalendarService.generateDoctorCalendarFeed(
                 id,
@@ -157,7 +157,7 @@ router.get('/patient/:id/feed',
         try {
             const { id } = req.params;
             const { startDate, endDate } = req.query;
-            const tenantId = req.user.tenantId;
+            const tenantId = req.person.tenantId;
 
             const result = await CalendarService.generatePatientCalendarFeed(
                 id,
@@ -194,8 +194,8 @@ router.get('/my-appointments',
     async (req, res) => {
         try {
             const { startDate, endDate } = req.query;
-            const tenantId = req.user.tenantId;
-            const userId = req.user.id;
+            const tenantId = req.person.tenantId;
+            const userId = req.person.id;
 
             // If user is a doctor, get their doctor appointments
             // Otherwise get patient appointments
@@ -234,8 +234,8 @@ router.get('/google/calendars',
     async (req, res) => {
         try {
             const calendars = await CalendarService.getGoogleCalendars(
-                req.user.id,
-                req.user.tenantId
+                req.person.id,
+                req.person.tenantId
             );
 
             res.json({
@@ -275,8 +275,8 @@ router.post('/google/sync',
 
             const result = await CalendarService.syncToGoogleCalendar(
                 appointmentId,
-                req.user.id,
-                req.user.tenantId
+                req.person.id,
+                req.person.tenantId
             );
 
             logger.info('Appointment synced to Google Calendar', {
@@ -284,7 +284,7 @@ router.post('/google/sync',
                 action: 'syncToGoogle',
                 appointmentId,
                 eventId: result.eventId,
-                userId: req.user.id
+                userId: req.person.id
             });
 
             res.json({
@@ -320,8 +320,8 @@ router.delete('/google/sync/:appointmentId',
 
             const result = await CalendarService.removeFromGoogleCalendar(
                 appointmentId,
-                req.user.id,
-                req.user.tenantId
+                req.person.id,
+                req.person.tenantId
             );
 
             res.json({

@@ -906,9 +906,9 @@ router.get('/test',
         success: true,
         message: 'Test endpoint working',
         user: {
-          id: req.user?.id,
-          email: req.user?.email,
-          globalRole: req.user?.globalRole
+          id: req.person?.id,
+          email: req.person?.email,
+          globalRole: req.person?.globalRole
         },
         timestamp: new Date().toISOString()
       });

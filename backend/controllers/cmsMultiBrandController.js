@@ -337,7 +337,7 @@ class CMSMultiBrandController {
         });
       }
       const tenantId = tenant.id;
-      const userId = req.user.id;
+      const userId = req.person.id;
 
       const {
         title,

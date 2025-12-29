@@ -83,7 +83,7 @@ router.get('/', authenticateToken(), requirePermission('documents:read'), async 
   try {
     const { scheduleId, year } = req.query;
     let personId = req.query.personId;
-    const tenantId = req.user.tenantId;
+    const tenantId = req.person.tenantId;
     const person = req.person;
 
     // Verifica se l'utente è EMPLOYEE (ha solo il ruolo EMPLOYEE, non altri ruoli admin)
@@ -187,7 +187,7 @@ router.get('/', authenticateToken(), requirePermission('documents:read'), async 
       action: 'list',
       error: error.message,
       stack: error.stack,
-      personId: req.user?.id
+      personId: req.person?.id
     });
     res.status(500).json({
       error: 'Failed to fetch attestati',
@@ -220,8 +220,8 @@ router.post(
       }
 
       const { scheduleId, personId, templateId, sendEmail = false, validityYears } = req.body;
-      const tenantId = req.user.tenantId;
-      const userId = req.user.id;
+      const tenantId = req.person.tenantId;
+      const userId = req.person.id;
 
       // Verify schedule exists and belongs to tenant
       const schedule = await prisma.courseSchedule.findFirst({
@@ -393,13 +393,13 @@ router.post(
       // Prepare marker context
       const markerContext = {
         tenant: {
-          name: req.user.tenant?.name || 'Company Name',
-          logoUrl: req.user.tenant?.logoUrl || '',
-          address: req.user.tenant?.address || {},
-          vatNumber: req.user.tenant?.vatNumber || '',
-          email: req.user.tenant?.email || '',
-          phone: req.user.tenant?.phone || '',
-          legalRepresentative: req.user.tenant?.legalRepresentative || ''
+          name: req.person.tenant?.name || 'Company Name',
+          logoUrl: req.person.tenant?.logoUrl || '',
+          address: req.person.tenant?.address || {},
+          vatNumber: req.person.tenant?.vatNumber || '',
+          email: req.person.tenant?.email || '',
+          phone: req.person.tenant?.phone || '',
+          legalRepresentative: req.person.tenant?.legalRepresentative || ''
         },
         person: {
           fullName: `${person.firstName} ${person.lastName}`,
@@ -578,7 +578,7 @@ router.post(
         action: 'generate',
         error: error.message,
         stack: error.stack,
-        personId: req.user?.id
+        personId: req.person?.id
       });
       res.status(500).json({ error: 'Failed to generate certificate', message: error.message });
     }
@@ -609,8 +609,8 @@ router.post(
       }
 
       const { scheduleId, personIds, templateId, sendEmail = false, validityYears } = req.body;
-      const tenantId = req.user.tenantId;
-      const userId = req.user.id;
+      const tenantId = req.person.tenantId;
+      const userId = req.person.id;
 
       // Verify schedule
       const schedule = await prisma.courseSchedule.findFirst({
@@ -794,13 +794,13 @@ router.post(
           // Prepare markers
           const markerContext = {
             tenant: {
-              name: req.user.tenant?.name || 'Company Name',
-              logoUrl: req.user.tenant?.logoUrl || '',
-              address: req.user.tenant?.address || {},
-              vatNumber: req.user.tenant?.vatNumber || '',
-              email: req.user.tenant?.email || '',
-              phone: req.user.tenant?.phone || '',
-              legalRepresentative: req.user.tenant?.legalRepresentative || ''
+              name: req.person.tenant?.name || 'Company Name',
+              logoUrl: req.person.tenant?.logoUrl || '',
+              address: req.person.tenant?.address || {},
+              vatNumber: req.person.tenant?.vatNumber || '',
+              email: req.person.tenant?.email || '',
+              phone: req.person.tenant?.phone || '',
+              legalRepresentative: req.person.tenant?.legalRepresentative || ''
             },
             person: {
               fullName: `${person.firstName} ${person.lastName}`,
@@ -904,13 +904,7 @@ router.post(
 
             // Log any warnings about mismatched fields
             warnings.forEach(warning => {
-              logger.warn(warning, {
-                component: 'attestati-routes',
-                action: 'generate-batch',
-                templateId: template.id,
-                templateName: template.name
-              });
-              console.warn(`⚠️  ${warning}`);
+              logger.warn({ component: 'attestati-routes', action: 'generate-batch', templateId: template.id, templateName: template.name, warning }, 'Template field mismatch warning');
             });
 
             if (!documentId || !documentType) {
@@ -1013,10 +1007,10 @@ router.post(
               // System / Tenant
               DATA_CORRENTE: formatDate(new Date()),
               ORA_CORRENTE: new Date().toLocaleTimeString('it-IT'),
-              ENTE_NOME: req.user.tenant?.name || '',
-              ENTE_INDIRIZZO: req.user.tenant?.address || '',
-              ENTE_TELEFONO: req.user.tenant?.phone || '',
-              ENTE_EMAIL: req.user.tenant?.email || ''
+              ENTE_NOME: req.person.tenant?.name || '',
+              ENTE_INDIRIZZO: req.person.tenant?.address || '',
+              ENTE_TELEFONO: req.person.tenant?.phone || '',
+              ENTE_EMAIL: req.person.tenant?.email || ''
             };
 
             // Add lowercase/nested versions of all placeholders for compatibility
@@ -1238,14 +1232,7 @@ router.post(
       });
 
     } catch (error) {
-      logger.error('Failed to generate batch certificates', {
-        component: 'attestati-routes',
-        action: 'generate-batch',
-        error: error.message,
-        stack: error.stack,
-        personId: req.user?.id
-      });
-      console.error('❌ BATCH GENERATION ERROR:', error);
+      logger.error({ component: 'attestati-routes', action: 'generate-batch', error: error.message, stack: error.stack, personId: req.person?.id }, 'Failed to generate batch certificates');
       res.status(500).json({
         error: 'Failed to generate batch certificates',
         message: error.message,
@@ -1263,7 +1250,7 @@ router.post(
 router.post('/delete-batch', authenticateToken(), requirePermission('documents:delete'), async (req, res) => {
   try {
     const { ids } = req.body;
-    const tenantId = req.user.tenantId;
+    const tenantId = req.person.tenantId;
 
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({ error: 'Invalid request: ids array required' });
@@ -1295,7 +1282,7 @@ router.post('/delete-batch', authenticateToken(), requirePermission('documents:d
       component: 'attestati-routes',
       action: 'delete-batch',
       count: attestati.length,
-      personId: req.user?.id
+      personId: req.person?.id
     });
 
     res.json({
@@ -1307,7 +1294,7 @@ router.post('/delete-batch', authenticateToken(), requirePermission('documents:d
       component: 'attestati-routes',
       action: 'delete-batch',
       error: error.message,
-      personId: req.user?.id
+      personId: req.person?.id
     });
     res.status(500).json({ error: 'Failed to delete certificates' });
   }
@@ -1321,7 +1308,7 @@ router.post('/delete-batch', authenticateToken(), requirePermission('documents:d
 router.get('/:id/download', authenticateToken(), requirePermission('documents:read'), async (req, res) => {
   try {
     const { id } = req.params;
-    const tenantId = req.user.tenantId;
+    const tenantId = req.person.tenantId;
 
     const attestato = await prisma.attestato.findFirst({
       where: {
@@ -1367,7 +1354,7 @@ router.get('/:id/download', authenticateToken(), requirePermission('documents:re
       component: 'attestati-routes',
       action: 'download',
       attestatoId: id,
-      personId: req.user?.id,
+      personId: req.person?.id,
       fileUrl: attestato.fileUrl
     });
 
@@ -1473,7 +1460,7 @@ router.get('/:id/download', authenticateToken(), requirePermission('documents:re
       action: 'download',
       attestatoId: req.params.id,
       error: error.message,
-      personId: req.user?.id
+      personId: req.person?.id
     });
     res.status(500).json({ error: 'Failed to download certificate' });
   }
@@ -1488,7 +1475,7 @@ router.get('/:id/download', authenticateToken(), requirePermission('documents:re
 router.get('/:id', authenticateToken(), requirePermission('documents:read'), async (req, res) => {
   try {
     const { id } = req.params;
-    const tenantId = req.user.tenantId;
+    const tenantId = req.person.tenantId;
 
     const attestato = await prisma.attestato.findFirst({
       where: {
@@ -1522,7 +1509,7 @@ router.get('/:id', authenticateToken(), requirePermission('documents:read'), asy
       action: 'get',
       attestatoId: req.params.id,
       error: error.message,
-      personId: req.user?.id
+      personId: req.person?.id
     });
     res.status(500).json({ error: 'Failed to fetch attestato' });
   }
@@ -1535,7 +1522,7 @@ router.get('/:id', authenticateToken(), requirePermission('documents:read'), asy
 router.delete('/:id', authenticateToken(), requirePermission('documents:delete'), async (req, res) => {
   try {
     const { id } = req.params;
-    const tenantId = req.user.tenantId;
+    const tenantId = req.person.tenantId;
 
     const attestato = await prisma.attestato.findFirst({
       where: {
@@ -1558,7 +1545,7 @@ router.delete('/:id', authenticateToken(), requirePermission('documents:delete')
       component: 'attestati-routes',
       action: 'delete',
       attestatoId: id,
-      personId: req.user?.id
+      personId: req.person?.id
     });
 
     res.json({ message: 'Certificate deleted successfully' });
@@ -1568,7 +1555,7 @@ router.delete('/:id', authenticateToken(), requirePermission('documents:delete')
       action: 'delete',
       attestatoId: req.params.id,
       error: error.message,
-      personId: req.user?.id
+      personId: req.person?.id
     });
     res.status(500).json({ error: 'Failed to delete certificate' });
   }
@@ -1594,7 +1581,7 @@ router.post(
       }
 
       const { attestatoIds } = req.body;
-      const tenantId = req.user.tenantId;
+      const tenantId = req.person.tenantId;
 
       // Get all certificates
       const attestati = await prisma.attestato.findMany({
@@ -1721,7 +1708,7 @@ router.post(
         totalCertificates: attestati.length,
         filesAdded: filesToAdd.length,
         totalBytes,
-        personId: req.user?.id
+        personId: req.person?.id
       });
 
     } catch (error) {
@@ -1730,7 +1717,7 @@ router.post(
         action: 'download-zip-batch',
         error: error.message,
         stack: error.stack,
-        personId: req.user?.id
+        personId: req.person?.id
       });
       res.status(500).json({ error: 'Failed to create ZIP archive' });
     }
@@ -1759,7 +1746,7 @@ router.post(
 
       const { id } = req.params;
       const { recipientEmail, subject, message } = req.body;
-      const tenantId = req.user.tenantId;
+      const tenantId = req.person.tenantId;
 
       // Get certificate
       const attestato = await prisma.attestato.findFirst({
@@ -1793,7 +1780,7 @@ router.post(
         action: 'send-email',
         attestatoId: id,
         recipientEmail: email,
-        personId: req.user?.id
+        personId: req.person?.id
       });
 
       // Mock success response
@@ -1809,7 +1796,7 @@ router.post(
         action: 'send-email',
         attestatoId: req.params.id,
         error: error.message,
-        personId: req.user?.id
+        personId: req.person?.id
       });
       res.status(500).json({ error: 'Failed to send certificate email' });
     }

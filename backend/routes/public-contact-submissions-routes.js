@@ -6,6 +6,7 @@
 import express from 'express';
 import { createSubmission } from '../controllers/contactSubmissionController.js';
 import { rateLimitMiddleware } from '../middleware/rateLimiting.js';
+import logger from '../utils/logger.js';
 
 const router = express.Router();
 
@@ -76,7 +77,7 @@ router.post('/',
             // Chiama il controller esistente
             await createSubmission(req, res);
         } catch (error) {
-            console.error('[public-contact-submissions] Error:', error);
+            logger.error({ component: 'public-contact-submissions-routes', error: error.message }, 'Error processing contact submission');
             res.status(500).json({
                 error: 'Errore interno',
                 message: 'Si è verificato un errore durante l\'invio della richiesta'

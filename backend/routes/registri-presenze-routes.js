@@ -25,7 +25,7 @@ const { authenticate: authenticateToken, authorize: requirePermission } = middle
 router.get('/', authenticateToken(), requirePermission('documents:read'), async (req, res) => {
   try {
     const { scheduleId, sessionId, formatoreId } = req.query;
-    const tenantId = req.user.tenantId;
+    const tenantId = req.person.tenantId;
 
     const where = {
       tenantId,
@@ -77,7 +77,7 @@ router.get('/', authenticateToken(), requirePermission('documents:read'), async 
       component: 'registri-presenze-routes',
       action: 'list',
       error: error.message,
-      personId: req.user?.id
+      personId: req.person?.id
     });
     res.status(500).json({ error: 'Failed to fetch registri presenze' });
   }
@@ -113,8 +113,8 @@ router.post('/generate',
       }
 
       const { sessionId, scheduleId, sessionIndex, sessionDate, sessionStart, sessionEnd, formatoreId, templateId, attendanceData } = req.body;
-      const tenantId = req.user.tenantId;
-      const userId = req.user.id;
+      const tenantId = req.person.tenantId;
+      const userId = req.person.id;
 
       let session = null;
       let schedule = null;
@@ -393,7 +393,7 @@ router.post('/generate',
         action: 'generate',
         error: error.message,
         stack: error.stack,
-        personId: req.user?.id
+        personId: req.person?.id
       });
       res.status(500).json({ error: 'Failed to generate attendance register', message: error.message });
     }
@@ -422,7 +422,7 @@ router.put('/:id/attendance',
 
       const { id } = req.params;
       const { attendanceData } = req.body;
-      const tenantId = req.user.tenantId;
+      const tenantId = req.person.tenantId;
 
       const registro = await prisma.registroPresenze.findFirst({
         where: { id, tenantId, deletedAt: null }
@@ -461,7 +461,7 @@ router.put('/:id/attendance',
         component: 'registri-presenze-routes',
         action: 'update-attendance',
         registroId: id,
-        personId: req.user?.id
+        personId: req.person?.id
       });
 
       res.json({ message: 'Attendance data updated successfully' });
@@ -470,7 +470,7 @@ router.put('/:id/attendance',
         component: 'registri-presenze-routes',
         action: 'update-attendance',
         error: error.message,
-        personId: req.user?.id
+        personId: req.person?.id
       });
       res.status(500).json({ error: 'Failed to update attendance data' });
     }
@@ -484,7 +484,7 @@ router.put('/:id/attendance',
 router.delete('/:id', authenticateToken(), requirePermission('documents:delete'), async (req, res) => {
   try {
     const { id } = req.params;
-    const tenantId = req.user.tenantId;
+    const tenantId = req.person.tenantId;
 
     const registro = await prisma.registroPresenze.findFirst({
       where: { id, tenantId }
@@ -503,7 +503,7 @@ router.delete('/:id', authenticateToken(), requirePermission('documents:delete')
       component: 'registri-presenze-routes',
       action: 'delete',
       registroId: id,
-      personId: req.user?.id
+      personId: req.person?.id
     });
 
     res.json({ message: 'Registro presenze deleted successfully' });
@@ -512,7 +512,7 @@ router.delete('/:id', authenticateToken(), requirePermission('documents:delete')
       component: 'registri-presenze-routes',
       action: 'delete',
       error: error.message,
-      personId: req.user?.id
+      personId: req.person?.id
     });
     res.status(500).json({ error: 'Failed to delete registro presenze' });
   }
@@ -525,7 +525,7 @@ router.delete('/:id', authenticateToken(), requirePermission('documents:delete')
 router.get('/:id/download', authenticateToken(), requirePermission('documents:read'), async (req, res) => {
   try {
     const { id } = req.params;
-    const tenantId = req.user.tenantId;
+    const tenantId = req.person.tenantId;
 
     const registro = await prisma.registroPresenze.findFirst({
       where: { id, tenantId, deletedAt: null }
@@ -542,7 +542,7 @@ router.get('/:id/download', authenticateToken(), requirePermission('documents:re
       component: 'registri-presenze-routes',
       action: 'download',
       error: error.message,
-      personId: req.user?.id
+      personId: req.person?.id
     });
     res.status(500).json({ error: 'Failed to download registro presenze' });
   }
@@ -559,7 +559,7 @@ router.get('/schedule/:scheduleId/download-zip',
     try {
       const { scheduleId } = req.params;
       const { ids } = req.query;
-      const tenantId = req.user.tenantId;
+      const tenantId = req.person.tenantId;
 
       // Build where clause
       const where = {
@@ -634,14 +634,14 @@ router.get('/schedule/:scheduleId/download-zip',
         action: 'download-zip',
         scheduleId,
         count: registri.length,
-        personId: req.user?.id
+        personId: req.person?.id
       });
     } catch (error) {
       logger.error('Failed to create registers ZIP', {
         component: 'registri-presenze-routes',
         action: 'download-zip',
         error: error.message,
-        personId: req.user?.id
+        personId: req.person?.id
       });
       res.status(500).json({ error: 'Failed to create ZIP file' });
     }
@@ -658,7 +658,7 @@ router.get('/schedule/:scheduleId/download-zip',
 router.get('/:id', authenticateToken(), requirePermission('documents:read'), async (req, res) => {
   try {
     const { id } = req.params;
-    const tenantId = req.user.tenantId;
+    const tenantId = req.person.tenantId;
 
     const registro = await prisma.registroPresenze.findFirst({
       where: { id, tenantId, deletedAt: null },
@@ -709,7 +709,7 @@ router.get('/:id', authenticateToken(), requirePermission('documents:read'), asy
       action: 'get',
       id: req.params.id,
       error: error.message,
-      personId: req.user?.id
+      personId: req.person?.id
     });
     res.status(500).json({ error: 'Failed to fetch registro presenze' });
   }

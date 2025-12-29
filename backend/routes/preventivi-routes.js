@@ -30,20 +30,13 @@ const router = express.Router();
 const validate = (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
-    console.error('=== VALIDATION ERRORS ===');
-    console.error('Path:', req.path);
-    console.error('Method:', req.method);
-    console.error('Body:', JSON.stringify(req.body, null, 2));
-    console.error('Errors:', JSON.stringify(errors.array(), null, 2));
-    console.error('=========================');
-
-    logger.error('Validation errors in preventivi route', {
-      component: 'preventivi-routes',
-      method: req.method,
-      path: req.path,
-      errors: errors.array(),
-      body: req.body
-    });
+    logger.error({ 
+      component: 'preventivi', 
+      path: req.path, 
+      method: req.method, 
+      body: req.body, 
+      errors: errors.array() 
+    }, 'Validation errors in preventivi route');
     return res.status(400).json({
       success: false,
       error: 'Validation failed',
@@ -84,7 +77,7 @@ router.get('/',
   validate,
   async (req, res) => {
     try {
-      const { tenantId } = req.user;
+      const { tenantId } = req.person;
       const page = req.query.page || 1;
       const limit = req.query.limit || 20;
       const skip = (page - 1) * limit;
@@ -199,7 +192,7 @@ router.get('/',
       logger.info('Preventivi listed', {
         component: 'preventivi-routes',
         action: 'list',
-        userId: req.user.id,
+        userId: req.person.id,
         tenantId,
         count: preventivi.length,
         filters: {
@@ -232,16 +225,11 @@ router.post('/',
   requirePermissions(['preventivi:create']),
   auditLog('preventivi', 'CREATE'),
   (req, res, next) => {
-    console.log('=== POST /api/preventivi - BEFORE VALIDATION ===');
-    console.log('Body:', JSON.stringify(req.body, null, 2));
-    console.log('Content-Type:', req.headers['content-type']);
-    console.log('===============================================');
-
-    logger.info('POST /api/preventivi - Before validation', {
-      component: 'preventivi-routes',
-      body: req.body,
-      headers: { 'content-type': req.headers['content-type'] }
-    });
+    logger.info({ 
+      component: 'preventivi', 
+      body: req.body, 
+      contentType: req.headers['content-type'] 
+    }, 'POST /api/preventivi - Before validation');
     next();
   },
   [
@@ -264,7 +252,7 @@ router.post('/',
   validate,
   async (req, res) => {
     try {
-      const { tenantId, id: userId } = req.user;
+      const { tenantId, id: userId } = req.person;
 
       // Log dei dati ricevuti per debugging
       logger.info('POST /api/preventivi - Request received', {
@@ -482,7 +470,7 @@ router.put('/:id/stato',
   validate,
   async (req, res) => {
     try {
-      const { tenantId, id: userId } = req.user;
+      const { tenantId, id: userId } = req.person;
       const { id } = req.params;
       const { nuovoStato, note } = req.body;
 
@@ -588,7 +576,7 @@ router.post('/:id/applica-sconto',
   validate,
   async (req, res) => {
     try {
-      const { tenantId, id: userId } = req.user;
+      const { tenantId, id: userId } = req.person;
       const { id: preventivoId } = req.params;
       const { codice: codiceTesto } = req.body;
 
@@ -719,7 +707,7 @@ router.delete('/:id/sconti/:scontoId',
   validate,
   async (req, res) => {
     try {
-      const { tenantId, id: userId } = req.user;
+      const { tenantId, id: userId } = req.person;
       const { id: preventivoId, scontoId } = req.params;
 
       // Verifica preventivo
@@ -803,7 +791,7 @@ router.get('/:id/pdf',
   validate,
   async (req, res) => {
     try {
-      const { tenantId, id: userId } = req.user;
+      const { tenantId, id: userId } = req.person;
       const { id } = req.params;
 
       // Verifica esistenza preventivo (Nota: Prisma client usa nome singolare Preventivo)
@@ -900,7 +888,7 @@ router.get('/:id',
   validate,
   async (req, res) => {
     try {
-      const { tenantId } = req.user;
+      const { tenantId } = req.person;
       const { id } = req.params;
 
       const preventivo = await prisma.preventivo.findFirst({
@@ -982,7 +970,7 @@ router.put('/:id',
   validate,
   async (req, res) => {
     try {
-      const { tenantId, id: userId } = req.user;
+      const { tenantId, id: userId } = req.person;
       const { id } = req.params;
 
       // Verifica esistenza
@@ -1113,7 +1101,7 @@ router.delete('/:id',
   validate,
   async (req, res) => {
     try {
-      const { tenantId, id: userId } = req.user;
+      const { tenantId, id: userId } = req.person;
       const { id } = req.params;
 
       const existing = await prisma.preventivo.findFirst({
@@ -1198,7 +1186,7 @@ router.post('/merge',
   validate,
   async (req, res) => {
     try {
-      const { tenantId, id: userId } = req.user;
+      const { tenantId, id: userId } = req.person;
       const { preventiviIds } = req.body;
 
       // Recupera tutti i preventivi da unire
@@ -1398,7 +1386,7 @@ router.post('/:id/unmerge',
   validate,
   async (req, res) => {
     try {
-      const { tenantId, id: userId } = req.user;
+      const { tenantId, id: userId } = req.person;
       const { id } = req.params;
 
       // Trova il preventivo unito

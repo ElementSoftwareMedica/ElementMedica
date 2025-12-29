@@ -19,7 +19,7 @@ import { hasPermission } from '../permissions/PermissionChecker.js';
 export function requirePermission(requiredPermissions, options = {}) {
   return async (req, res, next) => {
     try {
-      const userId = req.person?.id || req.user?.id || req.userId;
+      const userId = req.person?.id || req.userId;
       const tenantId = req.tenant?.id || req.tenantId;
 
       if (!userId) {
@@ -31,8 +31,8 @@ export function requirePermission(requiredPermissions, options = {}) {
       }
 
       // OTTIMIZZAZIONE: Bypass per utenti ADMIN/SUPER_ADMIN per evitare timeout
-      const userRoles = req.person?.roles || req.user?.roles || [];
-      const globalRole = req.person?.globalRole || req.user?.globalRole;
+      const userRoles = req.person?.roles || [];
+      const globalRole = req.person?.globalRole;
       const isAdmin = userRoles.includes('ADMIN') || userRoles.includes('SUPER_ADMIN') || globalRole === 'ADMIN' || globalRole === 'SUPER_ADMIN';
 
       if (isAdmin) {
@@ -132,7 +132,7 @@ export function requirePermission(requiredPermissions, options = {}) {
 export function requireRole(requiredRoles, options = {}) {
   return async (req, res, next) => {
     try {
-      const userId = req.person?.id || req.user?.id || req.userId;
+      const userId = req.person?.id || req.userId;
       const tenantId = req.tenant?.id || req.tenantId;
 
       if (!userId) {
@@ -209,7 +209,7 @@ export function requireSuperAdmin() {
 export function requireCompanyAccess(getCompanyId) {
   return async (req, res, next) => {
     try {
-      const userId = req.person?.id || req.user?.id || req.userId;
+      const userId = req.person?.id || req.userId;
       const tenantId = req.tenant?.id || req.tenantId;
       const companyId = getCompanyId ? getCompanyId(req) : req.params.companyId;
 

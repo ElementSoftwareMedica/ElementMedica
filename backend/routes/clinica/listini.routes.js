@@ -274,7 +274,7 @@ router.post('/bundle',
     async (req, res) => {
         try {
             const tenantId = getEffectiveTenantId(req);
-            const personId = req.user.personId;
+            const personId = req.person.personId;
 
             const listino = await ListinoPrezzoService.createForBundle({
                 ...req.body,

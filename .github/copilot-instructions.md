@@ -31,7 +31,7 @@
 ### 4. MULTI-TENANCY (NON NEGOZIABILE)
 - ✅ SEMPRE filtrare per `tenantId` in OGNI query
 - ✅ SEMPRE includere `deletedAt: null` (soft delete)
-- ✅ Middleware verifica `req.user.tenantId === resource.tenantId`
+- ✅ Middleware verifica `req.person.tenantId === resource.tenantId`
 - ✅ Tests obbligatori per tenant isolation (7/7 passing)
 - ✅ Pattern: `where: { tenantId, deletedAt: null }`
 - ❌ MAI query senza tenantId (tranne admin global)
@@ -87,6 +87,14 @@
 - ❌ MAI User, Employee (entità obsolete)
 - ✅ SOLO PersonRole + RoleType enum
 - ❌ MAI UserRole, Role (obsoleti)
+
+### 9.1 AUTENTICAZIONE: req.person (OBBLIGATORIO)
+- ✅ SEMPRE usare `req.person` per accedere all'utente autenticato
+- ✅ Pattern standard: `const { tenantId, id: personId } = req.person`
+- ✅ Accesso proprietà: `req.person.tenantId`, `req.person.id`, `req.person.email`
+- ❌ MAI usare `req.user` (obsoleto, rimosso dal middleware)
+- ❌ MAI usare `req.person || req.user` (backward compat rimosso)
+- ❌ MAI usare `req.user || req.person` (backward compat rimosso)
 
 ### 10. DATABASE MIGRATIONS
 - ✅ SOLO migrazioni additive (no DROP column)
@@ -196,12 +204,15 @@ Il sistema usa `GDPREntityTemplate` per tutte le entità:
 ❌ Ignorare errori "minori"
 ❌ Assumere path/strutture senza verificare
 ❌ Import duplicati (verificare PRIMA)
-❌ console.log in production
+❌ console.log in production (usare logger)
 ❌ Hard delete dati PII
 ❌ Query senza tenantId
 ❌ Password in export/logs
 ❌ Bypass security middleware
 ❌ Breaking changes senza migration
+❌ Usare `req.user` invece di `req.person`
+❌ Usare `req.person || req.user` (backward compat rimosso)
+❌ Usare alert() nel frontend (usare showToast)
 
 ## 📋 CHECKLIST PRE-COMMIT
 
@@ -261,8 +272,8 @@ const entities = await service.getAll({ tenantId });
 await prisma.gdprAuditLog.create({
   data: {
     personId, action: 'UPDATE', dataType: 'PERSON',
-    oldData, newData, performedBy: req.user.id,
-    ipAddress: req.ip, tenantId: req.user.tenantId
+    oldData, newData, performedBy: req.person.id,
+    ipAddress: req.ip, tenantId: req.person.tenantId
   }
 });
 ```
@@ -270,7 +281,7 @@ await prisma.gdprAuditLog.create({
 **Multi-tenancy Pattern**:
 ```typescript
 const entities = await prisma.entity.findMany({
-  where: { tenantId: req.user.tenantId, deletedAt: null }
+  where: { tenantId: req.person.tenantId, deletedAt: null }
 });
 ```
 

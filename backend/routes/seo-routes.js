@@ -41,7 +41,7 @@ router.get('/config/:entityType/:entityId',
       }
 
       const { entityType, entityId } = req.params;
-      const tenantId = req.user.tenantId;
+      const tenantId = req.person.tenantId;
 
       const seoConfig = await seoService.getSEOConfig(entityType, entityId, tenantId);
 
@@ -110,7 +110,7 @@ router.post('/config',
 
       const data = {
         ...req.body,
-        tenantId: req.user.tenantId
+        tenantId: req.person.tenantId
       };
 
       // Valida dati SEO
@@ -135,7 +135,7 @@ router.post('/config',
             url: `${baseUrl}/${page.slug}`,
             entityType: 'page',
             entityId: page.id,
-            tenantId: req.user.tenantId,
+            tenantId: req.person.tenantId,
             changefreq: 'weekly',
             priority: page.slug === 'home' ? 1.0 : 0.8
           });
@@ -147,7 +147,7 @@ router.post('/config',
             url: `${baseUrl}/courses/${course.slug}`,
             entityType: 'course',
             entityId: course.id,
-            tenantId: req.user.tenantId,
+            tenantId: req.person.tenantId,
             changefreq: 'monthly',
             priority: 0.7
           });
@@ -196,7 +196,7 @@ router.delete('/config/:seoConfigId',
       const seoConfig = await prisma.sEOConfig.findFirst({
         where: {
           id: seoConfigId,
-          tenantId: req.user.tenantId
+          tenantId: req.person.tenantId
         }
       });
 
@@ -272,7 +272,7 @@ router.get('/structured-data/organization',
   async (req, res) => {
     try {
       const tenant = await prisma.tenant.findUnique({
-        where: { id: req.user.tenantId }
+        where: { id: req.person.tenantId }
       });
 
       if (!tenant) {
@@ -322,7 +322,7 @@ router.get('/structured-data/course/:courseId',
       const course = await prisma.course.findFirst({
         where: {
           id: req.params.courseId,
-          tenantId: req.user.tenantId
+          tenantId: req.person.tenantId
         },
         include: {
           CourseSchedule: true,

@@ -28,7 +28,7 @@ router.get('/', requirePermission('tariffari:read'), async (req, res) => {
     try {
         const { tipo, companyId, convenzioneId, attivo, search, page, limit } = req.query;
 
-        const result = await TariffarioAziendaleService.getAll(req.user.tenantId, {
+        const result = await TariffarioAziendaleService.getAll(req.person.tenantId, {
             tipo,
             companyId,
             convenzioneId,
@@ -57,7 +57,7 @@ router.get('/', requirePermission('tariffari:read'), async (req, res) => {
  */
 router.get('/base', requirePermission('tariffari:read'), async (req, res) => {
     try {
-        const tariffari = await TariffarioAziendaleService.getTariffariBase(req.user.tenantId);
+        const tariffari = await TariffarioAziendaleService.getTariffariBase(req.person.tenantId);
         res.json({
             success: true,
             data: tariffari
@@ -77,7 +77,7 @@ router.get('/base', requirePermission('tariffari:read'), async (req, res) => {
  */
 router.get('/prestazioni-mdl', requirePermission('tariffari:read'), async (req, res) => {
     try {
-        const prestazioni = await TariffarioAziendaleService.getPrestazioniMDL(req.user.tenantId);
+        const prestazioni = await TariffarioAziendaleService.getPrestazioniMDL(req.person.tenantId);
         res.json({
             success: true,
             data: prestazioni
@@ -99,7 +99,7 @@ router.get('/:id', requirePermission('tariffari:read'), async (req, res) => {
     try {
         const tariffario = await TariffarioAziendaleService.getById(
             req.params.id,
-            req.user.tenantId
+            req.person.tenantId
         );
         res.json({
             success: true,
@@ -122,8 +122,8 @@ router.post('/', requirePermission('tariffari:update'), async (req, res) => {
     try {
         const tariffario = await TariffarioAziendaleService.create(
             req.body,
-            req.user.tenantId,
-            req.user.personId
+            req.person.tenantId,
+            req.person.personId
         );
         res.status(201).json({
             success: true,
@@ -147,7 +147,7 @@ router.put('/:id', requirePermission('tariffari:update'), async (req, res) => {
         const tariffario = await TariffarioAziendaleService.update(
             req.params.id,
             req.body,
-            req.user.tenantId
+            req.person.tenantId
         );
         res.json({
             success: true,
@@ -168,7 +168,7 @@ router.put('/:id', requirePermission('tariffari:update'), async (req, res) => {
  */
 router.delete('/:id', requirePermission('tariffari:update'), async (req, res) => {
     try {
-        await TariffarioAziendaleService.delete(req.params.id, req.user.tenantId);
+        await TariffarioAziendaleService.delete(req.params.id, req.person.tenantId);
         res.json({
             success: true,
             message: 'Tariffario eliminato con successo'
@@ -191,8 +191,8 @@ router.post('/:id/clone', requirePermission('tariffari:update'), async (req, res
         const clone = await TariffarioAziendaleService.clone(
             req.params.id,
             req.body,
-            req.user.tenantId,
-            req.user.personId
+            req.person.tenantId,
+            req.person.personId
         );
         res.status(201).json({
             success: true,
@@ -220,7 +220,7 @@ router.post('/:id/voci', requirePermission('tariffari:update'), async (req, res)
         const voce = await TariffarioAziendaleService.addVoce(
             req.params.id,
             req.body,
-            req.user.tenantId
+            req.person.tenantId
         );
         res.status(201).json({
             success: true,
@@ -244,7 +244,7 @@ router.put('/:id/voci/:voceId', requirePermission('tariffari:update'), async (re
         const voce = await TariffarioAziendaleService.updateVoce(
             req.params.voceId,
             req.body,
-            req.user.tenantId
+            req.person.tenantId
         );
         res.json({
             success: true,
@@ -265,7 +265,7 @@ router.put('/:id/voci/:voceId', requirePermission('tariffari:update'), async (re
  */
 router.delete('/:id/voci/:voceId', requirePermission('tariffari:update'), async (req, res) => {
     try {
-        await TariffarioAziendaleService.deleteVoce(req.params.voceId, req.user.tenantId);
+        await TariffarioAziendaleService.deleteVoce(req.params.voceId, req.person.tenantId);
         res.json({
             success: true,
             message: 'Voce eliminata con successo'
@@ -292,7 +292,7 @@ router.post('/voci/:voceId/fasce', requirePermission('tariffari:update'), async 
         const fascia = await TariffarioAziendaleService.addFascia(
             req.params.voceId,
             req.body,
-            req.user.tenantId
+            req.person.tenantId
         );
         res.status(201).json({
             success: true,
@@ -316,7 +316,7 @@ router.put('/voci/:voceId/fasce/:fasciaId', requirePermission('tariffari:update'
         const fascia = await TariffarioAziendaleService.updateFascia(
             req.params.fasciaId,
             req.body,
-            req.user.tenantId
+            req.person.tenantId
         );
         res.json({
             success: true,
@@ -337,7 +337,7 @@ router.put('/voci/:voceId/fasce/:fasciaId', requirePermission('tariffari:update'
  */
 router.delete('/voci/:voceId/fasce/:fasciaId', requirePermission('tariffari:update'), async (req, res) => {
     try {
-        await TariffarioAziendaleService.deleteFascia(req.params.fasciaId, req.user.tenantId);
+        await TariffarioAziendaleService.deleteFascia(req.params.fasciaId, req.person.tenantId);
         res.json({
             success: true,
             message: 'Fascia eliminata con successo'
@@ -373,7 +373,7 @@ router.post('/voci/:voceId/calcola-prezzo', requirePermission('tariffari:read'),
         const result = await TariffarioAziendaleService.calcolaPrezzo(
             req.params.voceId,
             numeroDipendenti,
-            req.user.tenantId
+            req.person.tenantId
         );
 
         res.json({

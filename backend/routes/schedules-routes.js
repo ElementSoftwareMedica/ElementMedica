@@ -183,7 +183,7 @@ router.get('/', authenticateToken(), requirePermission('schedules:read'), roleDa
  */
 router.get('/expiring-courses', authenticateToken(), requirePermission('schedules:read'), roleDataFilter, filterResponseFields, async (req, res) => {
   try {
-    const { tenantId } = req.user;
+    const { tenantId } = req.person;
     const person = req.person;
     const expiredDays = parseInt(req.query.expiredDays) || 30;
     const expiringDays = parseInt(req.query.expiringDays) || 60;
@@ -460,7 +460,7 @@ router.get('/expiring-courses', authenticateToken(), requirePermission('schedule
       errorCode: error.code,
       stack: error.stack,
       personId: req.person?.id,
-      tenantId: req.user?.tenantId
+      tenantId: req.person?.tenantId
     });
     res.status(500).json({
       error: 'Internal server error',
@@ -485,7 +485,7 @@ router.get('/expiring-courses', authenticateToken(), requirePermission('schedule
  */
 router.post('/import-expiring-courses', authenticateToken(), requirePermission('schedules:update'), async (req, res) => {
   try {
-    const { tenantId } = req.user;
+    const { tenantId } = req.person;
     const { records } = req.body;
 
     if (!Array.isArray(records) || records.length === 0) {
@@ -606,7 +606,7 @@ router.post('/import-expiring-courses', authenticateToken(), requirePermission('
             source: 'IMPORT',
             status: 'COMPLETED',
             isPublic: false, // Corsi importati non sono pubblici di default
-            importedBy: req.user.personId,
+            importedBy: req.person.id,
             importedAt: new Date(),
             importNotes: record.notes || null,
             notes: `Corso esterno importato - ${course.title}`

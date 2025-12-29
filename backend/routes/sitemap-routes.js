@@ -85,7 +85,7 @@ router.post('/api/v1/sitemap/regenerate',
   auditLog('REGENERATE_SITEMAP'),
   async (req, res) => {
     try {
-      const tenantId = req.user.tenantId;
+      const tenantId = req.person.tenantId;
       const baseUrl = process.env.FRONTEND_URL || req.get('origin') || 'http://localhost:5173';
 
       const result = await sitemapService.regenerateFullSitemap(tenantId, baseUrl);
@@ -116,7 +116,7 @@ router.post('/api/v1/sitemap/regenerate/pages',
   auditLog('REGENERATE_SITEMAP_PAGES'),
   async (req, res) => {
     try {
-      const tenantId = req.user.tenantId;
+      const tenantId = req.person.tenantId;
       const baseUrl = process.env.FRONTEND_URL || req.get('origin') || 'http://localhost:5173';
 
       const results = await sitemapService.regenerateFromCMSPages(tenantId, baseUrl);
@@ -149,7 +149,7 @@ router.post('/api/v1/sitemap/regenerate/courses',
   auditLog('REGENERATE_SITEMAP_COURSES'),
   async (req, res) => {
     try {
-      const tenantId = req.user.tenantId;
+      const tenantId = req.person.tenantId;
       const baseUrl = process.env.FRONTEND_URL || req.get('origin') || 'http://localhost:5173';
 
       const results = await sitemapService.regenerateFromCourses(tenantId, baseUrl);
@@ -181,7 +181,7 @@ router.get('/api/v1/sitemap/stats',
   requirePermissions('seo:read'),
   async (req, res) => {
     try {
-      const tenantId = req.user.tenantId;
+      const tenantId = req.person.tenantId;
       const stats = await sitemapService.getSitemapStats(tenantId);
 
       res.json({
@@ -223,7 +223,7 @@ router.delete('/api/v1/sitemap/:entityType/:entityId',
       }
 
       const { entityType, entityId } = req.params;
-      const tenantId = req.user.tenantId;
+      const tenantId = req.person.tenantId;
 
       await sitemapService.deleteSitemapEntry(entityType, entityId, tenantId);
 

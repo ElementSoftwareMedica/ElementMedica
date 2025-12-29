@@ -330,7 +330,7 @@ export function createCustomProxyMiddleware(serviceName, target, options = {}) {
     if (process.env.DEBUG_AUTH || process.env.DEBUG_ALL) {
       console.log(`🔍 [PROXY AUTH CHECK] Service: ${serviceName}`, {
         requireAuth,
-        hasUser: !!req.user,
+        hasUser: !!req.person,
         hasAuthHeader: !!req.headers.authorization,
         path: req.path,
         method: req.method
@@ -338,10 +338,10 @@ export function createCustomProxyMiddleware(serviceName, target, options = {}) {
     }
     
     // Controllo autenticazione se richiesto
-    if (requireAuth && !req.user && !req.headers.authorization) {
+    if (requireAuth && !req.person && !req.headers.authorization) {
       console.log(`❌ [PROXY AUTH FAILED] Service: ${serviceName}`, {
         requireAuth,
-        hasUser: !!req.user,
+        hasUser: !!req.person,
         hasAuthHeader: !!req.headers.authorization,
         path: req.path,
         method: req.method

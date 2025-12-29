@@ -44,7 +44,7 @@ router.get('/pages', authenticate, requirePermissions('cms.pages:read'), [
       });
     }
 
-    const isGlobalAdmin = req.user.globalRole === 'ADMIN' || req.user.globalRole === 'SUPER_ADMIN';
+    const isGlobalAdmin = req.person.globalRole === 'ADMIN' || req.person.globalRole === 'SUPER_ADMIN';
 
     // Determina il tenantId da usare per il filtro
     // Gli admin globali di default vedono tutte le pagine (null), ma possono filtrare per tenant specifico
@@ -59,7 +59,7 @@ router.get('/pages', authenticate, requirePermissions('cms.pages:read'), [
       }
     } else {
       // Utente normale: sempre filtrato per il proprio tenant
-      filterTenantId = req.user.tenantId;
+      filterTenantId = req.person.tenantId;
     }
 
     const result = await cmsService.listPages({
@@ -79,7 +79,7 @@ router.get('/pages', authenticate, requirePermissions('cms.pages:read'), [
     logger.error('Failed to list CMS pages', {
       component: 'cms-routes',
       error: error.message,
-      tenantId: req.user?.tenantId
+      tenantId: req.person?.tenantId
     });
     res.status(500).json({
       success: false,
@@ -171,8 +171,8 @@ router.get('/pages/:id', authenticate, requirePermissions('cms.pages:read'), [
 ], async (req, res) => {
   try {
     // Gli admin globali possono vedere pagine di qualsiasi tenant
-    const isGlobalAdmin = req.user.globalRole === 'ADMIN' || req.user.globalRole === 'SUPER_ADMIN';
-    const page = await cmsService.getPage(req.params.id, req.user.tenantId, isGlobalAdmin);
+    const isGlobalAdmin = req.person.globalRole === 'ADMIN' || req.person.globalRole === 'SUPER_ADMIN';
+    const page = await cmsService.getPage(req.params.id, req.person.tenantId, isGlobalAdmin);
 
     res.json({
       success: true,
@@ -224,8 +224,8 @@ router.post('/pages', authenticate, requirePermissions('cms.pages:create'), [
 
     const page = await cmsService.createPage({
       ...req.body,
-      tenantId: req.user.tenantId
-    }, req.user.id);
+      tenantId: req.person.tenantId
+    }, req.person.id);
 
     res.status(201).json({
       success: true,
@@ -277,11 +277,11 @@ router.patch('/pages/:id', authenticate, requirePermissions('cms.pages:update'),
     }
 
     // Gli admin globali possono modificare pagine di qualsiasi tenant
-    const isGlobalAdmin = req.user.globalRole === 'ADMIN' || req.user.globalRole === 'SUPER_ADMIN';
+    const isGlobalAdmin = req.person.globalRole === 'ADMIN' || req.person.globalRole === 'SUPER_ADMIN';
     const page = await cmsService.updatePage(
       req.params.id,
       req.body,
-      req.user.tenantId,
+      req.person.tenantId,
       isGlobalAdmin
     );
 
@@ -325,7 +325,7 @@ router.post('/pages/:id/publish', authenticate, requirePermissions('cms.pages:pu
   param('id').isString()
 ], async (req, res) => {
   try {
-    const page = await cmsService.publishPage(req.params.id, req.user.tenantId);
+    const page = await cmsService.publishPage(req.params.id, req.person.tenantId);
 
     res.json({
       success: true,
@@ -352,7 +352,7 @@ router.post('/pages/:id/unpublish', authenticate, requirePermissions('cms.pages:
   param('id').isString()
 ], async (req, res) => {
   try {
-    const page = await cmsService.unpublishPage(req.params.id, req.user.tenantId);
+    const page = await cmsService.unpublishPage(req.params.id, req.person.tenantId);
 
     res.json({
       success: true,
@@ -379,7 +379,7 @@ router.delete('/pages/:id', authenticate, requirePermissions('cms.pages:delete')
   param('id').isString()
 ], async (req, res) => {
   try {
-    const page = await cmsService.deletePage(req.params.id, req.user.tenantId);
+    const page = await cmsService.deletePage(req.params.id, req.person.tenantId);
 
     res.json({
       success: true,
@@ -408,8 +408,8 @@ router.post('/pages/:id/duplicate', authenticate, requirePermissions('cms.pages:
   try {
     const page = await cmsService.duplicatePage(
       req.params.id,
-      req.user.tenantId,
-      req.user.id
+      req.person.tenantId,
+      req.person.id
     );
 
     res.status(201).json({
@@ -496,7 +496,7 @@ router.get('/courses', authenticate, requirePermissions('cms:read'), [
     } = req.query;
 
     const offset = (parseInt(page) - 1) * parseInt(limit);
-    const tenantId = req.user.tenantId;
+    const tenantId = req.person.tenantId;
 
     // Costruisci il filtro WHERE
     const where = {
@@ -563,8 +563,8 @@ router.get('/courses', authenticate, requirePermissions('cms:read'), [
       action: 'getCMSCourses',
       error: error.message,
       stack: error.stack,
-      userId: req.user?.id,
-      tenantId: req.user?.tenantId
+      userId: req.person?.id,
+      tenantId: req.person?.tenantId
     });
 
     res.status(500).json({
@@ -592,7 +592,7 @@ router.get('/courses/:id', authenticate, requirePermissions('cms:read'), [
     }
 
     const { id } = req.params;
-    const tenantId = req.user.tenantId;
+    const tenantId = req.person.tenantId;
 
     const course = await prisma.course.findFirst({
       where: {
@@ -639,7 +639,7 @@ router.get('/courses/:id', authenticate, requirePermissions('cms:read'), [
       error: error.message,
       stack: error.stack,
       courseId: req.params.id,
-      userId: req.user?.id
+      userId: req.person?.id
     });
 
     res.status(500).json({
@@ -685,7 +685,7 @@ router.put('/courses/:id/content', authenticate, requirePermissions('cms:update'
       where: {
         id: id,
         deletedAt: null,
-        tenantId: req.user.tenantId
+        tenantId: req.person.tenantId
       }
     });
 
@@ -725,7 +725,7 @@ router.put('/courses/:id/content', authenticate, requirePermissions('cms:update'
     });
 
     // Log audit
-    await auditLog(req.user.id, 'UPDATE', 'Course', id, {
+    await auditLog(req.person.id, 'UPDATE', 'Course', id, {
       action: 'update_content',
       changes: updateData
     });
@@ -743,7 +743,7 @@ router.put('/courses/:id/content', authenticate, requirePermissions('cms:update'
       error: error.message,
       stack: error.stack,
       courseId: req.params.id,
-      userId: req.user?.id
+      userId: req.person?.id
     });
 
     if (error.code === 'P2002') {
@@ -774,8 +774,8 @@ router.post('/upload/image', authenticate, requirePermissions('cms.media:manage'
       });
     }
 
-    const tenantId = req.user.tenantId;
-    const userId = req.user.id;
+    const tenantId = req.person.tenantId;
+    const userId = req.person.id;
     const file = req.file;
 
     // Salva le informazioni del file nel database
@@ -793,7 +793,7 @@ router.post('/upload/image', authenticate, requirePermissions('cms.media:manage'
     });
 
     // Log audit
-    await auditLog(req.user.id, 'CREATE', 'CMSMedia', mediaRecord.id, {
+    await auditLog(req.person.id, 'CREATE', 'CMSMedia', mediaRecord.id, {
       action: 'upload_image',
       filename: req.file.filename,
       size: req.file.size
@@ -820,7 +820,7 @@ router.post('/upload/image', authenticate, requirePermissions('cms.media:manage'
       action: 'uploadImage',
       error: error.message,
       stack: error.stack,
-      userId: req.user?.id
+      userId: req.person?.id
     });
 
     res.status(500).json({
@@ -854,7 +854,7 @@ router.get('/media', authenticate, requirePermissions('cms:read'), [
     } = req.query;
 
     const offset = (parseInt(page) - 1) * parseInt(limit);
-    const tenantId = req.user.tenantId;
+    const tenantId = req.person.tenantId;
 
     const [media, total] = await Promise.all([
       prisma.cMSMedia.findMany({
@@ -907,7 +907,7 @@ router.get('/media', authenticate, requirePermissions('cms:read'), [
       action: 'getMedia',
       error: error.message,
       stack: error.stack,
-      userId: req.user?.id
+      userId: req.person?.id
     });
 
     res.status(500).json({
@@ -935,8 +935,8 @@ router.delete('/media/:id', authenticate, requirePermissions('cms.media:manage')
     }
 
     const { id } = req.params;
-    const tenantId = req.user.tenantId;
-    const userId = req.user.id;
+    const tenantId = req.person.tenantId;
+    const userId = req.person.id;
 
     // Trova il record media
     const mediaRecord = await prisma.cMSMedia.findFirst({
@@ -977,7 +977,7 @@ router.delete('/media/:id', authenticate, requirePermissions('cms.media:manage')
     }
 
     // Log audit
-    await auditLog(req.user.id, 'DELETE', 'CMSMedia', id, {
+    await auditLog(req.person.id, 'DELETE', 'CMSMedia', id, {
       action: 'delete_media',
       filename: mediaRecord.filename
     });
@@ -994,7 +994,7 @@ router.delete('/media/:id', authenticate, requirePermissions('cms.media:manage')
       error: error.message,
       stack: error.stack,
       mediaId: req.params.id,
-      userId: req.user?.id
+      userId: req.person?.id
     });
 
     res.status(500).json({
@@ -1010,7 +1010,7 @@ router.delete('/media/:id', authenticate, requirePermissions('cms.media:manage')
  */
 router.get('/public-content', authenticate, requirePermissions('cms:read'), async (req, res) => {
   try {
-    const tenantId = req.user.tenantId;
+    const tenantId = req.person.tenantId;
 
     // Cerca la pagina CMS per il contenuto pubblico
     const publicContentPage = await prisma.cMSPage.findFirst({
@@ -1083,8 +1083,8 @@ router.get('/public-content', authenticate, requirePermissions('cms:read'), asyn
       action: 'getPublicContent',
       error: error.message,
       stack: error.stack,
-      userId: req.user?.id,
-      tenantId: req.user?.tenantId
+      userId: req.person?.id,
+      tenantId: req.person?.tenantId
     });
 
     res.status(500).json({
@@ -1115,8 +1115,8 @@ router.put('/public-content', authenticate, requirePermissions('cms:update'), [
       });
     }
 
-    const tenantId = req.user.tenantId;
-    const userId = req.user.id;
+    const tenantId = req.person.tenantId;
+    const userId = req.person.id;
     const contentData = req.body;
 
     // Cerca la pagina esistente o creane una nuova
@@ -1170,8 +1170,8 @@ router.put('/public-content', authenticate, requirePermissions('cms:update'), [
       action: 'updatePublicContent',
       error: error.message,
       stack: error.stack,
-      userId: req.user?.id,
-      tenantId: req.user?.tenantId
+      userId: req.person?.id,
+      tenantId: req.person?.tenantId
     });
 
     res.status(500).json({

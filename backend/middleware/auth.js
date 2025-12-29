@@ -110,9 +110,6 @@ const authenticate = async (req, res, next) => {
     // Imposta anche req.tenantId per le query
     req.tenantId = effectiveTenantId;
 
-    // Backwards compatibility - alcune routes usano req.user
-    req.user = req.person;
-
     next();
   } catch (error) {
     const msg = (error && error.message) || '';
@@ -123,7 +120,7 @@ const authenticate = async (req, res, next) => {
       return res.status(401).json({ error: 'Token non valido' });
     }
 
-    console.error('Errore durante l\'autenticazione:', error);
+    logger.error({ component: 'auth', action: 'authenticate', error: error.message, ip: req.ip }, 'Authentication error');
     return res.status(500).json({ error: 'Errore interno del server' });
   }
 };
@@ -181,9 +178,6 @@ export async function optionalAuth(req, res, next) {
           permissions: permissions,
           lastLogin: person.lastLogin
         };
-
-        // Backwards compatibility - alcune routes usano req.user
-        req.user = req.person;
       }
     }
 

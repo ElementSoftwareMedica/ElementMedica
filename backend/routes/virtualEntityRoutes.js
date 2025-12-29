@@ -366,7 +366,7 @@ virtualEntitiesRouter.get('/permissions',
   authenticateToken(),
   async (req, res) => {
     try {
-      const userId = req.user?.id;
+      const userId = req.person?.id;
       const tenantId = req.tenant?.id;
       
       if (!userId || !tenantId) {
@@ -379,7 +379,7 @@ virtualEntitiesRouter.get('/permissions',
       // Ottieni i permessi dell'utente per le entità virtuali
       const { getRoleVirtualEntityPermissions } = await import('../services/virtualEntityPermissions.js');
       
-      const userRoles = req.user.roles || [];
+      const userRoles = req.person.roles || [];
       const permissions = {
         employees: {
           view: false,
@@ -442,7 +442,7 @@ virtualEntitiesRouter.post('/permissions/assign',
   async (req, res) => {
     try {
       const { roleId, virtualEntityName, permissions } = req.body;
-      const grantedBy = req.user?.id;
+      const grantedBy = req.person?.id;
       
       if (!grantedBy) {
         return res.status(401).json({
@@ -530,7 +530,7 @@ virtualEntitiesRouter.post('/permissions/check',
   async (req, res) => {
     try {
       const { virtualEntityName, action } = req.body;
-      const userId = req.user?.id;
+      const userId = req.person?.id;
       const tenantId = req.tenant?.id;
       
       if (!userId || !tenantId) {

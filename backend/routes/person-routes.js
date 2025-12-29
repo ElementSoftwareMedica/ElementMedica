@@ -217,7 +217,7 @@ router.get('/me/privacy-settings',
   auditLog('VIEW_PRIVACY_SETTINGS'),
   async (req, res) => {
     try {
-      const personId = req.user?.personId || req.user?.id;
+      const personId = req.person?.personId || req.person?.id;
 
       if (!personId) {
         return res.status(401).json({
@@ -253,7 +253,7 @@ router.get('/me/privacy-settings',
     } catch (error) {
       logger.error('Failed to get privacy settings', {
         error: error.message,
-        personId: req.user?.personId || req.user?.id
+        personId: req.person?.personId || req.person?.id
       });
       res.status(500).json({
         success: false,
@@ -269,7 +269,7 @@ router.put('/me/privacy-settings',
   auditLog('UPDATE_PRIVACY_SETTINGS'),
   async (req, res) => {
     try {
-      const personId = req.user?.personId || req.user?.id;
+      const personId = req.person?.personId || req.person?.id;
 
       if (!personId) {
         return res.status(401).json({
@@ -293,7 +293,7 @@ router.put('/me/privacy-settings',
     } catch (error) {
       logger.error('Failed to update privacy settings', {
         error: error.message,
-        personId: req.user?.personId || req.user?.id
+        personId: req.person?.personId || req.person?.id
       });
       res.status(500).json({
         success: false,

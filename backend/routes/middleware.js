@@ -85,7 +85,7 @@ export const rateLimiters = {
     validate: { ip: false }, // Disable IP validation to prevent errors with proxy
     keyGenerator: (req) => {
       // Use user ID if authenticated, otherwise cleaned IP
-      return req.user?.id?.toString() || getClientIp(req);
+      return req.person?.id?.toString() || getClientIp(req);
     }
   }),
 
@@ -304,7 +304,7 @@ export const requestLogger = (options = {}) => {
       query: req.query,
       ip: req.ip,
       userAgent: req.get('User-Agent'),
-      userId: req.user?.id,
+      userId: req.person?.id,
       component: 'request-logger'
     };
 

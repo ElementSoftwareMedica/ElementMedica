@@ -261,7 +261,7 @@ router.get('/:id/tariffari',
   async (req, res) => {
     try {
       const { id } = req.params;
-      const tariffari = await TariffarioAziendaleService.getByCompany(id, req.user.tenantId);
+      const tariffari = await TariffarioAziendaleService.getByCompany(id, req.person.tenantId);
       res.json({
         success: true,
         data: tariffari

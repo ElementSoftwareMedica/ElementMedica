@@ -71,7 +71,7 @@ router.post('/send',
     async (req, res) => {
         try {
             const { type, entityId, to, templateData } = req.body;
-            const tenantId = req.user.tenantId;
+            const tenantId = req.person.tenantId;
 
             let result;
 
@@ -111,7 +111,7 @@ router.post('/send',
                 component: 'NotificationRoutes',
                 action: 'send',
                 type,
-                userId: req.user.id,
+                userId: req.person.id,
                 tenantId
             });
 
@@ -124,7 +124,7 @@ router.post('/send',
                 component: 'NotificationRoutes',
                 action: 'send',
                 error: error.message,
-                tenantId: req.user.tenantId
+                tenantId: req.person.tenantId
             });
 
             res.status(500).json({
@@ -225,7 +225,7 @@ router.get('/config',
     requirePermission('settings:read'),
     async (req, res) => {
         try {
-            const config = await NotificationSchedulerService._getTenantReminderConfig(req.user.tenantId);
+            const config = await NotificationSchedulerService._getTenantReminderConfig(req.person.tenantId);
 
             res.json({
                 success: true,
@@ -260,15 +260,15 @@ router.put('/config',
     async (req, res) => {
         try {
             const result = await NotificationSchedulerService.updateTenantConfig(
-                req.user.tenantId,
+                req.person.tenantId,
                 req.body
             );
 
             logger.info('Notification config updated', {
                 component: 'NotificationRoutes',
                 action: 'updateConfig',
-                userId: req.user.id,
-                tenantId: req.user.tenantId
+                userId: req.person.id,
+                tenantId: req.person.tenantId
             });
 
             res.json({
@@ -318,14 +318,14 @@ router.post('/test',
                 to,
                 template,
                 data: testData,
-                tenantId: req.user.tenantId
+                tenantId: req.person.tenantId
             });
 
             logger.info('Test email sent', {
                 component: 'NotificationRoutes',
                 action: 'test',
                 to: to.substring(0, 3) + '***',
-                userId: req.user.id
+                userId: req.person.id
             });
 
             res.json({
@@ -540,15 +540,15 @@ router.post('/sms/send',
                 to,
                 template,
                 data: data || {},
-                tenantId: req.user.tenantId
+                tenantId: req.person.tenantId
             });
 
             logger.info('SMS sent via API', {
                 component: 'NotificationRoutes',
                 action: 'sendSMS',
                 template,
-                userId: req.user.id,
-                tenantId: req.user.tenantId
+                userId: req.person.id,
+                tenantId: req.person.tenantId
             });
 
             res.json({
@@ -588,15 +588,15 @@ router.post('/whatsapp/send',
                 to,
                 template,
                 data: data || {},
-                tenantId: req.user.tenantId
+                tenantId: req.person.tenantId
             });
 
             logger.info('WhatsApp message sent via API', {
                 component: 'NotificationRoutes',
                 action: 'sendWhatsApp',
                 template,
-                userId: req.user.id,
-                tenantId: req.user.tenantId
+                userId: req.person.id,
+                tenantId: req.person.tenantId
             });
 
             res.json({
@@ -635,7 +635,7 @@ router.put('/opt-out',
 
             const result = await SMSService.updateOptOut(
                 patientId,
-                req.user.tenantId,
+                req.person.tenantId,
                 { smsOptOut, whatsappOptOut }
             );
 
@@ -643,8 +643,8 @@ router.put('/opt-out',
                 component: 'NotificationRoutes',
                 action: 'updateOptOut',
                 patientId,
-                userId: req.user.id,
-                tenantId: req.user.tenantId
+                userId: req.person.id,
+                tenantId: req.person.tenantId
             });
 
             res.json({

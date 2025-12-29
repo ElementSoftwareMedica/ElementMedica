@@ -50,8 +50,6 @@ export function authenticateTest(req, res, next) {
             permissions: Array.isArray(decoded.permissions) ? decoded.permissions : ['ALL_PERMISSIONS']
         };
         
-        req.user = req.person; // Backward compatibility
-        
         next();
         
     } catch (error) {

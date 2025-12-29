@@ -1,5 +1,6 @@
 import express from 'express';
 const router = express.Router();
+import logger from '../utils/logger.js';
 import tenantService from '../services/tenantService.js';
 import enhancedRoleService from '../services/enhancedRoleService.js';
 import { tenantMiddleware, validateUserTenant, requireSuperAdmin } from '../middleware/tenant.js';
@@ -40,7 +41,7 @@ router.get('/', requireSuperAdmin, async (req, res) => {
       pagination: result.pagination
     });
   } catch (error) {
-    console.error('[TENANTS_API] Error listing tenants:', error);
+    logger.error({ component: 'tenants', error: error.message }, 'Error listing tenants');
     res.status(500).json({
       success: false,
       error: 'Failed to list tenants',
@@ -90,7 +91,7 @@ router.post('/', requireSuperAdmin, async (req, res) => {
       message: 'Tenant created successfully'
     });
   } catch (error) {
-    console.error('[TENANTS_API] Error creating tenant:', error);
+    logger.error({ component: 'tenants', error: error.message }, 'Error creating tenant');
 
     if (error.message.includes('already exists')) {
       return res.status(409).json({
@@ -114,29 +115,29 @@ router.post('/', requireSuperAdmin, async (req, res) => {
  */
 router.get('/current', tenantMiddleware, validateUserTenant, async (req, res) => {
   try {
-    console.log('[TENANTS_API] Getting current tenant for user:', req.person?.id);
-    console.log('[TENANTS_API] User tenant ID:', req.person?.tenantId);
-    console.log('[TENANTS_API] Tenant from middleware:', req.tenant?.id);
+    logger.info({ component: 'tenants', userId: req.person?.id }, 'Getting current tenant for user');
+    logger.info({ component: 'tenants', tenantId: req.person?.tenantId }, 'User tenant ID');
+    logger.info({ component: 'tenants', tenantId: req.tenant?.id }, 'Tenant from middleware');
 
     const tenant = req.tenant;
 
     if (!tenant) {
-      console.error('[TENANTS_API] No tenant found in request');
+      logger.error({ component: 'tenants' }, 'No tenant found in request');
       return res.status(400).json({
         success: false,
         error: 'No tenant information available'
       });
     }
 
-    console.log('[TENANTS_API] Getting stats for tenant:', tenant.id);
+    logger.info({ component: 'tenants', tenantId: tenant.id }, 'Getting stats for tenant');
     // Ottieni statistiche del tenant
     const stats = await tenantService.getTenantStats(tenant.id);
 
-    console.log('[TENANTS_API] Getting billing info for tenant:', tenant.id);
+    logger.info({ component: 'tenants', tenantId: tenant.id }, 'Getting billing info for tenant');
     // Ottieni limiti del piano
     const billingInfo = await tenantService.checkBillingLimits(tenant.id);
 
-    console.log('[TENANTS_API] Successfully retrieved tenant information');
+    logger.info({ component: 'tenants' }, 'Successfully retrieved tenant information');
     res.json({
       success: true,
       data: {
@@ -155,8 +156,7 @@ router.get('/current', tenantMiddleware, validateUserTenant, async (req, res) =>
       }
     });
   } catch (error) {
-    console.error('[TENANTS_API] Error getting current tenant:', error);
-    console.error('[TENANTS_API] Error stack:', error.stack);
+    logger.error({ component: 'tenants', error: error.message, stack: error.stack }, 'Error getting current tenant');
     res.status(500).json({
       success: false,
       error: 'Failed to get tenant information'
@@ -205,7 +205,7 @@ router.get('/:id', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('[TENANTS_API] Error getting tenant:', error);
+    logger.error({ component: 'tenants', error: error.message }, 'Error getting tenant');
     res.status(500).json({
       success: false,
       error: 'Failed to get tenant'
@@ -256,7 +256,7 @@ router.put('/:id', async (req, res) => {
       message: 'Tenant updated successfully'
     });
   } catch (error) {
-    console.error('[TENANTS_API] Error updating tenant:', error);
+    logger.error({ component: 'tenants', error: error.message }, 'Error updating tenant');
 
     if (error.message.includes('already exists')) {
       return res.status(409).json({
@@ -288,7 +288,7 @@ router.delete('/:id', requireSuperAdmin, async (req, res) => {
       message: result.message
     });
   } catch (error) {
-    console.error('[TENANTS_API] Error deleting tenant:', error);
+    logger.error({ component: 'tenants', error: error.message }, 'Error deleting tenant');
     res.status(500).json({
       success: false,
       error: 'Failed to delete tenant'
@@ -329,7 +329,7 @@ router.get('/:id/stats', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('[TENANTS_API] Error getting tenant stats:', error);
+    logger.error({ component: 'tenants', error: error.message }, 'Error getting tenant stats');
     res.status(500).json({
       success: false,
       error: 'Failed to get tenant statistics'
@@ -370,7 +370,7 @@ router.post('/:id/users/:personId/roles',
         message: 'Role assigned successfully'
       });
     } catch (error) {
-      console.error('[TENANTS_API] Error assigning role:', error);
+      logger.error({ component: 'tenants', error: error.message }, 'Error assigning role');
       res.status(500).json({
         success: false,
         error: 'Failed to assign role'
@@ -410,7 +410,7 @@ router.delete('/:id/users/:personId/roles/:roleType',
         });
       }
     } catch (error) {
-      console.error('[TENANTS_API] Error removing role:', error);
+      logger.error({ component: 'tenants', error: error.message }, 'Error removing role');
       res.status(500).json({
         success: false,
         error: 'Failed to remove role'
@@ -451,7 +451,7 @@ router.get('/:id/users/:personId/roles', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('[TENANTS_API] Error getting user roles:', error);
+    logger.error({ component: 'tenants', error: error.message }, 'Error getting user roles');
     res.status(500).json({
       success: false,
       error: 'Failed to get user roles'

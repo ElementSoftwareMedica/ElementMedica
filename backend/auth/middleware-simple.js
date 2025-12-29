@@ -94,8 +94,6 @@ export function authenticateSimple(options = {}) {
                 permissions: permissions
             };
             
-            req.user = req.person; // Backward compatibility
-            
             next();
             
         } catch (error) {

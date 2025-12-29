@@ -27,7 +27,7 @@ router.post('/companies/validate',
   async (req, res) => {
     try {
       const { companies } = req.body;
-      const tenantId = req.user.tenantId;
+      const tenantId = req.person.tenantId;
 
       if (!companies || !Array.isArray(companies)) {
         return res.status(400).json({
@@ -87,7 +87,7 @@ router.post('/companies',
   async (req, res) => {
     try {
       const { companies, overwriteIds = [] } = req.body;
-      const tenantId = req.user.tenantId;
+      const tenantId = req.person.tenantId;
 
       if (!companies || !Array.isArray(companies)) {
         return res.status(400).json({
@@ -117,7 +117,7 @@ router.post('/companies',
       logger.info('[IMPORT_ROUTES] Company import completed', {
         ...result,
         tenantId,
-        userId: req.user.id
+        userId: req.person.id
       });
 
       res.json(result);
@@ -144,7 +144,7 @@ router.post('/companies/:companyId/sites',
     try {
       const { companyId } = req.params;
       const siteData = req.body;
-      const tenantId = req.user.tenantId;
+      const tenantId = req.person.tenantId;
 
       const site = await CompanyImportService.createCompanySite(companyId, siteData, tenantId);
 
@@ -152,7 +152,7 @@ router.post('/companies/:companyId/sites',
         companyId,
         siteId: site.id,
         tenantId,
-        userId: req.user.id
+        userId: req.person.id
       });
 
       res.json({
@@ -183,7 +183,7 @@ router.post('/employees/validate',
   async (req, res) => {
     try {
       const { employees } = req.body;
-      const tenantId = req.user.tenantId;
+      const tenantId = req.person.tenantId;
 
       if (!employees || !Array.isArray(employees)) {
         return res.status(400).json({
@@ -248,7 +248,7 @@ router.post('/employees',
   async (req, res) => {
     try {
       const { employees, overwriteIds = [], defaultCompanyId = null } = req.body;
-      const tenantId = req.user.tenantId;
+      const tenantId = req.person.tenantId;
 
       if (!employees || !Array.isArray(employees)) {
         return res.status(400).json({
@@ -280,7 +280,7 @@ router.post('/employees',
         ...result,
         defaultCompanyId,
         tenantId,
-        userId: req.user.id
+        userId: req.person.id
       });
 
       res.json(result);
@@ -319,7 +319,7 @@ router.post('/employees/bulk-assign',
       logger.info('[IMPORT_ROUTES] Bulk assignment completed', {
         ...result,
         companyId,
-        userId: req.user.id
+        userId: req.person.id
       });
 
       res.json(result);
@@ -347,7 +347,7 @@ router.post('/trainers/validate',
   async (req, res) => {
     try {
       const { trainers } = req.body;
-      const tenantId = req.user.tenantId;
+      const tenantId = req.person.tenantId;
 
       if (!trainers || !Array.isArray(trainers)) {
         return res.status(400).json({
@@ -407,7 +407,7 @@ router.post('/trainers',
   async (req, res) => {
     try {
       const { trainers, overwriteIds = [], createAccounts = true } = req.body;
-      const tenantId = req.user.tenantId;
+      const tenantId = req.person.tenantId;
 
       if (!trainers || !Array.isArray(trainers)) {
         return res.status(400).json({
@@ -441,7 +441,7 @@ router.post('/trainers',
         skipped: result.skipped,
         accountsCreated: result.credentials.length,
         tenantId,
-        userId: req.user.id
+        userId: req.person.id
       });
 
       res.json(result);
@@ -479,7 +479,7 @@ router.post('/trainers/credentials-csv',
 
       logger.info('[IMPORT_ROUTES] Trainer credentials CSV generated', {
         count: credentials.length,
-        userId: req.user.id
+        userId: req.person.id
       });
 
       res.setHeader('Content-Type', 'text/csv');

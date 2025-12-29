@@ -47,7 +47,7 @@ router.get('/',
                 return res.status(400).json({ success: false, errors: errors.array() });
             }
 
-            const tenantId = req.tenantId || req.user?.tenantId;
+            const tenantId = req.tenantId || req.person?.tenantId;
             const result = await PazienteService.listPazienti({
                 page: parseInt(req.query.page) || 1,
                 pageSize: parseInt(req.query.pageSize) || 20,
@@ -83,7 +83,7 @@ router.get('/cerca-cf/:taxCode',
                 return res.status(400).json({ success: false, errors: errors.array() });
             }
 
-            const tenantId = req.tenantId || req.user?.tenantId;
+            const tenantId = req.tenantId || req.person?.tenantId;
             const person = await PazienteService.findByTaxCode(req.params.taxCode, tenantId);
 
             if (!person) {
@@ -151,11 +151,11 @@ router.post('/',
                 return res.status(400).json({ success: false, errors: errors.array() });
             }
 
-            const tenantId = req.tenantId || req.user?.tenantId;
+            const tenantId = req.tenantId || req.person?.tenantId;
             const result = await PazienteService.findOrCreatePaziente(
                 req.body,
                 tenantId,
-                req.user?.id
+                req.person?.id
             );
 
             const status = result.isNew ? 201 : 200;
@@ -196,7 +196,7 @@ router.get('/:id',
                 return res.status(400).json({ success: false, errors: errors.array() });
             }
 
-            const tenantId = req.tenantId || req.user?.tenantId;
+            const tenantId = req.tenantId || req.person?.tenantId;
             const paziente = await PazienteService.getPazienteById(req.params.id, tenantId);
 
             res.json({ success: true, data: paziente });
@@ -239,7 +239,7 @@ router.put('/:id',
                 return res.status(400).json({ success: false, errors: errors.array() });
             }
 
-            const tenantId = req.tenantId || req.user?.tenantId;
+            const tenantId = req.tenantId || req.person?.tenantId;
             const updated = await PazienteService.updatePaziente(
                 req.params.id,
                 req.body,
@@ -283,7 +283,7 @@ router.get('/:id/referti',
                 return res.status(400).json({ success: false, errors: errors.array() });
             }
 
-            const tenantId = req.tenantId || req.user?.tenantId;
+            const tenantId = req.tenantId || req.person?.tenantId;
             const referti = await PazienteService.getRefertiPaziente(req.params.id, tenantId);
 
             res.json({ success: true, data: referti });
@@ -340,8 +340,8 @@ router.get('/paziente/me',
     tenantMiddleware,
     async (req, res) => {
         try {
-            const tenantId = req.tenantId || req.user?.tenantId;
-            const isPaziente = await PazienteService.isPaziente(req.user.id, tenantId);
+            const tenantId = req.tenantId || req.person?.tenantId;
+            const isPaziente = await PazienteService.isPaziente(req.person.id, tenantId);
 
             if (!isPaziente) {
                 return res.status(403).json({
@@ -350,7 +350,7 @@ router.get('/paziente/me',
                 });
             }
 
-            const paziente = await PazienteService.getPazienteById(req.user.id, tenantId);
+            const paziente = await PazienteService.getPazienteById(req.person.id, tenantId);
 
             res.json({ success: true, data: paziente });
         } catch (error) {
@@ -369,8 +369,8 @@ router.get('/paziente/me/referti',
     tenantMiddleware,
     async (req, res) => {
         try {
-            const tenantId = req.tenantId || req.user?.tenantId;
-            const isPaziente = await PazienteService.isPaziente(req.user.id, tenantId);
+            const tenantId = req.tenantId || req.person?.tenantId;
+            const isPaziente = await PazienteService.isPaziente(req.person.id, tenantId);
 
             if (!isPaziente) {
                 return res.status(403).json({
@@ -379,7 +379,7 @@ router.get('/paziente/me/referti',
                 });
             }
 
-            const referti = await PazienteService.getRefertiPaziente(req.user.id, tenantId);
+            const referti = await PazienteService.getRefertiPaziente(req.person.id, tenantId);
 
             res.json({ success: true, data: referti });
         } catch (error) {

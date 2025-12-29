@@ -171,9 +171,6 @@ export function authenticate(options = {}) {
                 tenant: tenant
             };
 
-            // Alias for backward compatibility
-            req.user = req.person;
-
             next();
 
         } catch (error) {

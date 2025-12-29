@@ -984,7 +984,7 @@ class PersonController {
       const filters = { ...filtersFromQuery };
 
       // Imposta tenantId di default dall'utente autenticato se non esplicitato
-      const tenantIdFromAuth = req.user?.tenantId || req.tenant?.id;
+      const tenantIdFromAuth = req.person?.tenantId || req.tenant?.id;
       if (!filters.tenantId && tenantIdFromAuth) {
         filters.tenantId = tenantIdFromAuth;
       }

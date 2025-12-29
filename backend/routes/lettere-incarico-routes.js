@@ -25,7 +25,7 @@ const { authenticate: authenticateToken, authorize: requirePermission } = middle
 router.get('/', authenticateToken(), requirePermission('documents:read'), async (req, res) => {
   try {
     const { scheduleId, trainerId } = req.query;
-    const tenantId = req.user.tenantId;
+    const tenantId = req.person.tenantId;
 
     const where = {
       tenantId,
@@ -64,7 +64,7 @@ router.get('/', authenticateToken(), requirePermission('documents:read'), async 
       component: 'lettere-incarico-routes',
       action: 'list',
       error: error.message,
-      personId: req.user?.id
+      personId: req.person?.id
     });
     res.status(500).json({ error: 'Failed to fetch lettere incarico' });
   }
@@ -94,8 +94,8 @@ router.post('/generate',
       }
 
       const { scheduleId, trainerId, templateId, hourlyRate, expenses, sendEmail, email } = req.body;
-      const tenantId = req.user.tenantId;
-      const userId = req.user.id;
+      const tenantId = req.person.tenantId;
+      const userId = req.person.id;
 
       // Verify schedule exists
       const schedule = await prisma.courseSchedule.findFirst({
@@ -492,7 +492,7 @@ router.post('/generate',
         action: 'generate',
         error: error.message,
         stack: error.stack,
-        personId: req.user?.id
+        personId: req.person?.id
       });
       res.status(500).json({ error: 'Failed to generate letter of engagement', message: error.message });
     }
@@ -520,8 +520,8 @@ router.post('/generate-batch',
       }
 
       const { scheduleId, trainerIds, templateId, sendEmail } = req.body;
-      const tenantId = req.user.tenantId;
-      const userId = req.user.id;
+      const tenantId = req.person.tenantId;
+      const userId = req.person.id;
 
       // Verify schedule
       const schedule = await prisma.courseSchedule.findFirst({
@@ -590,7 +590,7 @@ router.post('/generate-batch',
         component: 'lettere-incarico-routes',
         action: 'generate-batch',
         error: error.message,
-        personId: req.user?.id
+        personId: req.person?.id
       });
       res.status(500).json({ error: 'Failed to start batch generation', message: error.message });
     }
@@ -604,7 +604,7 @@ router.post('/generate-batch',
 router.delete('/:id', authenticateToken(), requirePermission('documents:delete'), async (req, res) => {
   try {
     const { id } = req.params;
-    const tenantId = req.user.tenantId;
+    const tenantId = req.person.tenantId;
 
     const lettera = await prisma.letteraIncarico.findFirst({
       where: { id, tenantId }
@@ -623,7 +623,7 @@ router.delete('/:id', authenticateToken(), requirePermission('documents:delete')
       component: 'lettere-incarico-routes',
       action: 'delete',
       letteraId: id,
-      personId: req.user?.id
+      personId: req.person?.id
     });
 
     res.json({ message: 'Lettera incarico deleted successfully' });
@@ -632,7 +632,7 @@ router.delete('/:id', authenticateToken(), requirePermission('documents:delete')
       component: 'lettere-incarico-routes',
       action: 'delete',
       error: error.message,
-      personId: req.user?.id
+      personId: req.person?.id
     });
     res.status(500).json({ error: 'Failed to delete letter of engagement' });
   }
@@ -645,7 +645,7 @@ router.delete('/:id', authenticateToken(), requirePermission('documents:delete')
 router.get('/:id/download', authenticateToken(), requirePermission('documents:read'), async (req, res) => {
   try {
     const { id } = req.params;
-    const tenantId = req.user.tenantId;
+    const tenantId = req.person.tenantId;
 
     const lettera = await prisma.letteraIncarico.findFirst({
       where: { id, tenantId, deletedAt: null }
@@ -662,7 +662,7 @@ router.get('/:id/download', authenticateToken(), requirePermission('documents:re
       component: 'lettere-incarico-routes',
       action: 'download',
       error: error.message,
-      personId: req.user?.id
+      personId: req.person?.id
     });
     res.status(500).json({ error: 'Failed to download letter of engagement' });
   }
@@ -679,7 +679,7 @@ router.get('/schedule/:scheduleId/download-zip',
     try {
       const { scheduleId } = req.params;
       const { ids } = req.query;
-      const tenantId = req.user.tenantId;
+      const tenantId = req.person.tenantId;
 
       // Build where clause
       const where = {
@@ -753,14 +753,14 @@ router.get('/schedule/:scheduleId/download-zip',
         action: 'download-zip',
         scheduleId,
         count: lettere.length,
-        personId: req.user?.id
+        personId: req.person?.id
       });
     } catch (error) {
       logger.error('Failed to create letters ZIP', {
         component: 'lettere-incarico-routes',
         action: 'download-zip',
         error: error.message,
-        personId: req.user?.id
+        personId: req.person?.id
       });
       res.status(500).json({ error: 'Failed to create ZIP file' });
     }
@@ -777,7 +777,7 @@ router.get('/schedule/:scheduleId/download-zip',
 router.get('/:id', authenticateToken(), requirePermission('documents:read'), async (req, res) => {
   try {
     const { id } = req.params;
-    const tenantId = req.user.tenantId;
+    const tenantId = req.person.tenantId;
 
     const lettera = await prisma.letteraIncarico.findFirst({
       where: { id, tenantId, deletedAt: null },
@@ -811,7 +811,7 @@ router.get('/:id', authenticateToken(), requirePermission('documents:read'), asy
       action: 'get',
       id: req.params.id,
       error: error.message,
-      personId: req.user?.id
+      personId: req.person?.id
     });
     res.status(500).json({ error: 'Failed to fetch lettera incarico' });
   }

@@ -17,7 +17,7 @@ router.get('/', authMiddleware, checkAdvancedPermission('trainers', 'read'), fil
   logger.info('Getting all trainers', {
     component: 'trainers-routes',
     action: 'getAll',
-    userId: req.user?.id
+    userId: req.person?.id
   });
   
   // Delegate to dedicated controller method for trainers
@@ -30,7 +30,7 @@ router.get('/:id', authMiddleware, checkAdvancedPermission('trainers', 'read'), 
     component: 'trainers-routes',
     action: 'getById',
     trainerId: req.params.id,
-    userId: req.user?.id
+    userId: req.person?.id
   });
   
   return personController.getPersonById(req, res);
@@ -41,7 +41,7 @@ router.post('/', authMiddleware, checkAdvancedPermission('trainers', 'create'), 
   logger.info('Creating new trainer', {
     component: 'trainers-routes',
     action: 'create',
-    userId: req.user?.id
+    userId: req.person?.id
   });
   
   // Ensure roleType is set to TRAINER
@@ -55,7 +55,7 @@ router.put('/:id', authMiddleware, checkAdvancedPermission('trainers', 'update')
     component: 'trainers-routes',
     action: 'update',
     trainerId: req.params.id,
-    userId: req.user?.id
+    userId: req.person?.id
   });
   
   return personController.updatePerson(req, res);
@@ -67,7 +67,7 @@ router.delete('/:id', authMiddleware, checkAdvancedPermission('trainers', 'delet
     component: 'trainers-routes',
     action: 'delete',
     trainerId: req.params.id,
-    userId: req.user?.id
+    userId: req.person?.id
   });
   
   return personController.deletePerson(req, res);

@@ -59,7 +59,7 @@ router.get('/entities', async (req, res) => {
     try {
         logger.info('Richiesta lista entità backup');
 
-        const tenantId = req.user?.tenantId;
+        const tenantId = req.person?.tenantId;
         const entities = await backupService.getEntitiesWithCounts(tenantId);
 
         // Calcola totali
@@ -142,13 +142,13 @@ router.post('/create', async (req, res) => {
         logger.info('Creazione backup', {
             entities: entities.length,
             includeMedia,
-            userId: req.user?.id
+            userId: req.person?.id
         });
 
         const result = await backupService.createBackup(entities, {
-            tenantId: req.user?.tenantId,
+            tenantId: req.person?.tenantId,
             includeMedia,
-            userId: req.user?.id
+            userId: req.person?.id
         });
 
         res.json({
@@ -184,7 +184,7 @@ router.get('/download/:id', async (req, res) => {
             });
         }
 
-        logger.info('Download backup', { id, userId: req.user?.id });
+        logger.info('Download backup', { id, userId: req.person?.id });
 
         res.download(filePath, `${id}.zip`);
     } catch (error) {
@@ -213,7 +213,7 @@ router.post('/upload', upload.single('backup'), async (req, res) => {
         logger.info('Upload backup', {
             filename: req.file.originalname,
             size: req.file.size,
-            userId: req.user?.id
+            userId: req.person?.id
         });
 
         // Valida il file
@@ -295,14 +295,14 @@ router.post('/restore', async (req, res) => {
             tempPath,
             entities: entities?.length || 'all',
             overwrite,
-            userId: req.user?.id
+            userId: req.person?.id
         });
 
         const result = await backupService.restoreBackup(tempPath, {
             selectedEntities: entities,
             overwrite,
-            tenantId: req.user?.tenantId,
-            userId: req.user?.id
+            tenantId: req.person?.tenantId,
+            userId: req.person?.id
         });
 
         // Cleanup temp file
@@ -354,7 +354,7 @@ router.delete('/:id', async (req, res) => {
     try {
         const { id } = req.params;
 
-        logger.info('Eliminazione backup', { id, userId: req.user?.id });
+        logger.info('Eliminazione backup', { id, userId: req.person?.id });
 
         await backupService.deleteBackup(id);
 

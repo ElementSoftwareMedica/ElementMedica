@@ -146,7 +146,7 @@ router.get(
       const { action, personId, search, from, to, tenantFilter } = req.query;
 
       // Admin globali possono vedere tutti i log
-      const userGlobalRole = req.user?.globalRole;
+      const userGlobalRole = req.person?.globalRole;
       const isGlobalAdmin = userGlobalRole === 'SUPER_ADMIN' || userGlobalRole === 'ADMIN';
 
       const where = {};

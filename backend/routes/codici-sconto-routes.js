@@ -60,7 +60,7 @@ router.get('/',
   validate,
   async (req, res) => {
     try {
-      const { tenantId } = req.user;
+      const { tenantId } = req.person;
       const page = req.query.page || 1;
       const limit = req.query.limit || 20;
       const skip = (page - 1) * limit;
@@ -200,7 +200,7 @@ router.get('/',
       logger.info('Codici sconto listed', {
         component: 'codici-sconto-routes',
         action: 'list',
-        userId: req.user.id,
+        userId: req.person.id,
         tenantId,
         count: codici.length,
         filters: { stato: req.query.stato, tipo: req.query.tipo }
@@ -233,7 +233,7 @@ router.get('/:id',
   validate,
   async (req, res) => {
     try {
-      const { tenantId } = req.user;
+      const { tenantId } = req.person;
       const { id } = req.params;
 
       const codice = await prisma.codiceSconto.findFirst({
@@ -362,7 +362,7 @@ router.post('/',
   validate,
   async (req, res) => {
     try {
-      const { tenantId, id: userId } = req.user;
+      const { tenantId, id: userId } = req.person;
 
       // Validazioni custom
       if (req.body.tipoSconto === 'PERCENTUALE' && req.body.valore > 100) {
@@ -568,7 +568,7 @@ router.put('/:id',
   validate,
   async (req, res) => {
     try {
-      const { tenantId, id: userId } = req.user;
+      const { tenantId, id: userId } = req.person;
       const { id } = req.params;
 
       // Verifica esistenza
@@ -761,7 +761,7 @@ router.delete('/:id',
   validate,
   async (req, res) => {
     try {
-      const { tenantId, id: userId } = req.user;
+      const { tenantId, id: userId } = req.person;
       const { id } = req.params;
 
       // Verifica esistenza
@@ -857,7 +857,7 @@ router.post('/valida-preview',
   validate,
   async (req, res) => {
     try {
-      const { tenantId } = req.user;
+      const { tenantId } = req.person;
       const { codice: codiceTesto, importo, tipoServizio = 'ALTRO' } = req.body;
 
       // Trova codice
@@ -991,7 +991,7 @@ router.post('/valida',
   validate,
   async (req, res) => {
     try {
-      const { tenantId, id: userId } = req.user;
+      const { tenantId, id: userId } = req.person;
       const { codice: codiceTesto, prezzoBase, tipoServizio, clienteId, clienteType, corsoId } = req.body;
 
       // Trova codice

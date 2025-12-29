@@ -9,6 +9,7 @@
 import express from 'express';
 import { PrismaClient } from '@prisma/client';
 import middleware from '../auth/middleware.js';
+import logger from '../utils/logger.js';
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -103,7 +104,7 @@ router.get('/', authenticateToken(), requirePermission('templates:read'), async 
       }
     });
   } catch (error) {
-    console.error('Error listing templates:', error);
+    logger.error({ component: 'templates-enhanced', error: error.message }, 'Error listing templates');
     res.status(500).json({
       success: false,
       error: 'Failed to fetch templates',
@@ -180,7 +181,7 @@ router.get('/:id', authenticateToken(), requirePermission('templates:read'), asy
       data: template
     });
   } catch (error) {
-    console.error('Error fetching template:', error);
+    logger.error({ component: 'templates-enhanced', error: error.message }, 'Error fetching template');
     res.status(500).json({
       success: false,
       error: 'Failed to fetch template',
@@ -284,7 +285,7 @@ router.post('/', authenticateToken(), requirePermission('templates:read'), requi
       message: 'Template created successfully'
     });
   } catch (error) {
-    console.error('Error creating template:', error);
+    logger.error({ component: 'templates-enhanced', error: error.message }, 'Error creating template');
     res.status(500).json({
       success: false,
       error: 'Failed to create template',
@@ -426,7 +427,7 @@ router.put('/:id', authenticateToken(), requirePermission('templates:read'), req
         : 'Template metadata updated'
     });
   } catch (error) {
-    console.error('Error updating template:', error);
+    logger.error({ component: 'templates-enhanced', error: error.message }, 'Error updating template');
     res.status(500).json({
       success: false,
       error: 'Failed to update template',
@@ -477,7 +478,7 @@ router.delete('/:id', authenticateToken(), requirePermission('templates:read'), 
         : null
     });
   } catch (error) {
-    console.error('Error deleting template:', error);
+    logger.error({ component: 'templates-enhanced', error: error.message }, 'Error deleting template');
     res.status(500).json({
       success: false,
       error: 'Failed to delete template',
@@ -577,7 +578,7 @@ router.post('/:id/duplicate', authenticateToken(), requirePermission('templates:
       message: 'Template duplicated successfully'
     });
   } catch (error) {
-    console.error('Error duplicating template:', error);
+    logger.error({ component: 'templates-enhanced', error: error.message }, 'Error duplicating template');
     res.status(500).json({
       success: false,
       error: 'Failed to duplicate template',
@@ -617,7 +618,7 @@ router.get('/:id/versions', authenticateToken(), requirePermission('templates:re
       data: versions
     });
   } catch (error) {
-    console.error('Error fetching versions:', error);
+    logger.error({ component: 'templates-enhanced', error: error.message }, 'Error fetching versions');
     res.status(500).json({
       success: false,
       error: 'Failed to fetch versions',
@@ -718,7 +719,7 @@ router.post('/:id/restore-version', authenticateToken(), requirePermission('temp
       message: `Restored to version ${versionNumber} (saved as version ${newVersion})`
     });
   } catch (error) {
-    console.error('Error restoring version:', error);
+    logger.error({ component: 'templates-enhanced', error: error.message }, 'Error restoring version');
     res.status(500).json({
       success: false,
       error: 'Failed to restore version',

@@ -64,7 +64,7 @@ router.post(
   upload.array('files', 10), // Max 10 files contemporaneamente
   async (req, res) => {
     try {
-      const { tenantId, id: userId } = req.user;
+      const { tenantId, id: userId } = req.person;
       const { folderId, alt, title, tags } = req.body;
 
       if (!req.files || req.files.length === 0) {
@@ -119,8 +119,8 @@ router.post(
         {
           error: error.message,
           stack: error.stack,
-          tenantId: req.user?.tenantId,
-          userId: req.user?.id
+          tenantId: req.person?.tenantId,
+          userId: req.person?.id
         },
         'Media upload failed'
       );
@@ -144,7 +144,7 @@ router.get(
   requirePermissions('cms.media:read'),
   async (req, res) => {
     try {
-      const { tenantId } = req.user;
+      const { tenantId } = req.person;
       const {
         folderId,
         mimeType,
@@ -173,7 +173,7 @@ router.get(
       logger.error(
         {
           error: error.message,
-          tenantId: req.user?.tenantId
+          tenantId: req.person?.tenantId
         },
         'Failed to list media'
       );
@@ -197,7 +197,7 @@ router.get(
   requirePermissions('cms.media:read'),
   async (req, res) => {
     try {
-      const { tenantId } = req.user;
+      const { tenantId } = req.person;
       const { id } = req.params;
 
       const media = await prisma.cMSMedia.findFirst({
@@ -240,7 +240,7 @@ router.get(
         {
           error: error.message,
           mediaId: req.params.id,
-          tenantId: req.user?.tenantId
+          tenantId: req.person?.tenantId
         },
         'Failed to get media'
       );
@@ -264,7 +264,7 @@ router.patch(
   requirePermissions('cms.media:update'),
   async (req, res) => {
     try {
-      const { tenantId } = req.user;
+      const { tenantId } = req.person;
       const { id } = req.params;
       const { alt, title, tags, folderId } = req.body;
 
@@ -302,7 +302,7 @@ router.patch(
         {
           error: error.message,
           mediaId: req.params.id,
-          tenantId: req.user?.tenantId
+          tenantId: req.person?.tenantId
         },
         'Failed to update media'
       );
@@ -326,7 +326,7 @@ router.delete(
   requirePermissions('cms.media:delete'),
   async (req, res) => {
     try {
-      const { tenantId } = req.user;
+      const { tenantId } = req.person;
       const { id } = req.params;
 
       const media = await mediaService.deleteMedia(id, tenantId);
@@ -342,7 +342,7 @@ router.delete(
         {
           error: error.message,
           mediaId: req.params.id,
-          tenantId: req.user?.tenantId
+          tenantId: req.person?.tenantId
         },
         'Failed to delete media'
       );
@@ -370,7 +370,7 @@ router.get(
   requirePermissions('cms.media:read'),
   async (req, res) => {
     try {
-      const { tenantId } = req.user;
+      const { tenantId } = req.person;
       const { parentId } = req.query;
 
       const folders = await mediaService.listFolders(
@@ -387,7 +387,7 @@ router.get(
       logger.error(
         {
           error: error.message,
-          tenantId: req.user?.tenantId
+          tenantId: req.person?.tenantId
         },
         'Failed to list folders'
       );
@@ -411,7 +411,7 @@ router.post(
   requirePermissions('cms.media:manage'),
   async (req, res) => {
     try {
-      const { tenantId } = req.user;
+      const { tenantId } = req.person;
       const { name, parentId } = req.body;
 
       if (!name || name.trim() === '') {
@@ -437,7 +437,7 @@ router.post(
       logger.error(
         {
           error: error.message,
-          tenantId: req.user?.tenantId
+          tenantId: req.person?.tenantId
         },
         'Failed to create folder'
       );
@@ -461,7 +461,7 @@ router.delete(
   requirePermissions('cms.media:manage'),
   async (req, res) => {
     try {
-      const { tenantId } = req.user;
+      const { tenantId } = req.person;
       const { id } = req.params;
 
       // Verifica che la cartella sia vuota
@@ -506,7 +506,7 @@ router.delete(
         {
           error: error.message,
           folderId: req.params.id,
-          tenantId: req.user?.tenantId
+          tenantId: req.person?.tenantId
         },
         'Failed to delete folder'
       );

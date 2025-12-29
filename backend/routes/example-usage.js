@@ -109,7 +109,7 @@ function setupCustomMiddleware() {
     },
     // Admin authentication check
     (req, res, next) => {
-      if (!req.user || !req.user.roles.includes('admin')) {
+      if (!req.person || !req.person.roles.includes('admin')) {
         return res.status(403).json({
           success: false,
           error: {
@@ -123,7 +123,7 @@ function setupCustomMiddleware() {
     // Admin activity logging
     (req, res, next) => {
       logger.info('Admin operation', {
-        userId: req.user.id,
+        userId: req.person.id,
         action: `${req.method} ${req.path}`,
         ip: req.ip,
         component: 'admin-middleware'

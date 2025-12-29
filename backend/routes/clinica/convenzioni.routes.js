@@ -476,7 +476,7 @@ router.post('/:id/aziende',
     async (req, res) => {
         try {
             const tenantId = getEffectiveTenantId(req);
-            const userId = req.user?.id;
+            const userId = req.person?.id;
 
             const result = await RiconoscimentoConvenzioneService.associateAzienda(
                 req.params.id,

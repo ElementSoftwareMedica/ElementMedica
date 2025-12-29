@@ -109,7 +109,7 @@ router.get('/', authenticateToken(), requirePermission('templates:read'), async 
       }
     });
   } catch (error) {
-    console.error('Error listing templates:', error);
+    logger.error({ component: 'templates', error: error.message }, 'Error listing templates');
     res.status(500).json({
       success: false,
       error: 'Failed to fetch templates',
@@ -155,7 +155,7 @@ router.get('/default/:type', authenticateToken(), requirePermission('templates:r
 
     res.json(template);
   } catch (error) {
-    console.error('Error getting default template:', error);
+    logger.error({ component: 'templates', error: error.message }, 'Error getting default template');
     res.status(500).json({
       success: false,
       error: 'Failed to fetch default template',
@@ -227,7 +227,7 @@ router.get('/:id', authenticateToken(), requirePermission('templates:read'), asy
       data: template
     });
   } catch (error) {
-    console.error('Error fetching template:', error);
+    logger.error({ component: 'templates', error: error.message }, 'Error fetching template');
     res.status(500).json({
       success: false,
       error: 'Failed to fetch template',
@@ -401,7 +401,7 @@ router.post('/', authenticateToken(), requirePermission('templates:create'), asy
       message: 'Template created successfully'
     });
   } catch (error) {
-    console.error('Error creating template:', error);
+    logger.error({ component: 'templates', error: error.message }, 'Error creating template');
     res.status(500).json({
       success: false,
       error: 'Failed to create template',
@@ -650,7 +650,7 @@ router.put('/:id', authenticateToken(), requirePermission('templates:update'), a
       userId,
       tenantId
     });
-    console.error('Error updating template:', error);
+    logger.error({ component: 'templates', error: error.message, userId, tenantId }, 'Error updating template');
     res.status(500).json({
       success: false,
       error: 'Failed to update template',
@@ -704,7 +704,7 @@ router.put('/:id/set-default', authenticateToken(), requirePermission('templates
       data: { id, type: template.type }
     });
   } catch (error) {
-    console.error('Error setting default template:', error);
+    logger.error({ component: 'templates', error: error.message }, 'Error setting default template');
     res.status(500).json({
       success: false,
       error: 'Failed to set default template',
@@ -755,7 +755,7 @@ router.delete('/:id', authenticateToken(), requirePermission('templates:delete')
         : null
     });
   } catch (error) {
-    console.error('Error deleting template:', error);
+    logger.error({ component: 'templates', error: error.message }, 'Error deleting template');
     res.status(500).json({
       success: false,
       error: 'Failed to delete template',
@@ -859,7 +859,7 @@ router.post('/:id/duplicate', authenticateToken(), requirePermission('templates:
       message: 'Template duplicated successfully'
     });
   } catch (error) {
-    console.error('Error duplicating template:', error);
+    logger.error({ component: 'templates', error: error.message }, 'Error duplicating template');
     res.status(500).json({
       success: false,
       error: 'Failed to duplicate template',
@@ -899,7 +899,7 @@ router.get('/:id/versions', authenticateToken(), requirePermission('templates:re
       data: versions
     });
   } catch (error) {
-    console.error('Error fetching versions:', error);
+    logger.error({ component: 'templates', error: error.message }, 'Error fetching versions');
     res.status(500).json({
       success: false,
       error: 'Failed to fetch versions',
@@ -1000,7 +1000,7 @@ router.post('/:id/restore-version', authenticateToken(), requirePermission('temp
       message: `Restored to version ${versionNumber} (saved as version ${newVersion})`
     });
   } catch (error) {
-    console.error('Error restoring version:', error);
+    logger.error({ component: 'templates', error: error.message }, 'Error restoring version');
     res.status(500).json({
       success: false,
       error: 'Failed to restore version',

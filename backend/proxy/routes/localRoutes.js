@@ -865,7 +865,7 @@ export function setupDocumentRoutes(app) {
     try {
       if (process.env.DEBUG_ROUTES || process.env.DEBUG_ALL) {
         debugRoutes('GET /templates request:', {
-          userId: req.user?.id,
+          userId: req.person?.id,
           ip: req.ip
         });
       }
@@ -887,7 +887,7 @@ export function setupDocumentRoutes(app) {
         service: 'proxy-server',
         endpoint: 'GET /templates',
         count: templates.length,
-        userId: req.user?.id,
+        userId: req.person?.id,
         ip: req.ip
       });
       
@@ -898,7 +898,7 @@ export function setupDocumentRoutes(app) {
         service: 'proxy-server',
         endpoint: 'GET /templates',
         error: error.message,
-        userId: req.user?.id,
+        userId: req.person?.id,
         ip: req.ip
       });
       
@@ -914,7 +914,7 @@ export function setupDocumentRoutes(app) {
     try {
       if (process.env.DEBUG_ROUTES || process.env.DEBUG_ALL) {
         debugRoutes('GET /attestati request:', {
-          userId: req.user?.id,
+          userId: req.person?.id,
           query: req.query,
           ip: req.ip
         });
@@ -959,7 +959,7 @@ export function setupDocumentRoutes(app) {
         endpoint: 'GET /attestati',
         count: attestati.length,
         total,
-        userId: req.user?.id,
+        userId: req.person?.id,
         scheduleId,
         ip: req.ip
       });
@@ -979,7 +979,7 @@ export function setupDocumentRoutes(app) {
         service: 'proxy-server',
         endpoint: 'GET /attestati',
         error: error.message,
-        userId: req.user?.id,
+        userId: req.person?.id,
         ip: req.ip
       });
       
@@ -1040,7 +1040,7 @@ export function setupSystemRoutes(app) {
       res.json({
         message: 'Roles middleware test endpoint',
         timestamp: new Date().toISOString(),
-        user: req.user || null,
+        user: req.person || null,
         permissions: req.permissions || null
       });
     });

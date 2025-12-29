@@ -16,7 +16,7 @@ const prisma = new PrismaClient();
 router.get('/users', authenticateToken(), requirePermission(['users:read', 'system:manage']), async (req, res) => {
   try {
     const users = await prisma.person.findMany({
-      where: {tenantId: req.user.tenantId,},
+      where: {tenantId: req.person.tenantId,},
       select: {
         id: true,
         email: true,

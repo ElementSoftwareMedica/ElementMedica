@@ -257,7 +257,7 @@ export function getBranchFromRequest(req) {
  * @returns {boolean} - true se l'utente può accedere
  */
 export function canAccessBranch(req, branchType) {
-    const user = req.user;
+    const user = req.person;
 
     if (!user) {
         logger.warn('canAccessBranch called without user');
@@ -295,7 +295,7 @@ export function canAccessBranch(req, branchType) {
  * @returns {string[]} - Array di BranchType accessibili
  */
 export function getAccessibleBranches(req) {
-    const user = req.user;
+    const user = req.person;
 
     if (!user) {
         return [];
@@ -376,7 +376,7 @@ export function getBranchFilter(entityName, branchType) {
  * @returns {Object} - Where clause Prisma completa
  */
 export function buildWhereClause(req, entityName, additionalFilters = {}) {
-    const tenantId = req.user?.tenantId || req.tenantId;
+    const tenantId = req.person?.tenantId || req.tenantId;
     const branchType = getBranchFromRequest(req);
     const branchFilter = getBranchFilter(entityName, branchType);
 
@@ -456,8 +456,8 @@ export function requireBranchAccess(requiredBranch = null) {
         // Verifica accesso
         if (!canAccessBranch(req, branch)) {
             logger.warn({
-                userId: req.user?.id,
-                tenantId: req.user?.tenantId,
+                userId: req.person?.id,
+                tenantId: req.person?.tenantId,
                 requiredBranch: branch,
                 userBranches: req.tenantAccess?.enabledBranches,
                 path: req.path,

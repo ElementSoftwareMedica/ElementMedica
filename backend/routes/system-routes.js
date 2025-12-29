@@ -38,7 +38,7 @@ router.get('/logs',
                 tenantFilter // Permette agli admin di filtrare per tenant specifico
             } = req.query;
 
-            const userGlobalRole = req.user?.globalRole;
+            const userGlobalRole = req.person?.globalRole;
             const isGlobalAdmin = userGlobalRole === 'SUPER_ADMIN' || userGlobalRole === 'ADMIN';
 
             const tenantId = req.tenant?.id || req.tenantId;

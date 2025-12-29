@@ -333,7 +333,7 @@ export const globalErrorHandler = (err, req, res, next) => {
     body: req.body,
     query: req.query,
     params: req.params,
-    userId: req.user?.id,
+    userId: req.person?.id,
     requestId: req.requestId,
     component: 'global-error-handler'
   });
