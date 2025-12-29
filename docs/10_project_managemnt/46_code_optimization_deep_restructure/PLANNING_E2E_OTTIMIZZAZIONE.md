@@ -35,11 +35,17 @@ Questo progetto mira a una ristrutturazione profonda del codebase ElementMedica 
 |---------|---------|--------|
 | Max linee per file | 11,219 | 500 |
 | Naming convention | Misto | 100% camelCase |
-| Enum naming | IT/EN mix | 100% inglese |
-| @map nello schema | 126 | 0 (dopo migrazione) |
+| Enum naming | IT/EN mix | ✅ Italiano accettato (app solo Italia) |
+| @map nello schema | 126 | Minimizzare (backward compatibility) |
 | File obsoleti | 108MB | 0 (archiviati) |
 | Test coverage | 75% | 85% |
 | TypeScript errors | 0 | 0 (mantenuto) |
+
+> **NOTA**: I nomi italiani nello schema Prisma sono accettati dato che l'applicazione 
+> sarà commercializzata esclusivamente in Italia. Tuttavia:
+> - Tutti i nomi devono essere in **camelCase** (es. `statoPreventivo`, non `stato_preventivo`)
+> - I valori enum devono essere in **SCREAMING_SNAKE_CASE** (es. `BOZZA`, `CONFERMATO`)
+> - I permessi devono seguire il formato `resource:action` (es. `preventivi:read`)
 
 ---
 
@@ -206,45 +212,20 @@ backend/migration-backups/phase1-bonus-cleanup/DatabaseOperations.js.bak
 
 ## 📝 FASE 2: Schema Enum Standardizzazione (1 settimana)
 
-### Principio: Tutti gli enum in inglese PascalCase
+### Principio: Enum in italiano sono ACCETTATI (app solo per Italia)
 
-### Task 2.1: Mappare Enum Italiani → Inglesi
+> **AGGIORNAMENTO**: Dato che l'applicazione sarà commercializzata solo in Italia,
+> i nomi degli enum italiani sono accettati. La priorità è:
+> 1. **camelCase** per tutti i nomi (enum, tabelle, colonne)
+> 2. **SCREAMING_SNAKE_CASE** per i valori degli enum
+> 3. **Coerenza** tra tutti gli enum simili
 
-| Italiano | Inglese | Azione |
-|----------|---------|--------|
-| StatoPreventivo | QuoteStatus | Rename con @map |
-| StatoAmbulatorio | ClinicRoomStatus | Rename con @map |
-| StatoPoliambulatorio | ClinicStatus | Rename con @map |
-| StatoStrumento | EquipmentStatus | Rename con @map |
-| StatoManutenzione | MaintenanceStatus | Rename con @map |
-| StatoAppuntamento | AppointmentStatus | Rename con @map |
-| StatoVisita | VisitStatus | Rename con @map |
-| StatoReferto | ReportStatus | Rename con @map |
-| StatoFatturaSanitaria | MedicalInvoiceStatus | Rename con @map |
-| StatoRiconoscimento | RecognitionStatus | Rename con @map |
-| StatoAssenza | AbsenceStatus | Rename con @map |
-| StatoChiamata | CallStatus | Rename con @map |
-| StatoFirma | SignatureStatus | Rename con @map |
-| TipoSconto | DiscountType | Rename con @map |
-| TipoCompensoMedico | DoctorCompensationType | Rename con @map |
-| TipoPrestazione | ServiceType | Rename con @map |
-| TipoManutenzione | MaintenanceType | Rename con @map |
-| TipoDocumentoClinico | ClinicalDocumentType | Rename con @map |
-| TipoDocumentoPersonale | PersonalDocumentType | Rename con @map |
-| TipoConvenzione | AgreementType | Rename con @map |
-| TipoRiconoscimento | RecognitionType | Rename con @map |
-| TipoTariffario | PriceListType | Rename con @map |
-| TipoVoceTariffario | PriceListItemType | Rename con @map |
-| TipoChiusuraSpeciale | SpecialClosureType | Rename con @map |
-| TipoAssenza | AbsenceType | Rename con @map |
-| TipoCorsoSconto | CourseDiscountType | Rename con @map |
-| TipoServizio | ServiceCategory | Rename con @map |
-| TipoPrezzo | PriceType | Rename con @map |
-| TipologiaStrumento | EquipmentCategory | Rename con @map |
-| ApplicabilitaSconto | DiscountApplicability | Rename con @map |
-| ClienteType | CustomerType | Rename |
-| FrequenzaTariffario | PriceListFrequency | Rename con @map |
-| PrioritaChiamata | CallPriority | Rename con @map |
+### Task 2.1: Verificare Coerenza Enum
+
+Gli enum italiani sono accettati ma devono essere:
+- PascalCase per i nomi (es. `StatoPreventivo`, non `stato_preventivo`)
+- SCREAMING_SNAKE_CASE per i valori (es. `BOZZA`, `CONFERMATO`)
+- Coerenti tra entità simili (tutti gli stati usano lo stesso pattern)
 
 ### Task 2.2: Mappare Valori Enum
 
