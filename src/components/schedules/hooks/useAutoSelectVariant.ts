@@ -6,8 +6,8 @@ export interface UseAutoSelectVariantParams {
   selectedCourse: Training | undefined;
   selectedCourseVariants: Training[];
   trainings: Training[];
-  current: { training_id: string | number | ''; risk_level: string; course_type: string };
-  normalizeText: (s: string) => string;
+  current: { training_id?: string | number; risk_level?: string; course_type?: string };
+  normalizeText: (s?: unknown) => string; // Changed from (s: string) to match resolveVariantSelection
   riskOptions: { value: string; label: string }[];
   typeOptions: { value: string; label: string }[];
   onResolve: (id: string | number, details?: Training) => void;

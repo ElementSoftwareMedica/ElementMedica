@@ -63,7 +63,7 @@ export const useDocumentGeneration = ({
       });
 
       alert(`✅ ${result.message || `Avviate ${trainers.length} lettere di incarico!`}`);
-      
+
       // Invalidate cache before refresh
       invalidateCache('/api/v1/lettere-incarico');
       onRefresh();
@@ -78,6 +78,7 @@ export const useDocumentGeneration = ({
   /**
    * Generate registri presenze for all sessions
    * Loops through all dates and generates a registro for each
+   * Uses real sessionId from CourseSession if available
    */
   const generateRegistri = async () => {
     if (!scheduleId || dates.length === 0) return;
@@ -90,8 +91,13 @@ export const useDocumentGeneration = ({
       for (const [index, date] of dates.entries()) {
         try {
           const attendanceData = attendance[index] || [];
+
+          // Usa il sessionId reale se disponibile, altrimenti genera un ID temporaneo
+          // Il sessionId reale è presente solo per schedule già salvati
+          const sessionId = (date as any).sessionId || `${scheduleId}-session-${date.date}-${index}`;
+
           await registriPresenzeService.generate({
-            sessionId: `${scheduleId}-session-${date.date}-${index}`,
+            sessionId,
             formatoreId: String(date.trainerId),
             attendanceData: attendanceData.map(personId => ({
               personId: String(personId),
@@ -108,11 +114,10 @@ export const useDocumentGeneration = ({
 
       if (successCount > 0) {
         alert(
-          `✅ Generati ${successCount} registri presenze!${
-            errorCount > 0 ? ` (${errorCount} errori)` : ''
+          `✅ Generati ${successCount} registri presenze!${errorCount > 0 ? ` (${errorCount} errori)` : ''
           }`
         );
-        
+
         // Invalidate cache before refresh
         invalidateCache('/api/v1/registri-presenze');
         onRefresh();
@@ -179,16 +184,27 @@ export const useDocumentGeneration = ({
 
       if (result.success > 0) {
         alert(
-          `✅ Generati ${result.success} attestati!${
-            result.failed > 0 ? ` (${result.failed} errori)` : ''
+          `✅ Generati ${result.success} attestati!${result.failed > 0 ? ` (${result.failed} errori)` : ''
           }`
         );
-        
+
         // Invalidate cache before refresh
         invalidateCache('/api/v1/attestati');
         onRefresh();
       } else {
-        alert('❌ Nessun attestato generato con successo');
+        // Show detailed error message from backend
+        const errorDetails = result.errors?.length > 0
+          ? result.errors.map((e: { error?: string; personName?: string }) =>
+            e.error || 'Errore sconosciuto'
+          ).filter((v: string, i: number, a: string[]) => a.indexOf(v) === i).join(', ')
+          : 'Errore sconosciuto';
+
+        // Check for common errors and provide helpful messages
+        if (errorDetails.includes('not connected to Google')) {
+          alert('❌ Errore: Devi collegare il tuo account Google per generare attestati.\n\nVai in Impostazioni → Google Drive per collegare il tuo account.');
+        } else {
+          alert(`❌ Nessun attestato generato: ${errorDetails}`);
+        }
       }
     } catch (error: any) {
       console.error('Errore generazione attestati:', error);

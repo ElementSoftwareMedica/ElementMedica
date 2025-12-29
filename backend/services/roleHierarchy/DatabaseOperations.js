@@ -4,7 +4,7 @@
  */
 
 import { ROLE_HIERARCHY, getRoleLevel, getDefaultParentRole } from './HierarchyDefinition.js';
-import logger from "../utils/logger.js";
+import logger from "../../utils/logger.js";
 import { canAssignToRole, canManageRole } from './HierarchyCalculator.js';
 import { canAssignPermission } from './PermissionManager.js';
 import { PrismaClient } from '@prisma/client';

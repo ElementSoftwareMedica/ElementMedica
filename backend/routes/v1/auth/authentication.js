@@ -9,32 +9,58 @@ import bcrypt from 'bcrypt';
 import rateLimit from 'express-rate-limit';
 import { authenticate } from '../../../auth/middleware.js';
 import authService from '../../../services/authService.js';
+import { activityService, ActivityType } from '../../../services/activity/index.js';
 import logger from '../../../utils/logger.js';
 import prisma from '../../../config/prisma-optimization.js';
 import { JWTService } from '../../../auth/jwt.js';
 
 const router = express.Router();
 
+/**
+ * Get clean IP address from request (handles proxy headers)
+ */
+const getClientIp = (req) => {
+  // Check X-Forwarded-For header first (set by nginx proxy)
+  const forwarded = req.headers['x-forwarded-for'];
+  if (forwarded) {
+    // Get first IP from comma-separated list
+    const ip = forwarded.split(',')[0].trim();
+    // Clean any escape characters
+    return ip.replace(/\\/g, '');
+  }
+  // Check X-Real-IP header
+  const realIp = req.headers['x-real-ip'];
+  if (realIp) {
+    return realIp.replace(/\\/g, '');
+  }
+  // Fallback to req.ip with cleaning
+  return (req.ip || '127.0.0.1').replace(/\\/g, '').replace('::ffff:', '');
+};
+
 // Rate limiting for auth endpoints
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // SECURITY: Reduced from 200 to 5 attempts (brute force protection)
+  max: 50, // Increased from 5 to 50 (reasonable for production behind proxy)
   message: {
     error: 'Too many authentication attempts',
     message: 'Please try again in 15 minutes'
   },
   standardHeaders: true,
   legacyHeaders: false,
-  skipSuccessfulRequests: true // Don't count successful logins
+  skipSuccessfulRequests: true, // Don't count successful logins
+  keyGenerator: getClientIp, // Use custom IP getter to handle proxy
+  validate: { ip: false } // Disable IP validation to prevent errors with proxy
 });
 
 const registerLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max: 3, // 3 registrations per hour
+  max: 10, // Increased from 3 to 10 registrations per hour
   message: {
     error: 'Too many registration attempts',
     message: 'Please try again later'
-  }
+  },
+  keyGenerator: getClientIp, // Use custom IP getter to handle proxy
+  validate: { ip: false } // Disable IP validation to prevent errors with proxy
 });
 
 // Handle all other HTTP methods for /login endpoint with 405 Method Not Allowed
@@ -60,7 +86,7 @@ router.head('/login', methodNotAllowedHandler);
  *     description: Authenticate user and return JWT tokens
  *     tags: [Authentication]
  */
-router.post('/login', 
+router.post('/login',
   authLimiter,
   [
     body('identifier')
@@ -70,7 +96,7 @@ router.post('/login',
         // Verifica che sia email, username o codice fiscale
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         const taxCodeRegex = /^[A-Z]{6}[0-9]{2}[A-Z][0-9]{2}[A-Z][0-9]{3}[A-Z]$/i;
-        
+
         if (emailRegex.test(value) || taxCodeRegex.test(value) || value.length >= 3) {
           return true;
         }
@@ -82,9 +108,32 @@ router.post('/login',
   ],
   async (req, res) => {
     try {
+      // DEBUG: Log incoming login request
+      logger.info('🔐 [LOGIN REQUEST] Incoming login attempt', {
+        hasBody: !!req.body,
+        bodyKeys: req.body ? Object.keys(req.body) : [],
+        identifier: req.body?.identifier ? `${req.body.identifier.substring(0, 3)}***` : 'missing',
+        hasPassword: !!req.body?.password,
+        headers: {
+          'content-type': req.headers['content-type'],
+          'x-frontend-id': req.headers['x-frontend-id'],
+          'x-tenant-id': req.headers['x-tenant-id'],
+          'origin': req.headers['origin'],
+          'referer': req.headers['referer'],
+          'authorization': req.headers['authorization'] ? 'Bearer ***' : 'none'
+        },
+        ip: getClientIp(req)
+      });
+
       // Validation
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
+        logger.warn('🔐 [LOGIN VALIDATION FAILED]', {
+          errors: errors.array(),
+          bodyKeys: req.body ? Object.keys(req.body) : [],
+          hasIdentifier: !!req.body?.identifier,
+          hasPassword: !!req.body?.password
+        });
         return res.status(400).json({
           error: 'Validation failed',
           message: 'Invalid input data',
@@ -96,9 +145,14 @@ router.post('/login',
 
       // Verify credentials using AuthService
       const credentialsResult = await authService.verifyCredentials(identifier, password);
-      
+
       if (!credentialsResult.success) {
-        logger.warn('Login attempt failed', { identifier, error: credentialsResult.error });
+        logger.warn('🔐 [LOGIN CREDENTIALS FAILED]', { identifier, error: credentialsResult.error });
+
+        // Log login failure (nota: non abbiamo personId, usiamo log generico per security)
+        // Il logging dettagliato avviene già nel logger sopra per motivi di sicurezza
+        // Non logghiamo in ActivityLog senza personId per rispettare la struttura dati
+
         return res.status(401).json({
           error: 'Invalid credentials',
           message: 'Identifier or password is incorrect'
@@ -122,12 +176,14 @@ router.post('/login',
         }
       });
 
-      // Create new session
+      // Create new session (using hash instead of full token to avoid index size limit)
+      const crypto = await import('crypto');
+      const sessionTokenHash = crypto.createHash('sha256').update(accessToken).digest('hex');
       const sessionExpiresAt = new Date(Date.now() + (remember_me ? 7 * 24 * 60 * 60 * 1000 : 60 * 60 * 1000));
       await prisma.personSession.create({
         data: {
           personId: person.id,
-          sessionToken: accessToken,
+          sessionToken: sessionTokenHash,  // Store hash instead of full JWT
           isActive: true,
           lastActivityAt: new Date(),
           expiresAt: sessionExpiresAt,
@@ -143,18 +199,64 @@ router.post('/login',
         data: { lastLogin: new Date() }
       });
 
+      // Check if user has access to brandTenantId (cross-tenant login)
+      const brandTenantId = req.brandTenantId;
+      let tenantAccess = null;
+      let effectiveRoleType = null;
+
+      if (brandTenantId && brandTenantId !== person.tenantId) {
+        // User is logging into a different tenant - check PersonTenantAccess
+        tenantAccess = await prisma.personTenantAccess.findFirst({
+          where: {
+            personId: person.id,
+            tenantId: brandTenantId,
+            isActive: true,
+            deletedAt: null
+          }
+        });
+
+        if (tenantAccess) {
+          effectiveRoleType = tenantAccess.defaultRoleType;
+          logger.info('Cross-tenant login via PersonTenantAccess', {
+            personId: person.id,
+            primaryTenantId: person.tenantId,
+            brandTenantId,
+            roleType: effectiveRoleType,
+            accessLevel: tenantAccess.accessLevel
+          });
+        } else {
+          logger.warn('Cross-tenant login attempt without PersonTenantAccess', {
+            personId: person.id,
+            brandTenantId
+          });
+        }
+      }
+
       logger.info('Login successful', {
         personId: person.id,
         email: person.email,
-        tenantId: person.tenantId
+        tenantId: person.tenantId,
+        brandTenantId: brandTenantId || null,
+        effectiveRoleType
       });
 
       const userRoles = authService.getPersonRoles(person);
+      // Add effective role from tenant access if available
+      if (effectiveRoleType && !userRoles.includes(effectiveRoleType)) {
+        userRoles.push(effectiveRoleType);
+      }
+
       let primaryRole = 'User';
       if (userRoles.includes('SUPER_ADMIN') || userRoles.includes('ADMIN')) primaryRole = 'Admin';
       else if (userRoles.includes('COMPANY_ADMIN')) primaryRole = 'Administrator';
       else if (userRoles.includes('MANAGER')) primaryRole = 'Manager';
       else if (userRoles.includes('EMPLOYEE')) primaryRole = 'Employee';
+
+      // Estrai permessi dai PersonRoles
+      const permissions = (person.personRoles || [])
+        .flatMap(pr => pr.permissions || [])
+        .filter(rp => rp.isGranted)
+        .map(rp => rp.permission);
 
       // Calcola expires_in (in secondi) coerente con remember_me e con eventuali stringhe tipo '7d'
       const expiresInSeconds = (() => {
@@ -188,6 +290,21 @@ router.post('/login',
         path: '/'
       });
 
+      // Log login success (GDPR compliant activity logging)
+      await activityService.logImmediate({
+        personId: person.id,
+        action: ActivityType.AUTH_LOGIN_SUCCESS,
+        tenantId: person.tenantId,
+        ipAddress: getClientIp(req),
+        userAgent: req.get('User-Agent'),
+        metadata: {
+          loginMethod: remember_me ? 'remember_me' : 'standard',
+          crossTenant: !!tenantAccess,
+          brandTenantId: brandTenantId || null
+        },
+        success: true
+      });
+
       res.json({
         success: true,
         user: {
@@ -197,11 +314,19 @@ router.post('/login',
           lastName: person.lastName,
           globalRole: person.globalRole,
           role: primaryRole,
+          roleType: effectiveRoleType || (userRoles[0] || null),
           roles: userRoles,
+          permissions: permissions,
           status: person.status,
           companyId: person.companyId,
           tenantId: person.tenantId,
-          company: person.company ? { id: person.company.id, name: person.company.name } : null
+          company: person.company ? { id: person.company.id, name: person.company.name } : null,
+          tenantAccess: tenantAccess ? {
+            tenantId: tenantAccess.tenantId,
+            accessLevel: tenantAccess.accessLevel,
+            roleType: tenantAccess.defaultRoleType,
+            enabledFeatures: tenantAccess.enabledFeatures
+          } : null
         },
         tokens: {
           access_token: accessToken,
@@ -216,7 +341,7 @@ router.post('/login',
         stack: error.stack,
         identifier: req.body.identifier
       });
-      
+
       res.status(500).json({
         error: 'Internal server error',
         message: 'An error occurred during login'
@@ -345,7 +470,7 @@ router.post('/register',
         stack: error.stack,
         email: req.body.email
       });
-      
+
       res.status(500).json({
         error: 'Internal server error',
         message: 'An error occurred during registration'
@@ -365,7 +490,7 @@ router.post('/register',
 router.post('/refresh', async (req, res) => {
   try {
     const refreshToken = req.headers['x-refresh-token'] || req.body.refresh_token;
-    
+
     if (!refreshToken) {
       return res.status(401).json({
         error: 'Refresh token required',
@@ -410,7 +535,7 @@ router.post('/refresh', async (req, res) => {
       error: error.message,
       stack: error.stack
     });
-    
+
     res.status(401).json({
       error: 'Invalid refresh token',
       message: 'Unable to refresh token'
@@ -439,11 +564,23 @@ router.post('/logout', authenticate(), async (req, res) => {
         await JWTService.revokeAllPersonSessions(personId);
       }
     }
-    
+
+    // Log logout (GDPR compliant activity logging)
+    if (req.person?.id && req.person?.tenantId) {
+      activityService.log({
+        personId: req.person.id,
+        action: ActivityType.AUTH_LOGOUT,
+        tenantId: req.person.tenantId,
+        ipAddress: getClientIp(req),
+        userAgent: req.get('User-Agent'),
+        success: true
+      });
+    }
+
     // Pulisci cookie
     res.clearCookie('accessToken', { path: '/' });
     res.clearCookie('refreshToken', { path: '/' });
-    
+
     return res.json({
       success: true,
       message: 'Logged out successfully'
@@ -454,7 +591,7 @@ router.post('/logout', authenticate(), async (req, res) => {
       stack: error.stack,
       personId: req.person?.id
     });
-    
+
     res.status(500).json({
       error: 'Internal server error',
       message: 'An error occurred during logout'

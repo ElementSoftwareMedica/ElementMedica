@@ -17,10 +17,30 @@ class PublicCoursesController {
 
       const offset = (parseInt(page) - 1) * parseInt(limit);
 
+      // MULTI-BRAND SUPPORT
+      // Element Medica (poliambulatorio) non mostra corsi
+      if (req.frontendId === 'element-medica') {
+        logger.info({ frontendId: req.frontendId }, 'Courses not available for ElementMedica brand');
+        return res.status(200).json({
+          success: true,
+          data: {
+            courses: [],
+            pagination: {
+              total: 0,
+              page: parseInt(page),
+              limit: parseInt(limit),
+              totalPages: 0,
+            },
+          },
+        });
+      }
+
       // Costruisci il filtro WHERE
       const where = {
         isPublic: true,
-        deletedAt: null
+        deletedAt: null,
+        // Filtra per tenantId del brand (se disponibile)
+        ...(req.brandTenantId && { tenantId: req.brandTenantId }),
       };
 
       if (category) {

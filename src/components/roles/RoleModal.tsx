@@ -93,15 +93,25 @@ const RoleModal: React.FC<RoleModalProps> = ({
   // Effects - Sync form permissions with selection state
   // ============================================================================
 
+  // One-way sync: from form to selection state (when editing existing role)
+  // This runs only when form.permissions is loaded from backend
   useEffect(() => {
-    setFormDataPermissions(selectedPermissions);
-  }, [selectedPermissions, setFormDataPermissions]);
-
-  useEffect(() => {
-    if (Object.keys(formData.permissions).length > 0) {
+    const permissionKeys = Object.keys(formData.permissions);
+    if (permissionKeys.length > 0) {
       setSelectedPermissions(formData.permissions);
     }
-  }, [formData.permissions]);
+  }, [formData.permissions, setSelectedPermissions]);
+
+  // When user changes permissions via UI, update form data
+  // Use a ref to prevent infinite loop
+  const selectedPermissionsRef = React.useRef(selectedPermissions);
+  useEffect(() => {
+    // Only update if selectedPermissions actually changed (not from form sync)
+    if (selectedPermissionsRef.current !== selectedPermissions) {
+      selectedPermissionsRef.current = selectedPermissions;
+      setFormDataPermissions(selectedPermissions);
+    }
+  }, [selectedPermissions, setFormDataPermissions]);
 
   // ============================================================================
   // Handlers

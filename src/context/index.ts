@@ -11,5 +11,6 @@
 export { default as AppStateContext, AppStateProvider, useAppState } from './AppStateContext';
 export { AuthProvider, useAuth } from './AuthContext';
 export { TenantProvider, useTenant } from './TenantContext';
+export { TenantFilterProvider, useTenantFilter } from './TenantFilterContext';
 export { ToastProvider } from './ToastContext';
 export { PreferencesProvider, usePreferences } from './PreferencesContext';

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { 
+import {
   Activity,
   Building,
   Edit,
@@ -8,6 +8,7 @@ import {
   Users
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
 import { Company } from '../../types';
 import { getAllTenants, createTenant, updateTenant, deleteTenant, getTenantUsage, TenantCreateDTO, TenantUpdateDTO } from '../../services/tenants';
 import { useAuth } from '../../context/AuthContext';
@@ -24,30 +25,35 @@ const TenantsPage: React.FC = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [currentTenant, setCurrentTenant] = useState<Company | null>(null);
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
-  
-  const { user } = useAuth();
 
-  // Verifica se l'utente è un SUPER_ADMIN
-  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
+  const { confirm } = useConfirmDialog();
+  const { user, isLoading: authLoading } = useAuth();
+
+  // Verifica se l'utente ha i permessi per gestire i tenant (Admin o Administrator)
+  // I ruoli vengono mappati in AuthContext: SUPER_ADMIN/ADMIN -> 'Admin', COMPANY_ADMIN -> 'Administrator'
+  const canManageTenants = user?.role === 'Admin' || user?.role === 'Administrator' ||
+    user?.roles?.includes('ADMIN') || user?.roles?.includes('SUPER_ADMIN');
 
   useEffect(() => {
-    if (!isSuperAdmin) {
-      setError('Accesso negato. Solo i Super Admin possono gestire i tenant.');
+    if (!canManageTenants) {
+      setError('Accesso negato. Solo Admin e Super Admin possono gestire i tenant.');
       setIsLoading(false);
       return;
     }
-    
+
     fetchTenants();
-  }, [isSuperAdmin]);
+  }, [canManageTenants]);
 
   const fetchTenants = async () => {
     try {
       setIsLoading(true);
       const data = await getAllTenants();
-      setTenants(data);
+      // Garantiamo sempre un array
+      setTenants(Array.isArray(data) ? data : []);
       setError(null);
     } catch (err: any) {
       setError(err.message);
+      setTenants([]);
     } finally {
       setIsLoading(false);
     }
@@ -66,9 +72,13 @@ const TenantsPage: React.FC = () => {
   };
 
   const handleDelete = async (tenantId: string) => {
-    if (!window.confirm('Sei sicuro di voler eliminare questo tenant? Questa azione è irreversibile.')) {
-      return;
-    }
+    const shouldDelete = await confirm({
+      title: 'Elimina Tenant',
+      message: 'Sei sicuro di voler eliminare questo tenant? Questa azione è irreversibile.',
+      confirmLabel: 'Elimina',
+      variant: 'danger'
+    });
+    if (!shouldDelete) return;
 
     try {
       await deleteTenant(tenantId);
@@ -85,7 +95,7 @@ const TenantsPage: React.FC = () => {
       } else {
         await createTenant(tenantData as TenantCreateDTO);
       }
-      
+
       setIsModalOpen(false);
       await fetchTenants();
     } catch (err: any) {
@@ -100,11 +110,10 @@ const TenantsPage: React.FC = () => {
 
   const getStatusBadge = (isActive: boolean) => {
     return (
-      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-        isActive 
-          ? 'bg-green-100 text-green-800' 
-          : 'bg-red-100 text-red-800'
-      }`}>
+      <span className={`px-2 py-1 rounded-full text-xs font-medium ${isActive
+        ? 'bg-green-100 text-green-800'
+        : 'bg-red-100 text-red-800'
+        }`}>
         {isActive ? 'Attivo' : 'Inattivo'}
       </span>
     );
@@ -117,32 +126,33 @@ const TenantsPage: React.FC = () => {
       'PREMIUM': 'bg-purple-100 text-purple-800',
       'ENTERPRISE': 'bg-yellow-100 text-yellow-800'
     };
-    
+
     return (
-      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-        planColors[plan as keyof typeof planColors] || 'bg-gray-100 text-gray-800'
-      }`}>
+      <span className={`px-2 py-1 rounded-full text-xs font-medium ${planColors[plan as keyof typeof planColors] || 'bg-gray-100 text-gray-800'
+        }`}>
         {plan}
       </span>
     );
   };
 
-  if (!isSuperAdmin) {
+  // Mostra loading mentre l'auth si sta caricando
+  if (authLoading || isLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  // Controlla permessi SOLO dopo che l'auth è stato caricato
+  if (!canManageTenants) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="text-6xl mb-4">🚫</div>
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Accesso Negato</h1>
-          <p className="text-gray-600">Solo i Super Admin possono accedere a questa sezione.</p>
+          <p className="text-gray-600">Solo Admin e Super Admin possono accedere a questa sezione.</p>
         </div>
-      </div>
-    );
-  }
-
-  if (isLoading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
       </div>
     );
   }
@@ -187,7 +197,7 @@ const TenantsPage: React.FC = () => {
                     <p className="text-sm text-gray-500">{tenant.slug}</p>
                   </div>
                 </div>
-                {getStatusBadge(tenant.isActive)}
+                {getStatusBadge(tenant.isActive ?? false)}
               </div>
 
               {/* Info */}

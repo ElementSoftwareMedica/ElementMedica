@@ -73,12 +73,19 @@ export const PrivacySettingsTab: React.FC<PrivacySettingsTabProps> = ({ hook }) 
   useEffect(() => {
     if (settings && !localSettings) {
       setLocalSettings({
+        profileVisibility: settings.profileVisibility,
+        emailNotifications: settings.emailNotifications,
+        marketingEmails: settings.marketingEmails,
+        analyticsTracking: settings.analyticsTracking,
+        thirdPartySharing: settings.thirdPartySharing,
+        dataRetentionPeriod: settings.dataRetentionPeriod,
+        autoDeleteInactive: settings.autoDeleteInactive,
+        twoFactorAuth: settings.twoFactorAuth,
+        sessionTimeout: settings.sessionTimeout,
         dataProcessingConsent: settings.dataProcessingConsent,
         marketingConsent: settings.marketingConsent,
         analyticsConsent: settings.analyticsConsent,
-        profileVisibility: settings.profileVisibility,
-        dataRetentionOptOut: settings.dataRetentionOptOut,
-        thirdPartySharing: settings.thirdPartySharing
+        dataRetentionOptOut: settings.dataRetentionOptOut
       });
     }
   }, [settings, localSettings]);
@@ -171,7 +178,7 @@ export const PrivacySettingsTab: React.FC<PrivacySettingsTabProps> = ({ hook }) 
         <Typography variant="h6" component="h2">
           Privacy Settings
         </Typography>
-        
+
         <Stack direction="row" spacing={1} alignItems="center">
           <Chip
             icon={<SecurityIcon />}
@@ -179,13 +186,13 @@ export const PrivacySettingsTab: React.FC<PrivacySettingsTabProps> = ({ hook }) 
             color={getScoreColor(complianceScore)}
             size="small"
           />
-          
+
           <Tooltip title="Export settings">
             <IconButton onClick={exportSettings} size="small">
               <DownloadIcon />
             </IconButton>
           </Tooltip>
-          
+
           <Tooltip title="Refresh settings">
             <IconButton onClick={refreshSettings} disabled={loading} size="small">
               <RefreshIcon />
@@ -221,194 +228,201 @@ export const PrivacySettingsTab: React.FC<PrivacySettingsTabProps> = ({ hook }) 
         </Alert>
       )}
 
-      <Grid container spacing={3}>
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', lg: '2fr 1fr' },
+          gap: 3
+        }}
+      >
         {/* Settings Panel */}
-        <Grid item xs={12} lg={8}>
+        <Card>
+          <CardContent>
+            <Typography variant="h6" gutterBottom>
+              Privacy Preferences
+            </Typography>
+
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+              Configure your privacy settings to control how your data is processed and shared.
+            </Typography>
+
+            <List>
+              {Object.entries(localSettings).map(([key, value], index) => {
+                const settingKey = key as keyof PrivacySettingsFormData;
+                const description = getSettingDescription(settingKey);
+                const impact = getSettingImpact(settingKey);
+                const isBoolean = typeof value === 'boolean';
+
+                if (!isBoolean) return null;
+
+                return (
+                  <React.Fragment key={settingKey}>
+                    <ListItem>
+                      <ListItemText
+                        primary={
+                          <Stack direction="row" spacing={1} alignItems="center">
+                            <Typography variant="subtitle1">
+                              {settingKey.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
+                            </Typography>
+                            <Chip
+                              label={impact}
+                              color={getImpactColor(impact)}
+                              size="small"
+                              variant="outlined"
+                            />
+                          </Stack>
+                        }
+                        secondary={
+                          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                            {description}
+                          </Typography>
+                        }
+                      />
+
+                      <ListItemSecondaryAction>
+                        <Stack direction="row" spacing={1} alignItems="center">
+                          {/* Quick toggle for immediate save */}
+                          <Tooltip title="Apply immediately">
+                            <IconButton
+                              size="small"
+                              onClick={() => handleQuickToggle(settingKey, !value)}
+                              disabled={loading}
+                            >
+                              <SaveIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+
+                          <FormControlLabel
+                            control={
+                              <Switch
+                                checked={value}
+                                onChange={(e) => handleSettingChange(settingKey, e.target.checked)}
+                                disabled={loading}
+                                color="primary"
+                              />
+                            }
+                            label=""
+                          />
+                        </Stack>
+                      </ListItemSecondaryAction>
+                    </ListItem>
+
+                    {index < Object.keys(localSettings).length - 1 && <Divider />}
+                  </React.Fragment>
+                );
+              })}
+            </List>
+          </CardContent>
+
+          <CardActions sx={{ justifyContent: 'space-between', px: 2, pb: 2 }}>
+            <Button
+              startIcon={<RestoreIcon />}
+              onClick={() => setResetDialog(true)}
+              disabled={loading}
+              color="warning"
+            >
+              Reset to Defaults
+            </Button>
+
+            <Stack direction="row" spacing={1}>
+              <Button
+                variant="outlined"
+                onClick={refreshSettings}
+                disabled={loading}
+              >
+                Refresh
+              </Button>
+
+              <Button
+                variant="contained"
+                startIcon={saving ? <CircularProgress size={16} /> : <SaveIcon />}
+                onClick={handleSave}
+                disabled={!hasUnsavedChanges || saving}
+              >
+                {saving ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </Stack>
+          </CardActions>
+        </Card>
+
+        {/* Compliance Panel */}
+        <Stack spacing={3}>
+          {/* Compliance Score */}
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                Privacy Preferences
-              </Typography>
-              
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                Configure your privacy settings to control how your data is processed and shared.
+                Compliance Score
               </Typography>
 
-              <List>
-                {Object.entries(localSettings).map(([key, value], index) => {
-                  const settingKey = key as keyof PrivacySettingsFormData;
-                  const description = getSettingDescription(settingKey);
-                  const impact = getSettingImpact(settingKey);
-                  const isBoolean = typeof value === 'boolean';
+              <Box sx={{ textAlign: 'center', mb: 2 }}>
+                <Typography variant="h3" color={getScoreColor(complianceScore)}>
+                  {complianceScore}%
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  GDPR Compliance
+                </Typography>
+              </Box>
 
-                  if (!isBoolean) return null;
-
-                  return (
-                    <React.Fragment key={settingKey}>
-                      <ListItem>
-                        <ListItemText
-                          primary={
-                            <Stack direction="row" spacing={1} alignItems="center">
-                              <Typography variant="subtitle1">
-                                {settingKey.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
-                              </Typography>
-                              <Chip
-                                label={impact}
-                                color={getImpactColor(impact)}
-                                size="small"
-                                variant="outlined"
-                              />
-                            </Stack>
-                          }
-                          secondary={
-                            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                              {description}
-                            </Typography>
-                          }
-                        />
-                        
-                        <ListItemSecondaryAction>
-                          <Stack direction="row" spacing={1} alignItems="center">
-                            {/* Quick toggle for immediate save */}
-                            <Tooltip title="Apply immediately">
-                              <IconButton
-                                size="small"
-                                onClick={() => handleQuickToggle(settingKey, !value)}
-                                disabled={loading}
-                              >
-                                <SaveIcon fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
-                            
-                            <FormControlLabel
-                              control={
-                                <Switch
-                                  checked={value}
-                                  onChange={(e) => handleSettingChange(settingKey, e.target.checked)}
-                                  disabled={loading}
-                                  color="primary"
-                                />
-                              }
-                              label=""
-                            />
-                          </Stack>
-                        </ListItemSecondaryAction>
-                      </ListItem>
-                      
-                      {index < Object.keys(localSettings).length - 1 && <Divider />}
-                    </React.Fragment>
-                  );
-                })}
-              </List>
+              <LinearProgress
+                variant="determinate"
+                value={complianceScore}
+                color={getScoreColor(complianceScore)}
+                sx={{ height: 8, borderRadius: 4 }}
+              />
             </CardContent>
-            
-            <CardActions sx={{ justifyContent: 'space-between', px: 2, pb: 2 }}>
-              <Button
-                startIcon={<RestoreIcon />}
-                onClick={() => setResetDialog(true)}
-                disabled={loading}
-                color="warning"
-              >
-                Reset to Defaults
-              </Button>
-              
-              <Stack direction="row" spacing={1}>
-                <Button
-                  variant="outlined"
-                  onClick={refreshSettings}
-                  disabled={loading}
-                >
-                  Refresh
-                </Button>
-                
-                <Button
-                  variant="contained"
-                  startIcon={saving ? <CircularProgress size={16} /> : <SaveIcon />}
-                  onClick={handleSave}
-                  disabled={!hasUnsavedChanges || saving}
-                >
-                  {saving ? 'Saving...' : 'Save Changes'}
-                </Button>
-              </Stack>
-            </CardActions>
           </Card>
-        </Grid>
 
-        {/* Compliance Panel */}
-        <Grid item xs={12} lg={4}>
-          <Stack spacing={3}>
-            {/* Compliance Score */}
-            <Card>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  Compliance Score
+          {/* Recommendations */}
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Raccomandazioni
+              </Typography>
+
+              {recommendations.length > 0 ? (
+                <List dense>
+                  {recommendations.map((recommendation, index) => (
+                    <ListItem key={recommendation.id || index} sx={{ px: 0 }}>
+                      <ListItemText
+                        primary={
+                          <Typography variant="body2" fontWeight={500}>
+                            {recommendation.title}
+                          </Typography>
+                        }
+                        secondary={
+                          <Typography variant="caption" color="text.secondary">
+                            {recommendation.description}
+                          </Typography>
+                        }
+                      />
+                    </ListItem>
+                  ))}
+                </List>
+              ) : (
+                <Typography variant="body2" color="text.secondary">
+                  Nessuna raccomandazione al momento. Le tue impostazioni sono a posto!
                 </Typography>
-                
-                <Box sx={{ textAlign: 'center', mb: 2 }}>
-                  <Typography variant="h3" color={getScoreColor(complianceScore)}>
-                    {complianceScore}%
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    GDPR Compliance
-                  </Typography>
-                </Box>
-                
-                <LinearProgress
-                  variant="determinate"
-                  value={complianceScore}
-                  color={getScoreColor(complianceScore)}
-                  sx={{ height: 8, borderRadius: 4 }}
-                />
-              </CardContent>
-            </Card>
+              )}
+            </CardContent>
+          </Card>
 
-            {/* Recommendations */}
-            <Card>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  Recommendations
+          {/* Privacy Info */}
+          <Paper sx={{ p: 2, bgcolor: 'info.light', color: 'info.contrastText' }}>
+            <Stack direction="row" spacing={1} alignItems="flex-start">
+              <InfoIcon fontSize="small" />
+              <Box>
+                <Typography variant="subtitle2" gutterBottom>
+                  Privacy Notice
                 </Typography>
-                
-                {recommendations.length > 0 ? (
-                  <List dense>
-                    {recommendations.map((recommendation, index) => (
-                      <ListItem key={index} sx={{ px: 0 }}>
-                        <ListItemText
-                          primary={
-                            <Typography variant="body2">
-                              {recommendation}
-                            </Typography>
-                          }
-                        />
-                      </ListItem>
-                    ))}
-                  </List>
-                ) : (
-                  <Typography variant="body2" color="text.secondary">
-                    No recommendations at this time. Your settings look good!
-                  </Typography>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Privacy Info */}
-            <Paper sx={{ p: 2, bgcolor: 'info.light', color: 'info.contrastText' }}>
-              <Stack direction="row" spacing={1} alignItems="flex-start">
-                <InfoIcon fontSize="small" />
-                <Box>
-                  <Typography variant="subtitle2" gutterBottom>
-                    Privacy Notice
-                  </Typography>
-                  <Typography variant="body2">
-                    These settings control how we process your personal data. 
-                    Changes take effect immediately and are logged for compliance.
-                  </Typography>
-                </Box>
-              </Stack>
-            </Paper>
-          </Stack>
-        </Grid>
-      </Grid>
+                <Typography variant="body2">
+                  These settings control how we process your personal data.
+                  Changes take effect immediately and are logged for compliance.
+                </Typography>
+              </Box>
+            </Stack>
+          </Paper>
+        </Stack>
+      </Box>
 
       {/* Reset Confirmation Dialog */}
       <Dialog
@@ -423,23 +437,23 @@ export const PrivacySettingsTab: React.FC<PrivacySettingsTabProps> = ({ hook }) 
             Reset Privacy Settings
           </Stack>
         </DialogTitle>
-        
+
         <DialogContent>
           <Typography variant="body1" gutterBottom>
             Are you sure you want to reset all privacy settings to their default values?
           </Typography>
-          
+
           <Alert severity="warning" sx={{ mt: 2 }}>
             This action cannot be undone. All your current privacy preferences will be lost.
           </Alert>
         </DialogContent>
-        
+
         <DialogActions>
           <Button onClick={() => setResetDialog(false)}>
             Cancel
           </Button>
-          
-          <Button 
+
+          <Button
             onClick={handleReset}
             variant="contained"
             color="warning"

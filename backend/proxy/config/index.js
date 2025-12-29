@@ -14,14 +14,14 @@ dotenv.config();
  */
 export const serverConfig = {
   port: parseInt(process.env.PROXY_PORT || '4003', 10),
-  host: process.env.PROXY_HOST || 'localhost',
+  host: process.env.PROXY_HOST || '0.0.0.0', // Ascolta su tutte le interfacce
   environment: process.env.NODE_ENV || 'development',
-  
+
   // Timeout configurazioni
   requestTimeout: parseInt(process.env.REQUEST_TIMEOUT || '30000', 10),
   keepAliveTimeout: parseInt(process.env.KEEP_ALIVE_TIMEOUT || '5000', 10),
   headersTimeout: parseInt(process.env.HEADERS_TIMEOUT || '60000', 10),
-  
+
   // Graceful shutdown
   gracefulShutdownTimeout: parseInt(process.env.GRACEFUL_SHUTDOWN_TIMEOUT || '10000', 10),
   forceShutdownTimeout: parseInt(process.env.FORCE_SHUTDOWN_TIMEOUT || '5000', 10)
@@ -87,7 +87,7 @@ export const rateLimitConfig = {
     standardHeaders: true,
     legacyHeaders: false
   },
-  
+
   // Rate limit per API
   api: {
     windowMs: parseInt(process.env.API_RATE_LIMIT_WINDOW || '900000', 10), // 15 minuti
@@ -96,7 +96,7 @@ export const rateLimitConfig = {
     standardHeaders: true,
     legacyHeaders: false
   },
-  
+
   // Rate limit per login
   login: {
     windowMs: parseInt(process.env.LOGIN_RATE_LIMIT_WINDOW || '900000', 10), // 15 minuti
@@ -106,7 +106,7 @@ export const rateLimitConfig = {
     legacyHeaders: false,
     skipSuccessfulRequests: true
   },
-  
+
   // Rate limit per upload
   upload: {
     windowMs: parseInt(process.env.UPLOAD_RATE_LIMIT_WINDOW || '3600000', 10), // 1 ora
@@ -115,7 +115,7 @@ export const rateLimitConfig = {
     standardHeaders: true,
     legacyHeaders: false
   },
-  
+
   // Rate limit di sicurezza
   security: {
     windowMs: parseInt(process.env.SECURITY_RATE_LIMIT_WINDOW || '300000', 10), // 5 minuti
@@ -148,7 +148,7 @@ export const bodyParserConfig = {
     limit: process.env.TEXT_BODY_LIMIT || '1mb',
     type: 'text/plain'
   },
-  
+
   // Configurazioni specifiche
   bulkUpload: {
     limit: process.env.BULK_UPLOAD_LIMIT || '100mb'
@@ -184,7 +184,7 @@ export const securityConfig = {
     crossOriginEmbedderPolicy: false, // Disabilitato per compatibilità
     crossOriginResourcePolicy: { policy: 'cross-origin' }
   },
-  
+
   // Validazione input
   inputValidation: {
     maxBodySize: process.env.MAX_BODY_SIZE || '100mb',
@@ -204,7 +204,7 @@ export const securityConfig = {
 export const loggingConfig = {
   level: process.env.LOG_LEVEL || 'info',
   format: process.env.LOG_FORMAT || 'combined',
-  
+
   // Debug namespaces
   debug: {
     enabled: !!(process.env.DEBUG || process.env.DEBUG_ALL),
@@ -221,7 +221,7 @@ export const loggingConfig = {
       shutdown: 'proxy:shutdown'
     }
   },
-  
+
   // Configurazione file di log
   file: {
     enabled: process.env.LOG_TO_FILE === 'true',
@@ -229,7 +229,7 @@ export const loggingConfig = {
     maxSize: process.env.LOG_MAX_SIZE || '10m',
     maxFiles: parseInt(process.env.LOG_MAX_FILES || '5', 10)
   },
-  
+
   // Configurazione audit
   audit: {
     enabled: process.env.AUDIT_ENABLED === 'true',
@@ -245,7 +245,7 @@ export const healthConfig = {
   timeout: parseInt(process.env.HEALTH_CHECK_TIMEOUT || '5000', 10),
   retries: parseInt(process.env.HEALTH_CHECK_RETRIES || '3', 10),
   interval: parseInt(process.env.HEALTH_CHECK_INTERVAL || '30000', 10),
-  
+
   // Servizi da controllare
   services: {
     database: {
@@ -268,7 +268,7 @@ export const healthConfig = {
       timeout: parseInt(process.env.FRONTEND_HEALTH_TIMEOUT || '3000', 10)
     }
   },
-  
+
   // Soglie per le metriche di sistema
   thresholds: {
     memoryUsage: parseFloat(process.env.MEMORY_THRESHOLD || '0.9'), // 90%
@@ -282,20 +282,20 @@ export const healthConfig = {
  */
 export const gdprConfig = {
   enabled: process.env.GDPR_ENABLED !== 'false',
-  
+
   // Audit trail
   auditTrail: {
     enabled: process.env.GDPR_AUDIT_ENABLED !== 'false',
     retentionDays: parseInt(process.env.GDPR_AUDIT_RETENTION || '2555', 10), // 7 anni
     includePersonalData: process.env.GDPR_AUDIT_INCLUDE_PII === 'true'
   },
-  
+
   // Data retention
   dataRetention: {
     logRetentionDays: parseInt(process.env.LOG_RETENTION_DAYS || '90', 10),
     sessionRetentionDays: parseInt(process.env.SESSION_RETENTION_DAYS || '30', 10)
   },
-  
+
   // Privacy
   privacy: {
     anonymizeIPs: process.env.ANONYMIZE_IPS === 'true',
@@ -313,7 +313,7 @@ export const exemptPaths = {
     '/ready',
     '/metrics'
   ],
-  
+
   rateLimit: [
     '/health',
     '/healthz',
@@ -321,14 +321,14 @@ export const exemptPaths = {
     '/metrics',
     '/favicon.ico'
   ],
-  
+
   bodyParser: [
     '/health',
     '/healthz',
     '/ready',
     '/metrics'
   ],
-  
+
   auth: [
     '/health',
     '/healthz',
@@ -338,7 +338,7 @@ export const exemptPaths = {
     '/api/auth/refresh',
     '/favicon.ico'
   ],
-  
+
   logging: [
     '/favicon.ico'
   ]
@@ -354,36 +354,43 @@ export function validateConfig() {
     errors: [],
     warnings: []
   };
-  
+
   // Validazione porte
   if (serverConfig.port < 1 || serverConfig.port > 65535) {
     validation.valid = false;
     validation.errors.push(`Invalid server port: ${serverConfig.port}`);
   }
-  
+
   // Validazione URL servizi
   Object.entries(servicesConfig).forEach(([service, config]) => {
     if (config.url) {
-      try {
-        new URL(config.url);
-      } catch (error) {
-        validation.valid = false;
-        validation.errors.push(`Invalid ${service} URL: ${config.url}`);
-      }
+      // Gestisci URLs multipli per frontend (separati da virgola)
+      const urls = service === 'frontend' && config.url.includes(',')
+        ? config.url.split(',').map(u => u.trim())
+        : [config.url];
+
+      urls.forEach(url => {
+        try {
+          new URL(url);
+        } catch (error) {
+          validation.valid = false;
+          validation.errors.push(`Invalid ${service} URL: ${url}`);
+        }
+      });
     }
   });
-  
+
   // Validazione DATABASE_URL
   if (!databaseConfig.url) {
     validation.valid = false;
     validation.errors.push('DATABASE_URL is required');
   }
-  
+
   // Validazione CORS origin
   if (!corsConfig.origin) {
     validation.warnings.push('CORS origin not configured, using default');
   }
-  
+
   // Validazione rate limiting
   Object.entries(rateLimitConfig).forEach(([type, config]) => {
     if (config.max <= 0) {
@@ -393,7 +400,7 @@ export function validateConfig() {
       validation.warnings.push(`Rate limit window for ${type} should be > 0`);
     }
   });
-  
+
   return validation;
 }
 
@@ -403,7 +410,7 @@ export function validateConfig() {
  */
 export function getConfig() {
   const validation = validateConfig();
-  
+
   if (!validation.valid) {
     logger.error('Invalid configuration', {
       service: 'proxy-server',
@@ -411,10 +418,10 @@ export function getConfig() {
       errors: validation.errors,
       warnings: validation.warnings
     });
-    
+
     throw new Error(`Configuration validation failed: ${validation.errors.join(', ')}`);
   }
-  
+
   if (validation.warnings.length > 0) {
     logger.warn('Configuration warnings', {
       service: 'proxy-server',
@@ -422,7 +429,7 @@ export function getConfig() {
       warnings: validation.warnings
     });
   }
-  
+
   return {
     server: serverConfig,
     services: servicesConfig,

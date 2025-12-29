@@ -5,7 +5,7 @@
  * Utilizzato nella gestione delle schedule
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -35,6 +35,18 @@ interface Trainer {
   firstName: string;
   lastName: string;
   email?: string;
+  hourlyRate?: number; // Tariffa oraria dal database
+}
+
+interface TrainerSession {
+  trainerId: string;
+  duration: number; // Ore
+}
+
+interface TrainerCompensation {
+  hourlyRate: number;
+  expenses: number;
+  totalHours: number;
 }
 
 interface GenerateLetterDialogProps {
@@ -42,6 +54,8 @@ interface GenerateLetterDialogProps {
   onOpenChange: (open: boolean) => void;
   scheduleId: string;
   trainers: Trainer[];
+  /** Sessioni con durata e formatore per calcolare le ore */
+  sessions?: TrainerSession[];
   onSuccess?: () => void;
 }
 
@@ -50,6 +64,7 @@ export default function GenerateLetterDialog({
   onOpenChange,
   scheduleId,
   trainers,
+  sessions = [],
   onSuccess
 }: GenerateLetterDialogProps) {
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -57,11 +72,35 @@ export default function GenerateLetterDialog({
   const [selectedTrainers, setSelectedTrainers] = useState<Set<string>>(new Set());
   const [sendEmail, setSendEmail] = useState(false);
   const [customEmails, setCustomEmails] = useState<Record<string, string>>({});
+  /** Compensi per ogni formatore: { trainerId: { hourlyRate, expenses, totalHours } } */
+  const [trainerCompensations, setTrainerCompensations] = useState<Record<string, TrainerCompensation>>({});
   const [loading, setLoading] = useState(false);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [generatedLetters, setGeneratedLetters] = useState<Array<{ trainerId: string; downloadUrl: string }>>([]);
+
+  // Calcola le ore per ogni formatore dalle sessioni
+  const calculateTrainerHours = useCallback((trainerId: string): number => {
+    return sessions
+      .filter(s => s.trainerId === trainerId)
+      .reduce((sum, s) => sum + (s.duration || 0), 0);
+  }, [sessions]);
+
+  // Inizializza i compensi quando si seleziona un formatore
+  const initializeCompensation = useCallback((trainerId: string) => {
+    const trainer = trainers.find(t => t.id === trainerId);
+    const totalHours = calculateTrainerHours(trainerId);
+
+    setTrainerCompensations(prev => ({
+      ...prev,
+      [trainerId]: {
+        hourlyRate: trainer?.hourlyRate || 0,
+        expenses: 0,
+        totalHours
+      }
+    }));
+  }, [trainers, calculateTrainerHours]);
 
   // Carica i template disponibili
   useEffect(() => {
@@ -71,6 +110,7 @@ export default function GenerateLetterDialog({
       setSelectedTrainers(new Set());
       setSendEmail(false);
       setCustomEmails({});
+      setTrainerCompensations({});
       setError(null);
       setSuccess(false);
       setGeneratedLetters([]);
@@ -85,7 +125,7 @@ export default function GenerateLetterDialog({
         isActive: true
       });
       setTemplates(result.data);
-      
+
       // Seleziona automaticamente il template di default
       const defaultTemplate = result.data.find((t: Template) => t.isDefault);
       if (defaultTemplate) {
@@ -104,13 +144,19 @@ export default function GenerateLetterDialog({
       const newSet = new Set(prev);
       if (newSet.has(trainerId)) {
         newSet.delete(trainerId);
-        // Rimuovi anche l'email personalizzata
+        // Rimuovi anche l'email personalizzata e i compensi
         setCustomEmails(emails => {
           const { [trainerId]: _, ...rest } = emails;
           return rest;
         });
+        setTrainerCompensations(comp => {
+          const { [trainerId]: _, ...rest } = comp;
+          return rest;
+        });
       } else {
         newSet.add(trainerId);
+        // Inizializza i compensi per questo formatore
+        initializeCompensation(trainerId);
       }
       return newSet;
     });
@@ -120,13 +166,34 @@ export default function GenerateLetterDialog({
     if (selectedTrainers.size === trainers.length) {
       setSelectedTrainers(new Set());
       setCustomEmails({});
+      setTrainerCompensations({});
     } else {
-      setSelectedTrainers(new Set(trainers.map(t => t.id)));
+      const allTrainerIds = trainers.map(t => t.id);
+      setSelectedTrainers(new Set(allTrainerIds));
+      // Inizializza i compensi per tutti
+      allTrainerIds.forEach(id => initializeCompensation(id));
     }
   };
 
   const handleEmailChange = (trainerId: string, email: string) => {
     setCustomEmails(prev => ({ ...prev, [trainerId]: email }));
+  };
+
+  const handleCompensationChange = (trainerId: string, field: 'hourlyRate' | 'expenses', value: number) => {
+    setTrainerCompensations(prev => ({
+      ...prev,
+      [trainerId]: {
+        ...prev[trainerId],
+        [field]: value
+      }
+    }));
+  };
+
+  // Calcola il compenso totale per un formatore
+  const calculateTotalCompensation = (trainerId: string): number => {
+    const comp = trainerCompensations[trainerId];
+    if (!comp) return 0;
+    return (comp.hourlyRate * comp.totalHours) + comp.expenses;
   };
 
   const handleGenerate = async () => {
@@ -150,10 +217,14 @@ export default function GenerateLetterDialog({
         const trainer = trainers.find(t => t.id === trainerId);
         if (!trainer) continue;
 
+        const compensation = trainerCompensations[trainerId];
+
         const params: GenerateLetteraParams = {
           scheduleId,
           trainerId,
           templateId: selectedTemplateId,
+          hourlyRate: compensation?.hourlyRate,
+          expenses: compensation?.expenses,
           sendEmail,
           email: sendEmail ? (customEmails[trainerId] || trainer.email) : undefined
         };
@@ -217,10 +288,10 @@ export default function GenerateLetterDialog({
             </Select>
           </div>
 
-          {/* Trainer Selection */}
+          {/* Trainer Selection with Compensation */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label>Formatori</Label>
+              <Label>Formatori e Compensi</Label>
               <Button
                 type="button"
                 variant="ghost"
@@ -230,45 +301,106 @@ export default function GenerateLetterDialog({
                 {selectedTrainers.size === trainers.length ? 'Deseleziona tutti' : 'Seleziona tutti'}
               </Button>
             </div>
-            <div className="border rounded-lg p-4 space-y-3 max-h-64 overflow-y-auto">
+            <div className="border rounded-lg p-4 space-y-4 max-h-[400px] overflow-y-auto">
               {trainers.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">
                   Nessun formatore associato a questa schedule
                 </p>
               ) : (
-                trainers.map(trainer => (
-                  <div key={trainer.id} className="space-y-2">
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id={`trainer-${trainer.id}`}
-                        checked={selectedTrainers.has(trainer.id)}
-                        onCheckedChange={() => handleTrainerToggle(trainer.id)}
-                      />
-                      <label
-                        htmlFor={`trainer-${trainer.id}`}
-                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex-1 cursor-pointer"
-                      >
-                        {trainer.firstName} {trainer.lastName}
-                        {trainer.email && (
-                          <span className="text-muted-foreground ml-2">({trainer.email})</span>
-                        )}
-                      </label>
-                    </div>
-                    
-                    {/* Email personalizzata se sendEmail è abilitato */}
-                    {sendEmail && selectedTrainers.has(trainer.id) && (
-                      <div className="ml-6">
-                        <Input
-                          type="email"
-                          placeholder={trainer.email || 'Email personalizzata'}
-                          value={customEmails[trainer.id] || trainer.email || ''}
-                          onChange={(e) => handleEmailChange(trainer.id, e.target.value)}
-                          className="text-sm"
+                trainers.map(trainer => {
+                  const isSelected = selectedTrainers.has(trainer.id);
+                  const compensation = trainerCompensations[trainer.id];
+                  const totalComp = calculateTotalCompensation(trainer.id);
+
+                  return (
+                    <div
+                      key={trainer.id}
+                      className={`rounded-lg border p-3 transition-colors ${isSelected ? 'border-blue-300 bg-blue-50/50' : 'border-gray-200'}`}
+                    >
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`trainer-${trainer.id}`}
+                          checked={isSelected}
+                          onCheckedChange={() => handleTrainerToggle(trainer.id)}
                         />
+                        <label
+                          htmlFor={`trainer-${trainer.id}`}
+                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex-1 cursor-pointer"
+                        >
+                          {trainer.firstName} {trainer.lastName}
+                          {trainer.email && (
+                            <span className="text-muted-foreground ml-2">({trainer.email})</span>
+                          )}
+                        </label>
                       </div>
-                    )}
-                  </div>
-                ))
+
+                      {/* Compensation fields when selected */}
+                      {isSelected && compensation && (
+                        <div className="mt-3 ml-6 space-y-3 pt-3 border-t border-gray-100">
+                          {/* Ore totali (read-only) */}
+                          <div className="flex items-center gap-4">
+                            <div className="flex-1">
+                              <Label className="text-xs text-gray-500">Ore totali</Label>
+                              <div className="text-sm font-medium text-gray-700 mt-1">
+                                {compensation.totalHours} h
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Tariffa oraria e Spese */}
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <Label className="text-xs text-gray-500">Tariffa oraria (€/h)</Label>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={compensation.hourlyRate || ''}
+                                onChange={(e) => handleCompensationChange(trainer.id, 'hourlyRate', parseFloat(e.target.value) || 0)}
+                                className="text-sm mt-1"
+                                placeholder="0.00"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-xs text-gray-500">Rimborso spese (€)</Label>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={compensation.expenses || ''}
+                                onChange={(e) => handleCompensationChange(trainer.id, 'expenses', parseFloat(e.target.value) || 0)}
+                                className="text-sm mt-1"
+                                placeholder="0.00"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Totale calcolato */}
+                          <div className="flex items-center justify-between bg-gray-50 rounded p-2">
+                            <span className="text-xs text-gray-500">Compenso totale:</span>
+                            <span className="text-sm font-semibold text-blue-600">
+                              € {totalComp.toFixed(2).replace('.', ',')}
+                            </span>
+                          </div>
+
+                          {/* Email personalizzata se sendEmail è abilitato */}
+                          {sendEmail && (
+                            <div>
+                              <Label className="text-xs text-gray-500">Email</Label>
+                              <Input
+                                type="email"
+                                placeholder={trainer.email || 'Email personalizzata'}
+                                value={customEmails[trainer.id] || trainer.email || ''}
+                                onChange={(e) => handleEmailChange(trainer.id, e.target.value)}
+                                className="text-sm mt-1"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
               )}
             </div>
           </div>

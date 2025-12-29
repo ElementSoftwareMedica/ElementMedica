@@ -25,16 +25,16 @@ class PersonCore {
         },
         ...filters
       };
-      
+
       // DEBUG LOG TEMPORANEO
       // Debug: getPersonsByRole chiamato
-      
+
       // Determina l'ordinamento in base al tipo di ruolo
       let orderBy = { lastName: 'asc' };
       if (Array.isArray(roleType) && roleType.some(role => ['ADMIN', 'COMPANY_ADMIN', 'MANAGER', 'SUPER_ADMIN', 'TENANT_ADMIN'].includes(role))) {
         orderBy = { lastLogin: 'desc' };
       }
-      
+
       const persons = await prisma.person.findMany({
         where,
         include: this.getDefaultInclude(),
@@ -56,7 +56,7 @@ class PersonCore {
   static async getPersonById(id) {
     try {
       const person = await prisma.person.findFirst({
-        where: { 
+        where: {
           id,
           deletedAt: null // Escludi i record eliminati (soft delete)
         },
@@ -88,9 +88,9 @@ class PersonCore {
       if (!tenantId) {
         throw new Error('TenantId is required for person creation');
       }
-      
+
       const { roles, ...personData } = data;
-      
+
       // Normalizza taxCode e email per consistenza
       if (personData.taxCode) {
         personData.taxCode = personData.taxCode.toUpperCase().trim();
@@ -98,7 +98,7 @@ class PersonCore {
       if (personData.email) {
         personData.email = personData.email.toLowerCase().trim();
       }
-      
+
       // Converti birthDate da stringa a Date se necessario
       if (personData.birthDate && typeof personData.birthDate === 'string') {
         try {
@@ -111,7 +111,7 @@ class PersonCore {
             // Altri formati: usa costruttore Date standard
             personData.birthDate = new Date(dateStr);
           }
-          
+
           // Verifica che la data sia valida
           if (isNaN(personData.birthDate.getTime())) {
             logger.warn('Invalid birthDate provided, setting to null', { birthDate: data.birthDate });
@@ -122,7 +122,7 @@ class PersonCore {
           personData.birthDate = null;
         }
       }
-      
+
       // Converti hiredDate da stringa a Date se necessario
       if (personData.hiredDate && typeof personData.hiredDate === 'string') {
         try {
@@ -132,7 +132,7 @@ class PersonCore {
           } else {
             personData.hiredDate = new Date(dateStr);
           }
-          
+
           if (isNaN(personData.hiredDate.getTime())) {
             logger.warn('Invalid hiredDate provided, setting to null', { hiredDate: data.hiredDate });
             personData.hiredDate = null;
@@ -142,11 +142,11 @@ class PersonCore {
           personData.hiredDate = null;
         }
       }
-      
+
       // Genera username automatico se non fornito
       if (!personData.username && personData.firstName && personData.lastName) {
         personData.username = await PersonUtils.generateUniqueUsername(
-          personData.firstName, 
+          personData.firstName,
           personData.lastName,
           async (username) => {
             const existing = await prisma.person.findUnique({ where: { username } });
@@ -154,18 +154,18 @@ class PersonCore {
           }
         );
       }
-      
+
       // Imposta password di default se non fornita e hash della password
       if (!personData.password) {
         personData.password = PersonUtils.generateTemporaryPassword();
       }
-      
+
       // Hash della password se presente
       if (personData.password) {
         const bcrypt = await import('bcryptjs');
         personData.password = await bcrypt.default.hash(personData.password, 12);
       }
-      
+
       // Rimuovi campi undefined per evitare errori Prisma
       Object.keys(personData).forEach(key => {
         if (personData[key] === undefined) {
@@ -175,7 +175,7 @@ class PersonCore {
 
       // Mappa il ruolo se necessario
       const mappedRoleType = PersonRoleMapping.mapRoleType(roleType);
-      
+
       const createData = {
         ...personData,
         tenantId, // Aggiungi tenantId direttamente ai dati della persona
@@ -210,17 +210,47 @@ class PersonCore {
   static async updatePerson(id, data) {
     try {
       const { roles, ...personData } = data;
-      
+
       // Hash della password se presente e non è già hashata
       if (personData.password && !personData.password.startsWith('$2')) {
         const bcrypt = await import('bcryptjs');
         personData.password = await bcrypt.default.hash(personData.password, 12);
       }
-      
+
+      // Lista dei campi validi nel modello Person (Prisma)
+      const validPersonFields = [
+        'firstName', 'lastName', 'email', 'phone', 'birthDate', 'taxCode',
+        'vatNumber', 'residenceAddress', 'residenceCity', 'postalCode', 'province',
+        'username', 'password', 'status', 'title', 'hiredDate', 'hourlyRate',
+        'iban', 'registerCode', 'certifications', 'specialties', 'profileImage',
+        'notes', 'lastLogin', 'failedAttempts', 'lockedUntil', 'globalRole',
+        'tenantId', 'companyId', 'gdprConsentDate', 'gdprConsentVersion',
+        'dataRetentionUntil', 'preferences', 'siteId', 'reparto', 'repartoId'
+      ];
+
+      // Filtra solo i campi validi per evitare errori Prisma
+      const filteredData = {};
+      for (const key of Object.keys(personData)) {
+        if (validPersonFields.includes(key) && personData[key] !== undefined) {
+          filteredData[key] = personData[key];
+        }
+      }
+
+      // Converti campi data se sono stringhe
+      if (filteredData.birthDate && typeof filteredData.birthDate === 'string') {
+        filteredData.birthDate = new Date(filteredData.birthDate);
+      }
+      if (filteredData.hiredDate && typeof filteredData.hiredDate === 'string') {
+        filteredData.hiredDate = new Date(filteredData.hiredDate);
+      }
+      if (filteredData.hourlyRate !== undefined) {
+        filteredData.hourlyRate = parseFloat(filteredData.hourlyRate) || null;
+      }
+
       return await prisma.person.update({
         where: { id },
         data: {
-          ...personData,
+          ...filteredData,
           updatedAt: new Date()
         },
         include: this.getDefaultInclude()
@@ -293,7 +323,7 @@ class PersonCore {
 
       // Recupera gli ID effettivamente esistenti per evitare errori Prisma
       const existing = await prisma.person.findMany({
-        where: { 
+        where: {
           id: { in: uniqueIds },
           deletedAt: null // ✅ FIX: Exclude soft-deleted persons (GDPR compliance)
         },
@@ -344,7 +374,7 @@ class PersonCore {
         ],
         ...filters
       };
-      
+
       if (roleType) {
         where.personRoles = {
           some: {
@@ -353,7 +383,7 @@ class PersonCore {
           }
         };
       }
-      
+
       const persons = await prisma.person.findMany({
         where,
         include: this.getDefaultInclude(),
@@ -379,7 +409,7 @@ class PersonCore {
       const temporaryPassword = PersonUtils.generateTemporaryPassword();
       const bcrypt = await import('bcryptjs');
       const hashedPassword = await bcrypt.default.hash(temporaryPassword, 12);
-      
+
       await prisma.person.update({
         where: { id },
         data: {
@@ -404,16 +434,16 @@ class PersonCore {
    */
   static async isUsernameAvailable(username, excludePersonId = null) {
     try {
-      const where = { 
+      const where = {
         username,
         deletedAt: null // ✅ FIX: Exclude soft-deleted persons (GDPR compliance - allow username reuse)
       };
       if (excludePersonId) {
         where.id = { not: excludePersonId };
       }
-      
+
       const existingPerson = await prisma.person.findFirst({ where });
-      
+
       return !existingPerson;
     } catch (error) {
       logger.error('Error checking username availability:', { error: error.message, username });
@@ -429,16 +459,16 @@ class PersonCore {
    */
   static async isEmailAvailable(email, excludePersonId = null) {
     try {
-      const where = { 
+      const where = {
         email,
         deletedAt: null // ✅ FIX: Exclude soft-deleted persons (GDPR compliance - allow email reuse)
       };
       if (excludePersonId) {
         where.id = { not: excludePersonId };
       }
-      
+
       const existingPerson = await prisma.person.findFirst({ where });
-      
+
       return !existingPerson;
     } catch (error) {
       logger.error('Error checking email availability:', { error: error.message, email });
@@ -461,6 +491,7 @@ class PersonCore {
       },
       company: true,
       tenant: true,
+      site: true, // ✅ Include sede aziendale
       personSessions: {
         where: {
           isActive: true,
@@ -500,7 +531,7 @@ class PersonCore {
       'COMPANY_ADMIN', 'HR_MANAGER', 'MANAGER', 'DEPARTMENT_HEAD',
       'TRAINER_COORDINATOR', 'SENIOR_TRAINER', 'TRAINER', 'EXTERNAL_TRAINER',
       'EMPLOYEE', 'COMPANY_MANAGER', 'TRAINING_ADMIN', 'CLINIC_ADMIN',
-      'VIEWER', 'OPERATOR', 'COORDINATOR', 'SUPERVISOR', 'GUEST', 
+      'VIEWER', 'OPERATOR', 'COORDINATOR', 'SUPERVISOR', 'GUEST',
       'CONSULTANT', 'AUDITOR'
     ];
     return this.getPersonsByRole(employeeRoleTypes, filters);
@@ -534,7 +565,7 @@ class PersonCore {
         },
         ...filters
       };
-      
+
       const users = await prisma.person.findMany({
         where,
         include: this.getDefaultInclude(),
@@ -561,6 +592,7 @@ class PersonCore {
         roleType,
         isActive,
         companyId,
+        tenantId, // Multi-tenancy filter
         search,
         sortBy = 'lastLogin',
         sortOrder = 'desc',
@@ -571,6 +603,11 @@ class PersonCore {
       const where = {
         deletedAt: null // Escludi i record eliminati (soft delete)
       };
+
+      // Multi-tenancy: filter by tenantId when provided
+      if (tenantId) {
+        where.tenantId = tenantId;
+      }
 
       // Filtro per ruolo
       if (roleType) {

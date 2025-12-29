@@ -6,20 +6,26 @@
 const corsConfig = {
   development: {
     origin: [
-      'http://localhost:5173',  // Frontend Vite dev server
+      'http://localhost:5173',  // Element Formazione - Vite dev server
+      'http://localhost:5174',  // Element Medica - Vite dev server
       'http://localhost:3000',  // Alternative frontend port
       'http://127.0.0.1:5173',
+      'http://127.0.0.1:5174',
       'http://127.0.0.1:3000'
     ],
     credentials: true,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     allowedHeaders: [
-      'Content-Type', 
-      'Authorization', 
+      'Content-Type',
+      'Authorization',
       'X-Tenant-ID',
+      'X-Frontend-Id',  // MULTI-BRAND: Header per identificare il frontend brand
       'X-Requested-With',
       'Accept',
-      'Origin'
+      'Origin',
+      'cache-control',
+      'pragma',
+      'expires'
     ],
     exposedHeaders: [
       'X-Total-Count',
@@ -29,14 +35,14 @@ const corsConfig = {
     optionsSuccessStatus: 200, // For legacy browser support
     maxAge: 86400 // 24 hours
   },
-  
+
   production: {
     origin: function (origin, callback) {
       const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [];
-      
+
       // Allow requests with no origin (mobile apps, etc.)
       if (!origin) return callback(null, true);
-      
+
       if (allowedOrigins.indexOf(origin) !== -1) {
         callback(null, true);
       } else {
@@ -46,11 +52,15 @@ const corsConfig = {
     credentials: true,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     allowedHeaders: [
-      'Content-Type', 
-      'Authorization', 
+      'Content-Type',
+      'Authorization',
       'X-Tenant-ID',
+      'X-Frontend-Id',  // MULTI-BRAND: Header per identificare il frontend brand
       'X-Requested-With',
-      'Accept'
+      'Accept',
+      'cache-control',
+      'pragma',
+      'expires'
     ],
     exposedHeaders: [
       'X-Total-Count',
@@ -60,15 +70,16 @@ const corsConfig = {
     optionsSuccessStatus: 200,
     maxAge: 86400
   },
-  
+
   test: {
     origin: true, // Allow all origins in test environment
     credentials: true,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     allowedHeaders: [
-      'Content-Type', 
-      'Authorization', 
+      'Content-Type',
+      'Authorization',
       'X-Tenant-ID',
+      'X-Frontend-Id',  // MULTI-BRAND: Header per identificare il frontend brand
       'X-Requested-With',
       'Accept'
     ]
@@ -83,7 +94,7 @@ const corsConfig = {
  */
 export const getCorsConfig = (environment = process.env.NODE_ENV || 'development', customOptions = {}) => {
   const baseConfig = corsConfig[environment] || corsConfig.development;
-  
+
   return {
     ...baseConfig,
     ...customOptions
@@ -106,7 +117,7 @@ export const createCorsConfig = (customOptions = {}) => {
  */
 export const validateCorsConfig = (config) => {
   const requiredFields = ['origin', 'credentials', 'methods'];
-  
+
   return requiredFields.every(field => config.hasOwnProperty(field));
 };
 

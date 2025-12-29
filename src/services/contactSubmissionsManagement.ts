@@ -20,6 +20,8 @@ export interface ContactSubmission {
   ipAddress?: string;
   userAgent?: string;
   metadata?: Record<string, any>;
+  formData?: Record<string, any>; // Form field values submitted
+  templateName?: string; // Name of the form template
   assignedTo?: {
     id: string;
     firstName: string;
@@ -39,6 +41,8 @@ export interface ContactSubmissionFilters {
   status?: string;
   type?: string;
   search?: string;
+  templateId?: string;   // Legacy: maps to templateName in backend
+  templateName?: string; // Preferred: matches backend field
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
 }
@@ -71,7 +75,7 @@ class ContactSubmissionsManagementService {
         }
       });
     }
-    
+
     const response = await apiClient.get<{
       submissions: ContactSubmission[];
       pagination: {
@@ -92,9 +96,9 @@ class ContactSubmissionsManagementService {
 
   // Update submission status
   async updateSubmissionStatus(id: string, status: ContactSubmission['status'], notes?: string): Promise<ContactSubmission> {
-    const response = await apiClient.put<ContactSubmission>(`/api/v1/submissions/${id}/status`, { 
-      status, 
-      notes 
+    const response = await apiClient.put<ContactSubmission>(`/api/v1/submissions/${id}/status`, {
+      status,
+      notes
     });
     return response.data;
   }
@@ -129,7 +133,7 @@ class ContactSubmissionsManagementService {
       });
     }
     params.append('format', format);
-    
+
     const response = await apiClient.get<Blob>(`/api/v1/submissions/export?${params.toString()}`, {
       responseType: 'blob'
     });
@@ -140,23 +144,23 @@ class ContactSubmissionsManagementService {
 export const contactSubmissionsManagementService = new ContactSubmissionsManagementService();
 
 // Export individual functions for convenience
-export const getContactSubmissions = (filters?: ContactSubmissionFilters) => 
+export const getContactSubmissions = (filters?: ContactSubmissionFilters) =>
   contactSubmissionsManagementService.getContactSubmissions(filters);
 
-export const getContactSubmission = (id: string) => 
+export const getContactSubmission = (id: string) =>
   contactSubmissionsManagementService.getContactSubmission(id);
 
-export const updateContactSubmissionStatus = (id: string, status: ContactSubmission['status'], notes?: string) => 
+export const updateContactSubmissionStatus = (id: string, status: ContactSubmission['status'], notes?: string) =>
   contactSubmissionsManagementService.updateSubmissionStatus(id, status, notes);
 
-export const deleteContactSubmission = (id: string) => 
+export const deleteContactSubmission = (id: string) =>
   contactSubmissionsManagementService.deleteContactSubmission(id);
 
-export const getContactSubmissionStats = () => 
+export const getContactSubmissionStats = () =>
   contactSubmissionsManagementService.getSubmissionStats();
 
-export const assignContactSubmission = (id: string, assignedToId: string) => 
+export const assignContactSubmission = (id: string, assignedToId: string) =>
   contactSubmissionsManagementService.assignSubmission(id, assignedToId);
 
-export const exportContactSubmissions = (filters?: ContactSubmissionFilters, format: 'csv' | 'excel' = 'csv') => 
+export const exportContactSubmissions = (filters?: ContactSubmissionFilters, format: 'csv' | 'excel' = 'csv') =>
   contactSubmissionsManagementService.exportSubmissions(filters, format);

@@ -8,6 +8,7 @@ import { useGoogleIntegration } from '../../hooks/useGoogleIntegration';
 import { GoogleConnectionButton } from './GoogleConnectionButton';
 import { GoogleImportDialog } from './GoogleImportDialog';
 import { AlertCircle, Download } from 'lucide-react';
+import { useConfirmDialog } from '../../../../../contexts/ConfirmDialogContext';
 
 interface GoogleIntegrationPanelProps {
   onTemplateImported?: (templateData: any) => void;
@@ -28,6 +29,7 @@ export const GoogleIntegrationPanel: React.FC<GoogleIntegrationPanelProps> = ({
   } = useGoogleIntegration();
 
   const [showImportDialog, setShowImportDialog] = useState(false);
+  const { confirm } = useConfirmDialog();
 
   const handleConnect = async () => {
     clearError();
@@ -35,7 +37,13 @@ export const GoogleIntegrationPanel: React.FC<GoogleIntegrationPanelProps> = ({
   };
 
   const handleDisconnect = async () => {
-    if (confirm('Sei sicuro di voler disconnettere il tuo account Google?')) {
+    const shouldDisconnect = await confirm({
+      title: 'Disconnetti Account Google',
+      message: 'Sei sicuro di voler disconnettere il tuo account Google?',
+      confirmLabel: 'Disconnetti',
+      variant: 'warning'
+    });
+    if (shouldDisconnect) {
       clearError();
       await disconnectGoogle();
     }
@@ -51,12 +59,12 @@ export const GoogleIntegrationPanel: React.FC<GoogleIntegrationPanelProps> = ({
 
   const handleImport = (result: any) => {
     console.log('Template imported:', result);
-    
+
     // Notify parent component
     if (onTemplateImported) {
       onTemplateImported(result);
     }
-    
+
     // Show success message
     alert(`Template "${result.name}" importato con successo!`);
   };
@@ -80,8 +88,8 @@ export const GoogleIntegrationPanel: React.FC<GoogleIntegrationPanelProps> = ({
             Stato connessione
           </p>
           <p className="text-sm text-gray-500 mt-1">
-            {connectionStatus.connected 
-              ? `Connesso • Scopi: ${connectionStatus.scopes.length}` 
+            {connectionStatus.connected
+              ? `Connesso • Scopi: ${connectionStatus.scopes.length}`
               : 'Non connesso'}
           </p>
         </div>

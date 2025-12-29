@@ -7,6 +7,9 @@ export interface PersonRole {
   id: string;
   roleType: string;
   isActive: boolean;
+  deletedAt?: string;
+  professionalProfile?: string;
+  hiringDate?: string;
   company?: {
     id: string;
     ragioneSociale: string;
@@ -22,6 +25,7 @@ export interface Person {
   phone?: string;
   taxCode?: string;
   roles: PersonRole[];
+  personRoles?: PersonRole[];
   company?: {
     id: string;
     ragioneSociale: string;
@@ -45,13 +49,25 @@ export interface FilterConfig {
 export const ROLE_HIERARCHY: Record<string, number> = {
   'SUPER_ADMIN': 0,
   'ADMIN': 1,
+  'TENANT_ADMIN': 1,
   'COMPANY_ADMIN': 2,        // "Responsabile Aziendale"
+  'TRAINING_ADMIN': 2,
+  'CLINIC_ADMIN': 2,
   'HR_MANAGER': 3,
   'MANAGER': 3,
+  'COMPANY_MANAGER': 3,
+  'DEPARTMENT_HEAD': 4,
   'TRAINER_COORDINATOR': 4,  // "Coordinatore Formatori"
+  'COORDINATOR': 4,
+  'SUPERVISOR': 5,
   'SENIOR_TRAINER': 5,
   'TRAINER': 6,
   'EXTERNAL_TRAINER': 6,
+  'OPERATOR': 7,
+  'VIEWER': 7,
+  'CONSULTANT': 7,
+  'AUDITOR': 7,
+  'GUEST': 8,
   'EMPLOYEE': 8
 };
 
@@ -65,7 +81,7 @@ export const FILTER_CONFIGS = {
     maxRoleLevel: 8,
     roleTypes: ['COMPANY_ADMIN', 'HR_MANAGER', 'MANAGER', 'TRAINER_COORDINATOR', 'SENIOR_TRAINER', 'TRAINER', 'EMPLOYEE'] as string[]
   } as FilterConfig,
-  
+
   // Trainers: TRAINER_COORDINATOR (4) o inferiore (livelli più alti)
   trainers: {
     minRoleLevel: 4,
@@ -79,14 +95,14 @@ export const FILTER_CONFIGS = {
  * Una persona appare nel filtro se ha ALMENO UN ruolo attivo nel range specificato
  */
 export const filterPersonsByRoleLevel = (
-  persons: Person[], 
-  minLevel: number, 
+  persons: Person[],
+  minLevel: number,
   maxLevel: number
 ): Person[] => {
-  return persons.filter(person => 
+  return persons.filter(person =>
     person.roles.some(role => {
       if (!role.isActive) return false;
-      
+
       const level = ROLE_HIERARCHY[role.roleType];
       return level !== undefined && level >= minLevel && level <= maxLevel;
     })
@@ -118,16 +134,28 @@ export const getRoleDisplayName = (roleType: string): string => {
   const roleNames: Record<string, string> = {
     'SUPER_ADMIN': 'Super Admin',
     'ADMIN': 'Amministratore',
+    'TENANT_ADMIN': 'Tenant Admin',
     'COMPANY_ADMIN': 'Responsabile Aziendale',
+    'TRAINING_ADMIN': 'Admin Formazione',
+    'CLINIC_ADMIN': 'Admin Clinica',
     'HR_MANAGER': 'Manager HR',
     'MANAGER': 'Manager',
+    'COMPANY_MANAGER': 'Company Manager',
+    'DEPARTMENT_HEAD': 'Responsabile Reparto',
     'TRAINER_COORDINATOR': 'Coordinatore Formatori',
+    'COORDINATOR': 'Coordinatore',
+    'SUPERVISOR': 'Supervisore',
     'SENIOR_TRAINER': 'Formatore Senior',
     'TRAINER': 'Formatore',
     'EXTERNAL_TRAINER': 'Formatore Esterno',
+    'OPERATOR': 'Operatore',
+    'VIEWER': 'Visualizzatore',
+    'CONSULTANT': 'Consulente',
+    'AUDITOR': 'Auditor',
+    'GUEST': 'Ospite',
     'EMPLOYEE': 'Dipendente'
   };
-  
+
   return roleNames[roleType] || roleType;
 };
 
@@ -138,17 +166,57 @@ export const getRoleTypeFromDisplayName = (displayName: string): string => {
   const displayNameToRoleType: Record<string, string> = {
     'Super Admin': 'SUPER_ADMIN',
     'Amministratore': 'ADMIN',
+    'Admin': 'ADMIN',
+    'Tenant Admin': 'TENANT_ADMIN',
     'Responsabile Aziendale': 'COMPANY_ADMIN',
+    'Company Admin': 'COMPANY_ADMIN',
+    'Admin Formazione': 'TRAINING_ADMIN',
+    'Training Admin': 'TRAINING_ADMIN',
+    'Admin Clinica': 'CLINIC_ADMIN',
+    'Clinic Admin': 'CLINIC_ADMIN',
     'Manager HR': 'HR_MANAGER',
+    'Hr Manager': 'HR_MANAGER',
     'Manager': 'MANAGER',
+    'Company Manager': 'COMPANY_MANAGER',
+    'Responsabile Reparto': 'DEPARTMENT_HEAD',
+    'Department Head': 'DEPARTMENT_HEAD',
     'Coordinatore Formatori': 'TRAINER_COORDINATOR',
+    'Trainer Coordinator': 'TRAINER_COORDINATOR',
+    'Coordinatore': 'COORDINATOR',
+    'Coordinator': 'COORDINATOR',
+    'Supervisore': 'SUPERVISOR',
+    'Supervisor': 'SUPERVISOR',
     'Formatore Senior': 'SENIOR_TRAINER',
+    'Senior Trainer': 'SENIOR_TRAINER',
     'Formatore': 'TRAINER',
+    'Trainer': 'TRAINER',
     'Formatore Esterno': 'EXTERNAL_TRAINER',
-    'Dipendente': 'EMPLOYEE'
+    'External Trainer': 'EXTERNAL_TRAINER',
+    'Operatore': 'OPERATOR',
+    'Operator': 'OPERATOR',
+    'Visualizzatore': 'VIEWER',
+    'Viewer': 'VIEWER',
+    'Consulente': 'CONSULTANT',
+    'Consultant': 'CONSULTANT',
+    'Auditor': 'AUDITOR',
+    'Ospite': 'GUEST',
+    'Guest': 'GUEST',
+    'Dipendente': 'EMPLOYEE',
+    'Employee': 'EMPLOYEE'
   };
-  
-  return displayNameToRoleType[displayName] || displayName;
+
+  // Prima cerca nella mappatura esatta
+  if (displayNameToRoleType[displayName]) {
+    return displayNameToRoleType[displayName];
+  }
+
+  // Se non trova, verifica se è già un roleType valido (tutto maiuscolo con underscore)
+  if (/^[A-Z_]+$/.test(displayName)) {
+    return displayName;
+  }
+
+  // Ultimo fallback: ritorna il displayName come è
+  return displayName;
 };
 
 /**
@@ -181,7 +249,7 @@ export const getActiveRoles = (person: Person): PersonRole[] => {
 export const getHighestRole = (person: Person): PersonRole | null => {
   const activeRoles = getActiveRoles(person);
   if (activeRoles.length === 0) return null;
-  
+
   return activeRoles.reduce((highest, current) => {
     const currentLevel = getRoleLevel(current.roleType);
     const highestLevel = getRoleLevel(highest.roleType);
@@ -195,19 +263,19 @@ export const getHighestRole = (person: Person): PersonRole | null => {
 export function isInBothBranches(person: Person): boolean {
   const employeeRoleTypes = FILTER_CONFIGS.employees?.roleTypes;
   const trainerRoleTypes = FILTER_CONFIGS.trainers?.roleTypes;
-  
+
   if (!employeeRoleTypes || !trainerRoleTypes) {
     return false;
   }
-  
+
   const activeRoles = getActiveRoles(person);
-  const hasEmployeeRole = activeRoles.some(role => 
+  const hasEmployeeRole = activeRoles.some(role =>
     employeeRoleTypes.includes(role.roleType as string)
   );
-  const hasTrainerRole = activeRoles.some(role => 
+  const hasTrainerRole = activeRoles.some(role =>
     trainerRoleTypes.includes(role.roleType as string)
   );
-  
+
   return hasEmployeeRole && hasTrainerRole;
 }
 

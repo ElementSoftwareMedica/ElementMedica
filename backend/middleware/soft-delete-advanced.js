@@ -50,34 +50,51 @@ const RELATION_TO_MODEL = {
   'consentRecords': 'ConsentRecord'
 };
 
+// Relazioni TO-MANY (array) - queste supportano where nell'include
+const TO_MANY_RELATIONS = [
+  'personRoles', 'assignedRoles', 'permissions', 'courseSchedules', 'schedules',
+  'enrollments', 'courseEnrollments', 'sessions', 'courseSessions', 'attestati',
+  'refreshTokens', 'customRoles', 'enhancedUserRoles', 'assignedEnhancedRoles',
+  'personSessions', 'lettereIncarico', 'registriPresenze', 'testDocuments',
+  'activityLogs', 'gdprAuditLogs', 'consentRecords', 'employees', 'companies',
+  'presenti', 'participants'
+];
+
+// Relazioni TO-ONE (oggetto singolo) - NON supportano where nell'include
+const TO_ONE_RELATIONS = [
+  'company', 'person', 'tenant', 'customRole', 'schedule', 'course',
+  'trainer', 'coTrainer', 'formatore', 'template', 'scheduledCourse',
+  'employee'
+];
+
 /**
  * Crea il middleware soft-delete avanzato
  */
 export function createAdvancedSoftDeleteMiddleware() {
   return async (params, next) => {
     const { model, action } = params;
-    
+
     // Skip se modello non ha soft-delete
     if (!SOFT_DELETE_MODELS.includes(model) && !IS_ACTIVE_MODELS.includes(model)) {
       return next(params);
     }
-    
+
     try {
       // FIND OPERATIONS - Aggiungere filtri automatici
       if (['findFirst', 'findMany', 'findUnique', 'count', 'aggregate'].includes(action)) {
         return handleFindOperations(params, next);
       }
-      
+
       // DELETE OPERATIONS - Convertire in soft-delete
       if (['delete', 'deleteMany'].includes(action)) {
         return handleDeleteOperations(params, next);
       }
-      
+
       // UPDATE OPERATIONS - Preservare filtri
       if (['update', 'updateMany', 'upsert'].includes(action)) {
         return handleUpdateOperations(params, next);
       }
-      
+
       return next(params);
     } catch (error) {
       logger.error('Soft delete middleware error', {
@@ -96,15 +113,15 @@ export function createAdvancedSoftDeleteMiddleware() {
  */
 function handleFindOperations(params, next) {
   const { model, args } = params;
-  
+
   if (!args) {
     params.args = {};
   }
-  
+
   if (!args.where) {
     params.args.where = {};
   }
-  
+
   // Aggiungere filtro appropriato se non già presente
   if (SOFT_DELETE_MODELS.includes(model)) {
     if (!('deletedAt' in args.where)) {
@@ -115,12 +132,12 @@ function handleFindOperations(params, next) {
       params.args.where.isActive = true;
     }
   }
-  
+
   // Gestire include/select con soft-delete
   if (args.include) {
     params.args.include = addSoftDeleteToIncludes(args.include);
   }
-  
+
   return next(params);
 }
 
@@ -129,14 +146,14 @@ function handleFindOperations(params, next) {
  */
 function handleDeleteOperations(params, next) {
   const { model, action, args } = params;
-  
+
   if (SOFT_DELETE_MODELS.includes(model)) {
     // Convertire delete in update con deletedAt
     params.action = action === 'delete' ? 'update' : 'updateMany';
     params.args.data = {
       deletedAt: new Date()
     };
-    
+
     // Aggiungere filtro per non eliminare già eliminati
     if (!args.where) {
       params.args.where = {};
@@ -144,14 +161,14 @@ function handleDeleteOperations(params, next) {
     if (!('deletedAt' in args.where)) {
       params.args.where.deletedAt = null;
     }
-    
+
   } else if (IS_ACTIVE_MODELS.includes(model)) {
     // Convertire delete in update con isActive: false
     params.action = action === 'delete' ? 'update' : 'updateMany';
     params.args.data = {
       isActive: false
     };
-    
+
     if (!args.where) {
       params.args.where = {};
     }
@@ -159,7 +176,7 @@ function handleDeleteOperations(params, next) {
       params.args.where.isActive = true;
     }
   }
-  
+
   return next(params);
 }
 
@@ -168,11 +185,11 @@ function handleDeleteOperations(params, next) {
  */
 function handleUpdateOperations(params, next) {
   const { model, args } = params;
-  
+
   if (!args.where) {
     params.args.where = {};
   }
-  
+
   // Aggiungere filtro per aggiornare solo record attivi
   if (SOFT_DELETE_MODELS.includes(model)) {
     if (!('deletedAt' in args.where)) {
@@ -183,38 +200,62 @@ function handleUpdateOperations(params, next) {
       params.args.where.isActive = true;
     }
   }
-  
+
   return next(params);
 }
 
 /**
  * Aggiunge filtri soft-delete agli include
+ * IMPORTANTE: where nell'include è supportato SOLO per relazioni to-many
  */
 function addSoftDeleteToIncludes(include) {
   const processedInclude = {};
-  
+
   for (const [key, value] of Object.entries(include)) {
+    // Controlla se è una relazione to-many (supporta where)
+    const isToManyRelation = TO_MANY_RELATIONS.includes(key);
+
     if (typeof value === 'boolean' && value === true) {
-      // Semplice include: true -> aggiungere where
-      const filter = getSoftDeleteFilter(key);
-      if (Object.keys(filter).length > 0) {
-        processedInclude[key] = {
-          where: filter
-        };
+      // Semplice include: true
+      if (isToManyRelation) {
+        // Solo per relazioni to-many possiamo aggiungere where
+        const filter = getSoftDeleteFilter(key);
+        if (Object.keys(filter).length > 0) {
+          processedInclude[key] = {
+            where: filter
+          };
+        } else {
+          // Nessun filtro da aggiungere, lascia come boolean true
+          processedInclude[key] = value;
+        }
       } else {
+        // Per relazioni to-one, non possiamo aggiungere where
         processedInclude[key] = value;
       }
     } else if (typeof value === 'object') {
       // Include complesso
-      const filter = getSoftDeleteFilter(key);
-      processedInclude[key] = {
-        ...value,
-        where: {
-          ...filter,
-          ...(value.where || {})
+      if (isToManyRelation) {
+        // Solo per relazioni to-many possiamo usare where
+        const filter = getSoftDeleteFilter(key);
+        if (Object.keys(filter).length > 0 || value.where) {
+          // Solo aggiungi where se c'è un filtro effettivo
+          processedInclude[key] = {
+            ...value,
+            where: {
+              ...filter,
+              ...(value.where || {})
+            }
+          };
+        } else {
+          // Nessun filtro, mantieni l'oggetto senza where vuoto
+          processedInclude[key] = { ...value };
         }
-      };
-      
+      } else {
+        // Per relazioni to-one, copiamo senza aggiungere where
+        const { where: _ignoredWhere, ...restValue } = value;
+        processedInclude[key] = restValue;
+      }
+
       // Ricorsione per include annidati
       if (value.include) {
         processedInclude[key].include = addSoftDeleteToIncludes(value.include);
@@ -223,7 +264,7 @@ function addSoftDeleteToIncludes(include) {
       processedInclude[key] = value;
     }
   }
-  
+
   return processedInclude;
 }
 
@@ -232,13 +273,13 @@ function addSoftDeleteToIncludes(include) {
  */
 function getSoftDeleteFilter(relationName) {
   const modelName = RELATION_TO_MODEL[relationName];
-  
+
   if (SOFT_DELETE_MODELS.includes(modelName)) {
     return { deletedAt: null };
   } else if (IS_ACTIVE_MODELS.includes(modelName)) {
     return { isActive: true };
   }
-  
+
   return {};
 }
 
@@ -249,25 +290,25 @@ export class ExtendedPrismaClient {
   constructor(prismaClient) {
     this.prisma = prismaClient;
   }
-  
+
   /**
    * Metodo per eliminazione definitiva (GDPR)
    * Bypassa il middleware soft-delete
    */
   async hardDelete(model, where) {
     const modelDelegate = this.prisma[model.toLowerCase()];
-    
+
     if (!modelDelegate) {
       throw new Error(`Model ${model} not found`);
     }
-    
+
     // Log operazione critica
     logger.warn('Hard delete operation', {
       model,
       where,
       component: 'hard-delete'
     });
-    
+
     // Usare deleteMany per bypassare middleware
     return modelDelegate.deleteMany({
       where: {
@@ -277,13 +318,13 @@ export class ExtendedPrismaClient {
       }
     });
   }
-  
+
   /**
    * Metodo per recuperare record eliminati
    */
   async findDeleted(model, args = {}) {
     const modelDelegate = this.prisma[model.toLowerCase()];
-    
+
     if (SOFT_DELETE_MODELS.includes(model)) {
       return modelDelegate.findMany({
         ...args,
@@ -301,16 +342,16 @@ export class ExtendedPrismaClient {
         }
       });
     }
-    
+
     return [];
   }
-  
+
   /**
    * Metodo per ripristinare record eliminati
    */
   async restore(model, where) {
     const modelDelegate = this.prisma[model.toLowerCase()];
-    
+
     if (SOFT_DELETE_MODELS.includes(model)) {
       return modelDelegate.updateMany({
         where: {
@@ -332,16 +373,16 @@ export class ExtendedPrismaClient {
         }
       });
     }
-    
+
     throw new Error(`Model ${model} does not support soft delete`);
   }
-  
+
   /**
    * Metodo per visualizzare tutti i record (inclusi eliminati)
    */
   async findAllIncludingDeleted(model, args = {}) {
     const modelDelegate = this.prisma[model.toLowerCase()];
-    
+
     return modelDelegate.findMany({
       ...args,
       where: {

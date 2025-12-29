@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
+import {
   Building2,
   Calendar,
   Globe,
@@ -22,10 +22,10 @@ const CompanyEditForm: React.FC<CompanyEditFormProps> = ({ company, onSubmit, on
   const [formData, setFormData] = useState<Partial<Company>>({
     name: '',
     industry: '',
-    status: 'Active',
+    status: 'ACTIVE',
     location: '',
-    employees: 0,
-    established: new Date().getFullYear(),
+    employeesCount: 0,
+    establishedYear: new Date().getFullYear(),
     contactPerson: '',
     phone: '',
     email: '',
@@ -66,7 +66,7 @@ const CompanyEditForm: React.FC<CompanyEditFormProps> = ({ company, onSubmit, on
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-6" noValidate>
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded relative" role="alert">
           <span className="block sm:inline">{error}</span>
@@ -154,30 +154,30 @@ const CompanyEditForm: React.FC<CompanyEditFormProps> = ({ company, onSubmit, on
               <label htmlFor="employees" className="block text-sm font-medium text-gray-700">Number of Employees</label>
               <input
                 type="number"
-                name="employees"
-                id="employees"
+                name="employeesCount"
+                id="employeesCount"
                 required
                 min="1"
-                value={formData.employees}
+                value={formData.employeesCount}
                 onChange={handleChange}
                 className="mt-1 focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-md"
               />
             </div>
 
             <div>
-              <label htmlFor="established" className="block text-sm font-medium text-gray-700">Year Established</label>
+              <label htmlFor="establishedYear" className="block text-sm font-medium text-gray-700">Year Established</label>
               <div className="mt-1 relative rounded-md shadow-sm">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <Calendar className="h-5 w-5 text-gray-400" />
                 </div>
                 <input
                   type="number"
-                  name="established"
-                  id="established"
+                  name="establishedYear"
+                  id="establishedYear"
                   required
                   min="1900"
                   max={new Date().getFullYear()}
-                  value={formData.established}
+                  value={formData.establishedYear}
                   onChange={handleChange}
                   className="focus:ring-blue-500 focus:border-blue-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md"
                 />

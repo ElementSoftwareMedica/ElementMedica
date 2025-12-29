@@ -37,19 +37,21 @@ export function PriceBreakdown({ totals, config, scontoApplicato }: PriceBreakdo
             </span>
           </div>
         )}
-        <div className="flex justify-between pt-2 border-t">
-          <span className="text-gray-600">Subtotale:</span>
-          <span className="font-medium">
-            €{totals.subtotale.toFixed(2)}
-          </span>
-        </div>
         {totals.importoSconto > 0 && (
-          <div className="flex justify-between text-green-600">
-            <span>Sconto ({scontoApplicato?.percentuale}%):</span>
-            <span className="font-medium">
-              -€{totals.importoSconto.toFixed(2)}
-            </span>
-          </div>
+          <>
+            <div className="flex justify-between pt-2 border-t">
+              <span className="text-gray-600">Subtotale:</span>
+              <span className="font-medium">
+                €{totals.subtotale.toFixed(2)}
+              </span>
+            </div>
+            <div className="flex justify-between text-green-600">
+              <span>Sconto ({scontoApplicato?.percentuale}%):</span>
+              <span className="font-medium">
+                -€{totals.importoSconto.toFixed(2)}
+              </span>
+            </div>
+          </>
         )}
         <div className="flex justify-between pt-2 border-t">
           <span className="text-gray-700 font-medium">Imponibile:</span>

@@ -3,7 +3,7 @@ import { getBadgeClasses, getStatusClasses } from '../../utils/colorUtils';
 
 interface PublicBadgeProps {
   children: React.ReactNode;
-  variant?: 'blue' | 'purple' | 'green' | 'red' | 'yellow' | 'gray' | 'indigo' | 'pink';
+  variant?: 'blue' | 'purple' | 'green' | 'red' | 'yellow' | 'gray' | 'indigo' | 'pink' | 'safety-high' | 'safety-medium' | 'safety-low' | 'medical' | 'health';
   status?: 'active' | 'inactive' | 'pending' | 'error' | 'info' | 'warning';
   size?: 'sm' | 'md' | 'lg';
   className?: string;

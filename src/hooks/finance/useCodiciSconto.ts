@@ -35,9 +35,26 @@ export interface CodiceSconto {
 }
 
 export interface ValidazioneCodice {
-  valido: boolean;
+  valido: boolean;  // Mapped from backend 'valid'
+  valid?: boolean;  // Backend field name
   messaggio?: string;
-  codice?: CodiceSconto;
+  codice?: {
+    id: string;
+    codice: string;
+    nome: string;
+    descrizione?: string;
+    tipoSconto: string;
+    valore: number;
+    cumulabile: boolean;
+    tipo?: string;  // Alias for tipoSconto
+  };
+  calcolo?: {
+    prezzoBase: number;
+    importoSconto: number;
+    prezzoFinale: number;
+    risparmioPercentuale: string;
+  };
+  errors?: string[];
   limiti?: {
     utilizzoGlobale: {
       utilizzati: number;
@@ -87,10 +104,14 @@ interface FetchParams {
 
 interface ValidazioneParams {
   codice: string;
-  importo: number;
-  tipoServizio?: string;
-  tipoCliente?: string;
+  prezzoBase: number;  // Backend expects 'prezzoBase', not 'importo'
+  tipoServizio: string;  // Required by backend
+  clienteId: string;  // Required by backend
+  clienteType: 'azienda' | 'persona';  // Required by backend
   corsoId?: string;
+  // Legacy aliases for backward compatibility
+  importo?: number;  // Alias for prezzoBase
+  tipoCliente?: string;
   personaId?: string;
   dataPreventivo?: string;
 }
@@ -116,10 +137,10 @@ export const useCodiciSconto = (): UseCodiciScontoReturn => {
   const fetchCodici = useCallback(async (params: FetchParams = {}) => {
     setLoading(true);
     setError(null);
-    
+
     try {
       const queryParams = new URLSearchParams();
-      
+
       if (params.page) queryParams.append('page', params.page.toString());
       if (params.limit) queryParams.append('limit', params.limit.toString());
       if (params.search) queryParams.append('search', params.search);
@@ -132,8 +153,8 @@ export const useCodiciSconto = (): UseCodiciScontoReturn => {
       if (params.sortBy) queryParams.append('sortBy', params.sortBy);
       if (params.sortOrder) queryParams.append('sortOrder', params.sortOrder);
 
-      const response = await apiGet<ApiResponse>(`/api/codici-sconto?${queryParams.toString()}`) as ApiResponse;
-      
+      const response = await apiGet<ApiResponse>(`/api/v1/codici-sconto?${queryParams.toString()}`) as ApiResponse;
+
       if (response.success) {
         setCodici(response.data.codici || []);
         setPagination({
@@ -160,10 +181,10 @@ export const useCodiciSconto = (): UseCodiciScontoReturn => {
   const getCodice = useCallback(async (id: string): Promise<CodiceSconto> => {
     setLoading(true);
     setError(null);
-    
+
     try {
-      const response = await apiGet<ApiResponse<CodiceSconto>>(`/api/codici-sconto/${id}`) as ApiResponse<CodiceSconto>;
-      
+      const response = await apiGet<ApiResponse<CodiceSconto>>(`/api/v1/codici-sconto/${id}`) as ApiResponse<CodiceSconto>;
+
       if (response.success) {
         return response.data;
       } else {
@@ -184,10 +205,10 @@ export const useCodiciSconto = (): UseCodiciScontoReturn => {
   const createCodice = useCallback(async (data: Partial<CodiceSconto>): Promise<CodiceSconto> => {
     setLoading(true);
     setError(null);
-    
+
     try {
-      const response = await apiPost<ApiResponse<CodiceSconto>>('/api/codici-sconto', data) as ApiResponse<CodiceSconto>;
-      
+      const response = await apiPost<ApiResponse<CodiceSconto>>('/api/v1/codici-sconto', data) as ApiResponse<CodiceSconto>;
+
       if (response.success) {
         // Aggiungi il nuovo codice alla lista locale (optimistic update)
         setCodici(prev => [response.data, ...prev]);
@@ -210,13 +231,13 @@ export const useCodiciSconto = (): UseCodiciScontoReturn => {
   const updateCodice = useCallback(async (id: string, data: Partial<CodiceSconto>): Promise<CodiceSconto> => {
     setLoading(true);
     setError(null);
-    
+
     try {
-      const response = await apiPut<ApiResponse<CodiceSconto>>(`/api/codici-sconto/${id}`, data) as ApiResponse<CodiceSconto>;
-      
+      const response = await apiPut<ApiResponse<CodiceSconto>>(`/api/v1/codici-sconto/${id}`, data) as ApiResponse<CodiceSconto>;
+
       if (response.success) {
         // Aggiorna il codice nella lista locale (optimistic update)
-        setCodici(prev => 
+        setCodici(prev =>
           prev.map(c => c.id === id ? { ...c, ...response.data } : c)
         );
         return response.data;
@@ -238,10 +259,10 @@ export const useCodiciSconto = (): UseCodiciScontoReturn => {
   const deleteCodice = useCallback(async (id: string): Promise<void> => {
     setLoading(true);
     setError(null);
-    
+
     try {
-      const response = await apiDelete<ApiResponse>(`/api/codici-sconto/${id}`) as ApiResponse;
-      
+      const response = await apiDelete<ApiResponse>(`/api/v1/codici-sconto/${id}`) as ApiResponse;
+
       if (response.success) {
         // Rimuovi il codice dalla lista locale (optimistic update)
         setCodici(prev => prev.filter(c => c.id !== id));
@@ -263,11 +284,11 @@ export const useCodiciSconto = (): UseCodiciScontoReturn => {
   const bulkDelete = useCallback(async (ids: string[]): Promise<void> => {
     setLoading(true);
     setError(null);
-    
+
     try {
       // Esegui delete per ogni ID
-      await Promise.all(ids.map(id => apiDelete(`/api/codici-sconto/${id}`)));
-      
+      await Promise.all(ids.map(id => apiDelete(`/api/v1/codici-sconto/${id}`)));
+
       // Rimuovi i codici dalla lista locale
       setCodici(prev => prev.filter(c => !ids.includes(c.id)));
     } catch (err: any) {
@@ -285,12 +306,45 @@ export const useCodiciSconto = (): UseCodiciScontoReturn => {
   const validateCodice = useCallback(async (params: ValidazioneParams): Promise<ValidazioneCodice> => {
     setLoading(true);
     setError(null);
-    
+
     try {
-      const response = await apiPost<ApiResponse<ValidazioneCodice>>('/api/codici-sconto/valida', params) as ApiResponse<ValidazioneCodice>;
-      
+      // Backend returns: { success, valid, codice, calcolo, errors }
+      // NOT wrapped in data like other endpoints
+      const response = await apiPost<{
+        success: boolean;
+        valid: boolean;
+        codice?: {
+          id: string;
+          codice: string;
+          nome: string;
+          descrizione?: string;
+          tipoSconto: string;
+          valore: number;
+          cumulabile: boolean;
+        };
+        calcolo?: {
+          prezzoBase: number;
+          importoSconto: number;
+          prezzoFinale: number;
+          risparmioPercentuale: string;
+        };
+        errors?: string[];
+        message?: string;
+      }>('/api/v1/codici-sconto/valida', params);
+
       if (response.success) {
-        return response.data;
+        // Map backend 'valid' to frontend 'valido' for compatibility
+        return {
+          valido: response.valid,
+          valid: response.valid,
+          codice: response.codice ? {
+            ...response.codice,
+            tipo: response.codice.tipoSconto  // Add alias
+          } : undefined,
+          calcolo: response.calcolo,
+          errors: response.errors,
+          messaggio: response.errors?.[0]
+        };
       } else {
         throw new Error(response.message || 'Errore nella validazione del codice sconto');
       }

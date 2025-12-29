@@ -195,7 +195,7 @@ const PageScaffold: React.FC<PageScaffoldProps> = ({
               icon: <Download className="h-4 w-4" />,
               onClick: onExportAll
             }
-          ].filter(Boolean)}
+          ].filter((action): action is { label: string; icon: React.ReactElement; onClick: () => void } => Boolean(action))}
         />
       </div>
       

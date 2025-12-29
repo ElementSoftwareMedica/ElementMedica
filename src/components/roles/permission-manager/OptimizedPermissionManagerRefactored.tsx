@@ -3,14 +3,20 @@ import { toast } from 'react-hot-toast';
 import { Role } from '../../../hooks/useRoles';
 import { Tenant } from '../../../hooks/useTenants';
 import { EntityDefinition, EntityPermission, advancedPermissionsService } from '../../../services/advancedPermissions';
-import { 
-  updatePermissionInArray, 
-  updatePermissionFields, 
+import {
+  updatePermissionInArray,
+  updatePermissionFields,
   updatePermissionTenants,
+  updatePermissionRelationType,
+  updatePermissionDeniedFields,
   applyBulkPermissions,
   getAllActionNames,
   filterEntities
 } from './utils';
+import type { RelationType } from '../../../services/advanced-permissions/types';
+
+// Tipo per lo scope esteso con supporto relational
+type PermissionScope = 'all' | 'tenant' | 'own' | 'relational' | 'none';
 
 // Importa i componenti modulari
 import PermissionManagerHeader from './PermissionManagerHeader';
@@ -35,34 +41,37 @@ const OptimizedPermissionManagerRefactored: React.FC<OptimizedPermissionManagerR
   const [permissions, setPermissions] = useState<EntityPermission[]>([]);
   const [selectedEntity, setSelectedEntity] = useState<EntityDefinition | null>(null);
   const [selectedAction, setSelectedAction] = useState<string | null>(null);
-  
+
   // Stati per modalità bulk
   const [bulkMode, setBulkMode] = useState(false);
   const [selectedActions, setSelectedActions] = useState<Set<string>>(new Set());
-  
+
   // Stati di caricamento e errore
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   // Stato per ricerca entità
   const [searchTerm, setSearchTerm] = useState('');
 
   // Caricamento iniziale dei dati
   useEffect(() => {
     loadData();
-  }, [role.name]);
+  }, [role.type]);
 
   const loadData = async () => {
     try {
       setLoading(true);
       setError(null);
-      
+
+      // Usa role.type (roleType) invece di role.name per l'API
+      const roleIdentifier = role.type || role.name;
+
       const [entitiesData, permissionsData] = await Promise.all([
         advancedPermissionsService.getEntityDefinitions(),
-        advancedPermissionsService.getRolePermissions(role.name)
+        advancedPermissionsService.getRolePermissions(roleIdentifier)
       ]);
-      
+
       setEntities(entitiesData);
       setPermissions(permissionsData);
     } catch (err) {
@@ -84,11 +93,27 @@ const OptimizedPermissionManagerRefactored: React.FC<OptimizedPermissionManagerR
 
   // Gestione aggiornamento permessi
   const updatePermission = useCallback((
-    entity: string, 
-    action: string, 
-    scope: 'all' | 'tenant' | 'own' | 'none'
+    entity: string,
+    action: string,
+    scope: PermissionScope,
+    relationType?: RelationType
   ) => {
-    setPermissions(prev => updatePermissionInArray(prev, entity, action, scope));
+    setPermissions(prev => updatePermissionInArray(
+      prev,
+      entity,
+      action,
+      scope,
+      relationType ? { relationType } : undefined
+    ));
+  }, []);
+
+  // Gestione aggiornamento tipo relazione
+  const handleRelationTypeChange = useCallback((
+    entity: string,
+    action: string,
+    relationType: RelationType | null
+  ) => {
+    setPermissions(prev => updatePermissionRelationType(prev, entity, action, relationType));
   }, []);
 
   // Gestione toggle azioni per modalità bulk
@@ -113,26 +138,26 @@ const OptimizedPermissionManagerRefactored: React.FC<OptimizedPermissionManagerR
   }, []);
 
   // Gestione operazioni bulk
-  const applyBulkScope = useCallback((scope: 'all' | 'tenant' | 'own' | 'none') => {
+  const applyBulkScope = useCallback((scope: PermissionScope) => {
     if (!selectedEntity || selectedActions.size === 0) return;
-    
-    setPermissions(prev => 
+
+    setPermissions(prev =>
       applyBulkPermissions(prev, selectedEntity.name, selectedActions, 'scope', scope)
     );
   }, [selectedEntity, selectedActions]);
 
   const applyBulkFields = useCallback((fieldIds: string[], add: boolean) => {
     if (!selectedEntity || selectedActions.size === 0) return;
-    
-    setPermissions(prev => 
+
+    setPermissions(prev =>
       applyBulkPermissions(prev, selectedEntity.name, selectedActions, 'fields', fieldIds, add)
     );
   }, [selectedEntity, selectedActions]);
 
-  const applyBulkTenants = useCallback((tenantIds: number[], add: boolean) => {
+  const applyBulkTenants = useCallback((tenantIds: string[], add: boolean) => {
     if (!selectedEntity || selectedActions.size === 0) return;
-    
-    setPermissions(prev => 
+
+    setPermissions(prev =>
       applyBulkPermissions(prev, selectedEntity.name, selectedActions, 'tenants', tenantIds, add)
     );
   }, [selectedEntity, selectedActions]);
@@ -143,15 +168,47 @@ const OptimizedPermissionManagerRefactored: React.FC<OptimizedPermissionManagerR
   }, []);
 
   // Gestione tenant
-  const handleTenantChange = useCallback((entity: string, action: string, tenantId: number, selected: boolean) => {
+  const handleTenantChange = useCallback((entity: string, action: string, tenantId: string, selected: boolean) => {
     setPermissions(prev => updatePermissionTenants(prev, entity, action, tenantId, selected));
+  }, []);
+
+  // Gestione campi denied (modalità avanzata)
+  const handleDeniedFieldsChange = useCallback((entity: string, action: string, deniedFields: string[]) => {
+    setPermissions(prev => {
+      const permissionIndex = prev.findIndex(p => p.entity === entity && p.action === action);
+      if (permissionIndex === -1) return prev;
+
+      const newPermissions = [...prev];
+      newPermissions[permissionIndex] = {
+        ...newPermissions[permissionIndex],
+        deniedFields
+      };
+      return newPermissions;
+    });
+  }, []);
+
+  // Gestione campi allowed (modalità avanzata)
+  const handleAllowedFieldsChange = useCallback((entity: string, action: string, allowedFields: string[]) => {
+    setPermissions(prev => {
+      const permissionIndex = prev.findIndex(p => p.entity === entity && p.action === action);
+      if (permissionIndex === -1) return prev;
+
+      const newPermissions = [...prev];
+      newPermissions[permissionIndex] = {
+        ...newPermissions[permissionIndex],
+        fields: allowedFields
+      };
+      return newPermissions;
+    });
   }, []);
 
   // Salvataggio permessi
   const savePermissions = async () => {
     try {
       setSaving(true);
-      await advancedPermissionsService.updateRolePermissions(role.name, permissions);
+      // Usa role.type (roleType) invece di role.name per l'API
+      const roleIdentifier = role.type || role.name;
+      await advancedPermissionsService.updateRolePermissions(roleIdentifier, permissions);
       toast.success('Permessi aggiornati con successo');
     } catch (err) {
       console.error('Errore nel salvataggio:', err);
@@ -211,8 +268,8 @@ const OptimizedPermissionManagerRefactored: React.FC<OptimizedPermissionManagerR
         onReload={loadData}
       />
 
-      {/* Layout principale a 4 colonne */}
-      <div className="flex-1 grid grid-cols-4 min-h-0">
+      {/* Layout principale a 3 colonne */}
+      <div className="flex-1 grid grid-cols-3 min-h-0">
         {/* Colonna 1: Lista entità */}
         <EntityList
           entities={filteredEntities}
@@ -230,9 +287,12 @@ const OptimizedPermissionManagerRefactored: React.FC<OptimizedPermissionManagerR
             tenants={tenants}
             bulkMode={bulkMode}
             selectedActions={selectedActions}
+            selectedAction={selectedAction}
             onPermissionUpdate={updatePermission}
             onTenantChange={handleTenantChange}
+            onRelationTypeChange={handleRelationTypeChange}
             onActionToggle={toggleActionSelection}
+            onActionSelect={setSelectedAction}
             onSelectAllActions={selectAllActions}
             onClearActionSelection={clearActionSelection}
             onBulkScopeApply={applyBulkScope}
@@ -254,32 +314,14 @@ const OptimizedPermissionManagerRefactored: React.FC<OptimizedPermissionManagerR
             selectedActions={selectedActions}
             onFieldToggle={handleFieldToggle}
             onBulkFieldsApply={applyBulkFields}
+            onDeniedFieldsChange={handleDeniedFieldsChange}
+            onAllowedFieldsChange={handleAllowedFieldsChange}
           />
         ) : (
           <div className="bg-white flex items-center justify-center">
             <p className="text-gray-500">Seleziona un'entità per gestire i campi</p>
           </div>
         )}
-
-        {/* Colonna 4: Informazioni aggiuntive o preview */}
-        <div className="bg-white border-l border-gray-200 p-4">
-          <div className="text-center text-gray-500">
-            <h4 className="font-medium mb-2">Riepilogo Permessi</h4>
-            <div className="space-y-2 text-sm">
-              <p>Entità totali: {entities.length}</p>
-              <p>Permessi attivi: {permissions.length}</p>
-              {selectedEntity && (
-                <>
-                  <p>Entità selezionata: {selectedEntity.displayName}</p>
-                  <p>Campi disponibili: {selectedEntity.fields.length}</p>
-                </>
-              )}
-              {bulkMode && (
-                <p>Azioni selezionate: {selectedActions.size}</p>
-              )}
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );

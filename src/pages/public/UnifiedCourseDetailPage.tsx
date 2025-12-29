@@ -1,17 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { 
+import {
   AlertCircle,
   ArrowRight,
   Award,
   CheckCircle,
   Clock,
-  Users
+  Users,
+  Shield,
+  RefreshCw,
+  GraduationCap
 } from 'lucide-react';
 import { PublicButton } from '../../components/public/PublicButton';
 import { PublicHeader } from '../../components/public/PublicHeader';
 import { PublicFooter } from '../../components/public/PublicFooter';
 import { apiService } from '../../services/api';
+import {
+  getRiskLevelLabel as getLabel,
+  getRiskLevelColor as getColor,
+  getCourseTypeLabel,
+  getCourseTypeColor
+} from '../../utils/courseLabels';
 
 interface CourseVariant {
   id: string;
@@ -79,7 +88,7 @@ export const UnifiedCourseDetailPage: React.FC = () => {
       // Usa client centralizzato: il baseURL gestisce il prefisso /api automaticamente
       const data = await apiService.get<UnifiedCourse>(`/public/courses/unified/${encodeURIComponent(title)}`);
       setUnifiedCourse(data);
-      
+
       // Seleziona la prima variante di default
       if (data.variants && data.variants.length > 0) {
         setSelectedVariant(data.variants[0]);
@@ -92,57 +101,49 @@ export const UnifiedCourseDetailPage: React.FC = () => {
     }
   };
 
-  const getRiskLevelLabel = (riskLevel: string) => {
-    const labels = {
-      'ALTO': 'Rischio Alto',
-      'MEDIO': 'Rischio Medio', 
-      'BASSO': 'Rischio Basso',
-      'A': 'Categoria A',
-      'B': 'Categoria B',
-      'C': 'Categoria C'
-    };
-    return labels[riskLevel as keyof typeof labels] || riskLevel;
-  };
+  // Wrapper per le etichette che passa il titolo del corso per supportare etichette speciali (RLS)
+  const getRiskLevelLabel = (riskLevel: string) => getLabel(riskLevel, unifiedCourse?.baseTitle);
+  const getRiskLevelColor = (riskLevel: string, isSelected?: boolean) => getColor(riskLevel, isSelected);
 
-  const getCourseTypeLabel = (courseType: string) => {
-    const labels = {
-      'PRIMO_CORSO': 'Primo Corso',
-      'AGGIORNAMENTO': 'Aggiornamento'
-    };
-    return labels[courseType as keyof typeof labels] || courseType;
-  };
+  // State per i filtri delle varianti
+  const [filterRiskLevel, setFilterRiskLevel] = useState<string | null>(null);
+  const [filterCourseType, setFilterCourseType] = useState<string | null>(null);
 
-  const getRiskLevelColor = (riskLevel: string) => {
-    switch (riskLevel) {
-      case 'ALTO':
-      case 'A':
-        return 'bg-red-600 text-white';
-      case 'MEDIO':
-      case 'B':
-        return 'bg-yellow-600 text-white';
-      case 'BASSO':
-      case 'C':
-        return 'bg-green-600 text-white';
-      default:
-        return 'bg-gray-600 text-white';
-    }
-  };
+  // Estrai valori unici per i filtri
+  const availableRiskLevels = useMemo(() => {
+    if (!unifiedCourse?.variants) return [];
+    return [...new Set(unifiedCourse.variants.map(v => v.riskLevel))].sort();
+  }, [unifiedCourse]);
 
-  const getCourseTypeColor = (courseType: string) => {
-    switch (courseType) {
-      case 'PRIMO_CORSO':
-        return 'bg-blue-600 text-white';
-      case 'AGGIORNAMENTO':
-        return 'bg-purple-600 text-white';
-      default:
-        return 'bg-gray-600 text-white';
-    }
-  };
+  const availableCourseTypes = useMemo(() => {
+    if (!unifiedCourse?.variants) return [];
+    return [...new Set(unifiedCourse.variants.map(v => v.courseType))];
+  }, [unifiedCourse]);
+
+  // Filtra le varianti in base ai filtri selezionati
+  const filteredVariants = useMemo(() => {
+    if (!unifiedCourse?.variants) return [];
+    return unifiedCourse.variants.filter(v => {
+      if (filterRiskLevel && v.riskLevel !== filterRiskLevel) return false;
+      if (filterCourseType && v.courseType !== filterCourseType) return false;
+      return true;
+    });
+  }, [unifiedCourse, filterRiskLevel, filterCourseType]);
+
+  // Raggruppa varianti per tipo corso
+  const groupedByType = useMemo(() => {
+    const groups: Record<string, CourseVariant[]> = {};
+    filteredVariants.forEach(v => {
+      if (!groups[v.courseType]) groups[v.courseType] = [];
+      groups[v.courseType].push(v);
+    });
+    return groups;
+  }, [filteredVariants]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setRequestForm(prev => ({ ...prev, [name]: value }));
-    
+
     // Se cambia la variante selezionata, aggiorna anche il componente
     if (name === 'selectedVariant') {
       const variant = unifiedCourse?.variants.find(v => v.id === value);
@@ -154,9 +155,25 @@ export const UnifiedCourseDetailPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
+    // Validazione client-side
+    if (!requestForm.name.trim()) {
+      alert('Il campo Nome e Cognome è obbligatorio');
+      return;
+    }
+    if (!requestForm.email.trim()) {
+      alert('Il campo Email è obbligatorio');
+      return;
+    }
+    // Validazione formato email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(requestForm.email)) {
+      alert('Inserisci un indirizzo email valido');
+      return;
+    }
+
     try {
-      await apiService.post('/public/contact-submissions', {
+      await apiService.post('/api/public/contact-submissions', {
         ...requestForm,
         courseTitle: unifiedCourse?.baseTitle,
         courseVariant: selectedVariant?.slug
@@ -257,50 +274,15 @@ export const UnifiedCourseDetailPage: React.FC = () => {
                 {selectedVariant?.shortDescription}
               </p>
 
-              {/* Variant Selector */}
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-3">Seleziona Variante:</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {unifiedCourse.variants.map((variant) => (
-                    <button
-                      key={variant.id}
-                      onClick={() => {
-                        setSelectedVariant(variant);
-                        setRequestForm(prev => ({ ...prev, selectedVariant: variant.id }));
-                      }}
-                      className={`p-4 rounded-lg border-2 transition-all text-left ${
-                        selectedVariant?.id === variant.id
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      <div className="flex flex-wrap gap-2 mb-2">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getRiskLevelColor(variant.riskLevel)}`}>
-                          {getRiskLevelLabel(variant.riskLevel)}
-                        </span>
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getCourseTypeColor(variant.courseType)}`}>
-                          {getCourseTypeLabel(variant.courseType)}
-                        </span>
-                      </div>
-                      <div className="text-sm text-gray-600">
-                        <div className="flex items-center gap-4">
-                          <Clock className="w-4 h-4" />
-                          <span>{variant.duration} ore</span>
-                          <Users className="w-4 h-4" />
-                          <span>Max {variant.maxParticipants} partecipanti</span>
-                        </div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
               {/* Pricing and CTA */}
               <div className="mb-8">
                 <div className="flex items-center gap-4">
                   {selectedVariant?.price ? (
-                    <div className="text-2xl font-bold text-gray-900">
-                      {selectedVariant.price.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}
+                    <div>
+                      <span className="text-sm text-gray-500">A partire da</span>
+                      <div className="text-2xl font-bold text-gray-900">
+                        {selectedVariant.price.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}
+                      </div>
                     </div>
                   ) : (
                     <div className="text-gray-600">Contattaci per un preventivo personalizzato</div>
@@ -331,150 +313,296 @@ export const UnifiedCourseDetailPage: React.FC = () => {
         </div>
       </section>
 
-      {/* Variants Section */}
+      {/* Variants Section - Enhanced with Filters */}
       <section className="py-12 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">Varianti Disponibili</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {unifiedCourse.variants.map((variant) => (
-              <div key={variant.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                <div className="p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-xl font-semibold text-gray-900">{variant.title}</h3>
-                    <div className="flex gap-2">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getRiskLevelColor(variant.riskLevel)}`}>
-                        {getRiskLevelLabel(variant.riskLevel)}
-                      </span>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getCourseTypeColor(variant.courseType)}`}>
-                        {getCourseTypeLabel(variant.courseType)}
-                      </span>
-                    </div>
-                  </div>
-                  <p className="text-gray-600 mb-4">{variant.shortDescription}</p>
-                  <div className="flex items-center gap-6 text-sm text-gray-600">
-                    <div className="flex items-center gap-2">
-                      <Clock className="w-4 h-4" />
-                      <span>{variant.duration} ore</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Users className="w-4 h-4" />
-                      <span>Max {variant.maxParticipants} partecipanti</span>
-                    </div>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
+            <h2 className="text-2xl font-bold text-gray-900 mb-4 md:mb-0">Varianti Disponibili</h2>
+
+            {/* Filter Pills */}
+            <div className="flex flex-wrap gap-4">
+              {/* Risk Level Filter */}
+              {availableRiskLevels.length > 1 && (
+                <div className="flex items-center gap-2">
+                  <Shield className="w-4 h-4 text-gray-500" />
+                  <span className="text-sm text-gray-600 font-medium">Rischio:</span>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => setFilterRiskLevel(null)}
+                      className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${filterRiskLevel === null
+                        ? 'bg-gray-800 text-white'
+                        : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                        }`}
+                    >
+                      Tutti
+                    </button>
+                    {availableRiskLevels.map(level => (
+                      <button
+                        key={level}
+                        onClick={() => setFilterRiskLevel(filterRiskLevel === level ? null : level)}
+                        className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${getRiskLevelColor(level, filterRiskLevel === level)}`}
+                      >
+                        {getRiskLevelLabel(level)}
+                      </button>
+                    ))}
                   </div>
                 </div>
-              </div>
-            ))}
+              )}
+
+              {/* Course Type Filter */}
+              {availableCourseTypes.length > 1 && (
+                <div className="flex items-center gap-2">
+                  <GraduationCap className="w-4 h-4 text-gray-500" />
+                  <span className="text-sm text-gray-600 font-medium">Tipo:</span>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => setFilterCourseType(null)}
+                      className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${filterCourseType === null
+                        ? 'bg-gray-800 text-white'
+                        : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                        }`}
+                    >
+                      Tutti
+                    </button>
+                    {availableCourseTypes.map(type => (
+                      <button
+                        key={type}
+                        onClick={() => setFilterCourseType(filterCourseType === type ? null : type)}
+                        className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${getCourseTypeColor(type, filterCourseType === type)}`}
+                      >
+                        {getCourseTypeLabel(type)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
+
+          {/* Results count */}
+          <p className="text-sm text-gray-500 mb-6">
+            {filteredVariants.length === unifiedCourse.variants.length
+              ? `${filteredVariants.length} varianti disponibili`
+              : `${filteredVariants.length} di ${unifiedCourse.variants.length} varianti`
+            }
+          </p>
+
+          {/* Grouped Variants Display */}
+          {Object.entries(groupedByType).length > 0 ? (
+            <div className="space-y-8">
+              {Object.entries(groupedByType).map(([courseType, variants]) => (
+                <div key={courseType}>
+                  {/* Group Header */}
+                  <div className="flex items-center gap-3 mb-4">
+                    {courseType === 'PRIMO_CORSO' ? (
+                      <GraduationCap className="w-5 h-5 text-blue-600" />
+                    ) : (
+                      <RefreshCw className="w-5 h-5 text-purple-600" />
+                    )}
+                    <h3 className="text-lg font-semibold text-gray-800">
+                      {getCourseTypeLabel(courseType)}
+                    </h3>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getCourseTypeColor(courseType, true)}`}>
+                      {variants.length} {variants.length === 1 ? 'opzione' : 'opzioni'}
+                    </span>
+                  </div>
+
+                  {/* Variants Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {variants.map((variant) => (
+                      <div
+                        key={variant.id}
+                        onClick={() => {
+                          setSelectedVariant(variant);
+                          setRequestForm(prev => ({ ...prev, selectedVariant: variant.id }));
+                          document.getElementById('contact-form')?.scrollIntoView({ behavior: 'smooth' });
+                        }}
+                        className={`bg-white rounded-xl shadow-sm border-2 overflow-hidden cursor-pointer transition-all hover:shadow-md ${selectedVariant?.id === variant.id
+                          ? 'border-blue-500 ring-2 ring-blue-200'
+                          : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                      >
+                        {/* Risk Level Header Band */}
+                        <div className={`px-4 py-2 ${getRiskLevelColor(variant.riskLevel, true)}`}>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Shield className="w-4 h-4" />
+                              <span className="text-sm font-medium">{getRiskLevelLabel(variant.riskLevel)}</span>
+                            </div>
+                            {selectedVariant?.id === variant.id && (
+                              <CheckCircle className="w-4 h-4" />
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="p-4">
+                          <div className="mb-3">
+                            <h4 className="font-semibold text-gray-900 text-sm mb-1">{variant.title}</h4>
+                            {variant.shortDescription && (
+                              <p className="text-xs text-gray-500 line-clamp-2">{variant.shortDescription}</p>
+                            )}
+                          </div>
+
+                          {/* Key Info Pills */}
+                          <div className="flex flex-wrap gap-2 mb-3">
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-gray-100 text-gray-700 text-xs">
+                              <Clock className="w-3 h-3" />
+                              {variant.duration}h
+                            </span>
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-gray-100 text-gray-700 text-xs">
+                              <Users className="w-3 h-3" />
+                              Max {variant.maxParticipants}
+                            </span>
+                          </div>
+
+                          {/* Price */}
+                          {variant.price ? (
+                            <div>
+                              <span className="text-xs text-gray-500">A partire da</span>
+                              <div className="text-lg font-bold text-gray-900">
+                                {variant.price.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="text-sm text-gray-500 italic">Prezzo su richiesta</div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
+              <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-600">Nessuna variante corrisponde ai filtri selezionati.</p>
+              <button
+                onClick={() => { setFilterRiskLevel(null); setFilterCourseType(null); }}
+                className="mt-4 text-blue-600 hover:text-blue-700 text-sm font-medium"
+              >
+                Rimuovi filtri
+              </button>
+            </div>
+          )}
         </div>
       </section>
 
       {/* Contact Form */}
-      <section id="contact-form" className="py-12 bg-white">
+      <section id="contact-form" className="py-12 bg-gradient-to-br from-blue-50 to-indigo-100">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">Richiedi Informazioni</h2>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label htmlFor="requestType" className="block text-sm font-medium text-gray-700">Tipo di richiesta</label>
-              <select
-                id="requestType"
-                name="requestType"
-                value={requestForm.requestType}
-                onChange={handleInputChange}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              >
-                <option value="info">Richiesta Informazioni</option>
-                <option value="preventivo">Richiesta Preventivo</option>
-                <option value="iscrizione">Richiesta Iscrizione</option>
-              </select>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-white rounded-2xl shadow-xl p-8">
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Richiedi Informazioni</h2>
+            <p className="text-gray-600 mb-6">Compila il form e ti ricontatteremo al più presto</p>
+            <form onSubmit={handleSubmit} className="space-y-6" noValidate>
               <div>
-                <label htmlFor="name" className="block text-sm font-medium text-gray-700">Nome e Cognome</label>
-                <input
-                  type="text"
-                  id="name"
-                  name="name"
-                  value={requestForm.name}
+                <label htmlFor="requestType" className="block text-sm font-medium text-gray-700 mb-1">Tipo di richiesta</label>
+                <select
+                  id="requestType"
+                  name="requestType"
+                  value={requestForm.requestType}
                   onChange={handleInputChange}
-                  required
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-4 py-3 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20"
+                >
+                  <option value="info">Richiesta Informazioni</option>
+                  <option value="preventivo">Richiesta Preventivo</option>
+                  <option value="iscrizione">Richiesta Iscrizione</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">Nome e Cognome *</label>
+                  <input
+                    type="text"
+                    id="name"
+                    name="name"
+                    value={requestForm.name}
+                    onChange={handleInputChange}
+                    required
+                    placeholder="Mario Rossi"
+                    className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-4 py-3 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                  <input
+                    type="email"
+                    id="email"
+                    name="email"
+                    value={requestForm.email}
+                    onChange={handleInputChange}
+                    required
+                    placeholder="mario.rossi@email.com"
+                    className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-4 py-3 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">Telefono</label>
+                  <input
+                    type="tel"
+                    id="phone"
+                    name="phone"
+                    value={requestForm.phone}
+                    onChange={handleInputChange}
+                    placeholder="+39 333 1234567"
+                    className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-4 py-3 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="company" className="block text-sm font-medium text-gray-700 mb-1">Azienda</label>
+                  <input
+                    type="text"
+                    id="company"
+                    name="company"
+                    value={requestForm.company}
+                    onChange={handleInputChange}
+                    placeholder="Nome Azienda S.r.l."
+                    className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-4 py-3 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="message" className="block text-sm font-medium text-gray-700 mb-1">Messaggio</label>
+                <textarea
+                  id="message"
+                  name="message"
+                  rows={4}
+                  value={requestForm.message}
+                  onChange={handleInputChange}
+                  placeholder="Scrivi qui la tua richiesta..."
+                  className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-4 py-3 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20 resize-none"
                 />
               </div>
+
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email</label>
-                <input
-                  type="email"
-                  id="email"
-                  name="email"
-                  value={requestForm.email}
+                <label htmlFor="selectedVariant" className="block text-sm font-medium text-gray-700 mb-1">Variante del corso</label>
+                <select
+                  id="selectedVariant"
+                  name="selectedVariant"
+                  value={requestForm.selectedVariant}
                   onChange={handleInputChange}
-                  required
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                />
+                  className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-4 py-3 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20"
+                >
+                  {unifiedCourse.variants.map((variant) => (
+                    <option key={variant.id} value={variant.id}>
+                      {variant.title} - {getRiskLevelLabel(variant.riskLevel)} - {getCourseTypeLabel(variant.courseType)}
+                    </option>
+                  ))}
+                </select>
               </div>
-            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label htmlFor="phone" className="block text-sm font-medium text-gray-700">Telefono</label>
-                <input
-                  type="tel"
-                  id="phone"
-                  name="phone"
-                  value={requestForm.phone}
-                  onChange={handleInputChange}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                />
+              <div className="flex justify-end pt-4">
+                <PublicButton type="submit">
+                  Invia Richiesta
+                </PublicButton>
               </div>
-              <div>
-                <label htmlFor="company" className="block text-sm font-medium text-gray-700">Azienda</label>
-                <input
-                  type="text"
-                  id="company"
-                  name="company"
-                  value={requestForm.company}
-                  onChange={handleInputChange}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label htmlFor="message" className="block text-sm font-medium text-gray-700">Messaggio</label>
-              <textarea
-                id="message"
-                name="message"
-                rows={4}
-                value={requestForm.message}
-                onChange={handleInputChange}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="selectedVariant" className="block text-sm font-medium text-gray-700">Variante del corso</label>
-              <select
-                id="selectedVariant"
-                name="selectedVariant"
-                value={requestForm.selectedVariant}
-                onChange={handleInputChange}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              >
-                {unifiedCourse.variants.map((variant) => (
-                  <option key={variant.id} value={variant.id}>
-                    {variant.title} - {getRiskLevelLabel(variant.riskLevel)} - {getCourseTypeLabel(variant.courseType)}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex justify-end">
-              <PublicButton type="submit">
-                Invia Richiesta
-              </PublicButton>
-            </div>
-          </form>
+            </form>
+          </div>
         </div>
       </section>
 

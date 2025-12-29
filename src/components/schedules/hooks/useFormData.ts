@@ -20,6 +20,7 @@ export interface FormData {
   delivery_mode: DeliveryMode | '';
   risk_level: RiskLevel | '';
   course_type: CourseType | '';
+  isPublic: boolean; // Visibile nel calendario pubblico
 }
 
 export interface UseFormDataProps {
@@ -65,7 +66,7 @@ export function useFormData({
       const event = existingEvent as Record<string, unknown>;
       const course = event.course as Record<string, unknown> | undefined;
       const dates = (event.dates as Record<string, unknown>[]) || [];
-      
+
       return {
         training_id: (event.training_id as string) || (course?.id as string) || "",
         trainer_id: "",
@@ -83,9 +84,10 @@ export function useFormData({
         delivery_mode: (event.delivery_mode as string) || "",
         risk_level: (event.risk_level as string) || (course?.riskLevel as string) || "",
         course_type: (event.course_type as string) || (course?.courseType as string) || "",
+        isPublic: (event.isPublic as boolean) || false,
       };
     }
-    
+
     return {
       training_id: "",
       trainer_id: "",
@@ -103,6 +105,7 @@ export function useFormData({
       delivery_mode: "",
       risk_level: "",
       course_type: "",
+      isPublic: false,
     };
   }, [existingEvent, isEditing, initialDate, initialTime]);
 
@@ -138,13 +141,13 @@ export function useFormData({
   // Computed values
   const timeStringToMinutes = timeStringToMinutesUtil;
 
-  const totalSelectedMinutes = useMemo(() => 
-    computeTotalSelectedMinutes(formData.dates, timeStringToMinutes), 
+  const totalSelectedMinutes = useMemo(() =>
+    computeTotalSelectedMinutes(formData.dates, timeStringToMinutes),
     [formData.dates, timeStringToMinutes]
   );
 
-  const totalSelectedHours = useMemo(() => 
-    Math.round((totalSelectedMinutes / 60) * 100) / 100, 
+  const totalSelectedHours = useMemo(() =>
+    Math.round((totalSelectedMinutes / 60) * 100) / 100,
     [totalSelectedMinutes]
   );
 

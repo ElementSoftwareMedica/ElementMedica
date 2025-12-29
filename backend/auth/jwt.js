@@ -105,11 +105,8 @@ export class JWTService {
                 ? user.personRoles.map(pr => pr.roleType).filter(Boolean)
                 : [];
 
-        const permissions = Array.isArray(user.permissions)
-            ? user.permissions
-            : Array.isArray(user.personRoles)
-                ? user.personRoles.flatMap(pr => pr.permissions || [])
-                : [];
+        // NOTE: Permissions removed from JWT to avoid 431 Header Too Large errors
+        // Permissions are loaded server-side in authenticate middleware via RBACService
 
         const payload = {
             personId: user.id,
@@ -118,8 +115,7 @@ export class JWTService {
             taxCode: user.taxCode,
             companyId: user.companyId,
             tenantId: user.tenantId || null,
-            roles,
-            permissions
+            roles
         };
 
         // Merge safe extra claims without overriding core claims
@@ -225,14 +221,17 @@ export class JWTService {
             // Generate new access token
             const user = refreshTokenRecord.person;
             const roles = (user.personRoles || []).map(pr => pr.roleType).filter(Boolean);
-            const permissions = (user.personRoles || []).flatMap(pr => pr.permissions || []);
+
+            // NOTE: Permissions NOT included in JWT to avoid 431 Header Too Large errors
+            // Permissions are loaded server-side in authenticate middleware via RBACService
 
             const payload = {
                 personId: user.id,
                 email: user.email,
                 companyId: user.companyId,
-                roles,
-                permissions
+                tenantId: user.tenantId || null,
+                roles
+                // permissions omitted to keep JWT size manageable
             };
 
             const newAccessToken = this.generateAccessToken(payload);
@@ -319,11 +318,11 @@ export class PasswordService {
     static generateRandomPassword(length = 12) {
         const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
         let password = '';
-        
+
         for (let i = 0; i < length; i++) {
             password += charset.charAt(Math.floor(Math.random() * charset.length));
         }
-        
+
         return password;
     }
 

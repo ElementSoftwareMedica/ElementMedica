@@ -4,12 +4,13 @@ import { Button } from '@/design-system/atoms/Button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, AlertTriangle } from 'lucide-react';
 import { Role } from '../../hooks/useRoles';
+import type { RoleEditData } from './RoleHierarchy/types';
 
 interface DeleteRoleModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: () => Promise<void>;
-  role: Role;
+  role: Role | RoleEditData | null;
   loading?: boolean;
 }
 
@@ -22,8 +23,8 @@ const DeleteRoleModal: React.FC<DeleteRoleModalProps> = ({
 }) => {
   if (!role) return null;
 
-  const hasUsers = (role.userCount ?? 0) > 0;
-  const isSystemRole = role.isSystemRole;
+  const hasUsers = ('userCount' in role && role.userCount) ? role.userCount > 0 : false;
+  const isSystemRole = 'isSystemRole' in role ? role.isSystemRole : false;
 
   const handleConfirm = async () => {
     try {
@@ -69,7 +70,7 @@ const DeleteRoleModal: React.FC<DeleteRoleModalProps> = ({
               </div>
             </div>
 
-            {role.userCount && role.userCount > 0 && (
+            {hasUsers && 'userCount' in role && role.userCount && (
               <Alert variant="destructive">
                 <AlertTriangle className="h-4 w-4" />
                 <AlertDescription>

@@ -4,13 +4,15 @@
  */
 
 import express from 'express';
-import { 
-  getPublicFormTemplate, 
-  submitPublicForm, 
-  getPublicFormTemplates 
+import {
+  getPublicFormTemplate,
+  submitPublicForm,
+  getPublicFormTemplates
 } from '../controllers/publicFormsController.js';
+import { createSubmission } from '../controllers/contactSubmissionController.js';
 import { rateLimitMiddleware } from '../middleware/rateLimiting.js';
-import { csrfProtection } from '../config/security.js';
+// NOTE: CSRF protection removed for public forms - not needed for anonymous submissions
+// Rate limiting provides sufficient protection against abuse
 
 const router = express.Router();
 
@@ -18,7 +20,7 @@ const router = express.Router();
  * GET /api/public/forms
  * Lista dei form templates pubblici disponibili
  */
-router.get('/', 
+router.get('/',
   rateLimitMiddleware('public-forms-list', { windowMs: 60000, max: 30 }),
   getPublicFormTemplates
 );
@@ -27,7 +29,7 @@ router.get('/',
  * GET /api/public/forms/:id
  * Recupera un template di form specifico per la visualizzazione pubblica
  */
-router.get('/:id', 
+router.get('/:id',
   rateLimitMiddleware('public-form-get', { windowMs: 60000, max: 60 }),
   getPublicFormTemplate
 );
@@ -35,10 +37,9 @@ router.get('/:id',
 /**
  * POST /api/public/forms/:formTemplateId/submit
  * Invia una submission per un form pubblico
- * SECURITY: CSRF protection + rate limiting (5 submissions/5min)
+ * SECURITY: Rate limiting (5 submissions/5min) - CSRF not needed for public anonymous forms
  */
-router.post('/:formTemplateId/submit', 
-  csrfProtection(), // CSRF protection
+router.post('/:formTemplateId/submit',
   rateLimitMiddleware('public-form-submit', { windowMs: 300000, max: 5 }), // 5 submissions ogni 5 minuti
   submitPublicForm
 );

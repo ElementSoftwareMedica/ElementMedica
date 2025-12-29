@@ -58,6 +58,21 @@ export const STATIC_ENTITY_DEFINITIONS: EntityDefinition[] = [
     ]
   },
   {
+    id: 'schedules',
+    name: 'schedules',
+    displayName: 'Programmazioni',
+    fields: [
+      { id: 'title', name: 'title', displayName: 'Titolo', type: 'string' },
+      { id: 'date', name: 'date', displayName: 'Data', type: 'date' },
+      { id: 'startTime', name: 'startTime', displayName: 'Ora Inizio', type: 'string' },
+      { id: 'endTime', name: 'endTime', displayName: 'Ora Fine', type: 'string' },
+      { id: 'location', name: 'location', displayName: 'Luogo', type: 'string' },
+      { id: 'trainer', name: 'trainer', displayName: 'Formatore', type: 'string' },
+      { id: 'status', name: 'status', displayName: 'Stato', type: 'string' },
+      { id: 'maxParticipants', name: 'maxParticipants', displayName: 'Max Partecipanti', type: 'number' }
+    ]
+  },
+  {
     id: 'roles',
     name: 'roles',
     displayName: 'Ruoli',
@@ -449,6 +464,95 @@ export const EXTENDED_ENTITY_DEFINITIONS: EntityDefinition[] = [
       { id: 'content', name: 'content', displayName: 'Contenuto', type: 'string' },
       { id: 'images', name: 'images', displayName: 'Immagini', type: 'string' },
       { id: 'metadata', name: 'metadata', displayName: 'Metadati', type: 'string' }
+    ]
+  },
+  {
+    id: 'users',
+    name: 'users',
+    displayName: 'Utenti',
+    fields: [
+      { id: 'email', name: 'email', displayName: 'Email', type: 'email', sensitive: true },
+      { id: 'username', name: 'username', displayName: 'Username', type: 'string' },
+      { id: 'firstName', name: 'firstName', displayName: 'Nome', type: 'string' },
+      { id: 'lastName', name: 'lastName', displayName: 'Cognome', type: 'string' },
+      { id: 'role', name: 'role', displayName: 'Ruolo', type: 'string' },
+      { id: 'status', name: 'status', displayName: 'Stato', type: 'string' },
+      { id: 'lastLogin', name: 'lastLogin', displayName: 'Ultimo Accesso', type: 'date' }
+    ]
+  },
+  {
+    id: 'quotes',
+    name: 'quotes',
+    displayName: 'Preventivi',
+    fields: [
+      { id: 'number', name: 'number', displayName: 'Numero', type: 'string' },
+      { id: 'date', name: 'date', displayName: 'Data', type: 'date' },
+      { id: 'client', name: 'client', displayName: 'Cliente', type: 'string' },
+      { id: 'amount', name: 'amount', displayName: 'Importo', type: 'number', sensitive: true },
+      { id: 'status', name: 'status', displayName: 'Stato', type: 'string' },
+      { id: 'validUntil', name: 'validUntil', displayName: 'Valido Fino', type: 'date' }
+    ]
+  },
+  {
+    id: 'invoices',
+    name: 'invoices',
+    displayName: 'Fatture',
+    fields: [
+      { id: 'number', name: 'number', displayName: 'Numero', type: 'string' },
+      { id: 'date', name: 'date', displayName: 'Data', type: 'date' },
+      { id: 'client', name: 'client', displayName: 'Cliente', type: 'string' },
+      { id: 'amount', name: 'amount', displayName: 'Importo', type: 'number', sensitive: true },
+      { id: 'tax', name: 'tax', displayName: 'IVA', type: 'number', sensitive: true },
+      { id: 'total', name: 'total', displayName: 'Totale', type: 'number', sensitive: true },
+      { id: 'status', name: 'status', displayName: 'Stato', type: 'string' },
+      { id: 'dueDate', name: 'dueDate', displayName: 'Scadenza', type: 'date' }
+    ]
+  },
+  {
+    id: 'tenants',
+    name: 'tenants',
+    displayName: 'Tenant',
+    fields: [
+      { id: 'name', name: 'name', displayName: 'Nome', type: 'string' },
+      { id: 'domain', name: 'domain', displayName: 'Dominio', type: 'string' },
+      { id: 'status', name: 'status', displayName: 'Stato', type: 'string' },
+      { id: 'plan', name: 'plan', displayName: 'Piano', type: 'string' },
+      { id: 'createdAt', name: 'createdAt', displayName: 'Data Creazione', type: 'date' }
+    ]
+  },
+  {
+    id: 'administration',
+    name: 'administration',
+    displayName: 'Amministrazione',
+    fields: [
+      { id: 'setting', name: 'setting', displayName: 'Impostazione', type: 'string' },
+      { id: 'value', name: 'value', displayName: 'Valore', type: 'string' },
+      { id: 'description', name: 'description', displayName: 'Descrizione', type: 'string' }
+    ]
+  },
+  {
+    id: 'audit_logs',
+    name: 'audit_logs',
+    displayName: 'Log di Audit',
+    fields: [
+      { id: 'action', name: 'action', displayName: 'Azione', type: 'string' },
+      { id: 'entity', name: 'entity', displayName: 'Entità', type: 'string' },
+      { id: 'entityId', name: 'entityId', displayName: 'ID Entità', type: 'string' },
+      { id: 'user', name: 'user', displayName: 'Utente', type: 'string' },
+      { id: 'timestamp', name: 'timestamp', displayName: 'Data/Ora', type: 'date' },
+      { id: 'details', name: 'details', displayName: 'Dettagli', type: 'string', sensitive: true }
+    ]
+  },
+  {
+    id: 'api_keys',
+    name: 'api_keys',
+    displayName: 'Chiavi API',
+    fields: [
+      { id: 'name', name: 'name', displayName: 'Nome', type: 'string' },
+      { id: 'key', name: 'key', displayName: 'Chiave', type: 'string', sensitive: true },
+      { id: 'permissions', name: 'permissions', displayName: 'Permessi', type: 'string' },
+      { id: 'expiresAt', name: 'expiresAt', displayName: 'Scadenza', type: 'date' },
+      { id: 'lastUsed', name: 'lastUsed', displayName: 'Ultimo Utilizzo', type: 'date' }
     ]
   }
 ];

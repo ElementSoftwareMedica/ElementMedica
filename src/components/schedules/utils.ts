@@ -2,6 +2,20 @@
 
 import type { ScheduleDateEntry, Option, Person, ScheduleFormData, ValidationResult, Trainer, CertificateFilter } from './types';
 
+// Normalize attendance data keys from string to number
+export const normalizeAttendanceData = (
+  attendance: Record<string, (string | number)[]>
+): Record<number, (string | number)[]> => {
+  const normalized: Record<number, (string | number)[]> = {};
+  Object.entries(attendance).forEach(([key, value]) => {
+    const numKey = parseInt(key, 10);
+    if (!isNaN(numKey)) {
+      normalized[numKey] = value;
+    }
+  });
+  return normalized;
+};
+
 export const normalizeText = (s?: unknown): string =>
   String(s ?? '')
     .toLowerCase()
@@ -372,10 +386,10 @@ export function filterTrainersByCerts(
   const filtered = (trainers || []).filter(tr => {
     const rawCerts = tr?.certifications;
     const certs = normalizeCertList(rawCerts).map(normalizeTextFn);
-    
+
     // Espandi anche le certificazioni del trainer per matching flessibile
     const expandedTrainerCerts = certs.flatMap(c => expandTerms(c));
-    
+
     // LOGICA CORRETTA: 
     // - Se allOf non è vuoto, il trainer DEVE avere tutte quelle cert (comuni a tutte le varianti)
     // - Altrimenti, basta che abbia almeno una cert in anyOf
@@ -387,7 +401,7 @@ export function filterTrainersByCerts(
       // Basta che ne abbia almeno una
       match = anyOf.some(c => expandedTrainerCerts.includes(c));
     }
-    
+
     // Debug dettagliato per i primi 2 trainers
     if (debugCount < 2) {
       console.debug(`[filterTrainersByCerts] Trainer #${debugCount + 1}: ${tr.firstName} ${tr.lastName}`,
@@ -399,7 +413,7 @@ export function filterTrainersByCerts(
         '\n  match:', match);
       debugCount++;
     }
-    
+
     return match;
   });
 
@@ -444,6 +458,7 @@ export function buildSchedulePayload(
     maxParticipants: formData.max_participants,
     notes: formData.notes,
     deliveryMode: formData.delivery_mode,
+    isPublic: formData.isPublic || false,
     dates: datesArr.map(dt => ({
       date: dt.date,
       start: dt.start,
@@ -508,7 +523,7 @@ export function computeDynamicRiskAndTypeOptions(
         course_type_snake: (selectedCourse as any)?.course_type
       });
     }
-    
+
     const courseRisk = getVariantRisk(selectedCourse);
     const courseType = getVariantType(selectedCourse);
 

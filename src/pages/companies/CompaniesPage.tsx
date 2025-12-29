@@ -54,15 +54,15 @@ interface Company {
 // Configurazione colonne per la tabella
 const getCompaniesColumns = (): DataTableColumn<Company>[] => [
   {
-      key: 'ragioneSociale',
-      label: 'Nome',
-      sortable: true,
-      renderCell: (company: Company) => (
-        <div className="font-medium text-gray-900">
-          {company.ragioneSociale || 'N/A'}
-        </div>
-      )
-    },
+    key: 'ragioneSociale',
+    label: 'Nome',
+    sortable: true,
+    renderCell: (company: Company) => (
+      <div className="font-medium text-gray-900">
+        {company.ragioneSociale || 'N/A'}
+      </div>
+    )
+  },
   {
     key: 'mail',
     label: 'Email',
@@ -118,9 +118,9 @@ const getCompaniesColumns = (): DataTableColumn<Company>[] => [
     renderCell: (company) => company.website ? (
       <div className="flex items-center gap-2">
         <Globe className="h-4 w-4 text-gray-400" />
-        <a 
-          href={company.website.startsWith('http') ? company.website : `https://${company.website}`} 
-          target="_blank" 
+        <a
+          href={company.website.startsWith('http') ? company.website : `https://${company.website}`}
+          target="_blank"
           rel="noopener noreferrer"
           className="text-blue-600 hover:text-blue-800 truncate max-w-32"
         >
@@ -305,7 +305,7 @@ const csvHeaders = [
   { key: 'siteMail', label: 'Mail Sede' },
   { key: 'domain', label: 'Sito (Domain)' },
   { key: 'note', label: 'Note' },
-  
+
   // === ALTRI CAMPI COMPANY SITE ===
   { key: 'dvr', label: 'DVR' },
   { key: 'rsppId', label: 'RSPP ID' },
@@ -332,6 +332,7 @@ export const CompaniesPage: React.FC = () => {
   const [showImportModal, setShowImportModal] = useState(false);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [, setLoadingCompanies] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0); // Key per forzare refresh del template
 
   // Stati per migrazione persone e eliminazione azienda
   const [showMigrateModal, setShowMigrateModal] = useState(false);
@@ -417,7 +418,7 @@ export const CompaniesPage: React.FC = () => {
           const persons = resp?.persons || [];
           total = resp?.total ?? persons.length;
           if (persons.length === 0) break;
-          
+
           // Elimina persone in chunks per evitare sovraccarico
           const chunks: typeof persons[] = [];
           for (let i = 0; i < persons.length; i += 10) {
@@ -489,11 +490,11 @@ export const CompaniesPage: React.FC = () => {
     }
   };
 
-   // Funzione per gestire l'import delle aziende
-   const handleImportEntities = async () => {
+  // Funzione per gestire l'import delle aziende
+  const handleImportEntities = async () => {
     // Apri subito il modal per evitare ritardi percepiti
     setShowImportModal(true);
-    
+
     // Aggiorna i dati in background senza bloccare l'UI
     loadCompanies().catch(console.error);
   };
@@ -511,13 +512,13 @@ export const CompaniesPage: React.FC = () => {
         companies: importedCompanies,
         overwriteIds: overwriteIds || []
       });
-      
+
       // Aggiorna la lista locale (il template si ricaricherà automaticamente)
       console.log('Import completato:', response);
-      
+
       // Ricarica i dati delle aziende per aggiornare la lista
       await loadCompanies();
-      
+
       // Chiudi il modal (la chiusura ora è gestita dal componente figlio in base ai conteggi)
       // setShowImportModal(false);
 
@@ -532,6 +533,7 @@ export const CompaniesPage: React.FC = () => {
   return (
     <>
       <GDPREntityTemplate<Company>
+        key={refreshKey} // Forza re-mount quando refreshKey cambia
         entityName="company"
         entityNamePlural="companies"
         entityDisplayName="Azienda"
@@ -561,6 +563,7 @@ export const CompaniesPage: React.FC = () => {
           { key: 'status', label: 'Stato' },
           { key: 'createdAt', label: 'Data creazione' }
         ]}
+        defaultSort={{ field: 'ragioneSociale', direction: 'asc' }}
         csvHeaders={csvHeaders}
         csvTemplateData={csvTemplateData}
         cardConfig={getCompanyCardConfig()}
@@ -572,8 +575,8 @@ export const CompaniesPage: React.FC = () => {
         onCreateEntity={handleCreateCompany}
         onImportEntities={handleImportEntities}
         onDeleteEntity={handleDeleteCompany}
-       />
- 
+      />
+
 
       {/* Modal migrazione persone prima dell'eliminazione azienda */}
       <Modal
@@ -592,15 +595,15 @@ export const CompaniesPage: React.FC = () => {
         contentClassName="rounded-xl" // Anche il contenuto interno
         footer={
           <>
-            <Button 
-              variant="ghost" 
+            <Button
+              variant="ghost"
               onClick={() => {
                 if (migrationLoading) return;
                 setShowMigrateModal(false);
                 setCompanyToDeleteId(null);
                 setTargetCompanyId('');
                 setDeleteEmployeesWithoutMigration(false);
-              }} 
+              }}
               disabled={migrationLoading}
             >
               Annulla
@@ -626,7 +629,7 @@ export const CompaniesPage: React.FC = () => {
                   Raccomandazione importante
                 </h4>
                 <p className="text-sm text-amber-700">
-                  Si consiglia vivamente di <strong>migrare i dipendenti</strong> verso un'altra azienda invece di eliminarli definitivamente. 
+                  Si consiglia vivamente di <strong>migrare i dipendenti</strong> verso un'altra azienda invece di eliminarli definitivamente.
                   La migrazione preserva lo storico e i dati dei dipendenti mantenendo la conformità GDPR.
                 </p>
               </div>
@@ -651,7 +654,7 @@ export const CompaniesPage: React.FC = () => {
           {/* Opzioni di gestione */}
           <div className="space-y-4">
             <h4 className="text-sm font-medium text-gray-900">Scegli come gestire i dipendenti:</h4>
-            
+
             {/* Opzione 1: Migrazione (raccomandato) */}
             <div className="space-y-3">
               <label className="flex items-start space-x-3">
@@ -680,7 +683,7 @@ export const CompaniesPage: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700">
                     Seleziona azienda di destinazione
                   </label>
-                  
+
                   {/* Tabella aziende disponibili */}
                   {companies.filter(c => c.id !== companyToDeleteId).length > 0 ? (
                     <div className="border border-gray-200 rounded-lg overflow-hidden">
@@ -695,9 +698,8 @@ export const CompaniesPage: React.FC = () => {
                           .map(company => (
                             <label
                               key={company.id}
-                              className={`flex items-center p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0 ${
-                                targetCompanyId === company.id ? 'bg-blue-50 border-blue-200' : ''
-                              }`}
+                              className={`flex items-center p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0 ${targetCompanyId === company.id ? 'bg-blue-50 border-blue-200' : ''
+                                }`}
                             >
                               <input
                                 type="radio"
@@ -733,7 +735,7 @@ export const CompaniesPage: React.FC = () => {
                   ) : (
                     <div className="border border-red-200 bg-red-50 rounded-lg p-4">
                       <p className="text-sm text-red-800">
-                        ❌ Non ci sono altre aziende disponibili per la migrazione. 
+                        ❌ Non ci sono altre aziende disponibili per la migrazione.
                         Crea prima un'altra azienda o scegli di eliminare i dipendenti.
                       </p>
                     </div>
@@ -769,16 +771,20 @@ export const CompaniesPage: React.FC = () => {
         </div>
       </Modal>
 
-       {showImportModal && (
-         <CompanyImport
-           onImport={handleImportCompanies}
-           onClose={() => setShowImportModal(false)}
-           existingCompanies={companies as unknown as CompanyData[]}
-         />
-       )}
-     </>
-   );
- };
+      {showImportModal && (
+        <CompanyImport
+          onImport={handleImportCompanies}
+          onClose={() => {
+            setShowImportModal(false);
+            // Forza refresh del GDPREntityTemplate incrementando la key
+            setRefreshKey(prev => prev + 1);
+          }}
+          existingCompanies={companies as unknown as CompanyData[]}
+        />
+      )}
+    </>
+  );
+};
 
- // Export default per compatibilità
- export default CompaniesPage;
+// Export default per compatibilità
+export default CompaniesPage;

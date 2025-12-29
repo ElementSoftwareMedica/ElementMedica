@@ -36,14 +36,16 @@ export class AmbulatorioService {
                     poliambulatorio: {
                         select: { id: true, nome: true, codice: true }
                     },
-                    prestazioni: {
+                    prestazioniAmbulatorio: {
+                        where: { deletedAt: null },
                         include: {
                             prestazione: {
                                 select: { id: true, nome: true, codice: true }
                             }
                         }
                     },
-                    strumenti: {
+                    strumentiAssegnati: {
+                        where: { deletedAt: null },
                         include: {
                             strumento: {
                                 select: { id: true, nome: true, codice: true }
@@ -88,8 +90,8 @@ export class AmbulatorioService {
                     poliambulatorio: {
                         select: { id: true, nome: true, codice: true }
                     },
-                    prestazioni: {
-                        where: { isActive: true },
+                    prestazioniAmbulatorio: {
+                        where: { attivo: true, deletedAt: null },
                         include: {
                             prestazione: {
                                 select: {
@@ -102,8 +104,8 @@ export class AmbulatorioService {
                             }
                         }
                     },
-                    strumenti: {
-                        where: { isActive: true },
+                    strumentiAssegnati: {
+                        where: { deletedAt: null },
                         include: {
                             strumento: {
                                 select: {
@@ -142,7 +144,7 @@ export class AmbulatorioService {
                 search = '',
                 poliambulatorioId = null,
                 specializzazione = null,
-                isActive = true,
+                filterByActive = true,
                 orderBy = 'nome',
                 orderDir = 'asc'
             } = options;
@@ -152,7 +154,7 @@ export class AmbulatorioService {
             const where = {
                 tenantId,
                 deletedAt: null,
-                ...(isActive !== undefined && { isActive }),
+                ...(filterByActive && { stato: 'ATTIVO' }),
                 ...(poliambulatorioId && { poliambulatorioId }),
                 ...(specializzazione && { specializzazione }),
                 ...(search && {
@@ -173,8 +175,8 @@ export class AmbulatorioService {
                         },
                         _count: {
                             select: {
-                                prestazioni: true,
-                                strumenti: true,
+                                prestazioniAmbulatorio: true,
+                                strumentiAssegnati: true,
                                 appuntamenti: true
                             }
                         }
@@ -216,11 +218,11 @@ export class AmbulatorioService {
                     poliambulatorioId,
                     tenantId,
                     deletedAt: null,
-                    isActive: true
+                    stato: 'ATTIVO'
                 },
                 include: {
                     _count: {
-                        select: { prestazioni: true }
+                        select: { prestazioniAmbulatorio: true }
                     }
                 },
                 orderBy: { nome: 'asc' }
@@ -262,10 +264,12 @@ export class AmbulatorioService {
                     poliambulatorio: {
                         select: { id: true, nome: true }
                     },
-                    prestazioni: {
+                    prestazioniAmbulatorio: {
+                        where: { deletedAt: null },
                         include: { prestazione: true }
                     },
-                    strumenti: {
+                    strumentiAssegnati: {
+                        where: { deletedAt: null },
                         include: { strumento: true }
                     }
                 }
@@ -362,22 +366,23 @@ export class AmbulatorioService {
             if (!prestazione) throw new Error('Prestazione not found');
 
             // Check if already assigned
-            const existing = await prisma.prestazioneAmbulatorio.findFirst({
+            const existing = await prisma.ambulatorioPrestazione.findFirst({
                 where: { ambulatorioId, prestazioneId }
             });
 
             if (existing) {
                 // Reactivate if deactivated
-                return prisma.prestazioneAmbulatorio.update({
+                return prisma.ambulatorioPrestazione.update({
                     where: { id: existing.id },
-                    data: { isActive: true }
+                    data: { attivo: true, deletedAt: null }
                 });
             }
 
-            const assignment = await prisma.prestazioneAmbulatorio.create({
+            const assignment = await prisma.ambulatorioPrestazione.create({
                 data: {
                     ambulatorioId,
-                    prestazioneId
+                    prestazioneId,
+                    tenantId
                 }
             });
 
@@ -408,7 +413,7 @@ export class AmbulatorioService {
      */
     static async removePrestazione(ambulatorioId, prestazioneId, tenantId) {
         try {
-            const assignment = await prisma.prestazioneAmbulatorio.findFirst({
+            const assignment = await prisma.ambulatorioPrestazione.findFirst({
                 where: { ambulatorioId, prestazioneId }
             });
 
@@ -416,9 +421,9 @@ export class AmbulatorioService {
                 throw new Error('Assignment not found');
             }
 
-            await prisma.prestazioneAmbulatorio.update({
+            await prisma.ambulatorioPrestazione.update({
                 where: { id: assignment.id },
-                data: { isActive: false }
+                data: { attivo: false }
             });
 
             logger.info('Prestazione removed from ambulatorio', {
@@ -466,7 +471,7 @@ export class AmbulatorioService {
                 },
                 select: {
                     dataOra: true,
-                    durataPrevista: true,
+                    durataMinuti: true,
                     stato: true
                 },
                 orderBy: { dataOra: 'asc' }
@@ -477,7 +482,7 @@ export class AmbulatorioService {
                 ambulatorioId,
                 slots: appointments.map(a => ({
                     start: a.dataOra,
-                    duration: a.durataPrevista,
+                    duration: a.durataMinuti,
                     status: a.stato
                 }))
             };

@@ -6,9 +6,9 @@
 
 import React from 'react';
 import HierarchyTreeView from '../../HierarchyTreeView';
-import { createRole } from '../../../../services/roles';
+import { createRole, UserRoleHierarchy } from '../../../../services/roles';
 import { toast } from 'react-hot-toast';
-import type { RoleHierarchyType, UserRoleHierarchy } from '../types';
+import type { RoleHierarchyType } from '../types';
 
 interface TreeViewWrapperProps {
   hierarchy: RoleHierarchyType;

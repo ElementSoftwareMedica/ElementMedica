@@ -1,7 +1,8 @@
 /* eslint-disable */
 // Mock API per le aziende - da sostituire con implementazione reale
 
-import type { Company, CompanyFilters } from '../hooks/resources/useCompaniesOptimized';
+import type { Company } from '../types';
+import type { CompanyFilters } from '../hooks/resources/useCompaniesOptimized';
 
 interface ListResponse<T> {
   data: T[];
@@ -23,6 +24,7 @@ interface QueryParams {
 const mockCompanies: Company[] = [
   {
     id: '1',
+    ragioneSociale: 'Acme Corporation',
     name: 'Acme Corporation',
     email: 'info@acme.com',
     phone: '+39 02 1234567',
@@ -32,12 +34,13 @@ const mockCompanies: Company[] = [
     cap: '20100',
     vatNumber: 'IT12345678901',
     fiscalCode: 'ACMCORP123',
-    legalRepresentative: 'Mario Rossi',
-    createdAt: '2024-01-15T10:00:00Z',
-    updatedAt: '2024-01-15T10:00:00Z',
+    contactPerson: 'Mario Rossi',
+    createdAt: new Date('2024-01-15T10:00:00Z'),
+    updatedAt: new Date('2024-01-15T10:00:00Z'),
   },
   {
     id: '2',
+    ragioneSociale: 'Tech Solutions SRL',
     name: 'Tech Solutions SRL',
     email: 'contact@techsolutions.it',
     phone: '+39 06 9876543',
@@ -47,9 +50,9 @@ const mockCompanies: Company[] = [
     cap: '00100',
     vatNumber: 'IT98765432109',
     fiscalCode: 'TECHSOL456',
-    legalRepresentative: 'Giulia Bianchi',
-    createdAt: '2024-01-20T14:30:00Z',
-    updatedAt: '2024-01-20T14:30:00Z',
+    contactPerson: 'Giulia Bianchi',
+    createdAt: new Date('2024-01-20T14:30:00Z'),
+    updatedAt: new Date('2024-01-20T14:30:00Z'),
   },
 ];
 
@@ -75,9 +78,10 @@ export const companiesApi = {
     if (search) {
       const searchLower = search.toLowerCase();
       filteredCompanies = filteredCompanies.filter(company => 
-        company.name.toLowerCase().includes(searchLower) ||
-        company.city.toLowerCase().includes(searchLower) ||
-        company.email.toLowerCase().includes(searchLower)
+        company.name?.toLowerCase().includes(searchLower) ||
+        company.city?.toLowerCase().includes(searchLower) ||
+        company.email?.toLowerCase().includes(searchLower) ||
+        company.ragioneSociale.toLowerCase().includes(searchLower)
       );
     }
     
@@ -124,7 +128,8 @@ export const companiesApi = {
     
     const newCompany: Company = {
       id: String(Date.now()),
-      name: data.name || '',
+      ragioneSociale: data.ragioneSociale || data.name || '',
+      name: data.name || data.ragioneSociale || '',
       email: data.email || '',
       phone: data.phone || '',
       address: data.address || '',
@@ -133,9 +138,9 @@ export const companiesApi = {
       cap: data.cap || '',
       vatNumber: data.vatNumber || '',
       fiscalCode: data.fiscalCode || '',
-      legalRepresentative: data.legalRepresentative || '',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      contactPerson: data.contactPerson || '',
+      createdAt: new Date(),
+      updatedAt: new Date(),
     };
     
     mockCompanies.push(newCompany);
@@ -155,7 +160,7 @@ export const companiesApi = {
       ...mockCompanies[index],
       ...data,
       id: String(id), // Mantieni l'ID originale
-      updatedAt: new Date().toISOString(),
+      updatedAt: new Date(),
     };
     
     mockCompanies[index] = updatedCompany;
@@ -180,9 +185,10 @@ export const companiesApi = {
     
     const queryLower = query.toLowerCase();
     return mockCompanies.filter(company => 
-      company.name.toLowerCase().includes(queryLower) ||
-      company.city.toLowerCase().includes(queryLower) ||
-      company.email.toLowerCase().includes(queryLower)
+      company.name?.toLowerCase().includes(queryLower) ||
+      company.city?.toLowerCase().includes(queryLower) ||
+      company.email?.toLowerCase().includes(queryLower) ||
+      company.ragioneSociale.toLowerCase().includes(queryLower)
     );
   },
 };

@@ -1,28 +1,32 @@
 #!/bin/bash
 # scripts/deploy-production.sh
+# =============================================================================
+# Deploy Script per PRODUCTION - ElementMedica Multi-Domain
+# =============================================================================
+# Deploy su Hetzner VPS: 128.140.15.15
+# - elementformazione.com (CRM)
+# - elementmedica.com (Frontend Pubblico)
+# =============================================================================
 
-set -e
+set -e  # Exit on error
 
-echo "🚀 Starting production deployment with Blue-Green strategy..."
-
-# Variables
-PROD_HOST="yourdomain.com"
-PROD_USER="deploy"
-PROD_PATH="/var/www/production"
-GIT_BRANCH="main"
-BACKUP_DIR="/var/backups/production/$(date +%Y%m%d_%H%M%S)"
-CURRENT_ENV="blue"
-NEW_ENV="green"
-HEALTH_CHECK_RETRIES=5
-HEALTH_CHECK_DELAY=30
-
-# Colors for output
+# Colori
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 PURPLE='\033[0;35m'
 NC='\033[0m' # No Color
+
+# Configurazione Hetzner
+SERVER_IP="128.140.15.15"
+SERVER_USER="elementmedica"
+SERVER_PATH="/var/www/elementmedica"
+SSH_KEY="$HOME/.ssh/id_ed25519"
+
+# Directory base
+BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$BASE_DIR"
 
 # Functions
 log_info() {
@@ -45,267 +49,191 @@ log_deploy() {
     echo -e "${PURPLE}🚀 $1${NC}"
 }
 
-# Rollback function
-rollback() {
-    log_error "Deployment failed! Starting rollback..."
-    
-    # Stop green environment
-    docker-compose -f docker-compose.production.yml --profile green down || true
-    
-    # Ensure blue environment is running
-    docker-compose -f docker-compose.production.yml up -d
-    
-    # Switch DNS back to blue (if it was changed)
-    # This would typically involve updating load balancer configuration
-    
-    log_error "Rollback completed. Blue environment is active."
+echo -e "${BLUE}=============================================${NC}"
+echo -e "${BLUE}🚀 ElementMedica Production Deploy${NC}"
+echo -e "${BLUE}=============================================${NC}"
+echo ""
+echo "📡 Server: $SERVER_USER@$SERVER_IP"
+echo "📁 Remote path: $SERVER_PATH"
+echo "🔑 SSH Key: $SSH_KEY"
+echo ""
+
+# =============================================================================
+# PRE-FLIGHT CHECKS
+# =============================================================================
+log_info "Running pre-flight checks..."
+
+# Verifica build directories
+if [ ! -d "dist" ] || [ ! -f "dist/index.html" ]; then
+    log_error "dist/ non trovato! Esegui prima: ./scripts/build-production.sh"
     exit 1
-}
+fi
 
-# Trap errors and call rollback
-trap rollback ERR
-
-# Pre-deployment checks
-log_info "Running pre-deployment checks..."
-
-# Check if required environment variables are set
-required_vars=("PROD_DATABASE_URL" "PROD_REDIS_URL" "PROD_JWT_SECRET" "PROD_JWT_REFRESH_SECRET")
-for var in "${required_vars[@]}"; do
-    if [ -z "${!var}" ]; then
-        log_error "$var environment variable is not set"
-        exit 1
-    fi
-done
-
-log_success "Environment variables check passed"
-
-# Run comprehensive tests
-log_info "Running comprehensive test suite..."
-
-# Unit tests
-npm run test:unit || {
-    log_error "Unit tests failed"
+if [ ! -d "dist-public" ] || [ ! -f "dist-public/index.html" ]; then
+    log_error "dist-public/ non trovato! Esegui prima: ./scripts/build-production.sh"
     exit 1
-}
+fi
 
-# Integration tests
-npm run test:integration || {
-    log_error "Integration tests failed"
-    exit 1
-}
+log_success "Build directories OK"
+echo "   • dist/: $(du -sh dist | cut -f1)"
+echo "   • dist-public/: $(du -sh dist-public | cut -f1)"
 
-# E2E tests
-npm run test:e2e || {
-    log_error "E2E tests failed"
-    exit 1
-}
-
-# Security tests
-npm run test:security || {
-    log_warning "Security tests failed, but deployment continues"
-}
-
-log_success "All critical tests passed"
-
-# Code quality checks
-log_info "Running code quality checks..."
-npm run lint || {
-    log_error "Linting failed"
-    exit 1
-}
-
-npm run type-check || {
-    log_error "Type checking failed"
-    exit 1
-}
-
-log_success "Code quality checks passed"
-
-# Build application
-log_info "Building application for production..."
-npm run build || {
-    log_error "Production build failed"
-    exit 1
-}
-
-log_success "Production build completed"
-
-# Build Docker images
-log_info "Building Docker images..."
-docker-compose -f docker-compose.production.yml build || {
-    log_error "Docker build failed"
-    exit 1
-}
-
-log_success "Docker images built successfully"
-
-# Create backup
-log_deploy "Creating backup of current production environment..."
-mkdir -p "$BACKUP_DIR"
-
-# Backup database
-log_info "Backing up production database..."
-docker-compose -f docker-compose.production.yml exec -T postgres pg_dump -U "$PROD_DB_USER" document_management > "$BACKUP_DIR/database.sql" || {
-    log_error "Database backup failed"
-    exit 1
-}
-
-# Backup configuration files
-cp docker-compose.production.yml "$BACKUP_DIR/"
-cp -r nginx/ "$BACKUP_DIR/" 2>/dev/null || true
-cp -r ssl/ "$BACKUP_DIR/" 2>/dev/null || true
-
-log_success "Backup completed: $BACKUP_DIR"
-
-# Blue-Green Deployment
-log_deploy "Starting Blue-Green deployment..."
-
-# Step 1: Deploy to Green environment
-log_info "Deploying to Green environment..."
-docker-compose -f docker-compose.production.yml --profile green up -d || {
-    log_error "Failed to start Green environment"
-    exit 1
-}
-
-log_success "Green environment started"
-
-# Step 2: Wait for Green environment to be ready
-log_info "Waiting for Green environment to be ready..."
-sleep $HEALTH_CHECK_DELAY
-
-# Step 3: Run database migrations on Green
-log_info "Running database migrations..."
-docker-compose -f docker-compose.production.yml --profile green exec -T api_green npm run db:migrate || {
-    log_error "Database migration failed"
-    exit 1
-}
-
-log_success "Database migrations completed"
-
-# Step 4: Health checks on Green environment
-log_info "Running health checks on Green environment..."
-for i in $(seq 1 $HEALTH_CHECK_RETRIES); do
-    log_info "Health check attempt $i/$HEALTH_CHECK_RETRIES..."
-    
-    # Check API health
-    if curl -f http://localhost:8889/api/health > /dev/null 2>&1; then
-        log_success "Green API health check passed"
-        break
-    elif [ $i -eq $HEALTH_CHECK_RETRIES ]; then
-        log_error "Green API health check failed after $HEALTH_CHECK_RETRIES attempts"
-        exit 1
-    else
-        log_warning "Health check failed, retrying in $HEALTH_CHECK_DELAY seconds..."
-        sleep $HEALTH_CHECK_DELAY
-    fi
-done
-
-# Step 5: Run smoke tests on Green
-log_info "Running smoke tests on Green environment..."
-npm run test:smoke:green || {
-    log_warning "Some smoke tests failed on Green environment"
-}
-
-# Step 6: Performance validation
-log_info "Running performance validation on Green environment..."
-npm run test:performance:green || {
-    log_warning "Performance tests failed, but deployment continues"
-}
-
-# Step 7: Switch traffic to Green (Blue-Green switch)
-log_deploy "Switching traffic from Blue to Green..."
-
-# Update nginx configuration to point to Green
-# This is a simplified example - in real scenarios, you'd update load balancer
-log_info "Updating load balancer configuration..."
-
-# Stop Blue environment
-log_info "Stopping Blue environment..."
-docker-compose -f docker-compose.production.yml down || {
-    log_warning "Failed to stop Blue environment cleanly"
-}
-
-# Start Green as the new Blue (rename containers)
-log_info "Promoting Green to Blue..."
-docker-compose -f docker-compose.production.yml up -d || {
-    log_error "Failed to promote Green to Blue"
-    exit 1
-}
-
-# Step 8: Final health checks
-log_info "Running final health checks..."
-sleep $HEALTH_CHECK_DELAY
-
-# Check API health
-if curl -f https://$PROD_HOST/api/health > /dev/null 2>&1; then
-    log_success "Production API health check passed"
+# Test connessione SSH
+log_info "Testing SSH connection..."
+if ssh -i $SSH_KEY -o ConnectTimeout=10 -o BatchMode=yes $SERVER_USER@$SERVER_IP "echo 'SSH OK'" 2>/dev/null; then
+    log_success "SSH connection OK"
 else
-    log_error "Production API health check failed"
-    exit 1
+    log_warning "SSH requires passphrase. Please enter when prompted."
 fi
 
-# Check frontend
-if curl -f https://$PROD_HOST > /dev/null 2>&1; then
-    log_success "Production frontend health check passed"
+# =============================================================================
+# BACKUP REMOTO
+# =============================================================================
+echo ""
+log_deploy "Creating remote backup..."
+
+ssh -i $SSH_KEY $SERVER_USER@$SERVER_IP "
+    cd $SERVER_PATH
+    mkdir -p backups/frontend
+    BACKUP_DATE=\$(date +%Y%m%d_%H%M%S)
+    if [ -d dist ]; then
+        tar -czf backups/frontend/dist_\$BACKUP_DATE.tar.gz dist 2>/dev/null || true
+    fi
+    if [ -d dist-public ]; then
+        tar -czf backups/frontend/dist-public_\$BACKUP_DATE.tar.gz dist-public 2>/dev/null || true
+    fi
+    echo 'Backup completato'
+" || log_warning "Backup skipped (directories may not exist yet)"
+
+# =============================================================================
+# UPLOAD FRONTEND CRM (elementformazione.com)
+# =============================================================================
+echo ""
+log_deploy "Uploading Element Formazione (CRM)..."
+
+rsync -avz --delete \
+    -e "ssh -i $SSH_KEY" \
+    dist/ \
+    $SERVER_USER@$SERVER_IP:$SERVER_PATH/dist/
+
+log_success "Element Formazione uploaded → elementformazione.com"
+
+# =============================================================================
+# UPLOAD FRONTEND PUBBLICO (elementmedica.com)
+# =============================================================================
+echo ""
+log_deploy "Uploading Element Medica (Pubblico)..."
+
+rsync -avz --delete \
+    -e "ssh -i $SSH_KEY" \
+    dist-public/ \
+    $SERVER_USER@$SERVER_IP:$SERVER_PATH/dist-public/
+
+log_success "Element Medica uploaded → elementmedica.com"
+
+# =============================================================================
+# UPLOAD BACKEND (opzionale)
+# =============================================================================
+echo ""
+read -p "Vuoi aggiornare anche il backend? (y/N): " UPDATE_BACKEND
+
+if [[ "$UPDATE_BACKEND" =~ ^[Yy]$ ]]; then
+    log_deploy "Uploading Backend..."
+    
+    rsync -avz --delete \
+        --exclude 'node_modules' \
+        --exclude '.git' \
+        --exclude 'logs/*' \
+        --exclude '*.log' \
+        -e "ssh -i $SSH_KEY" \
+        backend/ \
+        $SERVER_USER@$SERVER_IP:$SERVER_PATH/backend/
+    
+    log_info "Installing backend dependencies..."
+    ssh -i $SSH_KEY $SERVER_USER@$SERVER_IP "
+        cd $SERVER_PATH/backend
+        npm ci --production
+        npx prisma generate
+    "
+    
+    log_success "Backend updated"
+    
+    # Riavvio PM2 (con autorizzazione)
+    read -p "Vuoi riavviare i servizi PM2? (y/N): " RESTART_PM2
+    if [[ "$RESTART_PM2" =~ ^[Yy]$ ]]; then
+        ssh -i $SSH_KEY $SERVER_USER@$SERVER_IP "pm2 restart all"
+        log_success "PM2 services restarted"
+    fi
+fi
+
+# =============================================================================
+# RELOAD NGINX
+# =============================================================================
+echo ""
+log_info "Reloading Nginx..."
+
+ssh -i $SSH_KEY $SERVER_USER@$SERVER_IP "sudo nginx -t && sudo systemctl reload nginx"
+
+log_success "Nginx reloaded"
+
+# =============================================================================
+# HEALTH CHECKS
+# =============================================================================
+echo ""
+log_info "Running health checks..."
+
+# Test backend
+if curl -sf http://$SERVER_IP/health > /dev/null; then
+    log_success "Backend health: OK"
 else
-    log_error "Production frontend health check failed"
-    exit 1
+    log_warning "Backend health: Check required"
 fi
 
-# Step 9: Cleanup
-log_info "Cleaning up old Docker images..."
-docker image prune -f || {
-    log_warning "Failed to cleanup old images"
-}
-
-# Remove Green profile containers (they're now the main containers)
-docker-compose -f docker-compose.production.yml --profile green down || true
-
-log_success "Production deployment completed successfully!"
-
-# Step 10: Post-deployment monitoring
-log_info "Starting post-deployment monitoring..."
-
-# Start monitoring services if not already running
-docker-compose -f docker-compose.production.yml --profile monitoring up -d || {
-    log_warning "Failed to start monitoring services"
-}
-
-# Send notifications
-if [ ! -z "$SLACK_WEBHOOK_URL" ]; then
-    curl -X POST -H 'Content-type: application/json' \
-        --data '{"text":"🚀 Production deployment completed successfully! Blue-Green switch completed."}' \
-        "$SLACK_WEBHOOK_URL" || {
-        log_warning "Failed to send Slack notification"
-    }
+# Test elementformazione.com
+if curl -sf --max-time 10 http://elementformazione.com > /dev/null 2>&1; then
+    log_success "elementformazione.com: OK"
+elif curl -sf --max-time 10 https://elementformazione.com > /dev/null 2>&1; then
+    log_success "elementformazione.com (HTTPS): OK"
+else
+    log_warning "elementformazione.com: Check DNS/SSL configuration"
 fi
 
-if [ ! -z "$DISCORD_WEBHOOK_URL" ]; then
-    curl -X POST -H 'Content-type: application/json' \
-        --data '{"content":"🚀 Production deployment completed successfully! Blue-Green switch completed."}' \
-        "$DISCORD_WEBHOOK_URL" || {
-        log_warning "Failed to send Discord notification"
-    }
+# Test elementmedica.com
+if curl -sf --max-time 10 http://elementmedica.com > /dev/null 2>&1; then
+    log_success "elementmedica.com: OK"
+elif curl -sf --max-time 10 https://elementmedica.com > /dev/null 2>&1; then
+    log_success "elementmedica.com (HTTPS): OK"
+else
+    log_warning "elementmedica.com: DNS not yet configured (128.140.15.15)"
 fi
 
+# =============================================================================
+# PM2 STATUS
+# =============================================================================
 echo ""
-log_success "🎉 PRODUCTION DEPLOYMENT SUMMARY 🎉"
-echo "  📦 Environment: Production"
-echo "  🌐 Frontend: https://$PROD_HOST"
-echo "  🔌 API: https://$PROD_HOST/api"
-echo "  📊 Monitoring: https://$PROD_HOST:3000 (Grafana)"
-echo "  🔍 Metrics: https://$PROD_HOST:9090 (Prometheus)"
-echo "  💾 Backup: $BACKUP_DIR"
-echo "  🕐 Deployment Time: $(date)"
-echo ""
-log_info "Monitoring commands:"
-echo "  📊 View logs: docker-compose -f docker-compose.production.yml logs -f"
-echo "  📈 Check metrics: curl https://$PROD_HOST:9090/metrics"
-echo "  🔍 Health check: curl https://$PROD_HOST/api/health"
-echo ""
-log_info "Emergency rollback: ./scripts/rollback-production.sh $BACKUP_DIR"
+log_info "PM2 Status:"
+ssh -i $SSH_KEY $SERVER_USER@$SERVER_IP "pm2 status" 2>/dev/null || log_warning "PM2 status non disponibile"
 
-# Disable error trap
-trap - ERR
+# =============================================================================
+# SUMMARY
+# =============================================================================
+echo ""
+echo -e "${GREEN}=============================================${NC}"
+echo -e "${GREEN}✅ DEPLOY COMPLETATO${NC}"
+echo -e "${GREEN}=============================================${NC}"
+echo ""
+echo "🌐 Domains:"
+echo "   • https://elementformazione.com (CRM)"
+echo "   • https://elementmedica.com (Pubblico)"
+echo ""
+echo "📋 Prossimi passi:"
+echo "   1. Verifica i siti nel browser"
+echo "   2. Testa il login: admin@example.com / Admin123!"
+echo "   3. Controlla i logs: ssh $SERVER_USER@$SERVER_IP 'pm2 logs'"
+echo ""
+echo "📞 Per problemi:"
+echo "   • Logs: ssh $SERVER_USER@$SERVER_IP 'pm2 logs --lines 100'"
+echo "   • Health: curl http://$SERVER_IP/health"
+echo ""
 
 log_success "Production deployment completed! 🎉"

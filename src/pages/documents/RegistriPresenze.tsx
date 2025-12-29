@@ -86,11 +86,15 @@ const RegistriPresenze: React.FC<RegistriPresenzeProps> = ({
           filterOptions={registriFilterOptions}
           sortOptions={registriSortOptions}
           onFilterChange={(filters) => {
-            setActiveFilters(filters);
+            setActiveFilters(filters as Record<string, string>); // Filters are always strings
           }}
           activeFilters={activeFilters}
           activeSort={activeSort}
-          onSortChange={setActiveSort}
+          onSortChange={(sort) => {
+            if (sort && sort.field && sort.direction) {
+              setActiveSort({ field: sort.field, direction: sort.direction });
+            }
+          }}
         />
       </div>
     </div>

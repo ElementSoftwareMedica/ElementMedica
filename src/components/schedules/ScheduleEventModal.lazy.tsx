@@ -21,6 +21,12 @@ export interface ScheduleEventModalProps {
   onSuccess: () => void;
   initialDate?: string;
   initialTime?: { start: string; end: string; };
+  /** Pre-selezione corso per riprogrammazione rapida */
+  preSelectedCourseId?: string | null;
+  /** Pre-selezione dipendenti per riprogrammazione rapida */
+  preSelectedPersonIds?: string[];
+  /** Pre-selezione aziende per riprogrammazione rapida */
+  preSelectedCompanyIds?: string[];
 }
 
 // Lazy wrapper component with error boundary and loading fallback

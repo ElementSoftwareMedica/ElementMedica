@@ -38,9 +38,9 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { AlertCircle, CheckCircle2, Download, FileText, Loader2, XCircle } from 'lucide-react';
-import attestatiService, { 
-  type Attestato, 
-  type BatchGenerateResponse 
+import attestatiService, {
+  type Attestato,
+  type BatchGenerateResponse
 } from '@/services/attestatiService';
 import templateService from '@/services/templateService';
 import type { Template } from '@/types/templates';
@@ -102,6 +102,8 @@ export function GenerateCertificatesDialog({
   // Carica templates all'apertura
   useEffect(() => {
     if (open) {
+      // Reset template selection to force re-selection of default
+      setSelectedTemplateId('');
       loadTemplates();
       loadExistingCertificates();
       // Reset state quando si apre la dialog
@@ -465,9 +467,8 @@ export function GenerateCertificatesDialog({
                       return (
                         <div
                           key={person.id}
-                          className={`flex items-center space-x-3 p-3 ${
-                            hasExisting ? 'bg-muted/50' : ''
-                          }`}
+                          className={`flex items-center space-x-3 p-3 ${hasExisting ? 'bg-muted/50' : ''
+                            }`}
                         >
                           <Checkbox
                             checked={isSelected}

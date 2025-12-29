@@ -4,7 +4,7 @@ import { Button } from '../../design-system/atoms/Button';
 import { Input } from '../../design-system/atoms/Input';
 import { Label } from '../../design-system/atoms/Label';
 import { Badge } from '../../design-system/atoms/Badge';
-import { 
+import {
   AlertTriangle,
   Calendar,
   CheckCircle,
@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { apiGet, apiDelete, apiPost, apiPut } from '../../services/api';
 import { useToast } from '../../hooks/useToast';
+import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
 
 interface DVR {
   id: string;
@@ -48,6 +49,7 @@ export const DVRManager: React.FC<DVRManagerProps> = ({ siteId, siteName }) => {
     note: ''
   });
   const { showToast } = useToast();
+  const { confirmDelete } = useConfirmDialog();
 
   useEffect(() => {
     fetchDvrs();
@@ -68,7 +70,7 @@ export const DVRManager: React.FC<DVRManagerProps> = ({ siteId, siteName }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
       const payload = {
         ...formData,
@@ -107,7 +109,8 @@ export const DVRManager: React.FC<DVRManagerProps> = ({ siteId, siteName }) => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Sei sicuro di voler eliminare questo DVR?')) return;
+    const confirmed = await confirmDelete('Sei sicuro di voler eliminare questo DVR?');
+    if (!confirmed) return;
 
     try {
       await apiDelete(`/api/v1/dvr/${id}`);
@@ -225,7 +228,7 @@ export const DVRManager: React.FC<DVRManagerProps> = ({ siteId, siteName }) => {
               <CardContent>
                 <div className="space-y-3">
                   <p className="text-gray-700">{dvr.descrizione}</p>
-                  
+
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                     <div className="flex items-center text-gray-600">
                       <Calendar className="h-4 w-4 mr-2" />
@@ -270,7 +273,7 @@ export const DVRManager: React.FC<DVRManagerProps> = ({ siteId, siteName }) => {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+            <form onSubmit={handleSubmit} className="p-6 space-y-4" noValidate>
               <div>
                 <Label htmlFor="titolo">Titolo *</Label>
                 <Input

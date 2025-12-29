@@ -13,7 +13,7 @@ export interface RolePermission {
   action: string;
   granted: boolean;
   scope: string;
-  tenantIds: number[];
+  tenantIds: string[]; // Changed from number[] - Tenant.id is UUID string in Prisma
   fieldRestrictions: string[];
 }
 

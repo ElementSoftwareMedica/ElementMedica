@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { 
+import {
   AlertCircle,
   Building2,
   Check,
@@ -38,7 +38,7 @@ interface Role {
 }
 
 const PermissionsTab: React.FC = () => {
-  const { hasPermission } = useAuth();
+  const { hasPermission, isLoading: authLoading } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
@@ -60,7 +60,7 @@ const PermissionsTab: React.FC = () => {
         apiGet('/api/v1/permissions'),
         apiGet('/api/v1/roles')
       ]);
-      
+
       setUsers(usersData.data || usersData);
       setPermissions(permissionsData.data || permissionsData);
       setRoles(rolesData.data || rolesData);
@@ -78,18 +78,18 @@ const PermissionsTab: React.FC = () => {
       await apiPut(`/api/v1/users/${personId}/permissions`, {
         permissions: newPermissions
       });
-      
+
       // Aggiorna lo stato locale
-      setUsers(prev => prev.map(user => 
-        user.id === personId 
+      setUsers(prev => prev.map(user =>
+        user.id === personId
           ? { ...user, permissions: newPermissions }
           : user
       ));
-      
+
       if (selectedUser?.id === personId) {
         setSelectedUser(prev => prev ? { ...prev, permissions: newPermissions } : null);
       }
-      
+
       toast.success('Permessi aggiornati con successo');
     } catch (error) {
       console.error('Errore nell\'aggiornamento permessi:', error);
@@ -105,14 +105,14 @@ const PermissionsTab: React.FC = () => {
       await apiPut(`/api/v1/roles/${roleId}`, {
         permissions: newPermissions
       });
-      
+
       // Aggiorna lo stato locale
-      setRoles(prev => prev.map(role => 
-        role.id === roleId 
+      setRoles(prev => prev.map(role =>
+        role.id === roleId
           ? { ...role, permissions: newPermissions }
           : role
       ));
-      
+
       toast.success('Permessi del ruolo aggiornati con successo');
     } catch (error) {
       console.error('Errore nell\'aggiornamento permessi ruolo:', error);
@@ -124,24 +124,24 @@ const PermissionsTab: React.FC = () => {
 
   const toggleUserPermission = (permission: string) => {
     if (!selectedUser) return;
-    
+
     const currentPermissions = selectedUser.permissions || [];
     const newPermissions = currentPermissions.includes(permission)
       ? currentPermissions.filter(p => p !== permission)
       : [...currentPermissions, permission];
-    
+
     updateUserPermissions(selectedUser.id, newPermissions);
   };
 
   const toggleRolePermission = (roleId: string, permission: string) => {
     const role = roles.find(r => r.id === roleId);
     if (!role) return;
-    
+
     const currentPermissions = role.permissions || [];
     const newPermissions = currentPermissions.includes(permission)
       ? currentPermissions.filter(p => p !== permission)
       : [...currentPermissions, permission];
-    
+
     updateRolePermissions(roleId, newPermissions);
   };
 
@@ -163,21 +163,23 @@ const PermissionsTab: React.FC = () => {
     'General': { icon: AlertCircle, color: 'text-gray-600', bgColor: 'bg-gray-50' }
   };
 
+  // Mostra loading mentre l'auth si sta caricando
+  if (authLoading || loading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <span className="ml-2 text-gray-600">Caricamento...</span>
+      </div>
+    );
+  }
+
+  // Controlla permessi SOLO dopo che l'auth è stato caricato
   if (!hasPermission('system', 'admin')) {
     return (
       <div className="text-center py-8">
         <Shield className="mx-auto h-12 w-12 text-gray-400 mb-4" />
         <h3 className="text-lg font-medium text-gray-900 mb-2">Accesso Negato</h3>
         <p className="text-gray-600">Non hai i permessi necessari per gestire i permessi utente.</p>
-      </div>
-    );
-  }
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-        <span className="ml-2 text-gray-600">Caricamento...</span>
       </div>
     );
   }
@@ -190,27 +192,25 @@ const PermissionsTab: React.FC = () => {
           <h2 className="text-xl font-semibold text-gray-900">Gestione Permessi</h2>
           <p className="text-gray-600 mt-1">Gestisci i permessi granulari per utenti e ruoli</p>
         </div>
-        
+
         {/* Tab Navigation */}
         <div className="flex bg-gray-100 rounded-lg p-1">
           <button
             onClick={() => setActiveTab('users')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              activeTab === 'users'
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'users'
                 ? 'bg-white text-blue-600 shadow-sm'
                 : 'text-gray-600 hover:text-gray-900'
-            }`}
+              }`}
           >
             <Users className="w-4 h-4 inline mr-2" />
             Utenti
           </button>
           <button
             onClick={() => setActiveTab('roles')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              activeTab === 'roles'
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'roles'
                 ? 'bg-white text-blue-600 shadow-sm'
                 : 'text-gray-600 hover:text-gray-900'
-            }`}
+              }`}
           >
             <Shield className="w-4 h-4 inline mr-2" />
             Ruoli
@@ -232,14 +232,12 @@ const PermissionsTab: React.FC = () => {
                   <button
                     key={user.id}
                     onClick={() => setSelectedUser(user)}
-                    className={`w-full text-left p-4 border-b border-gray-100 hover:bg-gray-50 transition-colors ${
-                      selectedUser?.id === user.id ? 'bg-blue-50 border-blue-200' : ''
-                    }`}
+                    className={`w-full text-left p-4 border-b border-gray-100 hover:bg-gray-50 transition-colors ${selectedUser?.id === user.id ? 'bg-blue-50 border-blue-200' : ''
+                      }`}
                   >
                     <div className="flex items-center">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                        user.isActive ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'
-                      }`}>
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${user.isActive ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'
+                        }`}>
                         <UserIcon className="w-4 h-4" />
                       </div>
                       <div className="ml-3 flex-1">
@@ -279,7 +277,7 @@ const PermissionsTab: React.FC = () => {
                   {Object.entries(groupedPermissions).map(([category, categoryPermissions]) => {
                     const categoryConfig = permissionCategories[category as keyof typeof permissionCategories] || permissionCategories.General;
                     const IconComponent = categoryConfig.icon;
-                    
+
                     return (
                       <div key={category} className="space-y-3">
                         <div className="flex items-center">
@@ -303,11 +301,10 @@ const PermissionsTab: React.FC = () => {
                                   disabled={saving}
                                   className="sr-only"
                                 />
-                                <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
-                                  hasPermission
+                                <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${hasPermission
                                     ? 'bg-blue-600 border-blue-600 text-white'
                                     : 'border-gray-300'
-                                }`}>
+                                  }`}>
                                   {hasPermission && <Check className="w-3 h-3" />}
                                 </div>
                                 <div className="ml-3 flex-1">
@@ -347,7 +344,7 @@ const PermissionsTab: React.FC = () => {
                 {Object.entries(groupedPermissions).map(([category, categoryPermissions]) => {
                   const categoryConfig = permissionCategories[category as keyof typeof permissionCategories] || permissionCategories.General;
                   const IconComponent = categoryConfig.icon;
-                  
+
                   return (
                     <div key={category} className="space-y-3">
                       <div className="flex items-center">
@@ -371,11 +368,10 @@ const PermissionsTab: React.FC = () => {
                                 disabled={saving}
                                 className="sr-only"
                               />
-                              <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
-                                hasPermission
+                              <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${hasPermission
                                   ? 'bg-blue-600 border-blue-600 text-white'
                                   : 'border-gray-300'
-                              }`}>
+                                }`}>
                                 {hasPermission && <Check className="w-3 h-3" />}
                               </div>
                               <div className="ml-3 flex-1">

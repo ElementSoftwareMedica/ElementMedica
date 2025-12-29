@@ -50,10 +50,10 @@ router.post('/request',
                     details: errors.array()
                 });
             }
-            
+
             const { email, reason } = req.body;
             const personId = req.person.id;
-            
+
             // Verify email matches the authenticated user
             if (email !== req.person.email) {
                 return res.status(400).json({
@@ -61,43 +61,52 @@ router.post('/request',
                     code: 'GDPR_EMAIL_MISMATCH'
                 });
             }
-            
+
             // Check if there's already a pending deletion request
-            const existingRequest = await prisma.gdprAuditLog.findFirst({
+            // Note: dataAccessed is Json field, we need to check in memory
+            const existingRequests = await prisma.gdprAuditLog.findMany({
                 where: {
                     personId,
-                    action: 'DELETION_REQUESTED',
-                    details: {
-                        contains: '"status":"pending"'
-                    }
+                    action: 'DELETION_REQUESTED'
                 }
             });
-            
-            if (existingRequest) {
+
+            const existingPending = existingRequests.find(req => {
+                const data = req.dataAccessed || {};
+                return data.status === 'pending';
+            });
+
+            if (existingPending) {
                 return res.status(409).json({
                     error: 'A deletion request is already pending for this account',
                     code: 'GDPR_DELETION_ALREADY_PENDING'
                 });
             }
-            
+
             // Create deletion request record in audit log
+            // Get tenantId from the authenticated user
+            const person = await prisma.person.findUnique({
+                where: { id: personId },
+                select: { tenantId: true }
+            });
+
             const deletionRequest = await prisma.gdprAuditLog.create({
                 data: {
                     personId,
                     action: 'DELETION_REQUESTED',
-                    entityType: 'Person',
-                    entityId: personId,
-                    details: JSON.stringify({
+                    resourceType: 'Person',
+                    resourceId: personId,
+                    dataAccessed: {
                         email,
                         reason: reason || 'User requested account deletion',
                         status: 'pending',
                         requestDate: new Date().toISOString()
-                    }),
+                    },
                     ipAddress: req.ip,
-                    timestamp: new Date()
+                    tenantId: person?.tenantId || req.person?.tenantId
                 }
             });
-            
+
             logger.info('GDPR deletion request created', {
                 component: 'gdpr-data-deletion',
                 action: 'requestDeletion',
@@ -105,13 +114,13 @@ router.post('/request',
                 email,
                 requestId: deletionRequest.id
             });
-            
+
             res.status(201).json({
                 message: 'Data deletion request submitted successfully',
                 requestId: deletionRequest.id,
                 status: 'pending'
             });
-            
+
         } catch (error) {
             logger.error('Failed to create deletion request', {
                 component: 'gdpr-data-deletion',
@@ -120,7 +129,7 @@ router.post('/request',
                 personId: req.person?.id,
                 body: req.body
             });
-            
+
             res.status(500).json({
                 error: 'Failed to create deletion request',
                 code: 'GDPR_DELETION_REQUEST_FAILED'
@@ -131,10 +140,11 @@ router.post('/request',
 
 /**
  * Process data deletion (Admin only)
+ * Accepts: ADMIN, SUPER_ADMIN, TENANT_ADMIN roles
  */
 router.post('/process/:requestId',
     authenticateAdvanced,
-    requireRoles(['global_admin', 'data_protection_officer']),
+    requireRoles(['ADMIN', 'SUPER_ADMIN', 'TENANT_ADMIN']),
     [
         param('requestId').isString().notEmpty(),
         body('action').isString().isIn(['approve', 'reject']),
@@ -149,16 +159,16 @@ router.post('/process/:requestId',
                     details: errors.array()
                 });
             }
-            
+
             const { requestId } = req.params;
             const { action, reason } = req.body;
             const adminPersonId = req.person.id;
-            
+
             // Find the deletion request
             const deletionRequest = await prisma.gdprAuditLog.findUnique({
                 where: { id: requestId },
                 include: {
-                    user: {
+                    person: {
                         select: {
                             id: true,
                             email: true,
@@ -168,41 +178,41 @@ router.post('/process/:requestId',
                     }
                 }
             });
-            
+
             if (!deletionRequest || deletionRequest.action !== 'DELETION_REQUESTED') {
                 return res.status(404).json({
                     error: 'Deletion request not found',
                     code: 'GDPR_DELETION_REQUEST_NOT_FOUND'
                 });
             }
-            
-            const requestDetails = JSON.parse(deletionRequest.details);
-            
+
+            const requestDetails = deletionRequest.dataAccessed || {};
+
             if (requestDetails.status !== 'pending') {
                 return res.status(400).json({
                     error: 'Deletion request is not pending',
                     code: 'GDPR_DELETION_REQUEST_NOT_PENDING'
                 });
             }
-            
+
             if (action === 'approve') {
                 // Process the actual deletion
                 await GDPRService.processDataDeletion(deletionRequest.personId);
-                
+
                 // Update the request status
                 await prisma.gdprAuditLog.update({
                     where: { id: requestId },
                     data: {
-                        details: JSON.stringify({
+                        dataAccessed: {
                             ...requestDetails,
                             status: 'completed',
                             processedDate: new Date().toISOString(),
                             processedBy: adminPersonId,
                             adminReason: reason
-                        })
+                        }
                     }
                 });
-                
+
                 logger.info('GDPR deletion request approved and processed', {
                     component: 'gdpr-data-deletion',
                     action: 'processDeletion',
@@ -211,27 +221,27 @@ router.post('/process/:requestId',
                     adminPersonId,
                     result: 'approved'
                 });
-                
+
                 res.json({
                     message: 'Deletion request approved and processed successfully',
                     status: 'completed'
                 });
-                
+
             } else if (action === 'reject') {
                 // Update the request status to rejected
                 await prisma.gdprAuditLog.update({
                     where: { id: requestId },
                     data: {
-                        details: JSON.stringify({
+                        dataAccessed: {
                             ...requestDetails,
                             status: 'rejected',
                             processedDate: new Date().toISOString(),
                             processedBy: adminPersonId,
                             adminReason: reason || 'Request rejected by administrator'
-                        })
+                        }
                     }
                 });
-                
+
                 logger.info('GDPR deletion request rejected', {
                     component: 'gdpr-data-deletion',
                     action: 'processDeletion',
@@ -241,14 +251,14 @@ router.post('/process/:requestId',
                     result: 'rejected',
                     reason
                 });
-                
+
                 res.json({
                     message: 'Deletion request rejected',
                     status: 'rejected',
                     reason
                 });
             }
-            
+
         } catch (error) {
             logger.error('Failed to process deletion request', {
                 component: 'gdpr-data-deletion',
@@ -258,7 +268,7 @@ router.post('/process/:requestId',
                 adminPersonId: req.person?.id,
                 body: req.body
             });
-            
+
             res.status(500).json({
                 error: 'Failed to process deletion request',
                 code: 'GDPR_DELETION_PROCESS_FAILED'
@@ -269,10 +279,11 @@ router.post('/process/:requestId',
 
 /**
  * Get pending deletion requests (Admin only)
+ * Accepts: ADMIN, SUPER_ADMIN, TENANT_ADMIN roles
  */
 router.get('/requests',
     authenticateAdvanced,
-    requireRoles(['global_admin', 'data_protection_officer']),
+    requireRoles(['ADMIN', 'SUPER_ADMIN', 'TENANT_ADMIN']),
     [
         query('status').optional().isString().isIn(['pending', 'completed', 'rejected']),
         query('limit').optional().isInt({ min: 1, max: 100 }),
@@ -287,22 +298,19 @@ router.get('/requests',
                     details: errors.array()
                 });
             }
-            
+
             const {
                 status = 'pending',
                 limit = 50,
                 offset = 0
             } = req.query;
-            
+
             const requests = await prisma.gdprAuditLog.findMany({
                 where: {
-                    action: 'DELETION_REQUESTED',
-                    details: {
-                        contains: `"status":"${status}"`
-                    }
+                    action: 'DELETION_REQUESTED'
                 },
                 include: {
-                    user: {
+                    person: {
                         select: {
                             id: true,
                             email: true,
@@ -313,37 +321,40 @@ router.get('/requests',
                     }
                 },
                 orderBy: {
-                    timestamp: 'desc'
+                    createdAt: 'desc'
                 },
                 take: parseInt(limit),
                 skip: parseInt(offset)
             });
-            
+
             const total = await prisma.gdprAuditLog.count({
                 where: {
-                    action: 'DELETION_REQUESTED',
-                    details: {
-                        contains: `"status":"${status}"`
-                    }
+                    action: 'DELETION_REQUESTED'
                 }
             });
-            
-            const formattedRequests = requests.map(request => ({
+
+            // Filter by status in memory (dataAccessed is Json)
+            const filteredRequests = requests.filter(request => {
+                const data = request.dataAccessed || {};
+                return data.status === status || status === 'all';
+            });
+
+            const formattedRequests = filteredRequests.map(request => ({
                 id: request.id,
                 personId: request.personId,
-                user: request.user,
-                requestDate: request.timestamp,
-                details: JSON.parse(request.details),
+                user: request.person,
+                requestDate: request.createdAt,
+                details: request.dataAccessed || {},
                 ipAddress: request.ipAddress
             }));
-            
+
             res.json({
                 requests: formattedRequests,
                 total,
                 limit: parseInt(limit),
                 offset: parseInt(offset)
             });
-            
+
         } catch (error) {
             logger.error('Failed to get deletion requests', {
                 component: 'gdpr-data-deletion',
@@ -352,7 +363,7 @@ router.get('/requests',
                 adminPersonId: req.person?.id,
                 query: req.query
             });
-            
+
             res.status(500).json({
                 error: 'Failed to get deletion requests',
                 code: 'GDPR_DELETION_REQUESTS_FAILED'

@@ -1,0 +1,494 @@
+/**
+ * Clinica Theme - Element Medica
+ * 
+ * Estensione del tema brand-themes.css per il modulo clinico.
+ * Questo file contiene utility classes specifiche per ElementMedica.
+ * 
+ * COLORI MEDICA:
+ * - Primary: Teal medico (cura, professionalità)
+ * - Accent: Emerald health (salute, benessere)
+ * - Neutrals: Cool gray (equilibrio, pulizia)
+ * 
+ * @module styles/clinica-theme
+ */
+
+/* ============================================
+   CLINICA-SPECIFIC CSS CUSTOM PROPERTIES
+   ============================================ */
+.clinica-theme,
+[data-theme="clinica"] {
+    /* Primary Teal - Medical */
+    --clinica-primary-50: #f0fdfa;
+    --clinica-primary-100: #ccfbf1;
+    --clinica-primary-200: #99f6e4;
+    --clinica-primary-300: #5eead4;
+    --clinica-primary-400: #2dd4bf;
+    --clinica-primary-500: #14b8a6;
+    --clinica-primary-600: #0d9488;
+    --clinica-primary-700: #0f766e;
+    --clinica-primary-800: #115e59;
+    --clinica-primary-900: #134e4a;
+    --clinica-primary-950: #042f2e;
+
+    /* Accent Emerald - Health */
+    --clinica-accent-50: #ecfdf5;
+    --clinica-accent-100: #d1fae5;
+    --clinica-accent-200: #a7f3d0;
+    --clinica-accent-300: #6ee7b7;
+    --clinica-accent-400: #34d399;
+    --clinica-accent-500: #10b981;
+    --clinica-accent-600: #059669;
+    --clinica-accent-700: #047857;
+    --clinica-accent-800: #065f46;
+    --clinica-accent-900: #064e3b;
+
+    /* Status Colors */
+    --clinica-success: #10b981;
+    --clinica-warning: #f59e0b;
+    --clinica-error: #ef4444;
+    --clinica-info: #0ea5e9;
+
+    /* Appointment Status Colors */
+    --status-scheduled: #3b82f6;
+    --status-confirmed: #10b981;
+    --status-waiting: #f59e0b;
+    --status-in-progress: #8b5cf6;
+    --status-completed: #059669;
+    --status-cancelled: #ef4444;
+    --status-no-show: #6b7280;
+
+    /* Visit Status Colors */
+    --visit-pending: #f59e0b;
+    --visit-in-progress: #8b5cf6;
+    --visit-completed: #10b981;
+    --visit-cancelled: #ef4444;
+
+    /* Report Status Colors */
+    --report-draft: #6b7280;
+    --report-pending-review: #f59e0b;
+    --report-approved: #10b981;
+    --report-signed: #059669;
+}
+
+/* ============================================
+   CLINICA UTILITY CLASSES
+   ============================================ */
+
+/* Background utilities */
+.bg-clinica-primary {
+    background-color: var(--clinica-primary-600);
+}
+
+.bg-clinica-primary-light {
+    background-color: var(--clinica-primary-100);
+}
+
+.bg-clinica-primary-dark {
+    background-color: var(--clinica-primary-800);
+}
+
+.bg-clinica-accent {
+    background-color: var(--clinica-accent-500);
+}
+
+.bg-clinica-accent-light {
+    background-color: var(--clinica-accent-100);
+}
+
+/* Text utilities */
+.text-clinica-primary {
+    color: var(--clinica-primary-600);
+}
+
+.text-clinica-primary-light {
+    color: var(--clinica-primary-400);
+}
+
+.text-clinica-primary-dark {
+    color: var(--clinica-primary-800);
+}
+
+.text-clinica-accent {
+    color: var(--clinica-accent-500);
+}
+
+/* Border utilities */
+.border-clinica-primary {
+    border-color: var(--clinica-primary-500);
+}
+
+.border-clinica-accent {
+    border-color: var(--clinica-accent-500);
+}
+
+/* Ring utilities */
+.ring-clinica-primary {
+    --tw-ring-color: var(--clinica-primary-500);
+}
+
+.focus\:ring-clinica-primary:focus {
+    --tw-ring-color: var(--clinica-primary-500);
+}
+
+/* ============================================
+   CLINICA COMPONENT VARIANTS
+   ============================================ */
+
+/* Primary Button - Teal */
+.btn-clinica-primary {
+    background: linear-gradient(135deg, var(--clinica-primary-600) 0%, var(--clinica-primary-700) 100%);
+    color: white;
+    padding: 0.625rem 1.25rem;
+    border-radius: 0.5rem;
+    font-weight: 500;
+    font-size: 0.875rem;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.btn-clinica-primary:hover {
+    background: linear-gradient(135deg, var(--clinica-primary-700) 0%, var(--clinica-primary-800) 100%);
+    box-shadow: 0 4px 12px rgba(13, 148, 136, 0.3);
+    transform: translateY(-1px);
+}
+
+.btn-clinica-primary:active {
+    transform: translateY(0);
+}
+
+/* Secondary Button */
+.btn-clinica-secondary {
+    background: white;
+    color: var(--clinica-primary-700);
+    padding: 0.625rem 1.25rem;
+    border-radius: 0.5rem;
+    font-weight: 500;
+    font-size: 0.875rem;
+    border: 1px solid var(--clinica-primary-300);
+    transition: all 0.2s ease;
+}
+
+.btn-clinica-secondary:hover {
+    background: var(--clinica-primary-50);
+    border-color: var(--clinica-primary-400);
+}
+
+/* Ghost Button */
+.btn-clinica-ghost {
+    background: transparent;
+    color: var(--clinica-primary-600);
+    padding: 0.625rem 1.25rem;
+    border-radius: 0.5rem;
+    font-weight: 500;
+    font-size: 0.875rem;
+    transition: all 0.2s ease;
+}
+
+.btn-clinica-ghost:hover {
+    background: var(--clinica-primary-50);
+}
+
+/* ============================================
+   CLINICA CARD STYLES
+   ============================================ */
+
+.card-clinica {
+    background: white;
+    border-radius: 0.75rem;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    transition: all 0.2s ease;
+}
+
+.card-clinica:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    border-color: var(--clinica-primary-200);
+}
+
+.card-clinica-accent {
+    background: white;
+    border-radius: 0.75rem;
+    border-left: 4px solid var(--clinica-primary-500);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+/* ============================================
+   CLINICA BADGE/STATUS STYLES
+   ============================================ */
+
+.badge-clinica {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.25rem 0.625rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+/* Appointment Status Badges */
+.badge-scheduled {
+    background: rgba(59, 130, 246, 0.1);
+    color: #2563eb;
+}
+
+.badge-confirmed {
+    background: rgba(16, 185, 129, 0.1);
+    color: #059669;
+}
+
+.badge-waiting {
+    background: rgba(245, 158, 11, 0.1);
+    color: #d97706;
+}
+
+.badge-in-progress {
+    background: rgba(139, 92, 246, 0.1);
+    color: #7c3aed;
+}
+
+.badge-completed {
+    background: rgba(5, 150, 105, 0.1);
+    color: #047857;
+}
+
+.badge-cancelled {
+    background: rgba(239, 68, 68, 0.1);
+    color: #dc2626;
+}
+
+.badge-no-show {
+    background: rgba(107, 114, 128, 0.1);
+    color: #4b5563;
+}
+
+/* ============================================
+   CLINICA SIDEBAR NAVIGATION
+   ============================================ */
+
+.nav-clinica-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.625rem 0.875rem;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #374151;
+    transition: all 0.15s ease;
+}
+
+.nav-clinica-item:hover {
+    background: var(--clinica-primary-50);
+    color: var(--clinica-primary-700);
+}
+
+.nav-clinica-item.active {
+    background: var(--clinica-primary-100);
+    color: var(--clinica-primary-800);
+    border-left: 3px solid var(--clinica-primary-500);
+    margin-left: -3px;
+    padding-left: calc(0.875rem + 3px);
+}
+
+/* ============================================
+   CLINICA FORM ELEMENTS
+   ============================================ */
+
+.input-clinica {
+    width: 100%;
+    padding: 0.625rem 0.875rem;
+    border: 1px solid #d1d5db;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    transition: all 0.15s ease;
+}
+
+.input-clinica:focus {
+    outline: none;
+    border-color: var(--clinica-primary-500);
+    box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.15);
+}
+
+.input-clinica::placeholder {
+    color: #9ca3af;
+}
+
+/* Select */
+.select-clinica {
+    width: 100%;
+    padding: 0.625rem 2.5rem 0.625rem 0.875rem;
+    border: 1px solid #d1d5db;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    background-color: white;
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+    background-position: right 0.5rem center;
+    background-repeat: no-repeat;
+    background-size: 1.5em 1.5em;
+}
+
+.select-clinica:focus {
+    outline: none;
+    border-color: var(--clinica-primary-500);
+    box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.15);
+}
+
+/* ============================================
+   CLINICA TABLE STYLES
+   ============================================ */
+
+.table-clinica {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.table-clinica thead {
+    background: var(--clinica-primary-50);
+}
+
+.table-clinica th {
+    padding: 0.75rem 1rem;
+    text-align: left;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--clinica-primary-700);
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.table-clinica td {
+    padding: 0.875rem 1rem;
+    font-size: 0.875rem;
+    color: #374151;
+    border-bottom: 1px solid #f3f4f6;
+}
+
+.table-clinica tbody tr:hover {
+    background: #f9fafb;
+}
+
+/* ============================================
+   CLINICA PROGRESS/STATS
+   ============================================ */
+
+.stat-clinica {
+    background: white;
+    border-radius: 0.75rem;
+    padding: 1.25rem;
+    border: 1px solid #e5e7eb;
+}
+
+.stat-clinica-value {
+    font-size: 1.875rem;
+    font-weight: 700;
+    color: var(--clinica-primary-700);
+    line-height: 1;
+}
+
+.stat-clinica-label {
+    font-size: 0.875rem;
+    color: #6b7280;
+    margin-top: 0.25rem;
+}
+
+.progress-clinica {
+    height: 0.5rem;
+    background: #e5e7eb;
+    border-radius: 9999px;
+    overflow: hidden;
+}
+
+.progress-clinica-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--clinica-primary-500), var(--clinica-accent-500));
+    border-radius: 9999px;
+    transition: width 0.3s ease;
+}
+
+/* ============================================
+   CLINICA ANIMATIONS
+   ============================================ */
+
+@keyframes pulse-clinica {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.7;
+    }
+}
+
+.animate-pulse-clinica {
+    animation: pulse-clinica 2s ease-in-out infinite;
+}
+
+/* Status indicator pulse */
+.status-indicator {
+    position: relative;
+}
+
+.status-indicator::before {
+    content: '';
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: inherit;
+    animation: ping-clinica 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+@keyframes ping-clinica {
+    0% {
+        transform: scale(1);
+        opacity: 1;
+    }
+
+    75%,
+    100% {
+        transform: scale(2);
+        opacity: 0;
+    }
+}
+
+/* ============================================
+   CLINICA RESPONSIVE UTILITIES
+   ============================================ */
+
+@media (max-width: 768px) {
+    .card-clinica {
+        border-radius: 0.5rem;
+    }
+
+    .stat-clinica-value {
+        font-size: 1.5rem;
+    }
+}
+
+/* ============================================
+   CLINICA PRINT STYLES
+   ============================================ */
+
+@media print {
+    .clinica-theme {
+        --clinica-primary-600: #0f766e;
+        --clinica-primary-700: #0f766e;
+    }
+
+    .btn-clinica-primary,
+    .btn-clinica-secondary,
+    .btn-clinica-ghost {
+        display: none;
+    }
+
+    .card-clinica {
+        box-shadow: none;
+        border: 1px solid #000;
+    }
+}

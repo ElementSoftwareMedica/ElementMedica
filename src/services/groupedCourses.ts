@@ -31,7 +31,7 @@ interface CourseTitle {
  * Servizio per gestire i corsi raggruppati per titolo
  */
 export class GroupedCoursesService {
-  
+
   /**
    * Ottiene tutti i titoli dei corsi disponibili
    */
@@ -68,7 +68,8 @@ export class GroupedCoursesService {
    */
   static async getGroupedCourses(): Promise<GroupedCourse[]> {
     try {
-      const resp = await apiGet('/api/public/courses', { _skipGdprCheck: true }) as any;
+      // Richiedi tutti i corsi (limit alto per non perdere nessun corso)
+      const resp = await apiGet('/api/public/courses?limit=500', { _skipGdprCheck: true }) as any;
       const extractCourses = (r: any): Course[] => {
         if (Array.isArray(r)) return r as Course[];
         if (Array.isArray(r?.courses)) return r.courses as Course[];
@@ -193,8 +194,8 @@ export class GroupedCoursesService {
 
     // Stopwords italiane comuni da ignorare nel matching
     const STOPWORDS = new Set([
-      'di','dei','degli','delle','della','del','dell','lo','la','le','gli','il','i','e','ed','da','un','una','uno',
-      'per','con','su','tra','fra','al','allo','alla','ai','agli','alle','dello','in','a','ad','dal','dai','dagli','dalle'
+      'di', 'dei', 'degli', 'delle', 'della', 'del', 'dell', 'lo', 'la', 'le', 'gli', 'il', 'i', 'e', 'ed', 'da', 'un', 'una', 'uno',
+      'per', 'con', 'su', 'tra', 'fra', 'al', 'allo', 'alla', 'ai', 'agli', 'alle', 'dello', 'in', 'a', 'ad', 'dal', 'dai', 'dagli', 'dalle'
     ]);
     const tokenize = (s: string): string[] => normalize(s).split(' ').filter(w => w && !STOPWORDS.has(w));
     const tokenOverlap = (a: string[] | Set<string>, b: string[]): number => {
@@ -275,7 +276,7 @@ export class GroupedCoursesService {
           if (bestTitle) {
             try {
               return await tryFetch(bestTitle);
-            } catch {}
+            } catch { }
           }
         }
       } catch (_) {
@@ -379,7 +380,7 @@ export class GroupedCoursesService {
    */
   static groupCoursesByTitle(courses: Course[]): GroupedCourse[] {
     const grouped = new Map<string, Course[]>();
-    
+
     // Raggruppa i corsi per titolo
     courses.forEach(course => {
       const title = course.title;

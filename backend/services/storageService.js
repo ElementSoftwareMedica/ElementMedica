@@ -17,10 +17,16 @@ import crypto from 'crypto';
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { logger } from '../utils/logger.js';
+import { fileURLToPath } from 'url';
+
+// Get __dirname equivalent in ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Configurazione storage mode
 const STORAGE_MODE = process.env.STORAGE_MODE || 'local'; // 'local' or 's3'
-const UPLOAD_PATH = process.env.UPLOAD_PATH || path.join(process.cwd(), 'uploads');
+// Use absolute path relative to backend folder (services/../uploads = backend/uploads)
+const UPLOAD_PATH = process.env.UPLOAD_PATH || path.resolve(__dirname, '..', 'uploads');
 
 // S3 Client configuration (opzionale)
 let s3Client = null;
@@ -68,7 +74,7 @@ class StorageService {
     this.uploadPath = UPLOAD_PATH;
     this.s3Client = s3Client;
     this.s3Bucket = S3_BUCKET;
-    
+
     // Inizializza directory locali se mode = local
     if (this.mode === 'local') {
       this.initializeLocalDirectories();
@@ -171,8 +177,8 @@ class StorageService {
     const filepath = path.join(dirPath, filename);
     await fs.writeFile(filepath, buffer);
 
-    // Generate URL (relative path)
-    const fileUrl = `/${directory}/${filename}`;
+    // Generate URL (with /uploads prefix for correct path resolution)
+    const fileUrl = `/uploads/${directory}/${filename}`;
 
     return {
       filepath,
@@ -266,11 +272,11 @@ class StorageService {
 
     const response = await this.s3Client.send(command);
     const chunks = [];
-    
+
     for await (const chunk of response.Body) {
       chunks.push(chunk);
     }
-    
+
     return Buffer.concat(chunks);
   }
 

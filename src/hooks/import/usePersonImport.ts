@@ -62,7 +62,7 @@ export const usePersonImport = () => {
         .filter((person: Record<string, unknown>) => !CsvMappingService.isEmptyTemplate(person))
         .map((person: Record<string, unknown>) => {
           const cleaned = CsvMappingService.cleanPersonData(person);
-          const formatted = CsvMappingService.applyTitleCaseFormatting(cleaned);
+          const formatted = CsvMappingService.applyTitleCaseFormatting(cleaned as Record<string, unknown>) as PersonData;
           return CsvMappingService.resolveCompanyId(formatted, existingCompanies);
         });
 

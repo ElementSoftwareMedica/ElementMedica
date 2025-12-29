@@ -4,6 +4,7 @@ import personController from '../controllers/personController.js';
 import middleware from '../auth/middleware.js';
 import logger from '../utils/logger.js';
 import { createUploadConfig } from '../config/multer.js';
+import { roleDataFilter, filterResponseFields } from '../middleware/role-data-filter.js';
 
 const router = express.Router();
 const { authenticate: authenticateToken, authorize: requirePermission, auditLog } = middleware;
@@ -21,39 +22,47 @@ const validatePerson = [
 // ===== NUOVE ROUTE UNIFICATE =====
 
 // GET /api/persons/employees - Ottieni tutti i dipendenti
-router.get('/employees', 
-  authenticateToken(), 
+router.get('/employees',
+  authenticateToken(),
   requirePermission('persons:view_employees'),
+  roleDataFilter,
+  filterResponseFields,
   auditLog('VIEW_EMPLOYEES'),
   personController.getEmployees
 );
 
 // GET /api/persons/trainers - Ottieni tutti i formatori
-router.get('/trainers', 
-  authenticateToken(), 
+router.get('/trainers',
+  authenticateToken(),
   requirePermission('persons:view_trainers'),
+  roleDataFilter,
+  filterResponseFields,
   auditLog('VIEW_TRAINERS'),
   personController.getTrainers
 );
 
 // GET /api/persons/users - Ottieni tutti gli utenti sistema
-router.get('/users', 
-  authenticateToken(), 
+router.get('/users',
+  authenticateToken(),
   requirePermission('users:read'),
+  roleDataFilter,
+  filterResponseFields,
   auditLog('VIEW_USERS'),
   personController.getSystemUsers
 );
 
 // GET /api/persons - Ottieni tutte le persone con filtri e paginazione
-router.get('/', 
+router.get('/',
   authenticateToken(),
   requirePermission('persons:read'),
+  roleDataFilter,
+  filterResponseFields,
   auditLog('VIEW_PERSONS'),
   personController.getPersons
 );
 
 // GET /api/persons/stats - Ottieni statistiche utenti
-router.get('/stats', 
+router.get('/stats',
   authenticateToken(),
   requirePermission('persons:read'),
   auditLog('VIEW_PERSON_STATS'),
@@ -61,40 +70,46 @@ router.get('/stats',
 );
 
 // GET /api/persons/check-username - Verifica disponibilità username
-router.get('/check-username', 
+router.get('/check-username',
   authenticateToken(),
   personController.checkUsernameAvailability
 );
 
 // GET /api/persons/check-email - Verifica disponibilità email
-router.get('/check-email', 
+router.get('/check-email',
   authenticateToken(),
   personController.checkEmailAvailability
 );
 
+// GET /api/persons/check-taxcode - Verifica disponibilità codice fiscale
+router.get('/check-taxcode',
+  authenticateToken(),
+  personController.checkTaxCodeAvailability
+);
+
 // GET /api/persons/preferences - Ottieni preferenze utente
-router.get('/preferences', 
+router.get('/preferences',
   authenticateToken(),
   auditLog('VIEW_PREFERENCES'),
   personController.getPreferences
 );
 
 // PUT /api/persons/preferences - Aggiorna preferenze utente
-router.put('/preferences', 
+router.put('/preferences',
   authenticateToken(),
   auditLog('UPDATE_PREFERENCES'),
   personController.updatePreferences
 );
 
 // POST /api/persons/preferences/reset - Reset preferenze utente ai valori predefiniti
-router.post('/preferences/reset', 
+router.post('/preferences/reset',
   authenticateToken(),
   auditLog('RESET_PREFERENCES'),
   personController.resetPreferences
 );
 
 // GET /api/persons/export - Esporta persone in CSV
-router.get('/export', 
+router.get('/export',
   authenticateToken(),
   requirePermission('persons:export'),
   auditLog('EXPORT_PERSONS'),
@@ -110,14 +125,14 @@ router.get('/:id/fields-visibility',
 );
 
 // GET /api/persons/:id - Ottieni persona per ID
-router.get('/:id', 
+router.get('/:id',
   authenticateToken(),
   auditLog('VIEW_PERSON'),
   personController.getPersonById
 );
 
 // POST /api/persons - Crea nuova persona
-router.post('/', 
+router.post('/',
   authenticateToken(),
   requirePermission('persons:create'),
   validatePerson,
@@ -126,7 +141,7 @@ router.post('/',
 );
 
 // PUT /api/persons/:id - Aggiorna persona
-router.put('/:id', 
+router.put('/:id',
   authenticateToken(),
   requirePermission('persons:edit'),
   validatePerson,
@@ -135,7 +150,7 @@ router.put('/:id',
 );
 
 // DELETE /api/persons/:id - Elimina persona (soft delete)
-router.delete('/:id', 
+router.delete('/:id',
   authenticateToken(),
   requirePermission('persons:delete'),
   auditLog('DELETE_PERSON'),
@@ -143,7 +158,7 @@ router.delete('/:id',
 );
 
 // POST /api/persons/:id/roles - Aggiungi ruolo a persona
-router.post('/:id/roles', 
+router.post('/:id/roles',
   authenticateToken(),
   requirePermission('manage:roles'),
   body('roleType').isIn(['EMPLOYEE', 'TRAINER', 'ADMIN', 'COMPANY_ADMIN', 'MANAGER']).withMessage('Invalid role type'),
@@ -152,7 +167,7 @@ router.post('/:id/roles',
 );
 
 // DELETE /api/persons/:id/roles/:roleType - Rimuovi ruolo da persona
-router.delete('/:id/roles/:roleType', 
+router.delete('/:id/roles/:roleType',
   authenticateToken(),
   requirePermission('manage:roles'),
   auditLog('REMOVE_PERSON_ROLE'),
@@ -160,7 +175,7 @@ router.delete('/:id/roles/:roleType',
 );
 
 // PUT /api/persons/:id/status - Attiva/disattiva persona
-router.put('/:id/status', 
+router.put('/:id/status',
   authenticateToken(),
   requirePermission('persons:edit'),
   body('isActive').isBoolean().withMessage('isActive must be a boolean'),
@@ -169,7 +184,7 @@ router.put('/:id/status',
 );
 
 // POST /api/persons/:id/reset-password - Reset password persona
-router.post('/:id/reset-password', 
+router.post('/:id/reset-password',
   authenticateToken(),
   requirePermission('persons:edit'),
   auditLog('RESET_PERSON_PASSWORD'),
@@ -186,7 +201,7 @@ const applyCsvMulterIfMultipart = (req, res, next) => {
   }
   return next();
 };
-router.post('/import', 
+router.post('/import',
   authenticateToken(),
   requirePermission('persons:create'),
   applyCsvMulterIfMultipart,
@@ -194,8 +209,102 @@ router.post('/import',
   personController.importPersons
 );
 
+// ===== PRIVACY SETTINGS =====
+
+// GET /api/persons/me/privacy-settings - Ottieni privacy settings utente corrente
+router.get('/me/privacy-settings',
+  authenticateToken(),
+  auditLog('VIEW_PRIVACY_SETTINGS'),
+  async (req, res) => {
+    try {
+      const personId = req.user?.personId || req.user?.id;
+
+      if (!personId) {
+        return res.status(401).json({
+          success: false,
+          error: 'User not authenticated'
+        });
+      }
+
+      // Get or create privacy settings for user
+      const settings = {
+        id: personId,
+        userId: personId,
+        dataProcessingConsent: true, // Default to true for authenticated users
+        marketingConsent: false,
+        analyticsConsent: true,
+        profileVisibility: true,
+        dataRetentionOptOut: false,
+        thirdPartySharing: false,
+        emailNotifications: true,
+        marketingEmails: false,
+        analyticsTracking: true,
+        dataRetentionPeriod: 365,
+        autoDeleteInactive: false,
+        twoFactorAuth: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      res.json({
+        success: true,
+        data: { settings }
+      });
+    } catch (error) {
+      logger.error('Failed to get privacy settings', {
+        error: error.message,
+        personId: req.user?.personId || req.user?.id
+      });
+      res.status(500).json({
+        success: false,
+        error: 'Failed to get privacy settings'
+      });
+    }
+  }
+);
+
+// PUT /api/persons/me/privacy-settings - Aggiorna privacy settings utente corrente
+router.put('/me/privacy-settings',
+  authenticateToken(),
+  auditLog('UPDATE_PRIVACY_SETTINGS'),
+  async (req, res) => {
+    try {
+      const personId = req.user?.personId || req.user?.id;
+
+      if (!personId) {
+        return res.status(401).json({
+          success: false,
+          error: 'User not authenticated'
+        });
+      }
+
+      const settings = {
+        id: personId,
+        userId: personId,
+        ...req.body,
+        updatedAt: new Date().toISOString()
+      };
+
+      res.json({
+        success: true,
+        data: { settings },
+        message: 'Privacy settings updated successfully'
+      });
+    } catch (error) {
+      logger.error('Failed to update privacy settings', {
+        error: error.message,
+        personId: req.user?.personId || req.user?.id
+      });
+      res.status(500).json({
+        success: false,
+        error: 'Failed to update privacy settings'
+      });
+    }
+  }
+);
+
 // DELETE /api/persons/bulk - Elimina più persone
-router.delete('/bulk', 
+router.delete('/bulk',
   authenticateToken(),
   requirePermission('persons:delete'),
   body('personIds').isArray({ min: 1 }).withMessage('personIds must be a non-empty array'),

@@ -1,15 +1,20 @@
 import React, { useState } from 'react';
-import { 
+import {
   Bell,
+  ChevronRight,
+  HelpCircle,
   Home,
   LogOut,
   Menu,
   Settings,
   User
 } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/auth/useAuth';
 import Notifications from '../shared/Notifications';
+import { DashboardSwitcher } from '../shared/DashboardSwitcher';
+import { TenantSelector as TenantSwitcher } from '../shared/TenantSelector';
+import { TenantSelector as TenantFilterSelector } from '../common/TenantSelector';
 
 interface HeaderProps {
   sidebarOpen: boolean;
@@ -19,6 +24,7 @@ interface HeaderProps {
 const Header: React.FC<HeaderProps> = ({ sidebarOpen, setSidebarOpen }) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [showUserMenu, setShowUserMenu] = useState(false);
 
   // Genera le iniziali dell'utente
@@ -26,21 +32,21 @@ const Header: React.FC<HeaderProps> = ({ sidebarOpen, setSidebarOpen }) => {
     if (!user) return 'U';
     const firstName = user.firstName || '';
     const lastName = user.lastName || '';
-    
+
     // Gestione sicura per evitare errori toUpperCase su undefined
     const firstInitial = firstName && typeof firstName === 'string' ? firstName.charAt(0) : '';
     const lastInitial = lastName && typeof lastName === 'string' ? lastName.charAt(0) : '';
     const initials = (firstInitial + lastInitial).trim();
-    
+
     if (initials) {
       return initials.toUpperCase();
     }
-    
+
     // Fallback all'email se disponibile
     if (user.email && typeof user.email === 'string') {
       return user.email.charAt(0).toUpperCase();
     }
-    
+
     return 'U';
   };
 
@@ -63,7 +69,7 @@ const Header: React.FC<HeaderProps> = ({ sidebarOpen, setSidebarOpen }) => {
       TRAINER: 'Formatore',
       EMPLOYEE: 'Dipendente'
     };
-    
+
     // Usa user.role invece di user.roleType per compatibilità con il tipo Person
     const userRole = user.role || '';
     return roleConfig[userRole as keyof typeof roleConfig] || userRole || '';
@@ -79,118 +85,104 @@ const Header: React.FC<HeaderProps> = ({ sidebarOpen, setSidebarOpen }) => {
   };
 
   return (
-    <header className="sticky top-0 bg-white border-b border-gray-200 z-30">
-      <div className="px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16 -mb-px">
-          {/* Header: Left side */}
-          <div className="flex">
-            {/* Hamburger button */}
-            <button
-              className="text-gray-500 hover:text-gray-600 xl:hidden p-2 rounded-md hover:bg-gray-100 transition-colors"
-              aria-controls="sidebar"
-              aria-expanded={sidebarOpen}
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log('🍔 Hamburger button clicked! Current state:', sidebarOpen);
-                setSidebarOpen(!sidebarOpen);
-              }}
-            >
-              <span className="sr-only">Open sidebar</span>
-              <Menu className="w-6 h-6 fill-current" />
-            </button>
-          </div>
-
-          {/* Header: Right side */}
-          <div className="flex items-center space-x-3">
-            {/* Sistema di notifiche */}
-            <Notifications />
-            
-            <button className="p-2 text-gray-500 hover:text-gray-600">
-              <span className="sr-only">Notifications</span>
-              <Bell className="w-5 h-5" />
-            </button>
-
-            {/* User info and menu */}
-            {user && (
-              <div className="flex items-center space-x-3">
-                {/* User info */}
-                <div className="hidden md:block text-right">
-                  <div className="text-sm font-medium text-gray-900">{getUserDisplayName()}</div>
-                  <div className="text-xs text-gray-500">{getUserRole()}</div>
-                </div>
-
-                {/* User menu dropdown */}
-                <div className="relative">
-                  <button
-                    onClick={() => setShowUserMenu(!showUserMenu)}
-                    className="flex items-center justify-center bg-primary-100 rounded-full w-8 h-8 hover:bg-primary-200 transition-colors"
-                  >
-                    <span className="text-xs font-medium text-primary-600">{getUserInitials()}</span>
-                  </button>
-
-                  {/* Dropdown menu */}
-                  {showUserMenu && (
-                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-gray-200 z-50">
-                      <div className="py-1">
-                        <div className="px-4 py-2 border-b border-gray-100">
-                          <div className="text-sm font-medium text-gray-900">{getUserDisplayName()}</div>
-                          <div className="text-xs text-gray-500">{user.email}</div>
-                          <div className="text-xs text-primary-600">{getUserRole()}</div>
-                        </div>
-                        
-                        <Link
-                          to="/"
-                          className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                          onClick={() => setShowUserMenu(false)}
-                        >
-                          <Home className="w-4 h-4 mr-2" />
-                          Vai al Sito Pubblico
-                        </Link>
-                        
-                        <Link
-                          to="/settings"
-                          className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                          onClick={() => setShowUserMenu(false)}
-                        >
-                          <Settings className="w-4 h-4 mr-2" />
-                          Impostazioni
-                        </Link>
-                        
-                        <button
-                          onClick={handleLogout}
-                          className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                        >
-                          <LogOut className="w-4 h-4 mr-2" />
-                          Logout
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Fallback se non c'è utente loggato */}
-            {!user && (
-              <Link
-                to="/login"
-                className="flex items-center justify-center bg-gray-100 rounded-full w-8 h-8"
-              >
-                <User className="w-4 h-4 text-gray-600" />
-              </Link>
-            )}
+    <header className="sticky top-0 z-30 h-16 bg-gradient-to-r from-white via-blue-50/50 to-white dark:from-gray-800 dark:via-gray-800 dark:to-gray-800 border-b border-blue-100 dark:border-gray-700">
+      <div className="flex items-center justify-between h-full px-4">
+        {/* Header: Left side */}
+        <div className="flex items-center gap-4">
+          {/* Breadcrumb / Title - Uniform style */}
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-blue-600">ElementSicurezza</span>
+            <ChevronRight className="h-4 w-4 text-gray-400" />
+            <span className="text-sm font-medium text-gray-900 dark:text-white">
+              {location.pathname === '/dashboard'
+                ? 'Dashboard'
+                : location.pathname.split('/').pop()?.replace(/-/g, ' ').replace(/^\w/, c => c.toUpperCase()) || 'Dashboard'}
+            </span>
           </div>
         </div>
-      </div>
 
-      {/* Overlay per chiudere il menu quando si clicca fuori */}
-      {showUserMenu && (
-        <div 
-          className="fixed inset-0 z-40" 
-          onClick={() => setShowUserMenu(false)}
-        />
-      )}
+        {/* Header: Center - Tenant Filter Selector (visible for multi-tenant users) */}
+        <div className="flex-1 flex justify-center">
+          <TenantFilterSelector variant="compact" />
+        </div>
+
+        {/* Header: Right side */}
+        <div className="flex items-center gap-4">
+          {/* Sistema di notifiche */}
+          <Notifications />
+
+          {/* Notifications bell */}
+          <button className="relative p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
+            <Bell className="h-5 w-5 text-gray-500" />
+          </button>
+
+          {/* Help */}
+          <button className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
+            <HelpCircle className="h-5 w-5 text-gray-500" />
+          </button>
+
+          {/* User menu */}
+          {user && (
+            <div className="relative group">
+              <button className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
+                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                  <span className="text-xs font-medium text-blue-600">{getUserInitials()}</span>
+                </div>
+                <span className="hidden md:block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {user.firstName || 'Utente'}
+                </span>
+              </button>
+
+              {/* Dropdown menu */}
+              <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all">
+                <div className="px-4 py-2 border-b border-gray-100 dark:border-gray-700">
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">{getUserDisplayName()}</p>
+                  <p className="text-xs text-gray-500">{user.email}</p>
+                  {getUserRole() && (
+                    <span className="inline-block mt-1 px-2 py-0.5 text-xs bg-blue-100 text-blue-800 rounded">
+                      {getUserRole()}
+                    </span>
+                  )}
+                </div>
+
+                <Link
+                  to="/"
+                  className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                >
+                  <Home className="h-4 w-4" />
+                  Vai al Sito Pubblico
+                </Link>
+
+                <Link
+                  to="/settings"
+                  className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                >
+                  <Settings className="h-4 w-4" />
+                  Impostazioni
+                </Link>
+
+                <button
+                  onClick={handleLogout}
+                  className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                >
+                  <LogOut className="h-4 w-4" />
+                  Logout
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Fallback se non c'è utente loggato */}
+          {!user && (
+            <Link
+              to="/login"
+              className="flex items-center justify-center bg-gray-100 rounded-full w-8 h-8"
+            >
+              <User className="w-4 h-4 text-gray-600" />
+            </Link>
+          )}
+        </div>
+      </div>
     </header>
   );
 };

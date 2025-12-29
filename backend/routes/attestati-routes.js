@@ -19,6 +19,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import googleDocsService from '../services/google-docs-service.js';
 import { getValidAccessToken } from '../services/googleTokenService.js';
+import qrCodeService from '../services/qrCodeService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -40,14 +41,70 @@ function formatDate(date) {
   return `${day}/${month}/${year}`;
 }
 
+// Helper function to translate deliveryMode to Italian
+function translateDeliveryMode(mode) {
+  const translations = {
+    'IN_PERSON': 'In presenza',
+    'ONLINE': 'Online',
+    'HYBRID': 'Ibrida',
+    'BLENDED': 'Mista',
+    'SELF_PACED': 'Autoapprendimento'
+  };
+  return translations[mode] || mode || '';
+}
+
+// Helper function to translate riskLevel to Italian
+function translateRiskLevel(level) {
+  const translations = {
+    'ALTO': 'Alto',
+    'MEDIO': 'Medio',
+    'BASSO': 'Basso',
+    'A': 'A',
+    'B': 'B',
+    'C': 'C'
+  };
+  return translations[level] || level || '';
+}
+
+// Helper function to translate courseType to Italian
+function translateCourseType(type) {
+  const translations = {
+    'PRIMO_CORSO': 'Primo Corso',
+    'AGGIORNAMENTO': 'Aggiornamento'
+  };
+  return translations[type] || type || '';
+}
+
 /**
  * GET /api/v1/attestati
  * Get all certificates with optional filters
  */
 router.get('/', authenticateToken(), requirePermission('read:documents'), async (req, res) => {
   try {
-    const { scheduleId, personId, year } = req.query;
+    const { scheduleId, year } = req.query;
+    let personId = req.query.personId;
     const tenantId = req.user.tenantId;
+    const person = req.person || req.user;
+
+    // Verifica se l'utente è EMPLOYEE (ha solo il ruolo EMPLOYEE, non altri ruoli admin)
+    const personRoles = await prisma.personRole.findMany({
+      where: {
+        personId: person.id,
+        tenantId,
+        isActive: true,
+        deletedAt: null
+      },
+      select: { roleType: true }
+    });
+
+    const roleTypes = personRoles.map(pr => pr.roleType);
+    const isEmployeeOnly = roleTypes.includes('EMPLOYEE') &&
+      !roleTypes.some(r => ['ADMIN', 'TRAINING_ADMIN', 'HR_MANAGER', 'COMPANY_MANAGER', 'SITE_MANAGER', 'TRAINER'].includes(r));
+
+    // Se è EMPLOYEE, forza il filtro per il proprio personId
+    if (isEmployeeOnly) {
+      personId = person.id;
+    }
 
     const where = {
       tenantId,
@@ -112,7 +169,7 @@ router.get('/', authenticateToken(), requirePermission('read:documents'), async 
           }
         };
       }
-      
+
       const { taxCode, ...personWithoutTaxCode } = attestato.person;
       return {
         ...attestato,
@@ -132,7 +189,7 @@ router.get('/', authenticateToken(), requirePermission('read:documents'), async 
       stack: error.stack,
       personId: req.user?.id
     });
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to fetch attestati',
       message: error.message,
       details: process.env.NODE_ENV === 'development' ? error.stack : undefined
@@ -167,7 +224,7 @@ router.post(
       const userId = req.user.id;
 
       // Verify schedule exists and belongs to tenant
-      const schedule = await prisma.scheduledCourse.findFirst({
+      const schedule = await prisma.courseSchedule.findFirst({
         where: {
           id: scheduleId,
           tenantId,
@@ -327,7 +384,7 @@ router.post(
           province: person.company.provincia || '',
           postalCode: person.company.cap || '',
           country: 'Italia',
-          full: person.company.sedeAzienda && person.company.citta 
+          full: person.company.sedeAzienda && person.company.citta
             ? `${person.company.sedeAzienda}, ${person.company.cap || ''} ${person.company.citta} ${person.company.provincia ? `(${person.company.provincia})` : ''}`.trim()
             : ''
         }
@@ -350,7 +407,10 @@ router.post(
           lastName: person.lastName,
           cf: person.taxCode || '',
           birthDate: formatDate(person.birthDate),
-          birthPlace: person.birthPlace || ''
+          birthPlace: person.birthPlace || '',
+          title: person.title || '',
+          email: person.email || '',
+          phone: person.phone || ''
         },
         company: companyData,
         course: {
@@ -360,20 +420,23 @@ router.post(
           category: schedule.course.category || '',
           regulation: schedule.course.regulation || '',
           validityYears: schedule.course.validityYears || 0,
-          description: schedule.course.description || ''
+          description: schedule.course.description || '',
+          riskLevel: translateRiskLevel(schedule.course.riskLevel),
+          courseType: translateCourseType(schedule.course.courseType)
         },
         schedule: {
           startDate: formatDate(schedule.startDate),
           endDate: formatDate(schedule.endDate),
           location: schedule.location || '',
           totalHours: schedule.course.duration || 0,
-          modality: schedule.deliveryMode || '',
+          deliveryMode: translateDeliveryMode(schedule.deliveryMode),
           notes: schedule.notes || ''
         },
         trainer: trainerData,
         document: {
           number: `${numeroProgressivo}/${currentYear}`,
-          date: formatDate(new Date())
+          date: formatDate(new Date()),
+          qrCode: '' // Will be populated below
         },
         current: {
           date: formatDate(new Date()),
@@ -386,6 +449,48 @@ router.post(
           registrationNumber: `ATT/${currentYear}/${String(numeroProgressivo).padStart(6, '0')}`
         }
       };
+
+      // Generate QR code for verification
+      const registrationNumber = markerContext.certificate.registrationNumber;
+      // Use FRONTEND_URL for QR verification - take first URL if multiple are configured
+      const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:5173').split(',')[0].trim();
+      const verifyUrl = `${frontendUrl}/verify/${encodeURIComponent(registrationNumber)}`;
+
+      // Extract QR code dimensions from template if available
+      let qrWidth = 150; // Default size in pixels
+      let qrHeight = 150;
+      try {
+        if (template.content) {
+          const templateContent = typeof template.content === 'string'
+            ? JSON.parse(template.content)
+            : template.content;
+
+          if (templateContent.__slideEditor && templateContent.elements) {
+            const qrElement = templateContent.elements.find(el => el.type === 'qrcode');
+            if (qrElement) {
+              // Use element dimensions, scale up for print quality (2x for 150 DPI)
+              qrWidth = Math.round(qrElement.width * 2) || 150;
+              qrHeight = Math.round(qrElement.height * 2) || 150;
+              logger.info('QR code dimensions from template', { qrWidth, qrHeight, elementWidth: qrElement.width, elementHeight: qrElement.height });
+            }
+          }
+        }
+      } catch (parseError) {
+        logger.warn('Failed to parse template for QR dimensions', { error: parseError.message });
+      }
+
+      try {
+        // Generate QR with extracted dimensions (use the larger dimension for square QR)
+        const qrSize = Math.max(qrWidth, qrHeight);
+        const qrCodeDataUrl = await qrCodeService.toDataUrl(verifyUrl, { width: qrSize });
+        // Store both the QR image and the dimensions for the template
+        markerContext.document.qrCode = `<img src="${qrCodeDataUrl}" alt="QR Code Verifica" style="width: 100%; height: 100%; object-fit: contain;" />`;
+        markerContext.document.qrCodeWidth = qrWidth;
+        markerContext.document.qrCodeHeight = qrHeight;
+      } catch (qrError) {
+        logger.warn('Failed to generate QR code for attestato', { error: qrError.message });
+        markerContext.document.qrCode = '';
+      }
 
       // Generate document
       const document = await documentService.generateDocument({
@@ -401,12 +506,20 @@ router.post(
         }
       });
 
+      // Generate filename with format: yyyy.mm.dd - nome cognome - corso
+      const today = new Date();
+      const dateStr = `${today.getFullYear()}.${String(today.getMonth() + 1).padStart(2, '0')}.${String(today.getDate()).padStart(2, '0')}`;
+      const sanitizedFirstName = person.firstName.replace(/[^a-zA-Z0-9\s]/g, '').trim();
+      const sanitizedLastName = person.lastName.replace(/[^a-zA-Z0-9\s]/g, '').trim();
+      const sanitizedCourseTitle = schedule.course.title.replace(/[^a-zA-Z0-9\s]/g, '').trim().substring(0, 50);
+      const customFileName = `${dateStr} - ${sanitizedFirstName} ${sanitizedLastName} - ${sanitizedCourseTitle}.pdf`;
+
       // Create attestato record
       const attestato = await prisma.attestato.create({
         data: {
           personId,
           scheduledCourseId: scheduleId,
-          fileName: document.fileName,
+          fileName: customFileName,
           fileUrl: document.fileUrl,
           numeroProgressivo,
           annoProgressivo: currentYear,
@@ -467,7 +580,7 @@ router.post(
         stack: error.stack,
         personId: req.user?.id
       });
-      res.status(500).json({ error: 'Failed to generate certificate' });
+      res.status(500).json({ error: 'Failed to generate certificate', message: error.message });
     }
   }
 );
@@ -562,6 +675,7 @@ router.post(
               ragioneSociale: true,
               piva: true,
               codiceFiscale: true,
+              codiceAteco: true,
               sedeAzienda: true,
               citta: true,
               provincia: true,
@@ -635,6 +749,9 @@ router.post(
                 fullName: `${firstSession.trainer.firstName} ${firstSession.trainer.lastName}`,
                 firstName: firstSession.trainer.firstName,
                 lastName: firstSession.trainer.lastName,
+                email: firstSession.trainer.email || '',
+                phone: firstSession.trainer.phone || '',
+                hourlyRate: firstSession.trainer.hourlyRate,
                 qualifications: firstSession.trainer.qualifications || ''
               };
             }
@@ -645,6 +762,9 @@ router.post(
               fullName: `${schedule.trainer.firstName} ${schedule.trainer.lastName}`,
               firstName: schedule.trainer.firstName,
               lastName: schedule.trainer.lastName,
+              email: schedule.trainer.email || '',
+              phone: schedule.trainer.phone || '',
+              hourlyRate: schedule.trainer.hourlyRate,
               qualifications: schedule.trainer.qualifications || ''
             };
           }
@@ -655,6 +775,7 @@ router.post(
             name: person.company.ragioneSociale,
             vatNumber: person.company.piva || '',
             fiscalCode: person.company.codiceFiscale || '',
+            codiceAteco: person.company.codiceAteco || '',
             legalRepresentative: person.company.personaRiferimento || '',
             email: person.company.mail || '',
             phone: person.company.telefono || '',
@@ -664,7 +785,7 @@ router.post(
               province: person.company.provincia || '',
               postalCode: person.company.cap || '',
               country: 'Italia',
-              full: person.company.sedeAzienda && person.company.citta 
+              full: person.company.sedeAzienda && person.company.citta
                 ? `${person.company.sedeAzienda}, ${person.company.cap || ''} ${person.company.citta} ${person.company.provincia ? `(${person.company.provincia})` : ''}`.trim()
                 : ''
             }
@@ -687,7 +808,10 @@ router.post(
               lastName: person.lastName,
               cf: person.taxCode || '',
               birthDate: formatDate(person.birthDate),
-              birthPlace: person.birthPlace || ''
+              birthPlace: person.birthPlace || '',
+              title: person.title || '',
+              email: person.email || '',
+              phone: person.phone || ''
             },
             company: companyData,
             course: {
@@ -696,19 +820,24 @@ router.post(
               duration: schedule.course.duration || 0,
               category: schedule.course.category || '',
               regulation: schedule.course.regulation || '',
-              validityYears: schedule.course.validityYears || 0
+              validityYears: schedule.course.validityYears || 0,
+              description: schedule.course.description || '',
+              riskLevel: translateRiskLevel(schedule.course.riskLevel),
+              courseType: translateCourseType(schedule.course.courseType)
             },
             schedule: {
               startDate: formatDate(schedule.startDate),
               endDate: formatDate(schedule.endDate),
               location: schedule.location || '',
               totalHours: schedule.course.duration || 0,
-              modality: schedule.deliveryMode || ''
+              deliveryMode: translateDeliveryMode(schedule.deliveryMode),
+              notes: schedule.notes || ''
             },
             trainer: trainerData,
             document: {
               number: `${numeroProgressivo}/${currentYear}`,
-              date: formatDate(new Date())
+              date: formatDate(new Date()),
+              qrCode: '' // Will be populated below
             },
             current: {
               date: formatDate(new Date()),
@@ -722,17 +851,57 @@ router.post(
             }
           };
 
+          // Generate QR code for verification
+          const registrationNumber = markerContext.certificate.registrationNumber;
+          // Use FRONTEND_URL for QR verification - take first URL if multiple are configured
+          const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:5173').split(',')[0].trim();
+          const verifyUrl = `${frontendUrl}/verify/${encodeURIComponent(registrationNumber)}`;
+
+          // Extract QR code dimensions from template if available
+          let qrWidth = 150; // Default size in pixels
+          let qrHeight = 150;
+          try {
+            if (template.content) {
+              const templateContent = typeof template.content === 'string'
+                ? JSON.parse(template.content)
+                : template.content;
+
+              if (templateContent.__slideEditor && templateContent.elements) {
+                const qrElement = templateContent.elements.find(el => el.type === 'qrcode');
+                if (qrElement) {
+                  // Use element dimensions, scale up for print quality (2x for 150 DPI)
+                  qrWidth = Math.round(qrElement.width * 2) || 150;
+                  qrHeight = Math.round(qrElement.height * 2) || 150;
+                }
+              }
+            }
+          } catch (parseError) {
+            // Ignore parse errors, use default dimensions
+          }
+
+          try {
+            // Generate QR with extracted dimensions
+            const qrSize = Math.max(qrWidth, qrHeight);
+            const qrCodeDataUrl = await qrCodeService.toDataUrl(verifyUrl, { width: qrSize });
+            markerContext.document.qrCode = `<img src="${qrCodeDataUrl}" alt="QR Code Verifica" style="width: 100%; height: 100%; object-fit: contain;" />`;
+            markerContext.document.qrCodeWidth = qrWidth;
+            markerContext.document.qrCodeHeight = qrHeight;
+          } catch (qrError) {
+            logger.warn('Failed to generate QR code for attestato', { error: qrError.message });
+            markerContext.document.qrCode = '';
+          }
+
           // Generate document
           let document;
-          
+
           // Check if template uses Google Docs/Slides
           if (template.googleDocsId || template.googleSlidesId) {
             // Use Google API for generation
             const accessToken = await getValidAccessToken(userId, tenantId);
-            
+
             // Detect document type with validation (auto-corrects mismatches)
             const { documentId, documentType, warnings } = detectDocumentType(template);
-            
+
             // Log any warnings about mismatched fields
             warnings.forEach(warning => {
               logger.warn(warning, {
@@ -743,11 +912,11 @@ router.post(
               });
               console.warn(`⚠️  ${warning}`);
             });
-            
+
             if (!documentId || !documentType) {
               throw new Error(`Template ${template.id} has invalid Google document configuration`);
             }
-            
+
             // Flatten markerContext for Google API (only top-level placeholders)
             const flatMarkers = {
               // Person
@@ -757,55 +926,207 @@ router.post(
               CODICE_FISCALE: person.taxCode || '',
               DATA_NASCITA: formatDate(person.birthDate),
               LUOGO_NASCITA: person.birthPlace || '',
-              
+              PROFILO_PROFESSIONALE: person.title || person.jobTitle || '',
+              EMAIL: person.email || '',
+              TELEFONO: person.phone || '',
+              INDIRIZZO_VIA: person.residenceAddress || '',
+              INDIRIZZO_CITTA: person.residenceCity || '',
+              INDIRIZZO_PROVINCIA: person.residenceProvince || '',
+              INDIRIZZO_CAP: person.residenceCap || '',
+              INDIRIZZO_PAESE: 'Italia',
+              INDIRIZZO_COMPLETO: [
+                person.residenceAddress,
+                person.residenceCap,
+                person.residenceCity,
+                person.residenceProvince ? `(${person.residenceProvince})` : ''
+              ].filter(Boolean).join(' '),
+
               // Course
               CORSO_TITOLO: schedule.course.title,
               CORSO_CODICE: schedule.course.code || '',
               CORSO_DURATA: String(schedule.course.duration || 0),
               CORSO_CATEGORIA: schedule.course.category || '',
-              
+              CORSO_NORMATIVA: schedule.course.regulation || '',
+              CORSO_VALIDITA_ANNI: String(schedule.course.validityYears || 0),
+              CORSO_DESCRIZIONE: schedule.course.description || '',
+              CORSO_OBIETTIVI: schedule.course.objectives || '',
+              CORSO_LIVELLO_RISCHIO: translateRiskLevel(schedule.course.riskLevel),
+              CORSO_TIPOLOGIA: translateCourseType(schedule.course.courseType),
+
               // Schedule
               DATA_INIZIO: formatDate(schedule.startDate),
               DATA_FINE: formatDate(schedule.endDate),
               SEDE_CORSO: schedule.location || '',
               ORE_TOTALI: String(schedule.course.duration || 0),
-              
+              MODALITA_EROGAZIONE: translateDeliveryMode(schedule.deliveryMode),
+              CODICE_EDIZIONE: schedule.code || '',
+              INDIRIZZO_SEDE: schedule.address || schedule.location || '',
+
               // Trainer
               NOME_FORMATORE: trainerData.firstName || '',
               COGNOME_FORMATORE: trainerData.lastName || '',
               FORMATORE_COMPLETO: trainerData.fullName || '',
-              
+              EMAIL_FORMATORE: trainerData.email || '',
+              TELEFONO_FORMATORE: trainerData.phone || '',
+              TARIFFA_ORARIA: trainerData.hourlyRate ? `€ ${parseFloat(trainerData.hourlyRate).toFixed(2)}` : '',
+              COMPENSO_TOTALE: trainerData.hourlyRate && schedule.course.duration
+                ? `€ ${(parseFloat(trainerData.hourlyRate) * (schedule.course.duration || 0)).toFixed(2)}`
+                : '',
+
               // Company
               AZIENDA_RAGIONE_SOCIALE: companyData.name || '',
               AZIENDA_PIVA: companyData.vatNumber || '',
               AZIENDA_CF: companyData.fiscalCode || '',
               AZIENDA_INDIRIZZO: companyData.address?.full || '',
-              
+              AZIENDA_CODICE_ATECO: companyData.codiceAteco || '',
+              AZIENDA_VIA: companyData.address?.street || '',
+              AZIENDA_CITTA: companyData.address?.city || '',
+              AZIENDA_PROVINCIA: companyData.address?.province || '',
+              AZIENDA_CAP: companyData.address?.postalCode || '',
+              AZIENDA_EMAIL: companyData.email || '',
+              AZIENDA_TELEFONO: companyData.phone || '',
+              AZIENDA_RAPPRESENTANTE: companyData.legalRepresentative || '',
+
               // Document
               NUMERO_PROGRESSIVO: `${numeroProgressivo}/${currentYear}`,
               DATA_GENERAZIONE: formatDate(new Date()),
               ANNO: String(currentYear),
-              NUMERO_ATTESTATO: `ATT/${currentYear}/${String(numeroProgressivo).padStart(6, '0')}`
+              NUMERO_ATTESTATO: `ATT/${currentYear}/${String(numeroProgressivo).padStart(6, '0')}`,
+              DATA_SCADENZA: validUntil ? formatDate(validUntil) : '',
+
+              // QR Code for certificate verification
+              // Generated using local qrcode library (no external API dependency)
+              QR_CODE_VERIFICA: await (async () => {
+                try {
+                  const { generateVerificationQRCode } = await import('../services/qrCodeService.js');
+                  const attestatoNumber = `ATT/${currentYear}/${String(numeroProgressivo).padStart(6, '0')}`;
+                  return await generateVerificationQRCode(attestatoNumber);
+                } catch (qrError) {
+                  // Fallback to Google Chart API if local generation fails
+                  logger.warn('QR code local generation failed, using Google Chart API fallback', { error: qrError.message });
+                  const attestatoNumber = `ATT/${currentYear}/${String(numeroProgressivo).padStart(6, '0')}`;
+                  const verifyUrl = `${process.env.PUBLIC_URL || 'https://app.elementmedica.it'}/verify/${encodeURIComponent(attestatoNumber)}`;
+                  return `https://chart.googleapis.com/chart?chs=150x150&cht=qr&chl=${encodeURIComponent(verifyUrl)}&choe=UTF-8`;
+                }
+              })(),
+
+              // System / Tenant
+              DATA_CORRENTE: formatDate(new Date()),
+              ORA_CORRENTE: new Date().toLocaleTimeString('it-IT'),
+              ENTE_NOME: req.user.tenant?.name || '',
+              ENTE_INDIRIZZO: req.user.tenant?.address || '',
+              ENTE_TELEFONO: req.user.tenant?.phone || '',
+              ENTE_EMAIL: req.user.tenant?.email || ''
             };
-            
-            const documentTitle = `Attestato_${person.lastName}_${person.firstName}_${numeroProgressivo}_${currentYear}`;
-            
+
+            // Add lowercase/nested versions of all placeholders for compatibility
+            // This allows users to use {{person.firstName}} OR {{NOME}} in their templates
+            const lowercaseMarkers = {
+              // Person
+              'person.firstName': flatMarkers.NOME,
+              'person.lastName': flatMarkers.COGNOME,
+              'person.fullName': flatMarkers.NOME_COMPLETO,
+              'person.cf': flatMarkers.CODICE_FISCALE,
+              'person.birthDate': flatMarkers.DATA_NASCITA,
+              'person.birthPlace': flatMarkers.LUOGO_NASCITA,
+              'person.title': flatMarkers.PROFILO_PROFESSIONALE,
+              'person.email': flatMarkers.EMAIL,
+              'person.phone': flatMarkers.TELEFONO,
+              'person.address.street': flatMarkers.INDIRIZZO_VIA,
+              'person.address.city': flatMarkers.INDIRIZZO_CITTA,
+              'person.address.province': flatMarkers.INDIRIZZO_PROVINCIA,
+              'person.address.postalCode': flatMarkers.INDIRIZZO_CAP,
+              'person.address.full': flatMarkers.INDIRIZZO_COMPLETO,
+
+              // Course
+              'course.title': flatMarkers.CORSO_TITOLO,
+              'course.code': flatMarkers.CORSO_CODICE,
+              'course.duration': flatMarkers.CORSO_DURATA,
+              'course.category': flatMarkers.CORSO_CATEGORIA,
+              'course.regulation': flatMarkers.CORSO_NORMATIVA,
+              'course.validityYears': flatMarkers.CORSO_VALIDITA_ANNI,
+              'course.description': flatMarkers.CORSO_DESCRIZIONE,
+              'course.objectives': flatMarkers.CORSO_OBIETTIVI,
+              'course.riskLevel': flatMarkers.CORSO_LIVELLO_RISCHIO,
+              'course.courseType': flatMarkers.CORSO_TIPOLOGIA,
+
+              // Schedule
+              'schedule.startDate': flatMarkers.DATA_INIZIO,
+              'schedule.endDate': flatMarkers.DATA_FINE,
+              'schedule.location': flatMarkers.SEDE_CORSO,
+              'schedule.totalHours': flatMarkers.ORE_TOTALI,
+              'schedule.deliveryMode': flatMarkers.MODALITA_EROGAZIONE,
+              'schedule.code': flatMarkers.CODICE_EDIZIONE,
+              'schedule.address': flatMarkers.INDIRIZZO_SEDE,
+
+              // Trainer
+              'trainer.firstName': flatMarkers.NOME_FORMATORE,
+              'trainer.lastName': flatMarkers.COGNOME_FORMATORE,
+              'trainer.fullName': flatMarkers.FORMATORE_COMPLETO,
+              'trainer.email': flatMarkers.EMAIL_FORMATORE,
+              'trainer.phone': flatMarkers.TELEFONO_FORMATORE,
+              'trainer.hourlyRate': flatMarkers.TARIFFA_ORARIA,
+              'trainer.totalCompensation': flatMarkers.COMPENSO_TOTALE,
+
+              // Company
+              'company.name': flatMarkers.AZIENDA_RAGIONE_SOCIALE,
+              'company.vatNumber': flatMarkers.AZIENDA_PIVA,
+              'company.fiscalCode': flatMarkers.AZIENDA_CF,
+              'company.codiceAteco': flatMarkers.AZIENDA_CODICE_ATECO,
+              'company.address.full': flatMarkers.AZIENDA_INDIRIZZO,
+              'company.address.street': flatMarkers.AZIENDA_VIA,
+              'company.address.city': flatMarkers.AZIENDA_CITTA,
+              'company.address.province': flatMarkers.AZIENDA_PROVINCIA,
+              'company.address.postalCode': flatMarkers.AZIENDA_CAP,
+              'company.email': flatMarkers.AZIENDA_EMAIL,
+              'company.phone': flatMarkers.AZIENDA_TELEFONO,
+              'company.legalRepresentative': flatMarkers.AZIENDA_RAPPRESENTANTE,
+
+              // Document
+              'document.number': flatMarkers.NUMERO_PROGRESSIVO,
+              'document.date': flatMarkers.DATA_GENERAZIONE,
+              'document.qrCode': flatMarkers.QR_CODE_VERIFICA,
+              'certificate.number': flatMarkers.NUMERO_ATTESTATO,
+              'certificate.registrationNumber': flatMarkers.NUMERO_ATTESTATO,
+              'certificate.validUntil': flatMarkers.DATA_SCADENZA,
+
+              // System
+              'current.date': flatMarkers.DATA_CORRENTE,
+              'current.year': flatMarkers.ANNO,
+              'current.time': flatMarkers.ORA_CORRENTE,
+              'tenant.name': flatMarkers.ENTE_NOME,
+              'tenant.address': flatMarkers.ENTE_INDIRIZZO,
+              'tenant.phone': flatMarkers.ENTE_TELEFONO,
+              'tenant.email': flatMarkers.ENTE_EMAIL
+            };
+
+            // Merge UPPERCASE and lowercase markers
+            const allMarkers = { ...flatMarkers, ...lowercaseMarkers };
+
+            // Generate filename with format: yyyy.mm.dd - nome cognome - corso
+            const today = new Date();
+            const dateStr = `${today.getFullYear()}.${String(today.getMonth() + 1).padStart(2, '0')}.${String(today.getDate()).padStart(2, '0')}`;
+            const sanitizedFirstName = person.firstName.replace(/[^a-zA-Z0-9\s]/g, '').trim();
+            const sanitizedLastName = person.lastName.replace(/[^a-zA-Z0-9\s]/g, '').trim();
+            const sanitizedCourseTitle = schedule.course.title.replace(/[^a-zA-Z0-9\s]/g, '').trim().substring(0, 50);
+            const documentTitle = `${dateStr} - ${sanitizedFirstName} ${sanitizedLastName} - ${sanitizedCourseTitle}`;
+
             const { pdfBuffer } = await googleDocsService.generateDocumentFromTemplate(
               accessToken,
               documentId,
               documentType,
-              flatMarkers,
+              allMarkers,
               documentTitle
             );
-            
+
             // Save PDF to uploads
             const uploadsDir = path.join(__dirname, '..', 'uploads', 'attestati');
             await fs.mkdir(uploadsDir, { recursive: true });
-            
+
             const filename = `${documentTitle}.pdf`;
             const filepath = path.join(uploadsDir, filename);
             await fs.writeFile(filepath, pdfBuffer);
-            
+
             document = {
               fileName: filename,
               fileUrl: `/uploads/attestati/${filename}`,
@@ -828,12 +1149,20 @@ router.post(
             });
           }
 
+          // Generate filename with format: yyyy.mm.dd - nome cognome - corso (for standard templates)
+          const today = new Date();
+          const dateStr = `${today.getFullYear()}.${String(today.getMonth() + 1).padStart(2, '0')}.${String(today.getDate()).padStart(2, '0')}`;
+          const sanitizedFirstName = person.firstName.replace(/[^a-zA-Z0-9\s]/g, '').trim();
+          const sanitizedLastName = person.lastName.replace(/[^a-zA-Z0-9\s]/g, '').trim();
+          const sanitizedCourseTitle = schedule.course.title.replace(/[^a-zA-Z0-9\s]/g, '').trim().substring(0, 50);
+          const customFileName = `${dateStr} - ${sanitizedFirstName} ${sanitizedLastName} - ${sanitizedCourseTitle}.pdf`;
+
           // Create attestato
           const attestato = await prisma.attestato.create({
             data: {
               personId: person.id,
               scheduledCourseId: scheduleId,
-              fileName: document.fileName,
+              fileName: customFileName,
               fileUrl: document.fileUrl,
               numeroProgressivo,
               annoProgressivo: currentYear,
@@ -917,7 +1246,7 @@ router.post(
         personId: req.user?.id
       });
       console.error('❌ BATCH GENERATION ERROR:', error);
-      res.status(500).json({ 
+      res.status(500).json({
         error: 'Failed to generate batch certificates',
         message: error.message,
         details: process.env.NODE_ENV === 'development' ? error.stack : undefined
@@ -969,7 +1298,7 @@ router.post('/delete-batch', authenticateToken(), requirePermission('delete:docu
       personId: req.user?.id
     });
 
-    res.json({ 
+    res.json({
       message: `${attestati.length} certificate(s) deleted successfully`,
       deleted: attestati.length
     });
@@ -981,6 +1310,172 @@ router.post('/delete-batch', authenticateToken(), requirePermission('delete:docu
       personId: req.user?.id
     });
     res.status(500).json({ error: 'Failed to delete certificates' });
+  }
+});
+
+/**
+ * GET /api/v1/attestati/:id/download
+ * Download certificate PDF
+ * ⚠️ IMPORTANTE: Deve essere PRIMA di /:id per non essere catturato come parametro
+ */
+router.get('/:id/download', authenticateToken(), requirePermission('read:documents'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const tenantId = req.user.tenantId;
+
+    const attestato = await prisma.attestato.findFirst({
+      where: {
+        id,
+        tenantId,
+        deletedAt: null
+      },
+      include: {
+        person: true,
+        scheduledCourse: {
+          include: { course: true }
+        }
+      }
+    });
+
+    if (!attestato) {
+      return res.status(404).json({ error: 'Certificate not found' });
+    }
+
+    if (!attestato.fileUrl) {
+      return res.status(404).json({ error: 'Certificate file not found' });
+    }
+
+    // Generate proper filename if not saved or is a UUID-style fallback
+    let downloadFileName = attestato.fileName;
+    if (!downloadFileName || downloadFileName.includes('attestato_') && downloadFileName.includes('-')) {
+      // Generate filename with format: yyyy.mm.dd - nome cognome - corso
+      const createdDate = new Date(attestato.createdAt);
+      const dateStr = `${createdDate.getFullYear()}.${String(createdDate.getMonth() + 1).padStart(2, '0')}.${String(createdDate.getDate()).padStart(2, '0')}`;
+
+      const firstName = attestato.person?.firstName || 'Partecipante';
+      const lastName = attestato.person?.lastName || '';
+      const courseTitle = attestato.scheduledCourse?.course?.title || 'Corso';
+
+      const sanitizedFirstName = firstName.replace(/[^a-zA-Z0-9\sàèéìòùÀÈÉÌÒÙ]/g, '').trim();
+      const sanitizedLastName = lastName.replace(/[^a-zA-Z0-9\sàèéìòùÀÈÉÌÒÙ]/g, '').trim();
+      const sanitizedCourseTitle = courseTitle.replace(/[^a-zA-Z0-9\sàèéìòùÀÈÉÌÒÙ]/g, '').trim().substring(0, 50);
+
+      downloadFileName = `${dateStr} - ${sanitizedFirstName} ${sanitizedLastName} - ${sanitizedCourseTitle}.pdf`;
+    }
+
+    logger.info('Certificate download requested', {
+      component: 'attestati-routes',
+      action: 'download',
+      attestatoId: id,
+      personId: req.user?.id,
+      fileUrl: attestato.fileUrl
+    });
+
+    // Se fileUrl è un path locale (/uploads/ o /documents/), invia il file
+    if (attestato.fileUrl.startsWith('/uploads/') || attestato.fileUrl.startsWith('/documents/')) {
+      // Determina il path corretto
+      // Se inizia con /uploads/, il file è già nel percorso corretto
+      // Se inizia con /documents/, il file è in /uploads/documents/
+      let filePath;
+      if (attestato.fileUrl.startsWith('/uploads/')) {
+        filePath = path.join(__dirname, '..', attestato.fileUrl);
+      } else {
+        // /documents/file.pdf -> /uploads/documents/file.pdf
+        // Remove leading slash to avoid path.join issues
+        const relativePath = attestato.fileUrl.substring(1); // Remove leading /
+        filePath = path.join(__dirname, '..', 'uploads', relativePath);
+      }
+
+      logger.debug('Attempting to serve file', {
+        component: 'attestati-routes',
+        action: 'download',
+        attestatoId: id,
+        fileUrl: attestato.fileUrl,
+        resolvedPath: filePath,
+        exists: fsSync.existsSync(filePath),
+        __dirname
+      });
+
+      if (fsSync.existsSync(filePath)) {
+        logger.info('File found, serving download', {
+          component: 'attestati-routes',
+          attestatoId: id,
+          filePath,
+          fileName: downloadFileName
+        });
+        return res.download(filePath, downloadFileName);
+      } else {
+        // Fallback: prova anche percorsi alternativi
+        const uploadsBasePath = path.join(__dirname, '..', 'uploads', 'documents');
+        const justFileName = path.basename(attestato.fileUrl);
+        const altPath1 = path.join(uploadsBasePath, justFileName);
+        const altPath2 = path.join(__dirname, '..', attestato.fileUrl);
+
+        logger.debug('Primary path not found, trying alternates', {
+          component: 'attestati-routes',
+          attestatoId: id,
+          primaryPath: filePath,
+          altPath1,
+          altPath1Exists: fsSync.existsSync(altPath1),
+          altPath2,
+          altPath2Exists: fsSync.existsSync(altPath2)
+        });
+
+        if (fsSync.existsSync(altPath1)) {
+          logger.info('File found at alternate path 1', {
+            component: 'attestati-routes',
+            attestatoId: id,
+            altPath1
+          });
+          return res.download(altPath1, downloadFileName);
+        }
+
+        if (fsSync.existsSync(altPath2)) {
+          logger.info('File found at alternate path 2', {
+            component: 'attestati-routes',
+            attestatoId: id,
+            altPath2
+          });
+          return res.download(altPath2, downloadFileName);
+        }
+
+        logger.error('File not found on disk', {
+          component: 'attestati-routes',
+          action: 'download',
+          attestatoId: id,
+          primaryPath: filePath,
+          altPath1,
+          altPath2,
+          fileUrl: attestato.fileUrl
+        });
+        return res.status(404).json({ error: 'Certificate file not found on disk' });
+      }
+    }
+
+    // Se è un URL esterno (Supabase storage o absolute path), fetch e stream
+    try {
+      const axios = require('axios');
+      const fileResponse = await axios.get(attestato.fileUrl, { responseType: 'stream' });
+      res.setHeader('Content-Type', 'application/pdf');
+      // Use the computed downloadFileName
+      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(downloadFileName)}"`);
+      fileResponse.data.pipe(res);
+    } catch (fetchError) {
+      logger.error('Failed to fetch file from storage', {
+        error: fetchError.message,
+        fileUrl: attestato.fileUrl
+      });
+      return res.status(500).json({ error: 'Failed to fetch certificate file' });
+    }
+  } catch (error) {
+    logger.error('Failed to download certificate', {
+      component: 'attestati-routes',
+      action: 'download',
+      attestatoId: req.params.id,
+      error: error.message,
+      personId: req.user?.id
+    });
+    res.status(500).json({ error: 'Failed to download certificate' });
   }
 });
 
@@ -1080,92 +1575,6 @@ router.delete('/:id', authenticateToken(), requirePermission('delete:documents')
 });
 
 /**
- * GET /api/v1/attestati/:id/download
- * Download certificate PDF
- */
-router.get('/:id/download', authenticateToken(), requirePermission('read:documents'), async (req, res) => {
-  try {
-    const { id } = req.params;
-    const tenantId = req.user.tenantId;
-
-    const attestato = await prisma.attestato.findFirst({
-      where: {
-        id,
-        tenantId,
-        deletedAt: null
-      }
-    });
-
-    if (!attestato) {
-      return res.status(404).json({ error: 'Certificate not found' });
-    }
-
-    if (!attestato.fileUrl) {
-      return res.status(404).json({ error: 'Certificate file not found' });
-    }
-
-    logger.info('Certificate downloaded', {
-      component: 'attestati-routes',
-      action: 'download',
-      attestatoId: id,
-      personId: req.user?.id
-    });
-
-    // Se fileUrl è un path locale, invia il file
-    if (attestato.fileUrl.startsWith('/uploads/')) {
-      // Path relativo alla cartella backend
-      const filePath = path.join(__dirname, '..', attestato.fileUrl);
-      
-      logger.debug('Attempting to serve file', {
-        component: 'attestati-routes',
-        action: 'download',
-        attestatoId: id,
-        fileUrl: attestato.fileUrl,
-        resolvedPath: filePath,
-        exists: fsSync.existsSync(filePath)
-      });
-      
-      if (fsSync.existsSync(filePath)) {
-        return res.download(filePath, attestato.fileName);
-      } else {
-        logger.error('File not found on disk', {
-          component: 'attestati-routes',
-          action: 'download',
-          attestatoId: id,
-          filePath,
-          fileUrl: attestato.fileUrl
-        });
-        return res.status(404).json({ error: 'Certificate file not found on disk' });
-      }
-    }
-
-    // Se è un URL esterno (Supabase storage o absolute path), fetch e stream
-    try {
-      const axios = require('axios');
-      const fileResponse = await axios.get(attestato.fileUrl, { responseType: 'stream' });
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="attestato_${id}.pdf"`);
-      fileResponse.data.pipe(res);
-    } catch (fetchError) {
-      logger.error('Failed to fetch file from storage', {
-        error: fetchError.message,
-        fileUrl: attestato.fileUrl
-      });
-      return res.status(500).json({ error: 'Failed to fetch certificate file' });
-    }
-  } catch (error) {
-    logger.error('Failed to download certificate', {
-      component: 'attestati-routes',
-      action: 'download',
-      attestatoId: req.params.id,
-      error: error.message,
-      personId: req.user?.id
-    });
-    res.status(500).json({ error: 'Failed to download certificate' });
-  }
-});
-
-/**
  * POST /api/v1/attestati/download-zip-batch
  * Download multiple certificates as ZIP archive
  */
@@ -1206,7 +1615,62 @@ router.post(
         return res.status(404).json({ error: 'No certificates found' });
       }
 
-      // Create ZIP archive
+      // First, collect all valid file paths before creating the archive
+      const filesToAdd = [];
+      for (const attestato of attestati) {
+        if (attestato.fileUrl) {
+          try {
+            // Extract file path from URL - handle both absolute URLs and relative paths
+            let filePath = attestato.fileUrl;
+
+            // Remove protocol and host if present
+            if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
+              const urlObj = new URL(filePath);
+              filePath = urlObj.pathname;
+            }
+
+            // Remove leading slash if present
+            filePath = filePath.replace(/^\/+/, '');
+
+            // If path starts with 'uploads/', use it directly, otherwise prepend uploads/
+            const fullPath = filePath.startsWith('uploads/')
+              ? path.join(process.cwd(), filePath)
+              : path.join(process.cwd(), 'uploads', filePath);
+
+            logger.debug('Processing attestato for ZIP', {
+              attestatoId: attestato.id,
+              fileUrl: attestato.fileUrl,
+              extractedPath: filePath,
+              fullPath: fullPath
+            });
+
+            // Check if file exists
+            await fs.access(fullPath);
+
+            // Use the original filename if available, otherwise generate one
+            const zipEntryName = attestato.fileName ||
+              `${attestato.person.lastName}_${attestato.person.firstName}_${attestato.scheduledCourse.course.title.substring(0, 30).replace(/\s+/g, '_')}.pdf`;
+
+            filesToAdd.push({ fullPath, zipEntryName });
+          } catch (fileError) {
+            logger.warn('Failed to access certificate file for ZIP', {
+              attestatoId: attestato.id,
+              fileUrl: attestato.fileUrl,
+              error: fileError.message
+            });
+          }
+        }
+      }
+
+      // Check if any files were found BEFORE creating archive and setting headers
+      if (filesToAdd.length === 0) {
+        return res.status(404).json({
+          error: 'No certificate files found on disk',
+          message: 'I file degli attestati non sono stati trovati. Potrebbero essere stati eliminati o non generati correttamente.'
+        });
+      }
+
+      // Now create ZIP archive and set response headers
       const archive = archiver('zip', {
         zlib: { level: 9 } // Maximum compression
       });
@@ -1216,44 +1680,47 @@ router.post(
       res.attachment(zipFileName);
       res.setHeader('Content-Type', 'application/zip');
 
+      // Handle archive errors
+      archive.on('error', (err) => {
+        logger.error('Archive error', { error: err.message });
+        if (!res.headersSent) {
+          res.status(500).json({ error: 'Archive creation failed' });
+        }
+      });
+
+      // Track when archive is finished
+      const archiveFinished = new Promise((resolve, reject) => {
+        archive.on('end', () => {
+          logger.info('Archive stream ended', {
+            component: 'attestati-routes',
+            totalBytes: archive.pointer()
+          });
+          resolve(archive.pointer());
+        });
+        archive.on('error', reject);
+      });
+
       // Pipe archive to response
       archive.pipe(res);
 
-      // Add each certificate to ZIP
-      for (const attestato of attestati) {
-        if (attestato.fileUrl) {
-          try {
-            // Extract file path from URL (assuming local storage)
-            const filePath = attestato.fileUrl.replace(/^https?:\/\/[^/]+/, '');
-            const fullPath = path.join(process.cwd(), 'uploads', filePath);
-
-            // Check if file exists
-            await fs.access(fullPath);
-
-            // Generate unique filename for ZIP entry
-            const personName = `${attestato.person.lastName}_${attestato.person.firstName}`.replace(/\s+/g, '_');
-            const courseName = attestato.scheduledCourse.course.title.substring(0, 30).replace(/\s+/g, '_');
-            const zipEntryName = `${personName}_${courseName}_${attestato.numeroProgressivo}_${attestato.annoProgressivo}.pdf`;
-
-            // Add file to archive
-            archive.file(fullPath, { name: zipEntryName });
-          } catch (fileError) {
-            logger.warn('Failed to add certificate to ZIP', {
-              attestatoId: attestato.id,
-              error: fileError.message
-            });
-            // Continue with other files
-          }
-        }
+      // Add all collected files to ZIP
+      for (const { fullPath, zipEntryName } of filesToAdd) {
+        logger.debug('Adding file to ZIP', { fullPath, zipEntryName });
+        archive.file(fullPath, { name: zipEntryName });
       }
 
-      // Finalize archive
-      await archive.finalize();
+      // Finalize and wait for completion
+      archive.finalize();
+
+      // Wait for archive to finish streaming
+      const totalBytes = await archiveFinished;
 
       logger.info('Batch certificates downloaded as ZIP', {
         component: 'attestati-routes',
         action: 'download-zip-batch',
-        count: attestati.length,
+        totalCertificates: attestati.length,
+        filesAdded: filesToAdd.length,
+        totalBytes,
         personId: req.user?.id
       });
 

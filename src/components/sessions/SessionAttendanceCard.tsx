@@ -10,6 +10,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { FileText, Download, Trash2, RefreshCw, Plus, Users, Clock } from 'lucide-react';
 import registriPresenzeService, { type RegistroPresenze } from '@/services/registriPresenzeService';
+import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
 import GenerateAttendanceDialog from './GenerateAttendanceDialog';
 
 interface Participant {
@@ -39,6 +40,7 @@ export default function SessionAttendanceCard({
   const [registri, setRegistri] = useState<RegistroPresenze[]>([]);
   const [loading, setLoading] = useState(true);
   const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
+  const { confirmDelete } = useConfirmDialog();
 
   useEffect(() => {
     loadRegistri();
@@ -57,9 +59,8 @@ export default function SessionAttendanceCard({
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Sei sicuro di voler eliminare questo registro?')) {
-      return;
-    }
+    const confirmed = await confirmDelete('Sei sicuro di voler eliminare questo registro?');
+    if (!confirmed) return;
 
     try {
       await registriPresenzeService.delete(id);

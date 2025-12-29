@@ -14,6 +14,13 @@ export const getContrastColors = {
     gray: 'bg-gray-600 text-white',
     indigo: 'bg-indigo-600 text-white',
     pink: 'bg-pink-600 text-white',
+    // Safety colors
+    'safety-high': 'bg-safety-high-500 text-white',
+    'safety-medium': 'bg-safety-medium-500 text-white',
+    'safety-low': 'bg-safety-low-500 text-white',
+    // Medical & Health colors
+    'medical': 'bg-medical-500 text-white',
+    'health': 'bg-health-500 text-white',
   },
   
   // Status colors

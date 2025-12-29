@@ -8,17 +8,19 @@ import logger from '../utils/logger.js';
 const tenantMiddleware = async (req, res, next) => {
   try {
     logger.info('[DEBUG] tenantMiddleware - START - Method:', req.method, 'Path:', req.path, 'URL:', req.originalUrl);
-    
+
     // Route pubbliche che non richiedono tenant (sincronizzate con il middleware di autenticazione)
     const publicRoutes = [
       '/api/auth/login',
-      '/api/auth/register', 
+      '/api/auth/register',
       '/api/auth/forgot-password',
       '/api/auth/reset-password',
       '/api/v1/auth/login',      // Percorso v1 per login
       '/api/v1/auth/register',   // Percorso v1 per register
       '/api/v1/auth/forgot-password', // Percorso v1 per forgot password
       '/api/v1/auth/reset-password',  // Percorso v1 per reset password
+      '/api/v1/public/verify-attestato', // Verifica pubblica attestati
+      '/api/public/verify-attestato',    // Verifica pubblica attestati (legacy)
       '/api/roles/public',    // Solo l'endpoint pubblico dei ruoli
       '/api/roles/test-simple', // Endpoint di test semplice
 
@@ -29,25 +31,25 @@ const tenantMiddleware = async (req, res, next) => {
       '/healthz',
       '/health'
     ];
-    
+
     // Controlla se la route corrente è pubblica
     const isPublicRoute = publicRoutes.some(route => req.path === route || req.path.startsWith(route));
-    
+
     if (isPublicRoute) {
       logger.info('[DEBUG] tenantMiddleware - SKIPPING public route:', req.path);
       return next();
     }
-    
+
     // Skip tenant resolution for global admin endpoints
     if (req.path.startsWith('/api/admin/global')) {
       return next();
     }
-    
+
     // Skip tenant resolution for test endpoints
     if (req.path.startsWith('/api/test')) {
       return next();
     }
-    
+
     // Skip tenant resolution for tenants management endpoints (super admin only)
     if (req.path.startsWith('/api/tenants') && !req.path.startsWith('/api/tenants/current')) {
       return next();
@@ -55,19 +57,19 @@ const tenantMiddleware = async (req, res, next) => {
 
     // Get host from request
     const host = req.get('host') || req.get('x-forwarded-host');
-    
+
     if (!host) {
-      return res.status(400).json({ 
-        error: 'Host header required for tenant resolution' 
+      return res.status(400).json({
+        error: 'Host header required for tenant resolution'
       });
     }
 
     let tenant = null;
-    
+
     // For development/localhost, use optimized tenant resolution
     if (host.includes('localhost') || host.includes('127.0.0.1')) {
       const tenantId = req.headers['x-tenant-id'] || req.headers['X-Tenant-ID'] || req.query.tenantId;
-      
+
       // If tenantId is provided in header/query, use it exclusively
       if (tenantId) {
         tenant = await prisma.tenant.findFirst({
@@ -80,14 +82,14 @@ const tenantMiddleware = async (req, res, next) => {
             deletedAt: null
           }
         });
-        
+
         if (tenant) {
           req.tenant = tenant;
           req.tenantId = tenant.id;
           return next();
         }
       }
-      
+
       // Only if no tenantId is provided, use default tenant for development
       if (!tenantId && process.env.NODE_ENV === 'development') {
         tenant = await prisma.tenant.findFirst({
@@ -99,7 +101,7 @@ const tenantMiddleware = async (req, res, next) => {
             createdAt: 'asc'
           }
         });
-        
+
         if (tenant) {
           req.tenant = tenant;
           req.tenantId = tenant.id;
@@ -109,7 +111,7 @@ const tenantMiddleware = async (req, res, next) => {
     } else {
       // For production domains, try domain and subdomain resolution in one query
       const subdomain = host.split('.')[0];
-      
+
       tenant = await prisma.tenant.findFirst({
         where: {
           OR: [
@@ -170,7 +172,7 @@ const tenantMiddleware = async (req, res, next) => {
             createdAt: 'asc'
           }
         });
-        
+
         if (tenant) {
           req.tenant = tenant;
           req.tenantId = tenant.id;
@@ -183,7 +185,7 @@ const tenantMiddleware = async (req, res, next) => {
           return next();
         }
       }
-      
+
       logger.error('[DEBUG] tenantMiddleware - FAILED - Tenant not found or inactive:', {
         host: host,
         path: req.path || req.originalUrl || req.url,
@@ -194,8 +196,8 @@ const tenantMiddleware = async (req, res, next) => {
         query: req.query.tenantId,
         environment: process.env.NODE_ENV
       });
-      
-      return res.status(404).json({ 
+
+      return res.status(404).json({
         error: 'Tenant not found or inactive',
         host: host,
         path: req.path || req.originalUrl || req.url,
@@ -214,11 +216,11 @@ const tenantMiddleware = async (req, res, next) => {
     // Skip the expensive $executeRaw for better performance
     // Row Level Security can be handled at the query level instead
     // await prisma.$executeRaw`SELECT set_config('app.current_tenant', ${tenant.id}, true)`;
-    
+
     next();
   } catch (error) {
     console.error('Error resolving tenant:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Tenant resolution failed',
       details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
@@ -231,7 +233,7 @@ const tenantMiddleware = async (req, res, next) => {
 const validateUserTenant = async (req, res, next) => {
   try {
     logger.info('[DEBUG] validateUserTenant - START - Method:', req.method, 'Path:', req.path, 'URL:', req.originalUrl);
-    
+
     const person = req.person;
     const tenant = req.tenant;
 
@@ -242,21 +244,21 @@ const validateUserTenant = async (req, res, next) => {
       logger.info('[DEBUG] validateUserTenant - Missing person');
       return res.status(401).json({ error: 'Authentication required' });
     }
-    
+
     if (!tenant) {
       logger.info('[DEBUG] validateUserTenant - Missing tenant');
       return res.status(401).json({ error: 'Tenant context required' });
     }
 
-    // Super admin can access any tenant
-    if (person.globalRole === 'SUPER_ADMIN') {
+    // Super admin and admin can access any tenant (cross-tenant access)
+    if (person.globalRole === 'SUPER_ADMIN' || person.globalRole === 'ADMIN') {
       return next();
     }
 
     // Check if user belongs to the current tenant
     // Compare tenantId from person with current tenant id
     if (person.tenantId !== tenant.id) {
-      return res.status(403).json({ 
+      return res.status(403).json({
         error: 'Access denied: User does not belong to this tenant',
         userTenant: person.tenantId,
         requestTenant: tenant.id
@@ -299,8 +301,8 @@ const isAdminOrSuperAdmin = (user) => {
  */
 const requireSuperAdmin = (req, res, next) => {
   if (!req.person || !isAdminOrSuperAdmin(req.person)) {
-    return res.status(403).json({ 
-      error: 'Admin access required' 
+    return res.status(403).json({
+      error: 'Admin access required'
     });
   }
   next();

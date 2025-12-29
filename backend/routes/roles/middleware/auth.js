@@ -44,28 +44,35 @@ export async function requireRoleManagement(req, res, next) {
   try {
     const userId = req.person?.id;
     const tenantId = req.tenant?.id || req.person?.tenantId;
-    
+    const globalRole = req.person?.globalRole;
+
     if (!userId) {
       return res.status(401).json({
         success: false,
         error: 'Authentication required'
       });
     }
-    
+
+    // CORREZIONE: Se l'utente ha globalRole SUPER_ADMIN o ADMIN, consenti l'accesso immediatamente
+    if (globalRole === 'SUPER_ADMIN' || globalRole === 'ADMIN') {
+      console.log('[DEBUG] Role management access granted via globalRole:', globalRole);
+      return next();
+    }
+
     // Verifica se l'utente ha il permesso ROLE_MANAGEMENT
     const hasPermission = await enhancedRoleService.hasPermission(
-      userId, 
-      'ROLE_MANAGEMENT', 
+      userId,
+      'ROLE_MANAGEMENT',
       { tenantId }
     );
-    
+
     if (!hasPermission) {
       return res.status(403).json({
         success: false,
         error: 'Insufficient permissions for role management'
       });
     }
-    
+
     next();
   } catch (error) {
     console.error('[AUTH_MIDDLEWARE] Error checking role management permission:', error);
@@ -87,33 +94,33 @@ export async function requireUserAccess(req, res, next) {
     const currentUserId = req.person?.id;
     const targetUserId = req.params.personId || req.body.personId;
     const tenantId = req.tenant?.id || req.person?.tenantId;
-    
+
     if (!currentUserId) {
       return res.status(401).json({
         success: false,
         error: 'Authentication required'
       });
     }
-    
+
     // L'utente può sempre accedere ai propri dati
     if (currentUserId === targetUserId) {
       return next();
     }
-    
+
     // Altrimenti verifica se ha permessi di gestione utenti
     const hasPermission = await enhancedRoleService.hasPermission(
       currentUserId,
       'users.read',
       { tenantId }
     );
-    
+
     if (!hasPermission) {
       return res.status(403).json({
         success: false,
         error: 'Access denied'
       });
     }
-    
+
     next();
   } catch (error) {
     console.error('[AUTH_MIDDLEWARE] Error checking user access:', error);
@@ -135,21 +142,28 @@ export async function requireHierarchyManagement(req, res, next) {
     const userId = req.person?.id;
     // CORREZIONE: Usa prima il tenantId dell'utente, poi quello risolto dal dominio
     const tenantId = req.person?.tenantId || req.tenant?.id;
-    
-    console.log('[DEBUG] requireHierarchyManagement - userId:', userId, 'tenantId:', tenantId);
+    const globalRole = req.person?.globalRole;
+
+    console.log('[DEBUG] requireHierarchyManagement - userId:', userId, 'tenantId:', tenantId, 'globalRole:', globalRole);
     console.log('[DEBUG] req.person.tenantId:', req.person?.tenantId, 'req.tenant.id:', req.tenant?.id);
-    
+
     if (!userId) {
       return res.status(401).json({
         success: false,
         error: 'Authentication required'
       });
     }
-    
-    // Importa il servizio di gerarchia dinamicamente
-    // const roleHierarchyService = await import(`../../../services/roleHierarchyService.js?t=${Date.now()}`);
-    
-    // Ottieni i ruoli dell'utente
+
+    // CORREZIONE: Se l'utente ha globalRole SUPER_ADMIN o ADMIN, consenti l'accesso immediatamente
+    if (globalRole === 'SUPER_ADMIN' || globalRole === 'ADMIN') {
+      console.log('[DEBUG] Access granted via globalRole:', globalRole);
+      req.userRoles = [globalRole];
+      req.userHighestRole = globalRole;
+      req.userLevel = globalRole === 'SUPER_ADMIN' ? 0 : 1;
+      return next();
+    }
+
+    // Ottieni i ruoli dell'utente dalla tabella PersonRole
     const userRoles = await prisma.personRole.findMany({
       where: {
         personId: userId,
@@ -157,33 +171,33 @@ export async function requireHierarchyManagement(req, res, next) {
         deletedAt: null
       }
     });
-    
+
     console.log('[DEBUG] userRoles found:', userRoles.length, userRoles.map(r => r.roleType));
-    
+
     const userRoleTypes = userRoles.map(role => role.roleType);
     const highestRole = roleHierarchyService.getHighestRole(userRoleTypes);
-    
+
     console.log('[DEBUG] highestRole:', highestRole);
-    
+
     // Verifica se l'utente ha un ruolo sufficientemente alto per gestire la gerarchia
     const userLevel = roleHierarchyService.getRoleLevel(highestRole);
-    
+
     console.log('[DEBUG] userLevel:', userLevel, 'check:', userLevel <= 1);
-    
+
     // CORREZIONE: Solo SUPER_ADMIN (livello 0) e ADMIN (livello 1) possono gestire la gerarchia
     // Livelli più bassi (0, 1) hanno più permessi, livelli più alti (2, 3, 4...) hanno meno permessi
-    if (userLevel > 1) { 
+    if (userLevel > 1) {
       return res.status(403).json({
         success: false,
         error: 'Insufficient permissions for hierarchy management'
       });
     }
-    
+
     // Aggiungi i dati dell'utente alla request per uso successivo
     req.userRoles = userRoleTypes;
     req.userHighestRole = highestRole;
     req.userLevel = userLevel;
-    
+
     next();
   } catch (error) {
     console.error('[AUTH_MIDDLEWARE] Error checking hierarchy management permission:', error);
@@ -205,18 +219,24 @@ export async function requireRoleAssignmentPermission(req, res, next) {
     const userId = req.person?.id;
     const tenantId = req.tenant?.id || req.person?.tenantId;
     const targetRoleType = req.body.roleType;
-    
+    const globalRole = req.person?.globalRole;
+
     if (!userId || !targetRoleType) {
       return res.status(400).json({
         success: false,
         error: 'User ID and role type are required'
       });
     }
-    
-    // Importa il servizio di gerarchia dinamicamente
-    // const roleHierarchyService = await import(`../../../services/roleHierarchyService.js?t=${Date.now()}`);
-    
-    // Ottieni i ruoli dell'utente corrente
+
+    // CORREZIONE: Se l'utente ha globalRole SUPER_ADMIN o ADMIN, può assegnare qualsiasi ruolo
+    if (globalRole === 'SUPER_ADMIN' || globalRole === 'ADMIN') {
+      console.log('[DEBUG] Role assignment access granted via globalRole:', globalRole);
+      req.userRoles = [globalRole];
+      req.userHighestRole = globalRole;
+      return next();
+    }
+
+    // Ottieni i ruoli dell'utente corrente dalla tabella PersonRole
     const userRoles = await prisma.personRole.findMany({
       where: {
         personId: userId,
@@ -224,24 +244,24 @@ export async function requireRoleAssignmentPermission(req, res, next) {
         deletedAt: null
       }
     });
-    
+
     const userRoleTypes = userRoles.map(role => role.roleType);
     const currentUserHighestRole = roleHierarchyService.getHighestRole(userRoleTypes);
-    
+
     // Verifica se l'utente può assegnare questo ruolo
     const canAssign = roleHierarchyService.canAssignToRole(currentUserHighestRole, targetRoleType);
-    
+
     if (!canAssign) {
       return res.status(403).json({
         success: false,
         error: `You don't have permission to assign role ${targetRoleType}. Your highest role: ${currentUserHighestRole}`
       });
     }
-    
+
     // Aggiungi i dati dell'utente alla request
     req.userRoles = userRoleTypes;
     req.userHighestRole = currentUserHighestRole;
-    
+
     next();
   } catch (error) {
     console.error('[AUTH_MIDDLEWARE] Error checking role assignment permission:', error);
@@ -262,27 +282,27 @@ export async function requireAnalyticsAccess(req, res, next) {
   try {
     const userId = req.person?.id;
     const tenantId = req.tenant?.id || req.person?.tenantId;
-    
+
     if (!userId) {
       return res.status(401).json({
         success: false,
         error: 'Authentication required'
       });
     }
-    
+
     const hasPermission = await enhancedRoleService.hasPermission(
       userId,
       'analytics.read',
       { tenantId }
     );
-    
+
     if (!hasPermission) {
       return res.status(403).json({
         success: false,
         error: 'Access denied to analytics'
       });
     }
-    
+
     next();
   } catch (error) {
     console.error('[AUTH_MIDDLEWARE] Error checking analytics access:', error);
@@ -302,8 +322,29 @@ export async function requireAnalyticsAccess(req, res, next) {
 export function authAndTenant(req, res, next) {
   authMiddleware(req, res, (err) => {
     if (err) return next(err);
-    
-    tenantAuth(req, res, next);
+
+    // Se l'utente è autenticato e ha un tenantId, usalo direttamente
+    // invece di tentare la risoluzione dal dominio (che fallisce per chiamate interne)
+    if (req.person?.tenantId) {
+      prisma.tenant.findUnique({
+        where: { id: req.person.tenantId }
+      }).then(tenant => {
+        if (tenant && tenant.isActive && !tenant.deletedAt) {
+          req.tenant = tenant;
+          req.tenantId = tenant.id;
+          next();
+        } else {
+          // Fallback al tenantAuth normale
+          tenantAuth(req, res, next);
+        }
+      }).catch(() => {
+        // In caso di errore, prova il tenantAuth normale
+        tenantAuth(req, res, next);
+      });
+    } else {
+      // Se non c'è tenantId nel JWT, usa il metodo normale
+      tenantAuth(req, res, next);
+    }
   });
 }
 
@@ -317,29 +358,29 @@ export async function requireCustomRoleManagement(req, res, next) {
   try {
     const userId = req.person?.id;
     const tenantId = req.tenant?.id || req.person?.tenantId;
-    
+
     if (!userId) {
       return res.status(401).json({
         success: false,
         error: 'Authentication required'
       });
     }
-    
+
     // Verifica permessi multipli per la gestione dei ruoli personalizzati
     const permissions = ['ROLE_MANAGEMENT', 'CREATE_ROLES', 'EDIT_ROLES'];
-    
+
     for (const permission of permissions) {
       const hasPermission = await enhancedRoleService.hasPermission(
         userId,
         permission,
         { tenantId }
       );
-      
+
       if (hasPermission) {
         return next();
       }
     }
-    
+
     return res.status(403).json({
       success: false,
       error: 'Insufficient permissions for custom role management'

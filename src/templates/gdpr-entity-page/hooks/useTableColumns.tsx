@@ -1,22 +1,10 @@
 import { useState, useCallback, useMemo } from 'react';
 import { Button } from '../../../components/ui/button';
 import { Eye, Edit, Trash2, Download } from 'lucide-react';
-import { GDPRPermissions } from '../types';
+import { GDPRPermissions, ColumnConfig, BaseEntity } from '../types';
 
 // Tipo generico per le entità
-export type EntityRecord = Record<string, unknown>;
-
-export interface ColumnConfig {
-  key: string;
-  label: string;
-  sortable?: boolean;
-  filterable?: boolean;
-  width?: number;
-  minWidth?: number;
-  maxWidth?: number;
-  hidden?: boolean;
-  render?: (value: unknown, entity: EntityRecord) => React.ReactNode;
-}
+export type EntityRecord = Record<string, unknown> & BaseEntity;
 
 export interface ActionConfig {
   view?: boolean;
@@ -167,7 +155,7 @@ export function useTableColumns(
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => handlers.onView && handlers.onView(entity)}
+              onClick={() => handlers.onView && handlers.onView(entity as EntityRecord)}
               title="Visualizza"
             >
               <Eye className="h-4 w-4" />
@@ -179,7 +167,7 @@ export function useTableColumns(
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => handlers.onEdit && handlers.onEdit(entity)}
+              onClick={() => handlers.onEdit && handlers.onEdit(entity as EntityRecord)}
               title="Modifica"
             >
               <Edit className="h-4 w-4" />
@@ -191,7 +179,7 @@ export function useTableColumns(
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => handlers.onDelete && handlers.onDelete(entity)}
+              onClick={() => handlers.onDelete && handlers.onDelete(entity as EntityRecord)}
               title="Elimina"
               className="text-red-600 hover:text-red-700"
             >
@@ -204,7 +192,7 @@ export function useTableColumns(
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => handlers.onExport && handlers.onExport(entity)}
+              onClick={() => handlers.onExport && handlers.onExport(entity as EntityRecord)}
               title="Esporta"
             >
               <Download className="h-4 w-4" />
@@ -214,7 +202,7 @@ export function useTableColumns(
           {/* Azioni personalizzate */}
           {actions.custom && actions.custom.map(customAction => {
              const hasPermission = customAction.permission 
-               ? (permissions as Record<string, boolean>)[customAction.permission] || false
+               ? (permissions as unknown as Record<string, boolean>)[customAction.permission] || false
                : true;
               
             if (!hasPermission) return null;
@@ -224,7 +212,7 @@ export function useTableColumns(
                 key={customAction.key}
                 variant="ghost"
                 size="sm"
-                onClick={() => customAction.onClick(entity)}
+                onClick={() => customAction.onClick(entity as EntityRecord)}
                 title={customAction.label}
               >
                 {customAction.icon || customAction.label}

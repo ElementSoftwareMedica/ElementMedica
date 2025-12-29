@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { dbStatusToItalian } from '../../../utils/scheduleStatusColors';
 
 // Interfacce per i tipi utilizzati nel calendario
 interface Course {
@@ -27,7 +28,7 @@ interface Session {
   trainer?: Trainer;
 }
 
-interface Schedule {
+export interface ScheduleResource {
   id: string;
   course?: Course;
   startDate: string;
@@ -38,6 +39,9 @@ interface Schedule {
   companies?: Array<{ company: Company }>;
 }
 
+// Alias interno per backward compatibility
+type Schedule = ScheduleResource;
+
 export interface ScheduleEvent {
   id: string;
   scheduleId: string;
@@ -45,7 +49,7 @@ export interface ScheduleEvent {
   start: Date;
   end: Date;
   allDay?: boolean;
-  resource: Schedule;
+  resource: ScheduleResource;
   status: string;
   tooltip: string;
   sessioniTooltipHtml: string;
@@ -75,7 +79,7 @@ export const useCalendarEvents = (schedulesData: Schedule[]) => {
           if (!sessionsByDay[day]) sessionsByDay[day] = [];
           sessionsByDay[day].push(sess);
         });
-        
+
         Object.entries(sessionsByDay).forEach(([day, sessions]) => {
           // Tooltip con tutte le sessioni (HTML)
           const allSessions = s.sessions!;
@@ -83,17 +87,17 @@ export const useCalendarEvents = (schedulesData: Schedule[]) => {
             const dateStr = new Date(ss.date).toLocaleDateString('it-IT');
             const orario = `${ss.start || '--:--'} - ${ss.end || '--:--'}`;
             const trainer = ss.trainer ? ` (${ss.trainer.firstName} ${ss.trainer.lastName})` : '';
-            return `<span style='color:#2563eb;font-weight:700'>Sessione ${i+1}: ${dateStr}, ${orario}${trainer}</span>`;
+            return `<span style='color:#2563eb;font-weight:700'>Sessione ${i + 1}: ${dateStr}, ${orario}${trainer}</span>`;
           }).join('<br>');
-          
+
           // Aziende senza duplicati
           const aziende = [...new Set((s.companies || []).map((c) => c.company?.ragioneSociale || c.company?.name))].join(', ');
-          
+
           // Orari del giorno
           const sortedSessions = [...sessions].sort((a, b) => a.start.localeCompare(b.start));
           const start = combineDateAndTime(day, sortedSessions[0].start);
-          const end = combineDateAndTime(day, sortedSessions[sessions.length-1].end);
-          
+          const end = combineDateAndTime(day, sortedSessions[sessions.length - 1].end);
+
           // Titolo: aggiungi " - Sessione X" solo se ci sono sessioni in giorni diversi
           let title = `${s.course?.title || s.course?.name || 'Corso'}`;
           const allSameDay = allSessions.every((ss: Session) => ss.date.split('T')[0] === day);
@@ -102,7 +106,7 @@ export const useCalendarEvents = (schedulesData: Schedule[]) => {
             const idx = allSessions.findIndex((ss: Session) => ss.date.split('T')[0] === day);
             if (idx !== -1) title += ` - Sessione ${idx + 1}`;
           }
-          
+
           grouped.push({
             id: s.id + '-' + day,
             scheduleId: s.id,
@@ -110,8 +114,8 @@ export const useCalendarEvents = (schedulesData: Schedule[]) => {
             start: new Date(start),
             end: new Date(end),
             resource: s,
-            status: s.status,
-            tooltip: `Corso: ${s.course?.title || s.course?.name}\nAziende: ${aziende}\nLuogo: ${s.location || '-'}\nData: ${new Date(day).toLocaleDateString('it-IT')}\nStato: ${s.status}`,
+            status: dbStatusToItalian(s.status),
+            tooltip: `Corso: ${s.course?.title || s.course?.name}\nAziende: ${aziende}\nLuogo: ${s.location || '-'}\nData: ${new Date(day).toLocaleDateString('it-IT')}\nStato: ${dbStatusToItalian(s.status)}`,
             sessioniTooltipHtml
           });
         });
@@ -125,8 +129,8 @@ export const useCalendarEvents = (schedulesData: Schedule[]) => {
           start: new Date(s.startDate),
           end: new Date(s.endDate),
           resource: s,
-          status: s.status,
-          tooltip: `Corso: ${s.course?.title || s.course?.name}\nAziende: ${aziende}\nLuogo: ${s.location || '-'}\nData: ${s.startDate ? new Date(s.startDate).toLocaleDateString('it-IT') : '-'}\nOrario: --:--\nStato: ${s.status}`,
+          status: dbStatusToItalian(s.status),
+          tooltip: `Corso: ${s.course?.title || s.course?.name}\nAziende: ${aziende}\nLuogo: ${s.location || '-'}\nData: ${s.startDate ? new Date(s.startDate).toLocaleDateString('it-IT') : '-'}\nOrario: --:--\nStato: ${dbStatusToItalian(s.status)}`,
           sessioniTooltipHtml: ''
         });
       }
@@ -143,23 +147,23 @@ export const useCalendarEvents = (schedulesData: Schedule[]) => {
           const end = new Date(combineDateAndTime(sess.date, sess.end));
           const allSessions = s.sessions!;
           const allSameDay = allSessions.every((ss: Session) => ss.date.split('T')[0] === sess.date.split('T')[0]);
-          
+
           let sessionTitle = s.course?.title || s.course?.name || 'Corso';
           if (!allSameDay && allSessions.length > 1) {
             const sessionNumber = ` - Sessione ${allSessions.findIndex((ss: Session) => ss === sess) + 1}`;
             sessionTitle += sessionNumber;
           }
-          
+
           const sessioniTooltipHtml = allSessions.map((ss: Session, i: number) => {
             const dateStr = new Date(ss.date).toLocaleDateString('it-IT');
             const orario = `${ss.start || '--:--'} - ${ss.end || '--:--'}`;
             const trainer = ss.trainer ? ` (${ss.trainer.firstName} ${ss.trainer.lastName})` : '';
             const isCurrent = allSameDay || ss === sess;
-            return `<span style='color:${isCurrent ? '#2563eb' : '#1e293b'};font-weight:${isCurrent ? 700 : 400}'>Sessione ${i+1}: ${dateStr}, ${orario}${trainer}</span>`;
+            return `<span style='color:${isCurrent ? '#2563eb' : '#1e293b'};font-weight:${isCurrent ? 700 : 400}'>Sessione ${i + 1}: ${dateStr}, ${orario}${trainer}</span>`;
           }).join('<br>');
-          
+
           const aziende = [...new Set((s.companies || []).map((c) => c.company?.ragioneSociale || c.company?.name))].join(', ');
-          
+
           return {
             id: s.id + '-' + (sess.id || idx),
             scheduleId: s.id,
@@ -168,8 +172,8 @@ export const useCalendarEvents = (schedulesData: Schedule[]) => {
             end,
             allDay: false,
             resource: s,
-            status: s.status,
-            tooltip: `Corso: ${s.course?.title || s.course?.name}\nAziende: ${aziende}\nLuogo: ${s.location || '-'}\nData: ${new Date(sess.date).toLocaleDateString('it-IT')}\nStato: ${s.status}`,
+            status: dbStatusToItalian(s.status),
+            tooltip: `Corso: ${s.course?.title || s.course?.name}\nAziende: ${aziende}\nLuogo: ${s.location || '-'}\nData: ${new Date(sess.date).toLocaleDateString('it-IT')}\nStato: ${dbStatusToItalian(s.status)}`,
             sessioniTooltipHtml
           };
         });
@@ -182,8 +186,8 @@ export const useCalendarEvents = (schedulesData: Schedule[]) => {
           start: new Date(s.startDate),
           end: new Date(s.endDate),
           resource: s,
-          status: s.status,
-          tooltip: `Corso: ${s.course?.title || s.course?.name}\nAziende: ${aziende}\nLuogo: ${s.location || '-'}\nData: ${s.startDate ? new Date(s.startDate).toLocaleDateString('it-IT') : '-'}\nOrario: --:--\nStato: ${s.status}`,
+          status: dbStatusToItalian(s.status),
+          tooltip: `Corso: ${s.course?.title || s.course?.name}\nAziende: ${aziende}\nLuogo: ${s.location || '-'}\nData: ${s.startDate ? new Date(s.startDate).toLocaleDateString('it-IT') : '-'}\nOrario: --:--\nStato: ${dbStatusToItalian(s.status)}`,
           sessioniTooltipHtml: ''
         }];
       }
@@ -197,6 +201,12 @@ export const useCalendarEvents = (schedulesData: Schedule[]) => {
       return;
     }
 
+    // DEBUG: Verifica stati dal backend
+    if (schedulesData.length > 0) {
+      console.log('[DEBUG useCalendarEvents] Primo schedule.status dal backend:', schedulesData[0].status);
+      console.log('[DEBUG useCalendarEvents] Tradotto con dbStatusToItalian:', dbStatusToItalian(schedulesData[0].status));
+    }
+
     // Scegli mapping in base alla vista (default: month)
     let events: ScheduleEvent[];
     if (calendarView === 'month') {
@@ -204,7 +214,12 @@ export const useCalendarEvents = (schedulesData: Schedule[]) => {
     } else {
       events = mapSessionsIndividually(schedulesData);
     }
-    
+
+    // DEBUG: Verifica event.status processato
+    if (events.length > 0) {
+      console.log('[DEBUG useCalendarEvents] Primo event.status processato:', events[0].status);
+    }
+
     setCalendarEvents(events);
   }, [calendarView, schedulesData, groupSessionsByDay, mapSessionsIndividually]);
 

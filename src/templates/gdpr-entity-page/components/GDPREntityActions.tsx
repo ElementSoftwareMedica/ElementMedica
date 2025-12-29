@@ -90,35 +90,35 @@ export function GDPREntityActions<T extends BaseEntity = BaseEntity>({
   const isAllSelected = selectedItems.length === totalItems && totalItems > 0;
   const isPartiallySelected = selectedItems.length > 0 && selectedItems.length < totalItems;
   
-  // Azioni GDPR predefinite
-  const gdprActions: EntityAction[] = [
+  // Azioni GDPR predefinite (senza onClick, gestite da onBatchAction)
+  const gdprActions: Array<Omit<EntityAction, 'onClick'> & { onClick?: never }> = [
     {
       key: 'export-data',
       label: 'Esporta Dati Selezionati',
       icon: <Download className="h-4 w-4" />,
       variant: 'secondary',
-      visible: true
+      visible: () => true
     },
     {
       key: 'request-consent',
       label: 'Richiedi Consenso',
       icon: <Shield className="h-4 w-4" />,
       variant: 'secondary',
-      visible: true
+      visible: () => true
     },
     {
       key: 'anonymize',
       label: 'Anonimizza Dati',
       icon: <Archive className="h-4 w-4" />,
       variant: 'secondary',
-      visible: true
+      visible: () => true
     },
     {
       key: 'delete-gdpr',
       label: 'Cancellazione GDPR',
       icon: <Trash2 className="h-4 w-4" />,
       variant: 'danger',
-      visible: true
+      visible: () => true
     }
   ];
   
@@ -225,7 +225,7 @@ export function GDPREntityActions<T extends BaseEntity = BaseEntity>({
             {primaryActions.map((action) => (
               <Button
                 key={action.key}
-                variant={action.variant === 'danger' ? 'danger' : 'outline'}
+                variant={action.variant === 'danger' ? 'destructive' : 'outline'}
                 size="sm"
                 onClick={() => handleAction(action.key)}
                 disabled={

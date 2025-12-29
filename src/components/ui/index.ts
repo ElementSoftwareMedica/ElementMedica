@@ -8,12 +8,34 @@ export { default as TabPills } from './TabPills';
 
 // Business-specific UI Components (moved from shared/ui)
 export { default as ActionButton } from './ActionButton';
+export { default as ActionMenu, createCrudActions } from './ActionMenu';
 export { default as AddEntityDropdown } from './AddEntityDropdown';
 export { default as BatchEditButton } from './BatchEditButton';
 export { default as ColumnSelector } from './ColumnSelector';
 
+// Validation Components
+export {
+    ValidationMessage,
+    RequiredIndicator,
+    FormLabel,
+    ValidatedInputWrapper,
+    ValidatedInput,
+    ValidatedSelect,
+    ValidatedTextarea,
+} from './ValidationMessage';
+export type {
+    ValidationMessageProps,
+    ValidationMessageType,
+    FormLabelProps,
+    ValidatedInputWrapperProps,
+    ValidatedInputProps,
+    ValidatedSelectProps,
+    ValidatedTextareaProps,
+} from './ValidationMessage';
+
 // Re-export types
-export type { ActionButtonProps } from './ActionButton';
+export type { ActionButtonProps, ActionButtonTheme } from './ActionButton';
+export type { ActionMenuItem, ActionMenuProps, ActionMenuTheme } from './ActionMenu';
 export type { AddEntityDropdownProps } from './AddEntityDropdown';
 export type { BatchEditButtonProps } from './BatchEditButton';
 

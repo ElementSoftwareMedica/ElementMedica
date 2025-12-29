@@ -35,8 +35,8 @@ const CompanyImportRefactored: React.FC<CompanyImportProps> = ({
     try {
       console.log('Aziende esistenti ricevute:', existingCompanies?.length || 0, existingCompanies?.[0]);
       
-      // Processa il file e ottieni i dati grezzi
-      const processedData = await defaultProcessFile(file, csvHeaderMap);
+      // Processa il file e ottieni i dati grezzi (delimitatore ; per formato italiano)
+      const processedData = await defaultProcessFile(file, csvHeaderMap, ';');
       
       // Applica formattazione e validazione
       const formattedData = processedData.map(company => {
@@ -211,6 +211,7 @@ const CompanyImportRefactored: React.FC<CompanyImportProps> = ({
               ragioneSociale: e.existingCompany.ragioneSociale,
               piva: e.existingCompany.piva,
               codiceFiscale: e.existingCompany.codiceFiscale,
+              sites: e.existingCompany.sites || []
             } : undefined
           }));
         if (conflictErrors.length > 0) {
@@ -243,13 +244,69 @@ const CompanyImportRefactored: React.FC<CompanyImportProps> = ({
   };
 
   // Gestione dei conflitti
-  const handleConflictResolution = (resolutions: ConflictResolution[]) => {
-    const overwriteIds = resolutions
-      .filter(r => r.action === 'overwrite' && r.companyId)
-      .map(r => r.companyId as string);
-    
-    setShowConflictModal(false);
-    handleImport(importData, overwriteIds);
+  const handleConflictResolution = async (resolutions: ConflictResolution[]) => {
+    try {
+      // Handle "addAsSite" actions first
+      const sitesToCreate = resolutions.filter(r => r.action === 'addAsSite');
+      
+      if (sitesToCreate.length > 0) {
+        for (const resolution of sitesToCreate) {
+          if (!resolution.companyId || !resolution.siteData) continue;
+          
+          try {
+            const response = await fetch(`/api/v1/import/companies/${resolution.companyId}/sites`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
+              },
+              body: JSON.stringify(resolution.siteData)
+            });
+            
+            if (!response.ok) {
+              const error = await response.json();
+              throw new Error(error.message || 'Errore creazione sede');
+            }
+            
+            const result = await response.json();
+            console.log('Site created:', result.site);
+          } catch (error) {
+            console.error('Error creating site:', error);
+            showToast({
+              title: 'Errore creazione sede',
+              description: error instanceof Error ? error.message : 'Errore sconosciuto',
+              type: 'error'
+            });
+          }
+        }
+      }
+      
+      // Handle "overwrite" actions
+      const overwriteIds = resolutions
+        .filter(r => r.action === 'overwrite' && r.companyId)
+        .map(r => r.companyId as string);
+      
+      setShowConflictModal(false);
+      
+      if (overwriteIds.length > 0) {
+        handleImport(importData, overwriteIds);
+      } else if (sitesToCreate.length > 0) {
+        // Just close and refresh if only sites were created
+        showToast({
+          title: 'Operazione completata',
+          description: `${sitesToCreate.length} sedi create con successo`,
+          type: 'success'
+        });
+        onClose();
+      }
+    } catch (error) {
+      console.error('Error in conflict resolution:', error);
+      showToast({
+        title: 'Errore',
+        description: 'Errore durante la risoluzione dei conflitti',
+        type: 'error'
+      });
+    }
   };
 
   return (

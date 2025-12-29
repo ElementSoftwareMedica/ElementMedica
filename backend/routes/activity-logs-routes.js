@@ -143,15 +143,25 @@ router.get(
       const limit = req.query.limit || 20;
       const skip = (page - 1) * limit;
 
-      const { action, personId, search, from, to } = req.query;
+      const { action, personId, search, from, to, tenantFilter } = req.query;
 
-      if (!req.tenant?.id) {
-        return res.status(400).json({ success: false, error: 'Tenant non trovato o inattivo' });
+      // Admin globali possono vedere tutti i log
+      const userGlobalRole = req.user?.globalRole;
+      const isGlobalAdmin = userGlobalRole === 'SUPER_ADMIN' || userGlobalRole === 'ADMIN';
+
+      const where = {};
+
+      if (!isGlobalAdmin) {
+        // Utenti normali: filtro tenant obbligatorio
+        if (!req.tenant?.id) {
+          return res.status(400).json({ success: false, error: 'Tenant non trovato o inattivo' });
+        }
+        where.tenantId = req.tenant.id;
+      } else if (tenantFilter) {
+        // Admin con filtro tenant specifico
+        where.tenantId = tenantFilter;
       }
-
-      const where = {
-        tenantId: req.tenant.id,
-      };
+      // Se isGlobalAdmin e no tenantFilter, where.tenantId rimane undefined = tutti i tenant
 
       if (personId) where.personId = personId;
       if (action) {

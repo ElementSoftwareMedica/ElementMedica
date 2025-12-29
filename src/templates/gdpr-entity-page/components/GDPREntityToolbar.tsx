@@ -31,7 +31,7 @@ import {
   Table,
   X
 } from 'lucide-react';
-import { FilterState, ColumnConfig, EntityAction } from '../types';
+import { FilterState, ColumnConfig, EntityAction, BaseEntity } from '../types';
 
 export type ViewMode = 'table' | 'grid';
 
@@ -163,8 +163,8 @@ export function GDPREntityToolbar({
                 {addActions.map((action) => (
                   <DropdownMenuItem
                     key={action.key}
-                    onClick={() => action.onClick({})}
-                    disabled={typeof action.disabled === 'function' ? action.disabled({}) : action.disabled}
+                    onClick={() => action.onClick({ id: '' } as BaseEntity)}
+                    disabled={typeof action.disabled === 'function' ? action.disabled({ id: '' } as BaseEntity) : action.disabled}
                     className="flex items-center gap-2"
                   >
                     {action.icon && <span>{action.icon}</span>}
@@ -304,7 +304,7 @@ export function GDPREntityToolbar({
                   variant={buttonVariant}
                   size="sm"
                   onClick={() => onBatchAction?.(action.key)}
-                  disabled={typeof action.disabled === 'function' ? action.disabled({}) : action.disabled}
+                  disabled={typeof action.disabled === 'function' ? action.disabled({ id: '' } as BaseEntity) : action.disabled}
                   className="flex items-center gap-2"
                 >
                   {action.icon && <span>{action.icon}</span>}

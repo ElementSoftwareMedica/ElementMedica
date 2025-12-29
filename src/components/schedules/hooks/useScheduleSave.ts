@@ -44,7 +44,7 @@ export function useScheduleSave({
   selectedCompanies = [],
   status = 'Preventivo'
 }: UseScheduleSaveProps): UseScheduleSaveReturn {
-  
+
   const handleSave = useCallback(async (
     formData: ScheduleFormData,
     selectedPersons: (string | number)[],
@@ -71,8 +71,16 @@ export function useScheduleSave({
 
       // Costruzione del payload
       // Converte attendance da Record<number, array> a array[]
-      const attendanceArray = (formData.dates || []).map((_, idx) => attendance[idx] || []);
-      
+      // ✅ FIX: Se attendance[idx] è undefined o vuoto, usa TUTTI i selectedPersons come default
+      const attendanceArray = (formData.dates || []).map((_, idx) => {
+        const sessionAttendance = attendance[idx];
+        // Se l'attendance per questa sessione non è stato impostato, usa tutti i partecipanti
+        if (!sessionAttendance || sessionAttendance.length === 0) {
+          return [...selectedPersons];
+        }
+        return sessionAttendance;
+      });
+
       const payload = buildSchedulePayloadUtil(
         formData,
         isEditing,
@@ -83,10 +91,10 @@ export function useScheduleSave({
         attendanceArray,
         status
       );
-      
+
       console.log('[useScheduleSave] Payload da inviare:', JSON.stringify(payload, null, 2));
       console.log('[useScheduleSave] courseId:', payload.courseId, '| tipo:', typeof payload.courseId);
-      
+
       let result;
       if (isEditing && scheduleId) {
         result = await update('schedules', scheduleId, payload);

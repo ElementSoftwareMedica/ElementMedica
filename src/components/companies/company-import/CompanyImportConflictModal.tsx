@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, AlertTriangle } from 'lucide-react';
+import { X, AlertTriangle, Building2, MapPin } from 'lucide-react';
 import type { CompanyData } from './types';
 
 export interface CompanyConflict {
@@ -11,6 +11,14 @@ export interface CompanyConflict {
     ragioneSociale: string;
     piva?: string;
     codiceFiscale?: string;
+    sites?: Array<{
+      id: string;
+      siteName: string;
+      indirizzo?: string;
+      citta?: string;
+      provincia?: string;
+      cap?: string;
+    }>;
   };
 }
 
@@ -23,8 +31,15 @@ export interface CompanyImportConflictModalProps {
 
 export interface ConflictResolution {
   index: number;
-  action: 'skip' | 'overwrite';
+  action: 'skip' | 'overwrite' | 'addAsSite';
   companyId?: string;
+  siteData?: {
+    name: string;
+    address?: string;
+    city?: string;
+    province?: string;
+    postalCode?: string;
+  };
 }
 
 const CompanyImportConflictModal: React.FC<CompanyImportConflictModalProps> = ({
@@ -34,6 +49,7 @@ const CompanyImportConflictModal: React.FC<CompanyImportConflictModalProps> = ({
   onResolve
 }) => {
   const [resolutions, setResolutions] = useState<{ [index: number]: ConflictResolution }>({});
+  const [siteNames, setSiteNames] = useState<{ [index: number]: string }>({});
 
   // Inizializza le risoluzioni con 'skip' come default
   useEffect(() => {
@@ -59,7 +75,23 @@ const CompanyImportConflictModal: React.FC<CompanyImportConflictModalProps> = ({
 
   // Gestisce la conferma delle risoluzioni
   const handleConfirm = () => {
-    const resolvedConflicts = Object.values(resolutions).filter(r => r.action === 'overwrite');
+    const resolvedConflicts = Object.values(resolutions).map(resolution => {
+      if (resolution.action === 'addAsSite') {
+        const conflict = conflicts.find(c => c.index === resolution.index);
+        return {
+          ...resolution,
+          siteData: {
+            name: siteNames[resolution.index] || `Sede ${conflict?.data.citta || 'Principale'}`,
+            address: conflict?.data.indirizzo,
+            city: conflict?.data.citta,
+            province: conflict?.data.provincia,
+            postalCode: conflict?.data.cap
+          }
+        };
+      }
+      return resolution;
+    }).filter(r => r.action !== 'skip');
+    
     onResolve(resolvedConflicts);
   };
 
@@ -123,46 +155,126 @@ const CompanyImportConflictModal: React.FC<CompanyImportConflictModalProps> = ({
                     {/* Dati dell'azienda esistente */}
                     {conflict.existingCompany && (
                       <div className="bg-amber-50 p-3 rounded-md mb-3">
-                        <h5 className="font-medium text-amber-900 mb-2">Azienda esistente nel database:</h5>
-                        <div className="grid grid-cols-2 gap-2 text-sm">
+                        <h5 className="font-medium text-amber-900 mb-2 flex items-center gap-2">
+                          <Building2 className="h-4 w-4" />
+                          Azienda esistente nel database:
+                        </h5>
+                        <div className="grid grid-cols-2 gap-2 text-sm mb-3">
                           <div><strong>Ragione Sociale:</strong> {conflict.existingCompany.ragioneSociale}</div>
                           {conflict.existingCompany.piva && <div><strong>P.IVA:</strong> {conflict.existingCompany.piva}</div>}
                           {conflict.existingCompany.codiceFiscale && <div><strong>Codice Fiscale:</strong> {conflict.existingCompany.codiceFiscale}</div>}
                         </div>
+                        
+                        {/* Existing Sites */}
+                        {conflict.existingCompany.sites && conflict.existingCompany.sites.length > 0 && (
+                          <div className="mt-3 pt-3 border-t border-amber-200">
+                            <h6 className="font-medium text-amber-800 mb-2 flex items-center gap-2">
+                              <MapPin className="h-4 w-4" />
+                              Sedi esistenti ({conflict.existingCompany.sites.length}):
+                            </h6>
+                            <div className="space-y-2">
+                              {conflict.existingCompany.sites.map((site, idx) => (
+                                <div key={site.id} className="text-sm bg-amber-100/50 rounded p-2">
+                                  <div className="font-medium">{site.siteName}</div>
+                                  {site.indirizzo && <div className="text-gray-600">{site.indirizzo}</div>}
+                                  {site.citta && (
+                                    <div className="text-gray-600">
+                                      {site.citta}
+                                      {site.provincia && ` (${site.provincia})`}
+                                      {site.cap && ` - ${site.cap}`}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
                 </div>
 
                 {/* Opzioni di risoluzione */}
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <h5 className="font-medium text-gray-900">Come vuoi procedere?</h5>
                   
-                  <label className="flex items-center">
+                  <label className="flex items-start cursor-pointer">
                     <input
                       type="radio"
                       name={`resolution-${conflict.index}`}
                       checked={resolutions[conflict.index]?.action === 'skip'}
                       onChange={() => updateResolution(conflict.index, { action: 'skip' })}
-                      className="mr-2"
+                      className="mr-3 mt-1"
                     />
-                    Salta questa azienda (mantieni esistente)
+                    <div>
+                      <div className="font-medium text-gray-900">Salta questa azienda</div>
+                      <div className="text-sm text-gray-500">Mantieni solo l'azienda esistente nel database</div>
+                    </div>
                   </label>
                   
                   {conflict.existingCompany && (
-                    <label className="flex items-center">
-                      <input
-                        type="radio"
-                        name={`resolution-${conflict.index}`}
-                        checked={resolutions[conflict.index]?.action === 'overwrite'}
-                        onChange={() => updateResolution(conflict.index, { 
-                          action: 'overwrite',
-                          companyId: conflict.existingCompany!.id
-                        })}
-                        className="mr-2"
-                      />
-                      Sovrascrivi i dati dell'azienda esistente
-                    </label>
+                    <>
+                      <label className="flex items-start cursor-pointer">
+                        <input
+                          type="radio"
+                          name={`resolution-${conflict.index}`}
+                          checked={resolutions[conflict.index]?.action === 'overwrite'}
+                          onChange={() => updateResolution(conflict.index, { 
+                            action: 'overwrite',
+                            companyId: conflict.existingCompany!.id
+                          })}
+                          className="mr-3 mt-1"
+                        />
+                        <div>
+                          <div className="font-medium text-gray-900">Sovrascrivi i dati</div>
+                          <div className="text-sm text-gray-500">Aggiorna l'azienda esistente con i nuovi dati dal CSV</div>
+                        </div>
+                      </label>
+                      
+                      <label className="flex items-start cursor-pointer">
+                        <input
+                          type="radio"
+                          name={`resolution-${conflict.index}`}
+                          checked={resolutions[conflict.index]?.action === 'addAsSite'}
+                          onChange={() => updateResolution(conflict.index, { 
+                            action: 'addAsSite',
+                            companyId: conflict.existingCompany!.id
+                          })}
+                          className="mr-3 mt-1"
+                        />
+                        <div className="flex-1">
+                          <div className="font-medium text-gray-900 flex items-center gap-2">
+                            <MapPin className="h-4 w-4 text-blue-600" />
+                            Aggiungi come nuova sede
+                          </div>
+                          <div className="text-sm text-gray-500 mb-2">
+                            Crea una nuova sede per l'azienda esistente con i dati dal CSV
+                          </div>
+                          
+                          {/* Site name input - only show if addAsSite is selected */}
+                          {resolutions[conflict.index]?.action === 'addAsSite' && (
+                            <div className="mt-2 ml-6">
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Nome sede:
+                              </label>
+                              <input
+                                type="text"
+                                value={siteNames[conflict.index] || `Sede ${conflict.data.citta || 'Principale'}`}
+                                onChange={(e) => setSiteNames(prev => ({ ...prev, [conflict.index]: e.target.value }))}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                placeholder="Es. Sede Milano, Filiale Roma..."
+                              />
+                              <div className="mt-2 text-xs text-gray-500 space-y-1">
+                                <div>📍 <strong>Indirizzo:</strong> {conflict.data.indirizzo || 'Non specificato'}</div>
+                                <div>🏙️ <strong>Città:</strong> {conflict.data.citta || 'Non specificata'}</div>
+                                {conflict.data.provincia && <div>📮 <strong>Provincia:</strong> {conflict.data.provincia}</div>}
+                                {conflict.data.cap && <div>📫 <strong>CAP:</strong> {conflict.data.cap}</div>}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </label>
+                    </>
                   )}
                 </div>
               </div>

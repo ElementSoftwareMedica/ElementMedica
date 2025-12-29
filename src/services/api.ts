@@ -14,7 +14,7 @@ const onRefreshed = (token: string | null) => {
     const cb = refreshSubscribers.shift();
     try {
       cb && cb(token);
-    } catch {}
+    } catch { }
   }
 };
 import { API_BASE_URL } from '../config/api';
@@ -69,7 +69,7 @@ const activeRequests = new Map<string, Promise<unknown>>();
 const getCacheKey = (method: string, url: string, data?: unknown): string => {
   // PROTEZIONE ULTRA-ROBUSTA per i metodi HTTP undefined/null/vuoti
   const safeMethod = (method && typeof method === 'string' && method.trim().length > 0 && /^[A-Za-z]+$/.test(method.trim())) ? method.trim().toUpperCase() : 'GET';
-  
+
   const dataHash = data ? JSON.stringify(data) : '';
   return `${safeMethod}:${url}:${dataHash}`;
 };
@@ -95,11 +95,16 @@ const getCacheTtl = (url: string): number => {
 };
 
 // Create base API client with default configuration
+// CRITICAL FIX: baseURL must be empty string because service URLs already include full path
+// Services use URLs like '/api/v1/auth/verify' which already contain the /api prefix
+// If we set baseURL to '/api', we get /api/api/v1/... (double prefix)
 const apiClient = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: '', // Empty string - URLs are already complete with /api/v1/... from services
   headers: {
     'Content-Type': 'application/json',
   },
+  // CRITICAL: Set default method to prevent toUpperCase errors in axios internals
+  method: 'GET',
   // Abilita withCredentials per supportare CORS con credenziali
   withCredentials: true,
   // Rimuovo timeout globale per permettere timeout specifici per operazione
@@ -110,11 +115,73 @@ apiClient.interceptors.request.use(
   (config: any) => {
     // CRITICAL FIX: Validate HTTP method FIRST for ALL requests
     // This must happen before any early returns to prevent 'toUpperCase' errors
-    if (!config.method || typeof config.method !== 'string' || config.method.trim() === '') {
+    // Use a try-catch as ultimate safety net
+    try {
+      if (!config.method || typeof config.method !== 'string' || config.method.trim() === '') {
+        config.method = 'GET';
+        console.warn('🔧 [API INTERCEPTOR] Method was invalid, forcing to GET');
+      } else {
+        // Extra safety: verify it's still a string before calling toUpperCase
+        const methodValue = config.method;
+        config.method = (methodValue && typeof methodValue === 'string')
+          ? methodValue.toUpperCase()
+          : 'GET';
+      }
+    } catch (methodError) {
+      console.error('🔧 [API INTERCEPTOR] Error processing method, defaulting to GET:', methodError);
       config.method = 'GET';
-      console.warn('🔧 [API INTERCEPTOR] Method was invalid, forcing to GET');
-    } else {
-      config.method = config.method.toUpperCase();
+    }
+
+    // MULTI-BRAND: Inject X-Frontend-Id header for ALL requests
+    const brandId = import.meta.env.VITE_BRAND_ID || 'element-formazione';
+    if (!config.headers) config.headers = {};
+    (config.headers as Record<string, any>)['X-Frontend-Id'] = brandId;
+
+    // RISCRITTURA LEGACY URLs - DEVE ESSERE PRIMA DI QUALSIASI EARLY RETURN
+    // Applica riscritture per tutti i tipi di richiesta (GET, POST, PUT, DELETE, etc.)
+    if (typeof config.url === 'string') {
+      const u = config.url;
+
+      // Courses: '/courses/*' -> '/api/v1/courses/*' e '/api/courses/*' -> '/api/v1/courses/*'
+      if (u === '/courses' || u === '/api/courses') {
+        config.url = '/api/v1/courses';
+      } else if (u.startsWith('/courses/') || u.startsWith('/courses?')) {
+        config.url = `/api/v1${u}`;
+      } else if (u.startsWith('/api/courses/') || u.startsWith('/api/courses?')) {
+        config.url = `/api/v1${u.substring(4)}`;
+      }
+      // Trainers
+      else if (u === '/trainers' || u === '/api/trainers') {
+        config.url = '/api/v1/trainers';
+      } else if (u.startsWith('/trainers/') || u.startsWith('/trainers?')) {
+        config.url = `/api/v1${u}`;
+      } else if (u.startsWith('/api/trainers/') || u.startsWith('/api/trainers?')) {
+        config.url = `/api/v1${u.substring(4)}`;
+      }
+      // Companies
+      else if (u === '/companies' || u === '/api/companies') {
+        config.url = '/api/v1/companies';
+      } else if (u.startsWith('/companies/') || u.startsWith('/companies?')) {
+        config.url = `/api/v1${u}`;
+      } else if (u.startsWith('/api/companies/') || u.startsWith('/api/companies?')) {
+        config.url = `/api/v1${u.substring(4)}`;
+      }
+      // Persons
+      else if (u === '/persons' || u === '/api/persons') {
+        config.url = '/api/v1/persons';
+      } else if (u.startsWith('/persons/') || u.startsWith('/persons?')) {
+        config.url = `/api/v1${u}`;
+      } else if (u.startsWith('/api/persons/') || u.startsWith('/api/persons?')) {
+        config.url = `/api/v1${u.substring(4)}`;
+      }
+      // Schedules
+      else if (u === '/schedules' || u === '/api/schedules') {
+        config.url = '/api/v1/schedules';
+      } else if (u.startsWith('/schedules/') || u.startsWith('/schedules?')) {
+        config.url = `/api/v1${u}`;
+      } else if (u.startsWith('/api/schedules/') || u.startsWith('/api/schedules?')) {
+        config.url = `/api/v1${u.substring(4)}`;
+      }
     }
 
     // SOLUZIONE ULTRA-SEMPLIFICATA: Per chiamate apiGet, fai il minimo indispensabile
@@ -130,8 +197,10 @@ apiClient.interceptors.request.use(
         if (!config.headers) config.headers = {};
         (config.headers as Record<string, any>)['Authorization'] = `Bearer ${token}`;
       } else if (!token && config.url?.includes('/auth/verify')) {
-        // Per endpoint di autenticazione, non loggare come critico: in fase di startup è atteso
-        console.warn('⚠️ No token for /auth/verify; attempting cookie-based verification');
+        // Expected for public users - no warning needed
+        if (process.env.NODE_ENV === 'development') {
+          console.debug('🔍 Auth verify without token (public user)');
+        }
       }
 
       // Imposta l'header X-Tenant-ID solo se presente in localStorage (niente fallback o gating host)
@@ -153,141 +222,16 @@ apiClient.interceptors.request.use(
         config.url = config.url.replace(/^\/api\//, '/');
       }
 
-      // RISCRITTURA LEGACY anche per apiGet: mappa '/trainers' e '/api/trainers' su '/api/v1/trainers'
-      if (typeof config.url === 'string') {
-        const u = config.url;
-        // Casi senza prefisso /api
-        if (u === '/trainers') {
-          config.url = '/api/v1/trainers';
-        } else if (u.startsWith('/trainers/')) {
-          config.url = `/api/v1${u}`;
-        } else if (u.startsWith('/trainers?')) {
-          config.url = `/api/v1${u}`;
-        }
-        // Casi con prefisso /api
-        else if (u === '/api/trainers') {
-          config.url = '/api/v1/trainers';
-        } else if (u.startsWith('/api/trainers/')) {
-          config.url = `/api/v1${u.substring(4)}`;
-        } else if (u.startsWith('/api/trainers?')) {
-          config.url = `/api/v1${u.substring(4)}`;
-        }
-      }
-
-      // RISCRITTURA LEGACY per companies: mappa '/companies' e '/api/companies' su '/api/v1/companies'
-      if (typeof config.url === 'string') {
-        const u = config.url;
-        // Casi senza prefisso /api
-        if (u === '/companies') {
-          config.url = '/api/v1/companies';
-        } else if (u.startsWith('/companies/')) {
-          config.url = `/api/v1${u}`; // es. /companies/123 -> /api/v1/companies/123
-        } else if (u.startsWith('/companies?')) {
-          config.url = `/api/v1${u}`; // es. /companies?search=x -> /api/v1/companies?search=x
-        }
-        // Casi con prefisso /api
-        else if (u === '/api/companies') {
-          config.url = '/api/v1/companies';
-        } else if (u.startsWith('/api/companies/')) {
-          config.url = `/api/v1${u.substring(4)}`;
-        } else if (u.startsWith('/api/companies?')) {
-          config.url = `/api/v1${u.substring(4)}`;
-        }
-      }
-
-      // RISCRITTURA LEGACY per persons: mappa '/persons' e '/api/persons' su '/api/v1/persons'
-      if (typeof config.url === 'string') {
-        const u = config.url;
-        // Casi senza prefisso /api
-        if (u === '/persons') {
-          config.url = '/api/v1/persons';
-        } else if (u.startsWith('/persons/')) {
-          config.url = `/api/v1${u}`;
-        } else if (u.startsWith('/persons?')) {
-          config.url = `/api/v1${u}`;
-        }
-        // Casi con prefisso /api
-        else if (u === '/api/persons') {
-          config.url = '/api/v1/persons';
-        } else if (u.startsWith('/api/persons/')) {
-          config.url = `/api/v1${u.substring(4)}`;
-        } else if (u.startsWith('/api/persons?')) {
-          config.url = `/api/v1${u.substring(4)}`;
-        }
-      }
-
-      // RISCRITTURA LEGACY per schedules: mappa '/schedules' e '/api/schedules' su '/api/v1/schedules'
-      // e '/schedules-with-attestati' su '/api/v1/schedules/with-attestati'
-      if (typeof config.url === 'string') {
-        const u = config.url;
-        // Schedules (senza prefisso /api)
-        if (u === '/schedules') {
-          config.url = '/api/v1/schedules';
-        } else if (u.startsWith('/schedules/')) {
-          config.url = `/api/v1${u}`; // es. /schedules/123 -> /api/v1/schedules/123
-        } else if (u.startsWith('/schedules?')) {
-          config.url = `/api/v1${u}`; // es. /schedules?status= -> /api/v1/schedules?status=
-        }
-        // Schedules (con prefisso /api)
-        else if (u === '/api/schedules') {
-          config.url = '/api/v1/schedules';
-        } else if (u.startsWith('/api/schedules/')) {
-          config.url = `/api/v1${u.substring(4)}`;
-        } else if (u.startsWith('/api/schedules?')) {
-          config.url = `/api/v1${u.substring(4)}`;
-        }
-        // with-attestati (senza prefisso /api)
-        else if (u === '/schedules-with-attestati') {
-          config.url = '/api/v1/schedules/with-attestati';
-        }
-        // with-attestati (con prefisso /api)
-        else if (u === '/api/schedules-with-attestati') {
-          config.url = '/api/v1/schedules/with-attestati';
-        }
-      }
-
-      // RISCRITTURA LEGACY per courses: mappa '/courses' e '/api/courses' su '/api/v1/courses'
-      // Include sottopercorsi (es. /courses/bulk-import) e querystring
-      if (typeof config.url === 'string') {
-        const u = config.url;
-        // Casi senza prefisso /api
-        if (u === '/courses') {
-          config.url = '/api/v1/courses';
-        } else if (u.startsWith('/courses/')) {
-          // Eccezione: non riscrivere l'endpoint di bulk-import corsi
-          if (!u.startsWith('/courses/bulk-import')) {
-            config.url = `/api/v1${u}`;
-          }
-        } else if (u.startsWith('/courses?')) {
-          config.url = `/api/v1${u}`;
-        }
-        // Casi con prefisso /api
-        else if (u === '/api/courses') {
-          config.url = '/api/v1/courses';
-        } else if (u.startsWith('/api/courses/')) {
-          // Eccezione: non riscrivere l'endpoint di bulk-import corsi
-          if (!u.startsWith('/api/courses/bulk-import')) {
-            config.url = `/api/v1${u.substring(4)}`;
-          }
-        } else if (u.startsWith('/api/courses?')) {
-          config.url = `/api/v1${u.substring(4)}`;
-        }
-      }
-
-      // Normalizzazione URL: se comincia con '/' ma non con '/api', prefissa '/api'
+      // Prefisso /api per URL relativi (se non già presente)
       if (
         typeof config.url === 'string' &&
-        config.url.startsWith('/') &&
         !config.url.startsWith('/api') &&
-        !/^https?:\/\//i.test(config.url) &&
-        // Eccezione: mantieni path nativo per bulk-import corsi per sfruttare la regola proxy dedicata di Vite
-        config.url !== '/courses/bulk-import'
+        !/^https?:\/\//i.test(config.url)
       ) {
         config.url = `/api${config.url}`;
       }
 
-      // Fallback baseURL: se manca baseURL e l'URL è relativo (non assoluto) e NON inizia già con "/api",
-      // imposta la baseURL a API_BASE_URL per garantire il prefisso corretto in produzione.
+      // Fallback baseURL
       if (
         !config.baseURL &&
         typeof config.url === 'string' &&
@@ -297,7 +241,7 @@ apiClient.interceptors.request.use(
         config.baseURL = API_BASE_URL;
       }
 
-      return config; // RITORNA SUBITO senza altre elaborazioni
+      return config; // RITORNA SUBITO per apiGet
     }
 
     // Per tutte le altre chiamate (non apiGet), gestisci normalmente
@@ -427,9 +371,7 @@ apiClient.interceptors.request.use(
       typeof config.url === 'string' &&
       config.url.startsWith('/') &&
       !config.url.startsWith('/api') &&
-      !/^https?:\/\//i.test(config.url) &&
-      // Eccezione: mantieni path nativo per bulk-import corsi per sfruttare la regola proxy dedicata di Vite
-      config.url !== '/courses/bulk-import'
+      !/^https?:\/\//i.test(config.url)
     ) {
       config.url = `/api${config.url}`;
     }
@@ -528,15 +470,15 @@ apiClient.interceptors.request.use(
         // Log GDPR action per cache hit (non-blocking)
         if (!config._skipGdprCheck) {
           logGdprAction(
-             'system',
-             'API_CACHE_HIT',
-             'api',
-             config.url || 'unknown',
-             {
-               url: config.url,
-               cacheAge: Date.now() - cached.timestamp
-             }
-           );
+            'system',
+            'API_CACHE_HIT',
+            'api',
+            config.url || 'unknown',
+            {
+              url: config.url,
+              cacheAge: Date.now() - cached.timestamp
+            }
+          );
         }
 
         // CRITICAL FIX: Create a completely clean config object for cached response
@@ -572,11 +514,11 @@ apiClient.interceptors.request.use(
           [Symbol.toStringTag]: 'AxiosResponse'
         };
 
-        recordApiCall(config.url || '', safeMethodForLogging, timer(), 200, { 
-          cached: true, 
-          deduplicated: false 
+        recordApiCall(config.url || '', safeMethodForLogging, timer(), 200, {
+          cached: true,
+          deduplicated: false
         });
-        
+
         return Promise.resolve(response);
       }
     }
@@ -584,59 +526,59 @@ apiClient.interceptors.request.use(
     // Deduplication per richieste identiche in corso
     if (!config._skipDeduplication && activeRequests.has(requestKey)) {
       console.log(`🔄 Deduplicating request: ${safeMethodForLogging} ${config.url}`);
-      
+
       // Log GDPR action per deduplication (non-blocking)
       if (!config._skipGdprCheck) {
         logGdprAction(
-           'system',
-           'API_REQUEST_DEDUPLICATED',
-           'api',
-           config.url || 'unknown',
-           {
-             url: config.url,
-             method: safeMethodForLogging
-           }
-         );
+          'system',
+          'API_REQUEST_DEDUPLICATED',
+          'api',
+          config.url || 'unknown',
+          {
+            url: config.url,
+            method: safeMethodForLogging
+          }
+        );
       }
-      
-      recordApiCall(config.url || '', safeMethodForLogging, timer(), 200, { 
-        cached: false, 
-        deduplicated: true 
+
+      recordApiCall(config.url || '', safeMethodForLogging, timer(), 200, {
+        cached: false,
+        deduplicated: true
       });
-      
+
       return activeRequests.get(requestKey);
     }
-    
+
     // Intercettore per limitare richieste parallele eccessive allo stesso endpoint
     const url = config.url || '';
-    
+
     // Limite aumentato per permettere batch operations (es. generazione attestati multipli)
     if (pendingRequests.count > 20) {
       throw new Error('Troppe richieste simultanee');
     }
-    
+
     if (pendingRequests.urls.has(url)) {
       console.warn(`Richiesta duplicata per ${url} - ottimizzando`);
     } else {
       pendingRequests.count++;
       pendingRequests.urls.add(url);
-      
+
       // Aggiungiamo una proprietà al config per tracciare l'URL per il cleanup
       config._requestUrl = url;
     }
-    
+
     // Interceptor per convertire i campi numerici prima dell'invio
     if (config.data && config.url && (
-      config.url.includes('/courses') || 
+      config.url.includes('/courses') ||
       config.url.includes('/bulk-import')
     )) {
       // Tratta i dati come un record generico
       const originalData = config.data as Record<string, unknown> | Array<Record<string, unknown>>;
-      
+
       // Funzione di conversione per un singolo oggetto corso - ottimizzata
       const convertCourseFields = (course: Record<string, unknown>): Record<string, unknown> => {
         const result = { ...course };
-        
+
         // Ottimizzazione: converti tutti i campi numerici in un'unica iterazione
         const numericFields = {
           validityYears: true, // true = intero
@@ -644,7 +586,7 @@ apiClient.interceptors.request.use(
           price: false, // false = float
           pricePerPerson: false
         };
-        
+
         // Converti tutti i campi numerici in un loop
         Object.entries(numericFields).forEach(([field, isInteger]) => {
           if (result[field] !== undefined && result[field] !== null) {
@@ -661,7 +603,7 @@ apiClient.interceptors.request.use(
               } else {
                 result[field] = null;
               }
-            } 
+            }
             // Se non è già un numero, imposta null
             else if (typeof result[field] !== 'number') {
               result[field] = null;
@@ -672,15 +614,15 @@ apiClient.interceptors.request.use(
             }
           }
         });
-        
+
         // Assicurati che duration rimanga una stringa
         if (result.duration !== undefined && result.duration !== null) {
           result.duration = String(result.duration);
         }
-        
+
         return result;
       };
-      
+
       try {
         // Gestisci sia oggetti singoli che array
         if (Array.isArray(originalData)) {
@@ -696,7 +638,7 @@ apiClient.interceptors.request.use(
         // Ignora errori e continua con i dati originali
       }
     }
-    
+
     return config;
   },
   (error) => {
@@ -710,37 +652,43 @@ apiClient.interceptors.response.use(
     const config = response.config as ExtendedAxiosConfig;
     const timer = startTimer();
 
+    // Cleanup pendingRequests tracking (anche nel success handler!)
+    if (config && config._requestUrl) {
+      pendingRequests.count = Math.max(0, pendingRequests.count - 1);
+      pendingRequests.urls.delete(config._requestUrl);
+    }
+
     // Validazione JSON response - Skip per status code che non dovrebbero avere body
     const statusCodesWithoutBody = [204, 205, 304]; // No Content, Reset Content, Not Modified
-    
+
     if (!statusCodesWithoutBody.includes(response.status)) {
       try {
         response.data = validateJsonResponse(response.data, config._requestUrl || 'unknown');
       } catch (jsonError) {
         console.error('JSON validation failed:', jsonError);
-        
+
         // Log GDPR action per errore JSON (non-blocking)
         if (!config?._skipGdprCheck) {
           logGdprAction(
-             'system',
-             'API_JSON_VALIDATION_ERROR',
-             'api',
-             config._requestUrl || 'unknown',
-             {
-               url: config._requestUrl,
-               status: response.status
-             },
-             false,
-             jsonError instanceof Error ? jsonError.message : 'JSON validation failed'
-           );
+            'system',
+            'API_JSON_VALIDATION_ERROR',
+            'api',
+            config._requestUrl || 'unknown',
+            {
+              url: config._requestUrl,
+              status: response.status
+            },
+            false,
+            jsonError instanceof Error ? jsonError.message : 'JSON validation failed'
+          );
         }
-        
+
         recordApiCall(config._requestUrl || '', config.method || 'GET', timer(), response.status, {
           cached: false,
           deduplicated: false,
           error: 'JSON validation failed'
         });
-        
+
         throw jsonError;
       }
     } else {
@@ -757,7 +705,7 @@ apiClient.interceptors.response.use(
         timestamp: Date.now(),
         ttl
       });
-      
+
       // Cleanup cache periodico (mantieni solo ultimi 100 entries)
       if (responseCache.size > 100) {
         const entries = Array.from(responseCache.entries());
@@ -769,17 +717,38 @@ apiClient.interceptors.response.use(
     // Log GDPR action per successful response (non-blocking)
     if (!config?._skipGdprCheck) {
       logGdprAction(
-         'system',
-         'API_RESPONSE_SUCCESS',
-         'api',
-         config._requestUrl || 'unknown',
-         {
-           url: config._requestUrl,
-           method: config.method,
-           status: response.status,
-           cached: response.statusText?.includes('Cached') || false
-         }
-       );
+        'system',
+        'API_RESPONSE_SUCCESS',
+        'api',
+        config._requestUrl || 'unknown',
+        {
+          url: config._requestUrl,
+          method: config.method,
+          status: response.status,
+          cached: response.statusText?.includes('Cached') || false
+        }
+      );
+    }
+
+    // Invalida automaticamente la cache correlata per operazioni di scrittura (POST/PATCH/PUT/DELETE)
+    const method = config.method?.toLowerCase();
+    if (method && ['post', 'patch', 'put', 'delete'].includes(method)) {
+      const url = config._requestUrl || '';
+      // Estrai il base path dell'endpoint (es: /api/v1/cms/media/upload -> /cms/media)
+      const urlMatch = url.match(/\/api\/v\d+(\/.+?)(?:\/[^/]+)?$/);
+      if (urlMatch && urlMatch[1]) {
+        // Invalida cache per il base path
+        const basePath = urlMatch[1].replace(/\/upload$|\/\d+$|\/[a-f0-9-]{36}$/i, '');
+        if (basePath) {
+          // Cerca e invalida tutte le cache che contengono questo path
+          responseCache.forEach((_, key) => {
+            if (key.includes(basePath)) {
+              responseCache.delete(key);
+              console.log(`🗑️ Auto-invalidated cache for: ${key} (due to ${method?.toUpperCase() || 'UNKNOWN'} ${url})`);
+            }
+          });
+        }
+      }
     }
 
     // Record metrics
@@ -787,13 +756,13 @@ apiClient.interceptors.response.use(
       cached: response.statusText?.includes('Cached') || false,
       deduplicated: false
     });
-    
+
     return response;
   },
   async (error) => {
     const config = error?.config as ExtendedAxiosConfig;
     const timer = startTimer();
-    
+
     // Cleanup del conteggio richieste anche in caso di errore
     if (config && config._requestUrl) {
       pendingRequests.count = Math.max(0, pendingRequests.count - 1);
@@ -808,22 +777,28 @@ apiClient.interceptors.response.use(
     const errorMessage = error.message || 'Unknown API error';
     const status = error.response?.status || 0;
 
-    // Log GDPR action per errore (non-blocking)
-    if (!config?._skipGdprCheck) {
+    // Skip GDPR logging for common non-critical errors:
+    // - 403: Permission denied (normal for restricted resources)
+    // - 404: Not found (normal during navigation)
+    // - Network errors without status (connectivity issues)
+    const skipGdprForStatus = [403, 404].includes(status) || status === 0;
+
+    // Log GDPR action per errore (non-blocking) - skip for non-critical errors
+    if (!config?._skipGdprCheck && !skipGdprForStatus) {
       logGdprAction(
-         'system',
-         'API_RESPONSE_ERROR',
-         'api',
-         config?._requestUrl || 'unknown',
-         {
-           url: config?._requestUrl,
-           method: config?.method,
-           status,
-           errorType: error.constructor.name
-         },
-         false,
-         errorMessage
-       );
+        'system',
+        'API_RESPONSE_ERROR',
+        'api',
+        config?._requestUrl || 'unknown',
+        {
+          url: config?._requestUrl,
+          method: config?.method,
+          status,
+          errorType: error.constructor.name
+        },
+        false,
+        errorMessage
+      );
     }
 
     // Record metrics per errore
@@ -832,7 +807,7 @@ apiClient.interceptors.response.use(
       deduplicated: false,
       error: errorMessage
     });
-    
+
     // Nessun retry automatico, riduciamo il debug
     if (process.env.NODE_ENV !== 'production' && error?.config?.url) {
       console.debug(`API Error [${error.config?.url}]: ${error.code || error.name || 'Unknown error'}`);
@@ -850,7 +825,7 @@ export const apiGet = async <T>(url: string, params = {}): Promise<T> => {
     try {
       // Configurazione speciale per endpoint di autenticazione per evitare cache browser
       const isAuthEndpoint = url.includes('/auth/');
-      
+
       // SOLUZIONE DEFINITIVA: Usa direttamente apiClient.get() per evitare problemi interni di Axios
       const config: ExtendedAxiosConfig = {
         params: {
@@ -861,7 +836,7 @@ export const apiGet = async <T>(url: string, params = {}): Promise<T> => {
         timeout: 20000, // Timeout ridotto
         headers: {}
       };
-      
+
       // Propaga _skipGdprCheck a livello config e rimuovilo dalla querystring
       const skipGdpr = (params as any)?._skipGdprCheck === true;
       if (skipGdpr) {
@@ -871,7 +846,7 @@ export const apiGet = async <T>(url: string, params = {}): Promise<T> => {
           config.params = rest;
         }
       }
-      
+
       // Headers no-cache per endpoint di autenticazione
       if (isAuthEndpoint) {
         config.headers!['Cache-Control'] = 'no-cache, no-store, must-revalidate';
@@ -879,10 +854,10 @@ export const apiGet = async <T>(url: string, params = {}): Promise<T> => {
         config.headers!['Expires'] = '0';
         console.log('🚫 [CACHE BYPASS] Adding no-cache headers for auth endpoint:', url);
       }
-      
+
       // Aggiungi il flag personalizzato per l'interceptor
       (config as any)._isApiGetCall = true;
-      
+
       // USA DIRETTAMENTE apiClient.get() invece di apiClient.request()
       // Questo evita problemi interni di Axios con il metodo HTTP
       const response = await apiClient.get(url, config);
@@ -913,19 +888,19 @@ const preserveNumericTypes = (data: unknown): unknown => {
   if (data === null || data === undefined || typeof data !== 'object') {
     return data;
   }
-  
+
   // Se è un array, applica recursivamente la funzione a ogni elemento
   if (Array.isArray(data)) {
     return data.map(item => preserveNumericTypes(item));
   }
-  
+
   // Clona l'oggetto per non modificare l'originale
   const result: Record<string, any> = { ...(data as Record<string, any>) };
-  
+
   // Campi numerici di interesse
   const integerFields = ['validityYears', 'maxPeople'];
   const floatFields = ['price', 'pricePerPerson'];
-  
+
   // Converti gli interi
   for (const field of integerFields) {
     if (result[field] !== undefined && result[field] !== null) {
@@ -940,7 +915,7 @@ const preserveNumericTypes = (data: unknown): unknown => {
       }
     }
   }
-  
+
   // Converti i float
   for (const field of floatFields) {
     if (result[field] !== undefined && result[field] !== null) {
@@ -955,14 +930,14 @@ const preserveNumericTypes = (data: unknown): unknown => {
       }
     }
   }
-  
+
   // Processa recursivamente eventuali oggetti annidati
   for (const key in result) {
     if (result[key] !== null && typeof result[key] === 'object') {
       result[key] = preserveNumericTypes(result[key]);
     }
   }
-  
+
   return result;
 };
 
@@ -977,7 +952,7 @@ export async function apiPost<T = unknown>(
   return throttledApiCall(url, async () => {
     // Se data è un oggetto e la preservazione dei tipi è abilitata, processa i dati
     let processedData = data;
-    
+
     // Elaboriamo i dati solo se necessario per evitare de/serializzazioni eccessive
     if (enablePreserveNumericTypes && data && typeof data === 'object') {
       try {
@@ -987,19 +962,19 @@ export async function apiPost<T = unknown>(
           if (Array.isArray(obj)) {
             return obj.map(item => ensureCorrectTypes(item));
           }
-          
+
           // Se non è un oggetto o è null, restituisci com'è
           if (!obj || typeof obj !== 'object') return obj;
-          
+
           const result: Record<string, unknown> = {};
-          
+
           // Copia tutte le proprietà, convertendo solo i tipi necessari
           for (const [key, value] of Object.entries(obj)) {
             if (value === undefined || value === null) {
               result[key] = null;
               continue;
             }
-            
+
             // Gestisci specificamente i campi di numeri interi
             if ((key === 'validityYears' || key === 'maxPeople') && value !== undefined) {
               const numValue = Number(value);
@@ -1019,17 +994,17 @@ export async function apiPost<T = unknown>(
               result[key] = value;
             }
           }
-          
+
           return result;
         };
-        
+
         processedData = ensureCorrectTypes(data);
       } catch (error: unknown) {
         // In caso di errore, continua con i dati originali
         processedData = data;
       }
     }
-    
+
     try {
       // Determina il timeout in base al tipo di operazione
       const getTimeoutForUrl = (url: string): number => {
@@ -1047,7 +1022,7 @@ export async function apiPost<T = unknown>(
 
       const timeoutValue = config?.timeout || getTimeoutForUrl(url);
       const withCredentialsValue = url.includes('/auth/'); // Abilita per auth endpoints
-      
+
       // Debug log per le chiamate di autenticazione
       if (url.includes('/auth/')) {
         console.log('🔐 Auth API Call Debug:', {
@@ -1057,8 +1032,8 @@ export async function apiPost<T = unknown>(
           baseURL: API_BASE_URL
         });
       }
-      
-      const enhancedConfig: Record<string, unknown> = { 
+
+      const enhancedConfig: Record<string, unknown> = {
         ...config,
         timeout: timeoutValue,
         // Abilita withCredentials per inviare i cookie di sessione
@@ -1069,10 +1044,26 @@ export async function apiPost<T = unknown>(
           ...(config?.headers || {})
         }
       };
-      
+
       const response = await apiClient.post<T>(url, processedData, enhancedConfig);
       return response.data;
     } catch (error: unknown) {
+      // Trasforma gli errori axios in errori più informativi
+      if (error && typeof error === 'object' && 'response' in error) {
+        const axiosError = error as any;
+        const responseData = axiosError.response?.data;
+        const status = axiosError.response?.status;
+
+        // Crea un errore più informativo con il messaggio del backend
+        const backendMessage = responseData?.error || responseData?.message || responseData?.details;
+        if (backendMessage) {
+          const enhancedError = new Error(backendMessage) as any;
+          enhancedError.response = axiosError.response;
+          enhancedError.status = status;
+          enhancedError.originalError = error;
+          throw enhancedError;
+        }
+      }
       throw error;
     }
   }, 1); // Priorità media per le POST
@@ -1100,6 +1091,39 @@ export const apiPut = async <T>(url: string, data = {}): Promise<T> => {
     });
     return response.data as T;
   } catch (error: unknown) {
+    // Trasforma gli errori axios in errori più informativi
+    if (error && typeof error === 'object' && 'response' in error) {
+      const axiosError = error as any;
+      const responseData = axiosError.response?.data;
+      const status = axiosError.response?.status;
+
+      // Crea un errore più informativo con il messaggio del backend
+      const backendMessage = responseData?.error || responseData?.message || responseData?.details;
+      if (backendMessage) {
+        const enhancedError = new Error(backendMessage) as any;
+        enhancedError.response = axiosError.response;
+        enhancedError.status = status;
+        enhancedError.originalError = error;
+        throw enhancedError;
+      }
+    }
+    throw error;
+  }
+};
+
+export const apiPatch = async <T>(url: string, data = {}): Promise<T> => {
+  const getTimeoutForUrl = (url: string): number => {
+    if (url.includes('/auth/')) return 10000;
+    return 30000;
+  };
+
+  try {
+    const response = await apiClient.patch(url, data, {
+      timeout: getTimeoutForUrl(url),
+      withCredentials: true
+    });
+    return response.data as T;
+  } catch (error: unknown) {
     throw error;
   }
 };
@@ -1122,7 +1146,7 @@ export const apiDelete = async <T>(url: string): Promise<T> => {
 
     const timeoutValue = getTimeoutForUrl(url);
     const withCredentialsValue = url.includes('/auth/'); // Abilita per auth endpoints
-    
+
     // Debug log per le chiamate di autenticazione
     if (url.includes('/auth/')) {
       console.log('🔐 Auth DELETE API Call Debug:', {
@@ -1171,10 +1195,79 @@ export const apiUpload = async <T>(url: string, formData: FormData, config?: Rec
         // Non impostare Content-Type per FormData, axios lo gestisce automaticamente
       }
     };
-    
+
     const response = await apiClient.post<T>(url, formData, enhancedConfig);
     return response.data;
   } catch (error: unknown) {
+    throw error;
+  }
+};
+
+/**
+ * Interfaccia per il risultato del download con filename
+ */
+export interface DownloadResult {
+  blob: Blob;
+  filename: string | null;
+}
+
+/**
+ * Funzione per download di file binari (PDF, immagini, etc.)
+ * Bypassa la validazione JSON e usa responseType: 'blob'
+ * 
+ * @param url - URL dell'endpoint da chiamare
+ * @returns Blob del file scaricato
+ */
+export const apiDownload = async (url: string): Promise<Blob> => {
+  try {
+    const response = await apiClient.get(url, {
+      responseType: 'blob',
+      timeout: 60000, // Timeout esteso per download
+      headers: {
+        'Accept': 'application/pdf, application/octet-stream, */*'
+      }
+    });
+    return response.data as Blob;
+  } catch (error: unknown) {
+    console.error('🚨 [API DOWNLOAD] Error:', error);
+    throw error;
+  }
+};
+
+/**
+ * Funzione per download di file binari con estrazione del filename dall'header
+ * Ritorna sia il blob che il filename dalla risposta del server
+ * 
+ * @param url - URL dell'endpoint da chiamare
+ * @returns DownloadResult con blob e filename
+ */
+export const apiDownloadWithFilename = async (url: string): Promise<DownloadResult> => {
+  try {
+    const response = await apiClient.get(url, {
+      responseType: 'blob',
+      timeout: 60000, // Timeout esteso per download
+      headers: {
+        'Accept': 'application/pdf, application/octet-stream, */*'
+      }
+    });
+
+    // Estrai filename dall'header Content-Disposition
+    let filename: string | null = null;
+    const contentDisposition = response.headers['content-disposition'];
+    if (contentDisposition) {
+      // Pattern: attachment; filename="nome-file.pdf"
+      const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+      if (filenameMatch && filenameMatch[1]) {
+        filename = filenameMatch[1].replace(/['"]/g, '');
+      }
+    }
+
+    return {
+      blob: response.data as Blob,
+      filename
+    };
+  } catch (error: unknown) {
+    console.error('🚨 [API DOWNLOAD WITH FILENAME] Error:', error);
     throw error;
   }
 };
@@ -1185,20 +1278,20 @@ export const apiUpload = async <T>(url: string, formData: FormData, config?: Rec
  */
 export const invalidateCache = (urlPattern: string): void => {
   const keysToDelete: string[] = [];
-  
+
   // Cerca tutte le chiavi che matchano il pattern
   responseCache.forEach((_, key) => {
     if (key.includes(urlPattern)) {
       keysToDelete.push(key);
     }
   });
-  
+
   // Elimina le chiavi trovate
   keysToDelete.forEach(key => {
     responseCache.delete(key);
     console.log(`🗑️ Cache invalidated for: ${key}`);
   });
-  
+
   if (keysToDelete.length > 0) {
     console.log(`🗑️ Invalidated ${keysToDelete.length} cache entries for pattern: ${urlPattern}`);
   }
@@ -1218,6 +1311,7 @@ export const apiService = {
   get: apiGet,
   post: apiPost,
   put: apiPut,
+  patch: apiPatch,
   delete: apiDelete,
   deleteWithPayload: apiDeleteWithPayload,
   upload: apiUpload,

@@ -126,7 +126,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
       disabled && stateStyles.disabled,
       props.readOnly && '!bg-gray-50',
       hasIcons && 'flex items-center',
-      leftIcon && 'pl-10',
+      leftIcon && 'pl-11',
       rightIcon && 'pr-10',
       !fullWidth && 'w-auto',
       className
@@ -139,7 +139,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             <span className="text-gray-400">{leftIcon}</span>
           </div>
         )}
-        
+
         <input
           ref={ref}
           id={inputId}
@@ -152,7 +152,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           onChange={disabled ? undefined : props.onChange}
           onFocus={disabled ? undefined : props.onFocus}
         />
-        
+
         {rightIcon && (
           <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
             <span className="text-gray-400">{rightIcon}</span>
@@ -169,7 +169,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           </p>
         );
       }
-      
+
       if (successMessage) {
         return (
           <p id={messageId} className={cn(helperTextStyles, 'text-green-600')}>
@@ -177,7 +177,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           </p>
         );
       }
-      
+
       if (helperText) {
         return (
           <p id={messageId} className={cn(helperTextStyles, 'text-gray-500')}>
@@ -185,7 +185,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           </p>
         );
       }
-      
+
       return null;
     };
 

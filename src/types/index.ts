@@ -1,6 +1,13 @@
 // Re-export template types
 export * from './templates';
 
+// Permission types
+export interface Permission {
+  resource: string;
+  action: string;
+  scope?: string;
+}
+
 // Company types
 export interface Company {
   id: string;
@@ -30,10 +37,10 @@ export interface Company {
   status?: 'ACTIVE' | 'INACTIVE' | 'PENDING';
   createdAt?: Date;
   updatedAt?: Date;
-  
+
   // Relazione con le sedi aziendali (opzionale, popolata dagli endpoint che includono le sites)
   sites?: CompanySite[];
-  
+
   // Legacy fields for backward compatibility (deprecated)
   name?: string;
   industry?: string;
@@ -104,12 +111,22 @@ export interface PersonData {
   phone?: string;
   dateOfBirth?: string;
   birthDate?: string; // Alias for dateOfBirth (UI component compatibility)
+  taxCode?: string; // Codice Fiscale
   residenceAddress?: string;
+  residenceCity?: string;
+  postalCode?: string;
+  province?: string;
+  notes?: string;
   employeeId?: string;
   startDate?: string;
   hiredDate?: string; // Alias for startDate (UI component compatibility)
+  hourlyRate?: number; // Prezzo/ora per trainers
   roleType?: string;
   tenantId?: string;
+  siteId?: string; // ID sede aziendale
+  site?: CompanySite; // Sede aziendale
+  certifications?: string[]; // Array of certification names
+  specialties?: string[]; // Array of specialty names
 }
 
 // Backward compatibility alias - Employee is now unified with PersonData
@@ -135,7 +152,9 @@ export interface MedicalRecord {
   provider?: string;
 }
 
-// Training record types
+// Training record types (alias for backward compatibility)
+export type Training = TrainingRecord;
+
 export interface TrainingRecord {
   id: string;
   personId: string;
@@ -177,6 +196,8 @@ export interface Person {
   lastName: string;
   title?: string; // Profilo professionale
   role: string; // Single role for frontend compatibility
+  roleType?: string; // Original role type from backend (EMPLOYEE, TRAINER, ADMIN, etc.)
+  globalRole?: string; // Global role (ADMIN, SUPER_ADMIN, USER, etc.)
   roles: string[]; // Array of roles from backend
   companyId?: string;
   tenantId?: string;

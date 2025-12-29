@@ -122,6 +122,42 @@ const getIconComponent = (iconName: string | undefined, fallback: React.ElementT
 };
 
 /**
+ * FAQItem component - Estratto per evitare violazione delle regole degli hooks
+ * I React hooks non possono essere chiamati dentro callback (.map, .filter, ecc.)
+ */
+interface FAQItemProps {
+  question: string;
+  answer: string;
+}
+
+const FAQItem: React.FC<FAQItemProps> = ({ question, answer }) => {
+  const [isOpen, setIsOpen] = React.useState(false);
+
+  return (
+    <div className="bg-white/80 backdrop-blur-sm rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all border border-gray-100">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between p-6 text-left hover:bg-white transition-colors"
+      >
+        <span className="font-semibold text-gray-900 pr-8">{question}</span>
+        <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${isOpen ? 'bg-blue-100' : 'bg-gray-100'}`}>
+          {isOpen ? (
+            <ChevronUp className="w-5 h-5 text-blue-600" />
+          ) : (
+            <ChevronDown className="w-5 h-5 text-gray-400" />
+          )}
+        </div>
+      </button>
+      {isOpen && (
+        <div className="px-6 pb-6 pt-2 bg-gradient-to-r from-blue-50/50 to-transparent border-t border-gray-100">
+          <p className="text-gray-600 leading-relaxed">{answer}</p>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/**
  * Renderer per contenuti custom (services, whyChooseUs, testimonials, cta, ecc.)
  */
 const CustomContentRenderer: React.FC<{ content: any; slug: string }> = ({ content, slug }) => {
@@ -2154,31 +2190,9 @@ const CustomContentRenderer: React.FC<{ content: any; slug: string }> = ({ conte
             </div>
             {content.faq.items && (
               <div className="max-w-4xl mx-auto space-y-4">
-                {content.faq.items.map((item: any, index: number) => {
-                  const [isOpen, setIsOpen] = React.useState(false);
-                  return (
-                    <div key={index} className="bg-white/80 backdrop-blur-sm rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all border border-gray-100">
-                      <button
-                        onClick={() => setIsOpen(!isOpen)}
-                        className="w-full flex items-center justify-between p-6 text-left hover:bg-white transition-colors"
-                      >
-                        <span className="font-semibold text-gray-900 pr-8">{item.question}</span>
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${isOpen ? 'bg-blue-100' : 'bg-gray-100'}`}>
-                          {isOpen ? (
-                            <ChevronUp className="w-5 h-5 text-blue-600" />
-                          ) : (
-                            <ChevronDown className="w-5 h-5 text-gray-400" />
-                          )}
-                        </div>
-                      </button>
-                      {isOpen && (
-                        <div className="px-6 pb-6 pt-2 bg-gradient-to-r from-blue-50/50 to-transparent border-t border-gray-100">
-                          <p className="text-gray-600 leading-relaxed">{item.answer}</p>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+                {content.faq.items.map((item: { question: string; answer: string }, index: number) => (
+                  <FAQItem key={index} question={item.question} answer={item.answer} />
+                ))}
               </div>
             )}
           </div>
@@ -3086,7 +3100,7 @@ export const CMSPageRenderer: React.FC<CMSPageRendererProps> = ({
     if (page?.id && !pageViewTracked.current) {
       pageViewTracked.current = true;
       pageLoadTime.current = Date.now();
-      
+
       // Genera/recupera session ID per questo tracking
       let sessionId = sessionStorage.getItem('cms_session_id');
       if (!sessionId) {
@@ -3094,7 +3108,7 @@ export const CMSPageRenderer: React.FC<CMSPageRendererProps> = ({
         sessionStorage.setItem('cms_session_id', sessionId);
       }
       currentSessionId.current = sessionId;
-      
+
       // Traccia la visita (fire-and-forget, non bloccante)
       trackPageView({
         pageId: page.id,

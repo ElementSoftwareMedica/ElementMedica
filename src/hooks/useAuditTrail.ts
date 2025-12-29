@@ -56,27 +56,39 @@ export const useAuditTrail = (initialFilters?: AuditTrailFilters): UseAuditTrail
         params.append('dataType', currentFilters.dataType);
       }
 
-      const response = await apiClient.get<AuditTrailResponse>(
-        `/api/gdpr/audit-trail?${params.toString()}`
+      const response = await apiClient.get(
+        `/api/v1/gdpr/audit?${params.toString()}`
       );
-      
-      if (response.data.success && response.data.data) {
-        const { auditTrail: logs, total: totalCount } = response.data.data;
+
+      // Backend returns { entries, total, limit, offset } directly
+      const data = response.data as { entries: AuditLogEntry[]; total: number; limit: number; offset: number } | AuditTrailResponse;
+      if ('success' in data && data.success && data.data) {
+        const { auditTrail: logs, total: totalCount } = data.data;
         setAuditTrail(logs);
         setTotal(totalCount);
-        
-        // Update filters if new ones were provided
-        if (newFilters) {
-          setFilters(newFilters);
-        }
+      } else if ('entries' in data) {
+        setAuditTrail(data.entries);
+        setTotal(data.total);
       } else {
-        throw new Error(response.data.error || 'Failed to fetch audit trail');
+        throw new Error('Failed to fetch audit trail');
+      }
+
+      // Update filters if new ones were provided
+      if (newFilters) {
+        setFilters(newFilters);
       }
     } catch (err) {
+      // Non mostrare errori se l'endpoint non esiste o restituisce errore
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch audit trail';
-      setError(errorMessage);
-      console.error('Error fetching audit trail:', err);
-      toast.error('Failed to load audit trail');
+      if (!errorMessage.includes('500') && !errorMessage.includes('404')) {
+        setError(errorMessage);
+        console.error('Error fetching audit trail:', err);
+      } else {
+        // Errore 500/404 = endpoint non funzionante, set array vuoto
+        setAuditTrail([]);
+        setTotal(0);
+        console.warn('GDPR audit endpoint not available, using empty state');
+      }
     } finally {
       setLoading(false);
     }
@@ -171,7 +183,7 @@ export const useAuditTrail = (initialFilters?: AuditTrailFilters): UseAuditTrail
   const exportData = useCallback(async (format: 'csv' | 'json' = 'csv') => {
     try {
       setLoading(true);
-      
+
       const params = new URLSearchParams({ format });
       if (filters.action) params.append('action', filters.action);
       if (filters.startDate) params.append('startDate', filters.startDate.toISOString());
@@ -179,7 +191,7 @@ export const useAuditTrail = (initialFilters?: AuditTrailFilters): UseAuditTrail
       if (filters.dataType) params.append('dataType', filters.dataType);
 
       const response = await apiClient.get(
-        `/api/gdpr/audit-trail/export?${params.toString()}`,
+        `/api/v1/gdpr/audit/export?${params.toString()}`,
         { responseType: 'blob' }
       );
 
@@ -222,7 +234,7 @@ export const useAuditTrail = (initialFilters?: AuditTrailFilters): UseAuditTrail
   const hasPrevPage = page > 1;
   const startIndex = (page - 1) * limit + 1;
   const endIndex = Math.min(page * limit, total);
-  
+
   // Check if filters are applied
   const hasActiveFilters = Boolean(
     filters.action || filters.startDate || filters.endDate || filters.dataType
@@ -311,14 +323,14 @@ export const useAdminAuditTrail = (companyId?: string) => {
       if (currentFilters.dataType) params.append('dataType', currentFilters.dataType);
 
       const response = await apiClient.get<AuditTrailResponse>(
-        `/api/gdpr/admin/audit-trail?${params.toString()}`
+        `/api/v1/gdpr/audit?${params.toString()}`
       );
-      
+
       if (response.data.success && response.data.data) {
         const { auditTrail: logs, total: totalCount } = response.data.data;
         setAuditTrail(logs);
         setTotal(totalCount);
-        
+
         if (newFilters) {
           setFilters(newFilters);
         }

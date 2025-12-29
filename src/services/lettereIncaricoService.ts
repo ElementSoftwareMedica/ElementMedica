@@ -54,6 +54,8 @@ export interface GenerateLetteraParams {
   scheduleId: string;
   trainerId: string;
   templateId?: string;
+  hourlyRate?: number;
+  expenses?: number;
   sendEmail?: boolean;
   email?: string;
 }
@@ -62,6 +64,8 @@ export interface GenerateBatchParams {
   scheduleId: string;
   trainerIds: string[];
   templateId?: string;
+  /** Map di trainerId -> { hourlyRate, expenses } */
+  trainerCompensation?: Record<string, { hourlyRate?: number; expenses?: number }>;
   sendEmail?: boolean;
 }
 
@@ -97,7 +101,7 @@ class LettereIncaricoService {
     if (params?.scheduleId) queryParams.append('scheduleId', params.scheduleId);
     if (params?.trainerId) queryParams.append('trainerId', params.trainerId);
 
-    const url = queryParams.toString() 
+    const url = queryParams.toString()
       ? `${this.baseUrl}?${queryParams.toString()}`
       : this.baseUrl;
 
@@ -149,9 +153,15 @@ class LettereIncaricoService {
   async download(id: string): Promise<void> {
     // Ottiene i dettagli della lettera per il download URL
     const lettera = await this.get(id);
-    
-    // Apre il download in una nuova finestra
-    window.open(lettera.url, '_blank');
+
+    // Forza il download invece di aprire in nuova tab
+    const link = document.createElement('a');
+    link.href = lettera.url;
+    link.download = lettera.nomeFile || `lettera_${id}.pdf`;
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   }
 
   /**
@@ -159,6 +169,36 @@ class LettereIncaricoService {
    */
   getDownloadUrl(id: string): string {
     return `${this.baseUrl}/${id}/download`;
+  }
+
+  /**
+   * Scarica lettere in batch come ZIP
+   */
+  async downloadZip(scheduleId: string, letterIds?: string[]): Promise<void> {
+    try {
+      const params = letterIds?.length
+        ? `?ids=${letterIds.join(',')}`
+        : '';
+
+      const response = await api.get(
+        `${this.baseUrl}/schedule/${scheduleId}/download-zip${params}`,
+        { responseType: 'blob' }
+      );
+
+      // Crea un link per il download
+      const blob = new Blob([response.data], { type: 'application/zip' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `lettere_incarico_${scheduleId}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading ZIP:', error);
+      throw error;
+    }
   }
 }
 

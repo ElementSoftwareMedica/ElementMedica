@@ -53,7 +53,7 @@ interface RoleHierarchy {
   [roleType: string]: RoleHierarchyLevel;
 }
 
-interface UserRoleHierarchy {
+export interface UserRoleHierarchy {
   userId: string;
   userRoles: string[];
   hierarchy: RoleHierarchy;
@@ -105,11 +105,11 @@ class RolesService {
         };
       };
     }
-    
+
     const response = await apiGet<BackendResponse>(this.baseUrl);
     // Il backend restituisce { success: true, data: { data: [...], pagination: {...} } }
     const backendRoles = response.data.data || [];
-    
+
     // Mappa i ruoli dal backend al formato frontend (roleType -> type)
     const roles: Role[] = backendRoles.map((backendRole) => ({
       type: backendRole.roleType || backendRole.type || '',
@@ -119,10 +119,10 @@ class RolesService {
       persons: backendRole.persons,
       permissions: backendRole.permissions
     }));
-    
+
     const totalRoles = response.data.pagination?.totalCount || roles.length;
     const totalUsers = roles.reduce((sum, role) => sum + (role.userCount || 0), 0);
-    
+
     return {
       roles,
       totalRoles,
@@ -143,11 +143,11 @@ class RolesService {
         permissions?: string[];
       };
     }
-    
+
     const encodedRoleType = encodeURIComponent(roleType);
     const response = await apiGet<BackendRoleResponse>(`${this.baseUrl}/${encodedRoleType}`);
     const backendRole = response.data;
-    
+
     // Mappa il ruolo dal backend al formato frontend (roleType -> type)
     return {
       type: backendRole.roleType || backendRole.type || '',
@@ -159,12 +159,12 @@ class RolesService {
     };
   }
 
-  async create(role: { 
-    name: string; 
-    description: string; 
-    level?: number; 
-    parentRoleType?: string; 
-    permissions?: string[] 
+  async create(role: {
+    name: string;
+    description: string;
+    level?: number;
+    parentRoleType?: string;
+    permissions?: string[]
   }): Promise<Role> {
     console.log('RolesService.create called with:', role);
     // Usa l'endpoint per ruoli personalizzati
@@ -205,24 +205,19 @@ class RolesService {
           // Estrai action ed entity dal permissionId (es. "VIEW_COMPANIES" -> action: "VIEW", entity: "COMPANIES")
           const parts = perm.key.split('_');
           if (parts.length >= 2) {
-            const action = parts[0]?.toLowerCase() || 'view';
-            const entity = parts.slice(1).join('_').toLowerCase() || category;
+            const action = (parts[0] ?? 'view').toLowerCase();
+            const entity = (parts.slice(1).join('_') || category).toLowerCase();
 
-            // Verifica che action ed entity siano validi
-            if (action && entity) {
-              permissionsArray.push({
-                id: perm.key,
-                name: perm.label || perm.name,
-                category: category,
-                description: perm.description,
-                resource: category,
-                action: action,
-                entity: entity,
-                scope: 'all'
-              });
-            } else {
-              console.warn('Invalid permission format:', perm.key);
-            }
+            permissionsArray.push({
+              id: perm.key,
+              name: perm.label || perm.name || perm.key,
+              category: category,
+              description: perm.description || '',
+              resource: category,
+              action,
+              entity,
+              scope: 'all'
+            });
           } else {
             console.warn('Invalid permission key format:', perm.key);
           }
@@ -236,30 +231,30 @@ class RolesService {
   async getRolePermissions(roleType: string): Promise<string[]> {
     const encodedRoleType = encodeURIComponent(roleType);
     console.log('🔍 [RolesService] Getting permissions for role:', roleType, 'encoded:', encodedRoleType);
-    
+
     const response = await apiGet<{ success: boolean, data: { permissions: Array<{ permissionId: string, granted: boolean }> } }>(`${this.baseUrl}/${encodedRoleType}/permissions`);
-    
+
     console.log('🔍 [RolesService] Raw API response:', response);
     console.log('🔍 [RolesService] Response data:', response.data);
     console.log('🔍 [RolesService] Response data permissions:', response.data?.permissions);
-    
+
     // Il backend restituisce { success: true, data: { permissions: [...], ... } }
     // Ogni permission ha la struttura { permissionId: string, granted: boolean, ... }
     // Restituiamo solo i permissionId dei permessi granted
     if (response.data && response.data.permissions && Array.isArray(response.data.permissions)) {
       console.log('🔍 [RolesService] Processing permissions array, length:', response.data.permissions.length);
-      
+
       const grantedPermissions = response.data.permissions
         .filter((perm) => {
           console.log('🔍 [RolesService] Permission:', perm.permissionId, 'granted:', perm.granted);
           return perm.granted === true;
         })
         .map((perm) => perm.permissionId);
-        
+
       console.log('🔍 [RolesService] Granted permissions:', grantedPermissions);
       return grantedPermissions;
     }
-    
+
     console.warn('🔍 [RolesService] No valid permissions found, returning empty array');
     return [];
   }
@@ -309,7 +304,7 @@ class RolesService {
 
   // Recupera la gerarchia dei ruoli per l'utente corrente
   async getCurrentUserRoleHierarchy(): Promise<UserRoleHierarchy> {
-    const response = await apiGet<{ success: boolean; data: UserRoleHierarchy }>(`${this.baseUrl}/hierarchy/user/current`);
+    const response = await apiGet<{ success: boolean; data: UserRoleHierarchy }>(`${this.baseUrl}/hierarchy/current-user`);
     return response.data;
   }
 
@@ -395,14 +390,13 @@ export const getAssignableRolesAndPermissions = (roleType: string) => rolesServi
 export const getVisibleRoles = () => rolesService.getVisibleRoles();
 export const moveRoleInHierarchy = (roleType: string, newLevel: number, newParentRoleType?: string) => rolesService.moveRoleInHierarchy(roleType, newLevel, newParentRoleType);
 
-export type { 
-  Role, 
-  Person, 
-  Permission, 
+export type {
+  Role,
+  Person,
+  Permission,
   RolePermissionUpdate,
   RoleHierarchy,
   RoleHierarchyLevel,
-  UserRoleHierarchy,
   RoleAssignmentResult,
   PermissionAssignmentResult,
   AssignableRolesAndPermissions

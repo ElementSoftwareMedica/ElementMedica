@@ -28,7 +28,7 @@ const browserPoolFactory = {
   create: async () => {
     try {
       logger.debug('Creating new browser instance', { service: 'pdfService' });
-      
+
       const browser = await puppeteer.launch({
         headless: 'new', // Use new headless mode
         args: [
@@ -113,6 +113,24 @@ class PDFService {
     let browser = null;
     let page = null;
 
+    // Debug log to see what HTML we're receiving
+    logger.debug('generatePDF called', {
+      service: 'pdfService',
+      htmlLength: html?.length,
+      htmlPreview: html?.substring(0, 300),
+      options: JSON.stringify(options)
+    });
+
+    // TEMP DEBUG: Save HTML to file for inspection
+    try {
+      const fs = await import('fs');
+      const debugPath = '/tmp/last_pdf_html.html';
+      await fs.promises.writeFile(debugPath, html || '');
+      logger.debug('Saved HTML to ' + debugPath);
+    } catch (e) {
+      logger.warn('Could not save debug HTML', { error: e.message });
+    }
+
     try {
       // Acquire browser from pool
       browser = await browserPool.acquire();
@@ -121,31 +139,56 @@ class PDFService {
       // Create new page
       page = await browser.newPage();
 
-      // Set viewport
+      // Determine viewport based on orientation
+      const isLandscape = options.landscape === true;
+      const viewportWidth = isLandscape ? 1123 : 794;  // A4 at 96 DPI
+      const viewportHeight = isLandscape ? 794 : 1123;
+
+      // Set viewport matching A4 dimensions
       await page.setViewport({
-        width: 1200,
-        height: 1600,
+        width: viewportWidth,
+        height: viewportHeight,
         deviceScaleFactor: 2,
       });
 
       // Set HTML content
       await page.setContent(html, {
-        waitUntil: ['domcontentloaded', 'networkidle0'],
+        waitUntil: ['domcontentloaded', 'networkidle0', 'load'],
         timeout: 30000,
       });
 
-      // Default PDF options
+      // Attendi caricamento immagini (importante per logo e altre immagini)
+      await page.evaluate(() => {
+        return Promise.all(
+          Array.from(document.querySelectorAll('img'))
+            .filter(img => !img.complete)
+            .map(img => new Promise((resolve, reject) => {
+              img.addEventListener('load', resolve);
+              img.addEventListener('error', () => {
+                console.warn('Image failed to load:', img.src);
+                resolve(); // Non fallire per immagini mancanti
+              });
+              // Timeout per singola immagine
+              setTimeout(resolve, 5000);
+            }))
+        );
+      });
+
+      // Default PDF options - l'ordine è importante!
+      // Prima applica i default, poi le options, ma alcuni valori critici vengono forzati dopo
       const pdfOptions = {
         format: options.format || 'A4',
-        printBackground: options.printBackground !== false,
+        printBackground: true, // Sempre true per background colors
         margin: options.margin || {
           top: '20mm',
           right: '20mm',
           bottom: '20mm',
           left: '20mm',
         },
-        preferCSSPageSize: false,
         ...options,
+        // Forza preferCSSPageSize: false per rispettare i margini di Puppeteer
+        // ma mantieni page-break CSS che funziona comunque
+        preferCSSPageSize: false,
       };
 
       // Generate PDF

@@ -29,7 +29,8 @@ const EmployeesSection: React.FC<EmployeesSectionProps> = ({ companyId }) => {
   const fetchEmployees = useCallback(async () => {
     try {
       setLoading(true);
-      const list = await getEmployeesService({ companyId });
+      // companyId è un UUID (stringa)
+      const list = await getEmployeesService({ companyId: companyId });
       setEmployees(list as unknown as Person[]);
     } catch (error) {
       console.error('Error fetching employees:', error);
@@ -77,7 +78,7 @@ const EmployeesSection: React.FC<EmployeesSectionProps> = ({ companyId }) => {
           {employees.length} persone
         </span>
       </div>
-      
+
       <div className="p-6">
         {employees.length === 0 ? (
           <div className="text-center py-8">
@@ -104,11 +105,11 @@ const EmployeesSection: React.FC<EmployeesSectionProps> = ({ companyId }) => {
                       </span>
                     </div>
                   )}
-                  
+
                   {/* Indicatore online/status */}
                   <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-400 border-2 border-white rounded-full"></div>
                 </div>
-                
+
                 {/* Informazioni persona */}
                 <div className="text-center space-y-1">
                   <h3 className="text-sm font-medium text-gray-900 group-hover:text-blue-600 transition-colors">

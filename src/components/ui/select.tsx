@@ -4,9 +4,11 @@ import { ChevronDown } from 'lucide-react';
 
 interface SelectContextType {
   value?: string;
-  onValueChange?: (value: string) => void;
+  displayValue?: string;
+  onValueChange?: (value: string, displayValue?: string) => void;
   open: boolean;
   setOpen: (open: boolean) => void;
+  setDisplayValue?: (displayValue: string) => void;
 }
 
 const SelectContext = createContext<SelectContextType | undefined>(undefined);
@@ -27,9 +29,17 @@ export interface SelectProps {
 
 export const Select: React.FC<SelectProps> = ({ value, onValueChange, children }) => {
   const [open, setOpen] = useState(false);
+  const [displayValue, setDisplayValue] = useState<string | undefined>(undefined);
+
+  const handleValueChange = (newValue: string, newDisplayValue?: string) => {
+    onValueChange?.(newValue);
+    if (newDisplayValue) {
+      setDisplayValue(newDisplayValue);
+    }
+  };
 
   return (
-    <SelectContext.Provider value={{ value, onValueChange, open, setOpen }}>
+    <SelectContext.Provider value={{ value, displayValue, onValueChange: handleValueChange, open, setOpen, setDisplayValue }}>
       <div className="relative">{children}</div>
     </SelectContext.Provider>
   );
@@ -71,8 +81,8 @@ export interface SelectValueProps {
 }
 
 export const SelectValue: React.FC<SelectValueProps> = ({ placeholder }) => {
-  const { value } = useSelect();
-  return <span>{value || placeholder}</span>;
+  const { displayValue } = useSelect();
+  return <span className="truncate">{displayValue || placeholder}</span>;
 };
 
 export interface SelectContentProps {
@@ -97,16 +107,41 @@ export interface SelectItemProps {
 }
 
 export const SelectItem: React.FC<SelectItemProps> = ({ value, children }) => {
-  const { onValueChange, setOpen } = useSelect();
+  const { onValueChange, setOpen, value: selectedValue, setDisplayValue } = useSelect();
+
+  // Estrai il testo display dai children
+  const getDisplayText = (children: React.ReactNode): string => {
+    if (typeof children === 'string') return children;
+    if (typeof children === 'number') return String(children);
+    if (Array.isArray(children)) {
+      return children.map(getDisplayText).join('');
+    }
+    if (React.isValidElement(children) && children.props.children) {
+      return getDisplayText(children.props.children);
+    }
+    return '';
+  };
+
+  const displayText = getDisplayText(children);
+
+  // Se questo item è selezionato, aggiorna il displayValue
+  React.useEffect(() => {
+    if (selectedValue === value && setDisplayValue) {
+      setDisplayValue(displayText);
+    }
+  }, [selectedValue, value, displayText, setDisplayValue]);
 
   const handleSelect = () => {
-    onValueChange?.(value);
+    onValueChange?.(value, displayText);
     setOpen(false);
   };
 
   return (
     <div
-      className="cursor-pointer px-3 py-2 text-sm hover:bg-gray-100"
+      className={cn(
+        'cursor-pointer px-3 py-2 text-sm hover:bg-gray-100',
+        selectedValue === value && 'bg-gray-100 font-medium'
+      )}
       onClick={handleSelect}
     >
       {children}

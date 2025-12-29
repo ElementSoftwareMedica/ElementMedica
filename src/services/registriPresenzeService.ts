@@ -89,6 +89,11 @@ export interface RegistroPresenze {
 
 export interface GenerateRegistroParams {
   sessionId: string;
+  scheduleId?: string;
+  sessionIndex?: number;
+  sessionDate?: string;
+  sessionStart?: string;
+  sessionEnd?: string;
   formatoreId: string;
   templateId?: string;
   attendanceData?: AttendanceData[];
@@ -121,7 +126,7 @@ class RegistriPresenzeService {
     if (params?.sessionId) queryParams.append('sessionId', params.sessionId);
     if (params?.formatoreId) queryParams.append('formatoreId', params.formatoreId);
 
-    const url = queryParams.toString() 
+    const url = queryParams.toString()
       ? `${this.baseUrl}?${queryParams.toString()}`
       : this.baseUrl;
 
@@ -176,9 +181,15 @@ class RegistriPresenzeService {
   async download(id: string): Promise<void> {
     // Ottiene i dettagli del registro per il download URL
     const registro = await this.get(id);
-    
-    // Apre il download in una nuova finestra
-    window.open(registro.url, '_blank');
+
+    // Forza il download invece di aprire in nuova tab
+    const link = document.createElement('a');
+    link.href = registro.url;
+    link.download = registro.nomeFile || `registro_${id}.pdf`;
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   }
 
   /**
@@ -186,6 +197,36 @@ class RegistriPresenzeService {
    */
   getDownloadUrl(id: string): string {
     return `${this.baseUrl}/${id}/download`;
+  }
+
+  /**
+   * Scarica registri in batch come ZIP
+   */
+  async downloadZip(scheduleId: string, registroIds?: string[]): Promise<void> {
+    try {
+      const params = registroIds?.length
+        ? `?ids=${registroIds.join(',')}`
+        : '';
+
+      const response = await api.get(
+        `${this.baseUrl}/schedule/${scheduleId}/download-zip${params}`,
+        { responseType: 'blob' }
+      );
+
+      // Crea un link per il download
+      const blob = new Blob([response.data], { type: 'application/zip' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `registri_presenze_${scheduleId}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading ZIP:', error);
+      throw error;
+    }
   }
 }
 

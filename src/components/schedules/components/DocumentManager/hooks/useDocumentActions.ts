@@ -15,6 +15,8 @@ export interface UseDocumentActionsReturn {
   downloadAttestato: (id: string) => Promise<void>;
   downloadPreventivo: (id: string) => Promise<void>;
   downloadAttestatiZip: (ids: string[]) => Promise<void>;
+  downloadLettereZip: (ids: string[]) => Promise<void>;
+  downloadRegistriZip: (ids: string[]) => Promise<void>;
   deleteLettera: (id: string) => Promise<void>;
   deleteRegistro: (id: string) => Promise<void>;
   deleteAttestato: (id: string) => Promise<void>;
@@ -25,11 +27,13 @@ export interface UseDocumentActionsReturn {
  * Custom hook for document actions (download, delete)
  * 
  * @param onRefresh - Callback to refresh document lists after operations
+ * @param scheduleId - Schedule ID for batch download operations
  */
 export const useDocumentActions = (
-  onRefresh: () => void
+  onRefresh: () => void,
+  scheduleId?: string | number | null
 ): UseDocumentActionsReturn => {
-  
+
   /**
    * Download lettera di incarico
    */
@@ -91,11 +95,43 @@ export const useDocumentActions = (
   };
 
   /**
+   * Download multiple lettere di incarico as ZIP
+   */
+  const downloadLettereZip = async (ids: string[]) => {
+    if (!scheduleId) {
+      alert('❌ Schedule ID non disponibile');
+      return;
+    }
+    try {
+      await lettereIncaricoService.downloadZip(String(scheduleId), ids);
+    } catch (error) {
+      console.error('Errore download ZIP lettere:', error);
+      alert('❌ Errore durante il download del file ZIP');
+    }
+  };
+
+  /**
+   * Download multiple registri presenze as ZIP
+   */
+  const downloadRegistriZip = async (ids: string[]) => {
+    if (!scheduleId) {
+      alert('❌ Schedule ID non disponibile');
+      return;
+    }
+    try {
+      await registriPresenzeService.downloadZip(String(scheduleId), ids);
+    } catch (error) {
+      console.error('Errore download ZIP registri:', error);
+      alert('❌ Errore durante il download del file ZIP');
+    }
+  };
+
+  /**
    * Delete lettera di incarico (with confirmation)
    */
   const deleteLettera = async (id: string) => {
     if (!confirm('Sei sicuro di voler eliminare questa lettera?')) return;
-    
+
     try {
       await lettereIncaricoService.delete(id);
       onRefresh();
@@ -110,7 +146,7 @@ export const useDocumentActions = (
    */
   const deleteRegistro = async (id: string) => {
     if (!confirm('Sei sicuro di voler eliminare questo registro?')) return;
-    
+
     try {
       await registriPresenzeService.delete(id);
       onRefresh();
@@ -125,7 +161,7 @@ export const useDocumentActions = (
    */
   const deleteAttestato = async (id: string) => {
     if (!confirm('Sei sicuro di voler eliminare questo attestato?')) return;
-    
+
     try {
       await attestatiService.delete(id);
       onRefresh();
@@ -140,7 +176,7 @@ export const useDocumentActions = (
    */
   const deletePreventivo = async (id: string) => {
     if (!confirm('Sei sicuro di voler eliminare questo preventivo?')) return;
-    
+
     try {
       await preventiviService.delete(id);
       onRefresh();
@@ -156,6 +192,8 @@ export const useDocumentActions = (
     downloadAttestato,
     downloadPreventivo,
     downloadAttestatiZip,
+    downloadLettereZip,
+    downloadRegistriZip,
     deleteLettera,
     deleteRegistro,
     deleteAttestato,

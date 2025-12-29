@@ -1,0 +1,125 @@
+/**
+ * Formazione Theme
+ * Blue theme for Sicurezza & Formazione module
+ * 
+ * Matches the uniform style of Management and Poliambulatorio
+ */
+
+/* Base Theme Variables */
+.formazione-theme {
+    --formazione-primary: #2563eb;
+    --formazione-primary-dark: #1d4ed8;
+    --formazione-primary-light: #60a5fa;
+    --formazione-accent: #3b82f6;
+    --formazione-bg: #eff6ff;
+    --formazione-surface: #ffffff;
+    --formazione-border: #bfdbfe;
+}
+
+/* Dark Mode Variables */
+.dark .formazione-theme {
+    --formazione-primary: #60a5fa;
+    --formazione-primary-dark: #3b82f6;
+    --formazione-primary-light: #93c5fd;
+    --formazione-accent: #2563eb;
+    --formazione-bg: #172554;
+    --formazione-surface: #1e3a5f;
+    --formazione-border: #1e40af;
+}
+
+/* Sidebar Styles */
+.formazione-theme aside {
+    background: linear-gradient(180deg, var(--formazione-surface) 0%, #f0f9ff 100%);
+}
+
+.dark .formazione-theme aside {
+    background: linear-gradient(180deg, var(--formazione-surface) 0%, #172554 100%);
+}
+
+/* Active Navigation Item */
+.formazione-theme .nav-active {
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+    color: var(--formazione-primary-dark);
+    border-left: 3px solid var(--formazione-primary);
+}
+
+.dark .formazione-theme .nav-active {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(37, 99, 235, 0.1) 100%);
+    color: var(--formazione-primary-light);
+}
+
+/* Header Gradient */
+.formazione-theme header {
+    background: linear-gradient(90deg, var(--formazione-surface) 0%, #f0f9ff 100%);
+    border-bottom: 1px solid var(--formazione-border);
+}
+
+.dark .formazione-theme header {
+    background: linear-gradient(90deg, var(--formazione-surface) 0%, #172554 100%);
+}
+
+/* Primary Button */
+.formazione-theme .btn-primary {
+    background: linear-gradient(135deg, var(--formazione-primary) 0%, var(--formazione-primary-dark) 100%);
+    color: white;
+    border: none;
+    box-shadow: 0 2px 4px rgba(37, 99, 235, 0.3);
+}
+
+.formazione-theme .btn-primary:hover {
+    background: linear-gradient(135deg, var(--formazione-primary-dark) 0%, #1e40af 100%);
+    box-shadow: 0 4px 8px rgba(37, 99, 235, 0.4);
+}
+
+/* Cards */
+.formazione-theme .card {
+    background: var(--formazione-surface);
+    border: 1px solid var(--formazione-border);
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.formazione-theme .card:hover {
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.1);
+    border-color: var(--formazione-primary-light);
+}
+
+/* Logo Icon */
+.formazione-theme .logo-icon {
+    background: linear-gradient(135deg, var(--formazione-primary) 0%, var(--formazione-primary-dark) 100%);
+}
+
+/* Badges */
+.formazione-theme .badge-primary {
+    background: var(--formazione-primary);
+    color: white;
+}
+
+.formazione-theme .badge-secondary {
+    background: var(--formazione-bg);
+    color: var(--formazione-primary);
+}
+
+/* Links */
+.formazione-theme a.active,
+.formazione-theme .text-primary {
+    color: var(--formazione-primary);
+}
+
+/* Focus States */
+.formazione-theme input:focus,
+.formazione-theme select:focus,
+.formazione-theme textarea:focus {
+    border-color: var(--formazione-primary);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+/* Scrollbar */
+.formazione-theme ::-webkit-scrollbar-thumb {
+    background: var(--formazione-border);
+    border-radius: 4px;
+}
+
+.formazione-theme ::-webkit-scrollbar-thumb:hover {
+    background: var(--formazione-primary-light);
+}

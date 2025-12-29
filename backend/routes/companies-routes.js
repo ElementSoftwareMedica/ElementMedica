@@ -2,6 +2,8 @@ import express from 'express';
 import logger from '../utils/logger.js';
 import middleware from '../auth/middleware.js';
 import { checkAdvancedPermission, filterDataByPermissions, requireOwnCompany } from '../middleware/advanced-permissions.js';
+import { roleDataFilter, filterResponseFields } from '../middleware/role-data-filter.js';
+import TariffarioAziendaleService from '../services/management/TariffarioAziendaleService.js';
 
 const router = express.Router();
 import prisma from '../config/prisma-optimization.js';
@@ -91,33 +93,54 @@ function sanitizeCompanyData(companyData) {
 
 // Route di test senza middleware
 router.get('/test', (req, res) => {
-    const response = {
-        message: 'Test route working!',
-        path: req.originalUrl,
-        timestamp: new Date().toISOString(),
-        method: req.method
-    };
-    
-    res.json(response);
+  const response = {
+    message: 'Test route working!',
+    path: req.originalUrl,
+    timestamp: new Date().toISOString(),
+    method: req.method
+  };
+
+  res.json(response);
 });
 
 // Get all companies
-router.get('/', 
-  authenticateToken(), 
+router.get('/',
+  authenticateToken(),
   checkAdvancedPermission('companies', 'read'),
+  roleDataFilter,
   filterDataByPermissions(),
+  filterResponseFields,
   async (req, res) => {
     try {
       const person = req.person || req.user;
       const permissionContext = req.permissionContext;
-      
+
       let whereClause = {};
-      
-      // Se lo scope è 'company', limita alle companies della persona
-      if (permissionContext.scope === 'company' && person.companyId) {
+
+      // Verifica se l'utente è EMPLOYEE (ha solo il ruolo EMPLOYEE, non altri ruoli admin)
+      const personRoles = await prisma.personRole.findMany({
+        where: {
+          personId: person.id,
+          tenantId: req.tenantId,
+          isActive: true,
+          deletedAt: null
+        },
+        select: { roleType: true }
+      });
+
+      const roleTypes = personRoles.map(pr => pr.roleType);
+      const isEmployeeOnly = roleTypes.includes('EMPLOYEE') &&
+        !roleTypes.some(r => ['ADMIN', 'TRAINING_ADMIN', 'HR_MANAGER', 'COMPANY_MANAGER', 'SITE_MANAGER'].includes(r));
+
+      // Se è EMPLOYEE, mostra solo la propria azienda
+      if (isEmployeeOnly && person.companyId) {
         whereClause.id = person.companyId;
       }
-      
+      // Se lo scope è 'company', limita alle companies della persona
+      else if (permissionContext.scope === 'company' && person.companyId) {
+        whereClause.id = person.companyId;
+      }
+
       const companies = await prisma.company.findMany({
         where: {
           ...whereClause,
@@ -145,7 +168,7 @@ router.get('/',
           }
         }
       });
-      
+
       res.json(companies);
     } catch (error) {
       logger.error('Failed to fetch companies', {
@@ -154,7 +177,7 @@ router.get('/',
         error: error.message,
         stack: error.stack
       });
-      res.status(500).json({ 
+      res.status(500).json({
         error: 'Internal server error',
         message: 'Failed to fetch companies'
       });
@@ -163,17 +186,19 @@ router.get('/',
 );
 
 // Get company by ID
-router.get('/:id', 
-  authenticateToken(), 
+router.get('/:id',
+  authenticateToken(),
   checkAdvancedPermission('companies', 'read'),
+  roleDataFilter,
   requireOwnCompany(),
   filterDataByPermissions(),
+  filterResponseFields,
   async (req, res) => {
     try {
       const { id } = req.params;
-      
-      const company = await prisma.company.findFirst({ 
-        where: { 
+
+      const company = await prisma.company.findFirst({
+        where: {
           id,
           deletedAt: null // Escludi i record eliminati (soft delete)
         },
@@ -204,14 +229,14 @@ router.get('/:id',
           }
         }
       });
-      
+
       if (!company) {
-        return res.status(404).json({ 
+        return res.status(404).json({
           error: 'Company not found',
           message: `Company with ID ${id} does not exist`
         });
       }
-      
+
       res.json(company);
     } catch (error) {
       logger.error('Failed to fetch company', {
@@ -221,7 +246,7 @@ router.get('/:id',
         stack: error.stack,
         companyId: req.params?.id
       });
-      res.status(500).json({ 
+      res.status(500).json({
         error: 'Internal server error',
         message: 'Failed to fetch company'
       });
@@ -229,16 +254,43 @@ router.get('/:id',
   }
 );
 
+// Get tariffari aziendali for a company
+router.get('/:id/tariffari',
+  authenticateToken(),
+  checkAdvancedPermission('tariffari', 'read'),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const tariffari = await TariffarioAziendaleService.getByCompany(id, req.user.tenantId);
+      res.json({
+        success: true,
+        data: tariffari
+      });
+    } catch (error) {
+      logger.error('Failed to fetch company tariffari', {
+        component: 'companies-routes',
+        action: 'getCompanyTariffari',
+        error: error.message,
+        companyId: req.params?.id
+      });
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  }
+);
+
 // Create new company
-router.post('/', 
-  authenticateToken(), 
+router.post('/',
+  authenticateToken(),
   checkAdvancedPermission('companies', 'create'),
   async (req, res) => {
     try {
       // Remove 'name' field if present (legacy compatibility)
       const { name, ...data } = req.body;
       const { companyData: mainCompanyData, siteData } = sanitizeCompanyData(data);
-      
+
       // Validate required fields
       if (!mainCompanyData.ragioneSociale) {
         return res.status(400).json({
@@ -246,7 +298,7 @@ router.post('/',
           message: 'ragioneSociale is required'
         });
       }
-      
+
       // Check for duplicate P.IVA if provided
       const person = req.person || req.user;
       let company;
@@ -259,7 +311,7 @@ router.post('/',
             deletedAt: null
           }
         });
-        
+
         if (activeCompanyByPiva) {
           // Azienda attiva: errore duplicato
           return res.status(409).json({
@@ -267,7 +319,7 @@ router.post('/',
             message: `Un'azienda con P.IVA ${mainCompanyData.piva} esiste già`
           });
         }
-        
+
         // Poi cerca aziende soft-deleted con stessa P.IVA (anche in altri tenant)
         const deletedCompanyByPiva = await prisma.company.findFirst({
           where: {
@@ -276,12 +328,12 @@ router.post('/',
           },
           orderBy: { deletedAt: 'desc' } // Prendi la più recentemente eliminata
         });
-        
+
         if (deletedCompanyByPiva) {
           // Azienda soft-deleted: ripristina e sovrascrivi i dati
           // Rimuovi i campi slug e domain per evitare constraint violation durante il ripristino
           const { slug, domain, ...restoreData } = mainCompanyData;
-          
+
           company = await prisma.company.update({
             where: { id: deletedCompanyByPiva.id },
             data: {
@@ -291,7 +343,7 @@ router.post('/',
               tenantId: person.tenantId // Assegna al tenant corrente
             }
           });
-          
+
           logger.info('Company restored from soft delete', {
             component: 'companies-routes',
             action: 'createCompany',
@@ -302,7 +354,7 @@ router.post('/',
           });
         } else {
           // Nessuna azienda con questa P.IVA: crea nuova
-          company = await prisma.company.create({ 
+          company = await prisma.company.create({
             data: {
               ...mainCompanyData,
               tenantId: person.tenantId
@@ -311,7 +363,7 @@ router.post('/',
         }
       } else {
         // Nessuna P.IVA fornita: crea nuova azienda
-        company = await prisma.company.create({ 
+        company = await prisma.company.create({
           data: {
             ...mainCompanyData,
             tenantId: person.tenantId
@@ -363,7 +415,7 @@ router.post('/',
           });
         }
       }
-      
+
       res.status(201).json(company);
     } catch (error) {
       logger.error('Failed to create company', {
@@ -373,15 +425,15 @@ router.post('/',
         stack: error.stack,
         companyName: req.body?.ragioneSociale
       });
-      
+
       if (error.code === 'P2002') {
         return res.status(409).json({
           error: 'Conflict',
           message: 'A company with this information already exists'
         });
       }
-      
-      res.status(500).json({ 
+
+      res.status(500).json({
         error: 'Internal server error',
         message: 'Failed to create company'
       });
@@ -390,8 +442,8 @@ router.post('/',
 );
 
 // Update company
-router.put('/:id', 
-  authenticateToken(), 
+router.put('/:id',
+  authenticateToken(),
   checkAdvancedPermission('companies', 'update'),
   requireOwnCompany(),
   async (req, res) => {
@@ -400,7 +452,7 @@ router.put('/:id',
       // Remove 'name' field if present (legacy compatibility)
       const { name, ...data } = req.body;
       const { companyData: mainCompanyData, siteData } = sanitizeCompanyData(data);
-      
+
       // Validate required fields
       if (!mainCompanyData.ragioneSociale) {
         return res.status(400).json({
@@ -408,7 +460,7 @@ router.put('/:id',
           message: 'ragioneSociale is required'
         });
       }
-      
+
       // Check for duplicate P.IVA if provided and update existing company
       const person = req.person || req.user;
 
@@ -495,7 +547,7 @@ router.put('/:id',
           });
         }
       }
-      
+
       res.json(company);
     } catch (error) {
       logger.error('Failed to update company', {
@@ -505,15 +557,15 @@ router.put('/:id',
         stack: error.stack,
         companyId: req.params?.id
       });
-      
+
       if (error.code === 'P2002') {
         return res.status(409).json({
           error: 'Conflict',
           message: 'A company with this information already exists'
         });
       }
-      
-      res.status(500).json({ 
+
+      res.status(500).json({
         error: 'Internal server error',
         message: 'Failed to update company'
       });
@@ -522,17 +574,17 @@ router.put('/:id',
 );
 
 // Soft delete company
-router.delete('/:id', 
-  authenticateToken(), 
+router.delete('/:id',
+  authenticateToken(),
   checkAdvancedPermission('companies', 'delete'),
   requireOwnCompany(),
   async (req, res) => {
     try {
       const { id } = req.params;
-      
+
       // Check if company exists
-      const existingCompany = await prisma.company.findFirst({ 
-        where: { 
+      const existingCompany = await prisma.company.findFirst({
+        where: {
           id,
           deletedAt: null // Escludi i record eliminati (soft delete)
         },
@@ -544,14 +596,14 @@ router.delete('/:id',
           }
         }
       });
-      
+
       if (!existingCompany) {
-        return res.status(404).json({ 
+        return res.status(404).json({
           error: 'Company not found',
           message: `Company with ID ${id} does not exist`
         });
       }
-      
+
       // Check if company has persons
       if (existingCompany.persons.length > 0) {
         return res.status(400).json({
@@ -559,7 +611,7 @@ router.delete('/:id',
           message: 'Company has associated persons. Please remove or reassign persons first.'
         });
       }
-      
+
       // Perform soft delete by updating deletedAt field
       const deletedCompany = await prisma.company.update({
         where: { id },
@@ -568,14 +620,14 @@ router.delete('/:id',
           updatedAt: new Date()
         }
       });
-      
+
       logger.info('Company soft deleted', {
         component: 'companies-routes',
         action: 'deleteCompany',
         companyId: id,
         companyName: existingCompany.ragioneSociale
       });
-      
+
       res.status(200).json({
         success: true,
         message: 'Company deleted successfully',
@@ -593,7 +645,7 @@ router.delete('/:id',
         stack: error.stack,
         companyId: req.params?.id
       });
-      res.status(500).json({ 
+      res.status(500).json({
         error: 'Internal server error',
         message: 'Failed to delete company'
       });
@@ -602,15 +654,15 @@ router.delete('/:id',
 );
 
 // Import companies with sites support
-router.post('/import', 
-  authenticateToken(), 
+router.post('/import',
+  authenticateToken(),
   checkAdvancedPermission('companies', 'create'),
   async (req, res) => {
     try {
       const importId = (req.headers['x-import-id'] && String(req.headers['x-import-id'])) || randomUUID();
       const startedAt = Date.now();
       const { companies, overwriteIds = [] } = req.body;
-      
+
       if (!companies || !Array.isArray(companies)) {
         return res.status(400).json({
           error: 'Validation error',
@@ -632,7 +684,7 @@ router.post('/import',
 
       for (let i = 0; i < companies.length; i++) {
         const companyData = companies[i];
-        
+
         try {
           // Validazione campi obbligatori
           if (!companyData.ragioneSociale) {
@@ -647,7 +699,7 @@ router.post('/import',
           // Gestione duplicati per P.IVA
           if (companyData.piva) {
             const pivaKey = companyData.piva.trim();
-            
+
             // Verifica se esiste già un'azienda con questa P.IVA nel database (incluse quelle eliminate)
             const existingCompany = await prisma.company.findFirst({
               where: {
@@ -673,7 +725,7 @@ router.post('/import',
 
             if (existingCompany) {
               const targetCompany = existingCompany;
-              
+
               // Se l'azienda esistente è eliminata (soft delete), riattivala e aggiorna i dati
               if (existingCompany && existingCompany.deletedAt) {
                 logger.info('Reactivating deleted company', {
@@ -857,232 +909,232 @@ router.post('/import',
                 continue;
               }
             } else {
-                // Nessuna azienda esistente con questa P.IVA: crea nuova Company (e sede opzionale)
-                const { companyData: mainCompanyData, siteData } = sanitizeCompanyData(companyData);
-                mainCompanyData.tenantId = person.tenantId;
-                delete mainCompanyData.slug; delete mainCompanyData.domain;
-                if (mainCompanyData.isActive !== undefined && typeof mainCompanyData.isActive === 'string') {
-                  mainCompanyData.isActive = mainCompanyData.isActive !== '' && mainCompanyData.isActive.toLowerCase() !== 'false' && mainCompanyData.isActive !== '0';
-                }
-
-                const company = await prisma.company.create({ data: mainCompanyData });
-
-                // Se presenti dati di sede, crea la sede principale
-                const hasSiteInput = siteData.siteCitta || siteData.siteIndirizzo || siteData.siteName;
-                let createdSite = null;
-                if (hasSiteInput) {
-                  const siteName = siteData.siteName || siteData.siteCitta || 'Sede Principale';
-                  const companySiteData = {
-                    companyId: company.id,
-                    siteName,
-                    citta: siteData.siteCitta,
-                    indirizzo: siteData.siteIndirizzo,
-                    cap: siteData.siteCap,
-                    provincia: siteData.siteProvincia,
-                    telefono: siteData.siteTelefono,
-                    mail: siteData.siteMail,
-                    tenantId: person.tenantId
-                  };
-                  Object.keys(companySiteData).forEach(k => { if (companySiteData[k] === undefined || companySiteData[k] === null) delete companySiteData[k]; });
-                  createdSite = await prisma.companySite.create({ data: companySiteData });
-                }
-
-                results.created.push(company);
-
-                // Aggiorna le mappe del batch
-                companiesByPiva.set(pivaKey, { company, index: i });
-                if (companyData.codiceFiscale) {
-                  companiesByCF.set(companyData.codiceFiscale.trim().toUpperCase(), { company, index: i });
-                }
-
-                if (createdSite) {
-                  results.sitesCreated.push({
-                    companyId: company.id,
-                    companyName: company.ragioneSociale,
-                    site: createdSite
-                  });
-                }
+              // Nessuna azienda esistente con questa P.IVA: crea nuova Company (e sede opzionale)
+              const { companyData: mainCompanyData, siteData } = sanitizeCompanyData(companyData);
+              mainCompanyData.tenantId = person.tenantId;
+              delete mainCompanyData.slug; delete mainCompanyData.domain;
+              if (mainCompanyData.isActive !== undefined && typeof mainCompanyData.isActive === 'string') {
+                mainCompanyData.isActive = mainCompanyData.isActive !== '' && mainCompanyData.isActive.toLowerCase() !== 'false' && mainCompanyData.isActive !== '0';
               }
-            } else {
-              // Nessuna P.IVA: gestione per Codice Fiscale o creazione nuova Company
-              const cfKey = (companyData.codiceFiscale && companyData.codiceFiscale.trim().toUpperCase()) || null;
-              if (cfKey) {
-                const batchCF = companiesByCF.get(cfKey);
-                if (batchCF) {
-                  results.errors.push({ index: i, error: `Codice Fiscale ${cfKey} duplicato nel file CSV alla riga ${batchCF.index + 1}`, data: companyData });
-                } else {
-                  const existingByCF = await prisma.company.findFirst({ where: { codiceFiscale: cfKey }, include: { sites: true } });
-                  if (existingByCF) {
-                    if (existingByCF.deletedAt) {
-                      const { companyData: mainCompanyData, siteData } = sanitizeCompanyData(companyData);
-                      mainCompanyData.tenantId = person.tenantId;
-                      mainCompanyData.deletedAt = null;
-                      delete mainCompanyData.slug; delete mainCompanyData.domain;
-                      if (mainCompanyData.isActive !== undefined && typeof mainCompanyData.isActive === 'string') {
-                        mainCompanyData.isActive = mainCompanyData.isActive !== '' && mainCompanyData.isActive.toLowerCase() !== 'false' && mainCompanyData.isActive !== '0';
-                      }
-                      const { company: reactivatedCompany, site: createdSite } = await prisma.$transaction(async (tx) => {
-                        const company = await tx.company.update({ where: { id: existingByCF.id }, data: mainCompanyData });
-                        let site = null;
-                        const hasSiteInput = siteData.siteCitta || siteData.siteIndirizzo || siteData.siteName;
-                        if (hasSiteInput) {
-                          const siteName = siteData.siteName || siteData.siteCitta || 'Sede Principale';
-                          const companySiteData = { companyId: company.id, siteName, citta: siteData.siteCitta, indirizzo: siteData.siteIndirizzo, cap: siteData.siteCap, provincia: siteData.siteProvincia, telefono: siteData.siteTelefono, mail: siteData.siteMail, tenantId: person.tenantId };
-                          Object.keys(companySiteData).forEach(k => { if (companySiteData[k] === undefined || companySiteData[k] === null) delete companySiteData[k]; });
-                          site = await tx.companySite.create({ data: companySiteData });
-                        }
-                        return { company, site };
-                      });
-                      results.updated.push(reactivatedCompany);
-                      if (createdSite) { results.sitesCreated.push({ companyId: reactivatedCompany.id, site: createdSite }); }
-                      companiesByCF.set(cfKey, { company: reactivatedCompany, index: i });
-                    } else {
-                      const { companyData: _ignored, siteData } = sanitizeCompanyData(companyData);
-                      const hasSiteInput = siteData.siteCitta || siteData.siteIndirizzo || siteData.siteName;
-                      if (hasSiteInput) {
-                        try {
-                          const siteName = siteData.siteName || siteData.siteCitta || 'Sede Principale';
-                          const companySiteData = { companyId: existingByCF.id, siteName, citta: siteData.siteCitta, indirizzo: siteData.siteIndirizzo, cap: siteData.siteCap, provincia: siteData.siteProvincia, telefono: siteData.siteTelefono, mail: siteData.siteMail, tenantId: person.tenantId };
-                          Object.keys(companySiteData).forEach(k => { if (companySiteData[k] === undefined || companySiteData[k] === null) delete companySiteData[k]; });
-                          const existingSite = await prisma.companySite.findFirst({ where: { companyId: existingByCF.id, siteName, ...(companySiteData.indirizzo ? { indirizzo: companySiteData.indirizzo } : {}), ...(companySiteData.citta ? { citta: companySiteData.citta } : {}) } });
-                          if (!existingSite) {
-                            const newSite = await prisma.companySite.create({ data: companySiteData });
-                            results.sitesCreated.push({ companyId: existingByCF.id, companyName: existingByCF.ragioneSociale, site: newSite });
-                          }
-                        } catch (siteErr) {
-                          logger.warn('Failed to create site for active company (CF) during import', { component: 'companies-routes', action: 'importCompanies', companyId: existingByCF.id, error: siteErr.message, index: i });
-                          results.errors.push({ index: i, error: `Errore creazione sede per azienda attiva (CF): ${siteErr.message}`, data: companyData });
-                        }
-                      } else {
-                        results.errors.push({ index: i, error: `Azienda con Codice Fiscale ${cfKey} già esistente. Utilizzare l'opzione di sovrascrittura per aggiornare i dati.`, data: companyData, existingCompany: { id: existingByCF.id, ragioneSociale: existingByCF.ragioneSociale, piva: existingByCF.piva, codiceFiscale: existingByCF.codiceFiscale } });
-                      }
-                    }
-                  } else {
+
+              const company = await prisma.company.create({ data: mainCompanyData });
+
+              // Se presenti dati di sede, crea la sede principale
+              const hasSiteInput = siteData.siteCitta || siteData.siteIndirizzo || siteData.siteName;
+              let createdSite = null;
+              if (hasSiteInput) {
+                const siteName = siteData.siteName || siteData.siteCitta || 'Sede Principale';
+                const companySiteData = {
+                  companyId: company.id,
+                  siteName,
+                  citta: siteData.siteCitta,
+                  indirizzo: siteData.siteIndirizzo,
+                  cap: siteData.siteCap,
+                  provincia: siteData.siteProvincia,
+                  telefono: siteData.siteTelefono,
+                  mail: siteData.siteMail,
+                  tenantId: person.tenantId
+                };
+                Object.keys(companySiteData).forEach(k => { if (companySiteData[k] === undefined || companySiteData[k] === null) delete companySiteData[k]; });
+                createdSite = await prisma.companySite.create({ data: companySiteData });
+              }
+
+              results.created.push(company);
+
+              // Aggiorna le mappe del batch
+              companiesByPiva.set(pivaKey, { company, index: i });
+              if (companyData.codiceFiscale) {
+                companiesByCF.set(companyData.codiceFiscale.trim().toUpperCase(), { company, index: i });
+              }
+
+              if (createdSite) {
+                results.sitesCreated.push({
+                  companyId: company.id,
+                  companyName: company.ragioneSociale,
+                  site: createdSite
+                });
+              }
+            }
+          } else {
+            // Nessuna P.IVA: gestione per Codice Fiscale o creazione nuova Company
+            const cfKey = (companyData.codiceFiscale && companyData.codiceFiscale.trim().toUpperCase()) || null;
+            if (cfKey) {
+              const batchCF = companiesByCF.get(cfKey);
+              if (batchCF) {
+                results.errors.push({ index: i, error: `Codice Fiscale ${cfKey} duplicato nel file CSV alla riga ${batchCF.index + 1}`, data: companyData });
+              } else {
+                const existingByCF = await prisma.company.findFirst({ where: { codiceFiscale: cfKey }, include: { sites: true } });
+                if (existingByCF) {
+                  if (existingByCF.deletedAt) {
                     const { companyData: mainCompanyData, siteData } = sanitizeCompanyData(companyData);
                     mainCompanyData.tenantId = person.tenantId;
+                    mainCompanyData.deletedAt = null;
                     delete mainCompanyData.slug; delete mainCompanyData.domain;
                     if (mainCompanyData.isActive !== undefined && typeof mainCompanyData.isActive === 'string') {
                       mainCompanyData.isActive = mainCompanyData.isActive !== '' && mainCompanyData.isActive.toLowerCase() !== 'false' && mainCompanyData.isActive !== '0';
                     }
-                    const company = await prisma.company.create({ data: mainCompanyData });
-                    let createdSite = null;
+                    const { company: reactivatedCompany, site: createdSite } = await prisma.$transaction(async (tx) => {
+                      const company = await tx.company.update({ where: { id: existingByCF.id }, data: mainCompanyData });
+                      let site = null;
+                      const hasSiteInput = siteData.siteCitta || siteData.siteIndirizzo || siteData.siteName;
+                      if (hasSiteInput) {
+                        const siteName = siteData.siteName || siteData.siteCitta || 'Sede Principale';
+                        const companySiteData = { companyId: company.id, siteName, citta: siteData.siteCitta, indirizzo: siteData.siteIndirizzo, cap: siteData.siteCap, provincia: siteData.siteProvincia, telefono: siteData.siteTelefono, mail: siteData.siteMail, tenantId: person.tenantId };
+                        Object.keys(companySiteData).forEach(k => { if (companySiteData[k] === undefined || companySiteData[k] === null) delete companySiteData[k]; });
+                        site = await tx.companySite.create({ data: companySiteData });
+                      }
+                      return { company, site };
+                    });
+                    results.updated.push(reactivatedCompany);
+                    if (createdSite) { results.sitesCreated.push({ companyId: reactivatedCompany.id, site: createdSite }); }
+                    companiesByCF.set(cfKey, { company: reactivatedCompany, index: i });
+                  } else {
+                    const { companyData: _ignored, siteData } = sanitizeCompanyData(companyData);
                     const hasSiteInput = siteData.siteCitta || siteData.siteIndirizzo || siteData.siteName;
                     if (hasSiteInput) {
-                      const siteName = siteData.siteName || siteData.siteCitta || 'Sede Principale';
-                      const companySiteData = { companyId: company.id, siteName, citta: siteData.siteCitta, indirizzo: siteData.siteIndirizzo, cap: siteData.siteCap, provincia: siteData.siteProvincia, telefono: siteData.siteTelefono, mail: siteData.siteMail, tenantId: person.tenantId };
-                      Object.keys(companySiteData).forEach(k => { if (companySiteData[k] === undefined || companySiteData[k] === null) delete companySiteData[k]; });
-                      createdSite = await prisma.companySite.create({ data: companySiteData });
-                    }
-                    results.created.push(company);
-                    companiesByCF.set(cfKey, { company, index: i });
-                    if (createdSite) {
-                      results.sitesCreated.push({ companyId: company.id, companyName: company.ragioneSociale, site: createdSite });
+                      try {
+                        const siteName = siteData.siteName || siteData.siteCitta || 'Sede Principale';
+                        const companySiteData = { companyId: existingByCF.id, siteName, citta: siteData.siteCitta, indirizzo: siteData.siteIndirizzo, cap: siteData.siteCap, provincia: siteData.siteProvincia, telefono: siteData.siteTelefono, mail: siteData.siteMail, tenantId: person.tenantId };
+                        Object.keys(companySiteData).forEach(k => { if (companySiteData[k] === undefined || companySiteData[k] === null) delete companySiteData[k]; });
+                        const existingSite = await prisma.companySite.findFirst({ where: { companyId: existingByCF.id, siteName, ...(companySiteData.indirizzo ? { indirizzo: companySiteData.indirizzo } : {}), ...(companySiteData.citta ? { citta: companySiteData.citta } : {}) } });
+                        if (!existingSite) {
+                          const newSite = await prisma.companySite.create({ data: companySiteData });
+                          results.sitesCreated.push({ companyId: existingByCF.id, companyName: existingByCF.ragioneSociale, site: newSite });
+                        }
+                      } catch (siteErr) {
+                        logger.warn('Failed to create site for active company (CF) during import', { component: 'companies-routes', action: 'importCompanies', companyId: existingByCF.id, error: siteErr.message, index: i });
+                        results.errors.push({ index: i, error: `Errore creazione sede per azienda attiva (CF): ${siteErr.message}`, data: companyData });
+                      }
+                    } else {
+                      results.errors.push({ index: i, error: `Azienda con Codice Fiscale ${cfKey} già esistente. Utilizzare l'opzione di sovrascrittura per aggiornare i dati.`, data: companyData, existingCompany: { id: existingByCF.id, ragioneSociale: existingByCF.ragioneSociale, piva: existingByCF.piva, codiceFiscale: existingByCF.codiceFiscale } });
                     }
                   }
+                } else {
+                  const { companyData: mainCompanyData, siteData } = sanitizeCompanyData(companyData);
+                  mainCompanyData.tenantId = person.tenantId;
+                  delete mainCompanyData.slug; delete mainCompanyData.domain;
+                  if (mainCompanyData.isActive !== undefined && typeof mainCompanyData.isActive === 'string') {
+                    mainCompanyData.isActive = mainCompanyData.isActive !== '' && mainCompanyData.isActive.toLowerCase() !== 'false' && mainCompanyData.isActive !== '0';
+                  }
+                  const company = await prisma.company.create({ data: mainCompanyData });
+                  let createdSite = null;
+                  const hasSiteInput = siteData.siteCitta || siteData.siteIndirizzo || siteData.siteName;
+                  if (hasSiteInput) {
+                    const siteName = siteData.siteName || siteData.siteCitta || 'Sede Principale';
+                    const companySiteData = { companyId: company.id, siteName, citta: siteData.siteCitta, indirizzo: siteData.siteIndirizzo, cap: siteData.siteCap, provincia: siteData.siteProvincia, telefono: siteData.siteTelefono, mail: siteData.siteMail, tenantId: person.tenantId };
+                    Object.keys(companySiteData).forEach(k => { if (companySiteData[k] === undefined || companySiteData[k] === null) delete companySiteData[k]; });
+                    createdSite = await prisma.companySite.create({ data: companySiteData });
+                  }
+                  results.created.push(company);
+                  companiesByCF.set(cfKey, { company, index: i });
+                  if (createdSite) {
+                    results.sitesCreated.push({ companyId: company.id, companyName: company.ragioneSociale, site: createdSite });
+                  }
                 }
-              } else {
-                // Né P.IVA né Codice Fiscale: crea comunque la Company con i dati disponibili
-                const { companyData: mainCompanyData, siteData } = sanitizeCompanyData(companyData);
-                mainCompanyData.tenantId = person.tenantId;
-                delete mainCompanyData.slug; delete mainCompanyData.domain;
-                if (mainCompanyData.isActive !== undefined && typeof mainCompanyData.isActive === 'string') {
-                  mainCompanyData.isActive = mainCompanyData.isActive !== '' && mainCompanyData.isActive.toLowerCase() !== 'false' && mainCompanyData.isActive !== '0';
-                }
-                const company = await prisma.company.create({ data: mainCompanyData });
-                let createdSite = null;
-                const hasSiteInput = siteData.siteCitta || siteData.siteIndirizzo || siteData.siteName;
-                if (hasSiteInput) {
-                  const siteName = siteData.siteName || siteData.siteCitta || 'Sede Principale';
-                  const companySiteData = { companyId: company.id, siteName, citta: siteData.siteCitta, indirizzo: siteData.siteIndirizzo, cap: siteData.siteCap, provincia: siteData.siteProvincia, telefono: siteData.siteTelefono, mail: siteData.siteMail, tenantId: person.tenantId };
-                  Object.keys(companySiteData).forEach(k => { if (companySiteData[k] === undefined || companySiteData[k] === null) delete companySiteData[k]; });
-                  createdSite = await prisma.companySite.create({ data: companySiteData });
-                }
-                results.created.push(company);
-                if (createdSite) { results.sitesCreated.push({ companyId: company.id, companyName: company.ragioneSociale, site: createdSite }); }
               }
+            } else {
+              // Né P.IVA né Codice Fiscale: crea comunque la Company con i dati disponibili
+              const { companyData: mainCompanyData, siteData } = sanitizeCompanyData(companyData);
+              mainCompanyData.tenantId = person.tenantId;
+              delete mainCompanyData.slug; delete mainCompanyData.domain;
+              if (mainCompanyData.isActive !== undefined && typeof mainCompanyData.isActive === 'string') {
+                mainCompanyData.isActive = mainCompanyData.isActive !== '' && mainCompanyData.isActive.toLowerCase() !== 'false' && mainCompanyData.isActive !== '0';
+              }
+              const company = await prisma.company.create({ data: mainCompanyData });
+              let createdSite = null;
+              const hasSiteInput = siteData.siteCitta || siteData.siteIndirizzo || siteData.siteName;
+              if (hasSiteInput) {
+                const siteName = siteData.siteName || siteData.siteCitta || 'Sede Principale';
+                const companySiteData = { companyId: company.id, siteName, citta: siteData.siteCitta, indirizzo: siteData.siteIndirizzo, cap: siteData.siteCap, provincia: siteData.siteProvincia, telefono: siteData.siteTelefono, mail: siteData.siteMail, tenantId: person.tenantId };
+                Object.keys(companySiteData).forEach(k => { if (companySiteData[k] === undefined || companySiteData[k] === null) delete companySiteData[k]; });
+                createdSite = await prisma.companySite.create({ data: companySiteData });
+              }
+              results.created.push(company);
+              if (createdSite) { results.sitesCreated.push({ companyId: company.id, companyName: company.ragioneSociale, site: createdSite }); }
             }
-
-          } catch (error) {
-            logger.error('Error importing company', {
-              component: 'companies-routes',
-              action: 'importCompany',
-              error: error.message,
-              index: i,
-              companyData
-            });
-            
-            results.errors.push({
-              index: i,
-              error: error.message,
-              data: companyData
-            });
           }
-        }
 
-        // Se ci sono conflitti che richiedono decisione utente, restituisci status 409
-        const hasConflicts = results.errors.some(error => error.existingCompany);
-        const totalOps = results.created.length + results.updated.length;
-        
-        if (hasConflicts && totalOps === 0) {
-          // Solo conflitti, nessuna operazione completata
-          res.status(409).json({
-            success: false,
-            message: 'Conflitti rilevati durante l\'importazione',
-            results,
-            summary: {
-              total: companies.length,
-              created: results.created.length,
-              updated: results.updated.length,
-              sitesCreated: results.sitesCreated.length,
-              errors: results.errors.length,
-              conflicts: results.errors.filter(e => e.existingCompany).length
-            }
+        } catch (error) {
+          logger.error('Error importing company', {
+            component: 'companies-routes',
+            action: 'importCompany',
+            error: error.message,
+            index: i,
+            companyData
           });
-        } else if (totalOps === 0) {
-          // Nessuna creazione/aggiornamento effettuata (solo errori di validazione o altri errori non di conflitto)
-          res.status(400).json({
-            success: false,
-            message: 'Nessuna azienda importata. Verificare i dati e riprovare.',
-            results,
-            summary: {
-              total: companies.length,
-              created: results.created.length,
-              updated: results.updated.length,
-              sitesCreated: results.sitesCreated.length,
-              errors: results.errors.length,
-              conflicts: results.errors.filter(e => e.existingCompany).length
-            }
-          });
-        } else {
-          // Operazioni completate con successo (con o senza alcuni conflitti)
-          res.json({
-            success: true,
-            results,
-            summary: {
-              total: companies.length,
-              created: results.created.length,
-              updated: results.updated.length,
-              sitesCreated: results.sitesCreated.length,
-              errors: results.errors.length,
-              conflicts: results.errors.filter(e => e.existingCompany).length
-            }
+
+          results.errors.push({
+            index: i,
+            error: error.message,
+            data: companyData
           });
         }
+      }
 
-      } catch (error) {
-        logger.error('Failed to import companies', {
-          component: 'companies-routes',
-          action: 'importCompanies',
-          error: error.message,
-          stack: error.stack
+      // Se ci sono conflitti che richiedono decisione utente, restituisci status 409
+      const hasConflicts = results.errors.some(error => error.existingCompany);
+      const totalOps = results.created.length + results.updated.length;
+
+      if (hasConflicts && totalOps === 0) {
+        // Solo conflitti, nessuna operazione completata
+        res.status(409).json({
+          success: false,
+          message: 'Conflitti rilevati durante l\'importazione',
+          results,
+          summary: {
+            total: companies.length,
+            created: results.created.length,
+            updated: results.updated.length,
+            sitesCreated: results.sitesCreated.length,
+            errors: results.errors.length,
+            conflicts: results.errors.filter(e => e.existingCompany).length
+          }
         });
-        
-        res.status(500).json({ 
-          error: 'Internal server error',
-          message: 'Failed to import companies'
+      } else if (totalOps === 0) {
+        // Nessuna creazione/aggiornamento effettuata (solo errori di validazione o altri errori non di conflitto)
+        res.status(400).json({
+          success: false,
+          message: 'Nessuna azienda importata. Verificare i dati e riprovare.',
+          results,
+          summary: {
+            total: companies.length,
+            created: results.created.length,
+            updated: results.updated.length,
+            sitesCreated: results.sitesCreated.length,
+            errors: results.errors.length,
+            conflicts: results.errors.filter(e => e.existingCompany).length
+          }
+        });
+      } else {
+        // Operazioni completate con successo (con o senza alcuni conflitti)
+        res.json({
+          success: true,
+          results,
+          summary: {
+            total: companies.length,
+            created: results.created.length,
+            updated: results.updated.length,
+            sitesCreated: results.sitesCreated.length,
+            errors: results.errors.length,
+            conflicts: results.errors.filter(e => e.existingCompany).length
+          }
         });
       }
+
+    } catch (error) {
+      logger.error('Failed to import companies', {
+        component: 'companies-routes',
+        action: 'importCompanies',
+        error: error.message,
+        stack: error.stack
+      });
+
+      res.status(500).json({
+        error: 'Internal server error',
+        message: 'Failed to import companies'
+      });
     }
+  }
 );
 
 export { router as default };

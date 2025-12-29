@@ -9,7 +9,12 @@ export type {
   EntityField,
   PermissionsSummary,
   VirtualEntityName,
-  PermissionAction
+  PermissionAction,
+  RelationType,
+  PermissionScope,
+  RelationDefinition,
+  RelationChainLink,
+  DataFilterTestResult
 } from './types';
 
 // Definizioni entità

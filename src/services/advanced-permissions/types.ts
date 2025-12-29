@@ -1,12 +1,36 @@
 import React from 'react';
 
+/**
+ * Tipi di relazione disponibili per lo scope "relational"
+ */
+export type RelationType =
+  | 'TRAINER_COURSES'      // Formatore → Corsi tenuti → Iscritti/Aziende
+  | 'COMPANY_MANAGER'      // Manager → Azienda → Dipendenti
+  | 'DEPARTMENT_HEAD'      // Capo Reparto → Reparto → Dipendenti
+  | 'SITE_MANAGER'         // Responsabile Sito → Sito → Dipendenti
+  | 'MEDICO_COMPETENTE'    // Medico → Siti assegnati → Dipendenti
+  | 'RSPP'                 // RSPP → Siti assegnati → Dipendenti/DVR
+  | 'CONSULTANT'           // Consulente → Aziende clienti → Documenti
+  | 'AUDITOR';             // Auditor → Aziende assegnate → Reports
+
+/**
+ * Scope disponibili per i permessi
+ */
+export type PermissionScope = 'all' | 'tenant' | 'own' | 'relational';
+
 export interface EntityPermission {
   entity: string;
   action: 'create' | 'read' | 'update' | 'delete';
-  scope: 'all' | 'tenant' | 'own';
-  fields?: string[];
-  tenantIds?: number[];
-  granted?: boolean; // Indica se il permesso è concesso o meno
+  scope: PermissionScope;
+  fields?: string[];                // Campi permessi (allowedFields)
+  deniedFields?: string[];          // Campi negati
+  tenantIds?: string[];             // Tenant.id è UUID string in Prisma
+  granted?: boolean;                // Indica se il permesso è concesso o meno
+  relationType?: RelationType;      // Tipo di relazione per scope "relational"
+  relationConfig?: Record<string, unknown>; // Config aggiuntiva per relazioni complesse
+  priority?: number;                // Per risoluzione conflitti (higher = more priority)
+  isInherited?: boolean;            // Se ereditato da ruolo genitore
+  sourceRoleId?: string;            // ID del ruolo da cui è stato ereditato
 }
 
 export interface RolePermissions {
@@ -38,3 +62,55 @@ export interface PermissionsSummary {
 
 export type VirtualEntityName = 'EMPLOYEES' | 'TRAINERS';
 export type PermissionAction = 'VIEW' | 'CREATE' | 'EDIT' | 'DELETE';
+
+/**
+ * Definizione di una relazione per lo scope "relational"
+ */
+export interface RelationDefinition {
+  id: string;
+  name: string;
+  displayName: string;
+  description: string;
+  baseEntity: string;
+  targetEntities: string[];
+  relationChain: RelationChainLink[];
+  isActive: boolean;
+  isSystem: boolean;
+  tenantId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+}
+
+/**
+ * Link nella catena di relazione
+ */
+export interface RelationChainLink {
+  from: string;
+  to: string;
+  via: string;
+  viaField?: string;
+  type: 'oneToOne' | 'oneToMany' | 'manyToOne' | 'manyToMany';
+}
+
+/**
+ * Risultato del test data filter
+ */
+export interface DataFilterTestResult {
+  allowed: boolean;
+  permission?: {
+    resource: string;
+    action: string;
+    scope: PermissionScope;
+    relationType?: RelationType;
+    allowedFields?: string[];
+    deniedFields?: string[];
+  };
+  dataFilter?: {
+    allowed: boolean;
+    where?: Record<string, unknown>;
+    relatedIds?: string[];
+  };
+  effectiveRoles?: string[];
+  reason?: string;
+}

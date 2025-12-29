@@ -121,7 +121,8 @@ export const refreshAccess = async (): Promise<string | null> => {
     if (!currentRefresh) return null;
 
     // Usa fetch per evitare interferenze con interceptor ed eventuali loop
-    const resp = await fetch(`${API_BASE_URL}/api/v1/auth/refresh`, {
+    // API_BASE_URL già include /api, quindi usiamo solo /v1/auth/refresh
+    const resp = await fetch(`${API_BASE_URL}/v1/auth/refresh`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -171,9 +172,9 @@ export const getUserPermissions = async (personId: string): Promise<UserPermissi
   try {
     console.log('🔍 getUserPermissions: Calling API for personId:', personId);
     const response = await apiGet<{ success: boolean; data: { personId: string; role: string; permissions: Record<string, boolean> } }>(`/api/v1/auth/permissions/${personId}`);
-    
+
     console.log('🔍 getUserPermissions: Raw API response received');
-    
+
     // Convert backend response format to frontend expected format
     const permissionsArray = Object.entries(response.data.permissions || {})
       .filter(([key, value]) => value === true) // Only include permissions that are granted
@@ -187,9 +188,9 @@ export const getUserPermissions = async (personId: string): Promise<UserPermissi
         };
       })
       .filter(p => p.resource !== 'unknown' && p.action !== 'unknown');
-    
+
     console.log('🔍 getUserPermissions: Converted permissions count:', permissionsArray.length);
-    
+
     return {
       role: response.data.role,
       permissions: permissionsArray
@@ -202,7 +203,7 @@ export const getUserPermissions = async (personId: string): Promise<UserPermissi
       data: error.response?.data,
       personId
     });
-    
+
     // Return default EMPLOYEE role if there's an error
     console.warn('⚠️ getUserPermissions: Returning default EMPLOYEE role due to error');
     return {

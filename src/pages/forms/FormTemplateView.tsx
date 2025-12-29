@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '../../design-system/atoms/Button';
 import { formTemplatesService } from '../../services/formTemplates';
 import { useToast } from '../../hooks/useToast';
+import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
 import { Eye, Edit, Copy, Trash2 } from 'lucide-react';
 
 interface FormTemplate {
@@ -26,13 +27,14 @@ interface FormField {
   label: string;
   placeholder?: string;
   required: boolean;
-  options?: string[];
+  options?: (string | { label: string; value: string; linkedSectionId?: string })[];
 }
 
 const FormTemplateView: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const { confirmDelete } = useConfirmDialog();
   const [loading, setLoading] = useState(true);
   const [template, setTemplate] = useState<FormTemplate | null>(null);
 
@@ -44,7 +46,7 @@ const FormTemplateView: React.FC = () => {
 
   const loadFormTemplate = async () => {
     if (!id) return;
-    
+
     try {
       setLoading(true);
       const templateData = await formTemplatesService.getFormTemplate(id);
@@ -60,7 +62,7 @@ const FormTemplateView: React.FC = () => {
 
   const handleDuplicate = async () => {
     if (!template) return;
-    
+
     const newName = prompt('Inserisci il nome per il nuovo template:', `${template.name} - Copia`);
     if (!newName) return;
 
@@ -76,10 +78,9 @@ const FormTemplateView: React.FC = () => {
 
   const handleDelete = async () => {
     if (!template) return;
-    
-    if (!confirm(`Sei sicuro di voler eliminare il template "${template.name}"?`)) {
-      return;
-    }
+
+    const shouldDelete = await confirmDelete(template.name);
+    if (!shouldDelete) return;
 
     try {
       await formTemplatesService.deleteFormTemplate(template.id);
@@ -124,11 +125,10 @@ const FormTemplateView: React.FC = () => {
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">{template.name}</h1>
                 <div className="flex items-center space-x-4 mt-2">
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                    template.isActive 
-                      ? 'bg-green-100 text-green-800' 
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${template.isActive
+                      ? 'bg-green-100 text-green-800'
                       : 'bg-red-100 text-red-800'
-                  }`}>
+                    }`}>
                     {template.isActive ? 'Attivo' : 'Inattivo'}
                   </span>
                   {template.isPublic && (
@@ -255,14 +255,17 @@ const FormTemplateView: React.FC = () => {
                           <div className="mt-2">
                             <span className="text-sm font-medium text-gray-700">Opzioni:</span>
                             <div className="mt-1 flex flex-wrap gap-2">
-                              {field.options.map((option, optionIndex) => (
-                                <span
-                                  key={optionIndex}
-                                  className="inline-flex items-center px-2 py-1 rounded text-xs bg-blue-100 text-blue-800"
-                                >
-                                  {option}
-                                </span>
-                              ))}
+                              {field.options.map((option, optionIndex) => {
+                                const optionLabel = typeof option === 'string' ? option : option.label;
+                                return (
+                                  <span
+                                    key={optionIndex}
+                                    className="inline-flex items-center px-2 py-1 rounded text-xs bg-blue-100 text-blue-800"
+                                  >
+                                    {optionLabel}
+                                  </span>
+                                );
+                              })}
                             </div>
                           </div>
                         )}
@@ -293,9 +296,9 @@ const FormTemplateView: React.FC = () => {
                     <div>
                       <label className="block text-sm font-medium text-gray-700">URL di Redirect</label>
                       <p className="mt-1 text-sm text-gray-900">
-                        <a 
-                          href={template.redirectUrl} 
-                          target="_blank" 
+                        <a
+                          href={template.redirectUrl}
+                          target="_blank"
                           rel="noopener noreferrer"
                           className="text-blue-600 hover:text-blue-800 underline"
                         >

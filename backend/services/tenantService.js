@@ -4,18 +4,22 @@ import logger from '../utils/logger.js';
 class TenantService {
   /**
    * Crea un nuovo tenant
+   * Crea prima il record Tenant, poi la Company associata
    */
   async createTenant(tenantData) {
     try {
-      const { name, slug, domain, settings = {}, billingPlan = 'basic' } = tenantData;
+      const { name, slug, domain, settings = {}, billingPlan = 'basic', enabledFeatures } = tenantData;
 
-      // Verifica che lo slug sia unico
-      const existingTenant = await prisma.company.findFirst({
+      // Supporta enabledFeatures sia come parametro diretto che dentro settings
+      const finalFeatures = enabledFeatures || settings.enabledFeatures || ['cms', 'documents'];
+
+      // Verifica che lo slug sia unico su Tenant
+      const existingTenant = await prisma.tenant.findFirst({
         where: {
           OR: [
             { slug: slug },
-            { domain: domain }
-          ]
+            domain ? { domain: domain } : undefined
+          ].filter(Boolean)
         }
       });
 
@@ -23,26 +27,50 @@ class TenantService {
         throw new Error('Tenant with this slug or domain already exists');
       }
 
-      // Crea il tenant
-      const tenant = await prisma.company.create({
-        data: {
-          ragioneSociale: name,
-          slug,
-          domain,
-          settings,
-          subscriptionPlan: billingPlan,
-          isActive: true,
-  
-        }
+      // Crea il tenant usando una transaction per garantire consistenza
+      const result = await prisma.$transaction(async (tx) => {
+        // 1. Crea il Tenant
+        const tenant = await tx.tenant.create({
+          data: {
+            name,
+            slug,
+            domain: domain || null,
+            settings: {
+              ...settings,
+              enabledFeatures: finalFeatures
+            },
+            billingPlan: billingPlan,
+            isActive: true
+          }
+        });
+
+        // 2. Crea la Company associata al tenant
+        const company = await tx.company.create({
+          data: {
+            ragioneSociale: name,
+            slug,
+            domain: domain || null,
+            settings: settings,
+            subscriptionPlan: billingPlan,
+            isActive: true,
+            tenantId: tenant.id
+          }
+        });
+
+        return { tenant, company };
       });
 
       // Crea configurazioni di default
-      await this.createDefaultConfigurations(tenant.id);
+      await this.createDefaultConfigurations(result.tenant.id);
 
       // Crea ruoli di default
-      await this.createDefaultRoles(tenant.id);
+      await this.createDefaultRoles(result.tenant.id);
 
-      return tenant;
+      // Ritorna il tenant con i dati della company
+      return {
+        ...result.tenant,
+        companyId: result.company.id
+      };
     } catch (error) {
       logger.error('Failed to create tenant', { component: 'tenantService', action: 'createTenant', error: error.message, stack: error.stack });
       throw error;
@@ -55,10 +83,10 @@ class TenantService {
   async getTenantById(tenantId) {
     try {
       return await prisma.tenant.findUnique({
-        where: {id: tenantId},
+        where: { id: tenantId },
         include: {
           persons: {
-            where: {deletedAt: null},
+            where: { deletedAt: null },
             select: {
               id: true,
               username: true,
@@ -69,7 +97,7 @@ class TenantService {
             }
           },
           personRoles: {
-            where: {isActive: true}
+            where: { isActive: true }
           }
         }
       });
@@ -85,7 +113,7 @@ class TenantService {
   async getTenantBySlug(slug) {
     try {
       return await prisma.tenant.findFirst({
-        where: {slug}
+        where: { slug }
       });
     } catch (error) {
       logger.error('Failed to get tenant by slug', { component: 'tenantService', action: 'getTenantBySlug', error: error.message, stack: error.stack });
@@ -193,13 +221,13 @@ class TenantService {
     try {
       const [personCount, courseCount, trainerCount] = await Promise.all([
         prisma.person.count({
-          where: {tenantId: tenantId, deletedAt: null}
+          where: { tenantId: tenantId, deletedAt: null }
         }),
         prisma.course.count({
-          where: {tenantId: tenantId}
+          where: { tenantId: tenantId }
         }),
         prisma.personRole.count({
-          where: {tenantId: tenantId, roleType: 'TRAINER', isActive: true}
+          where: { tenantId: tenantId, roleType: 'TRAINER', isActive: true }
         })
       ]);
 
@@ -280,7 +308,7 @@ class TenantService {
       // I ruoli sono ora definiti nell'enum RoleType: ADMIN, MANAGER, EMPLOYEE, TRAINER
       // Non è più necessario creare record separati per i ruoli
       // Questa funzione ora restituisce solo la configurazione dei ruoli disponibili
-      
+
       const availableRoles = [
         {
           roleType: 'ADMIN',
@@ -322,7 +350,7 @@ class TenantService {
       }
 
       const stats = await this.getTenantStats(tenantId);
-      
+
       const limits = {
         basic: { persons: 10, companies: 1, courses: 50 },
         professional: { persons: 50, companies: 5, courses: 200 },
@@ -330,7 +358,7 @@ class TenantService {
       };
 
       const planLimits = limits[tenant.billingPlan] || limits.basic;
-      
+
       return {
         plan: tenant.billingPlan,
         limits: planLimits,

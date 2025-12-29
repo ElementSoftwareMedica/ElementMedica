@@ -141,8 +141,10 @@ export interface ColumnConfig {
   maxWidth?: number;
   resizable?: boolean;
   visible?: boolean;
+  hidden?: boolean; // Alias for !visible
   order?: number;
   formatter?: (value: unknown, row: BaseEntity) => ReactNode;
+  render?: (value: unknown, entity: BaseEntity) => ReactNode; // Alias for formatter
   className?: string;
   headerClassName?: string;
   cellClassName?: string;

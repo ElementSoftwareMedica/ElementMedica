@@ -8,7 +8,7 @@
  */
 
 import React from 'react';
-import type { RoleHierarchy as RoleHierarchyType } from '../../services/roles';
+import type { RoleHierarchy as RoleHierarchyType, UserRoleHierarchy } from '../../services/roles';
 import RoleModal from './RoleModal';
 import DeleteRoleModal from './DeleteRoleModal';
 import MoveRoleModal from './MoveRoleModal';
@@ -199,7 +199,11 @@ const RoleHierarchy: React.FC<RoleHierarchyProps> = ({ onRoleAssignment }) => {
           setIsDeleteModalOpen(false);
           setRoleToDelete(null);
         }}
-        onConfirm={() => roleToDelete && handleRoleDeleteConfirm(roleToDelete.roleType)}
+        onConfirm={async () => {
+          if (roleToDelete) {
+            await handleRoleDeleteConfirm(roleToDelete.roleType);
+          }
+        }}
         role={roleToDelete}
       />
       
@@ -209,7 +213,11 @@ const RoleHierarchy: React.FC<RoleHierarchyProps> = ({ onRoleAssignment }) => {
           setIsMoveModalOpen(false);
           setRoleToMove(null);
         }}
-        onMove={(newLevel) => roleToMove && handleRoleMoveConfirm(roleToMove.roleType, newLevel)}
+        onMove={async (newLevel) => {
+          if (roleToMove) {
+            await handleRoleMoveConfirm(roleToMove.roleType, newLevel);
+          }
+        }}
         role={roleToMove}
         hierarchy={hierarchy as RoleHierarchyType}
         currentLevel={roleToMove?.level || 0}

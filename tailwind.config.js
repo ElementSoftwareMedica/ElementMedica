@@ -1,6 +1,42 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
+  safelist: [
+    // CMS Content - Include all gradient and color classes used in database HTML
+    {
+      pattern: /^(bg|text|border|from|via|to)-(teal|cyan|blue|gray|white|green|red|yellow|orange|purple|pink|indigo)-(50|100|200|300|400|500|600|700|800|900)/,
+    },
+    {
+      pattern: /^(bg|text|border)-gradient-(to|from)-(r|l|t|b|tr|tl|br|bl)/,
+    },
+    'bg-gradient-to-r',
+    'bg-gradient-to-br',
+    'bg-gradient-to-bl',
+    'text-white',
+    'text-gray-100',
+    'text-gray-200',
+    'text-gray-300',
+    'text-cyan-50',
+    'text-cyan-300',
+    'text-teal-300',
+    'text-blue-300',
+    'border-white',
+    'border-cyan-500',
+    'border-gray-300',
+    'shadow-xl',
+    'shadow-2xl',
+    'hover:shadow-2xl',
+    'hover:bg-white',
+    'hover:text-teal-900',
+    'hover:text-gray-900',
+    'hover:scale-105',
+    'transform',
+    'transition-all',
+    'duration-300',
+    'animate-pulse',
+    'backdrop-filter',
+    'blur-10px',
+  ],
   theme: {
     extend: {
       colors: {
@@ -41,9 +77,69 @@ export default {
           800: 'var(--color-accent-800)',
           900: 'var(--color-accent-900)',
         },
+        medical: {
+          50: 'var(--color-medical-50)',
+          100: 'var(--color-medical-100)',
+          200: 'var(--color-medical-200)',
+          300: 'var(--color-medical-300)',
+          400: 'var(--color-medical-400)',
+          500: 'var(--color-medical-500)',
+          600: 'var(--color-medical-600)',
+          700: 'var(--color-medical-700)',
+          800: 'var(--color-medical-800)',
+          900: 'var(--color-medical-900)',
+        },
+        health: {
+          50: 'var(--color-health-50)',
+          100: 'var(--color-health-100)',
+          200: 'var(--color-health-200)',
+          300: 'var(--color-health-300)',
+          400: 'var(--color-health-400)',
+          500: 'var(--color-health-500)',
+          600: 'var(--color-health-600)',
+          700: 'var(--color-health-700)',
+          800: 'var(--color-health-800)',
+          900: 'var(--color-health-900)',
+        },
+        safety: {
+          high: {
+            50: 'var(--color-safety-high-50)',
+            100: 'var(--color-safety-high-100)',
+            500: 'var(--color-safety-high-500)',
+            600: 'var(--color-safety-high-600)',
+            700: 'var(--color-safety-high-700)',
+          },
+          medium: {
+            50: 'var(--color-safety-medium-50)',
+            100: 'var(--color-safety-medium-100)',
+            500: 'var(--color-safety-medium-500)',
+            600: 'var(--color-safety-medium-600)',
+            700: 'var(--color-safety-medium-700)',
+          },
+          low: {
+            50: 'var(--color-safety-low-50)',
+            100: 'var(--color-safety-low-100)',
+            500: 'var(--color-safety-low-500)',
+            600: 'var(--color-safety-low-600)',
+            700: 'var(--color-safety-low-700)',
+          },
+        },
+        category: {
+          antincendio: 'var(--color-category-antincendio)',
+          'primo-soccorso': 'var(--color-category-primo-soccorso)',
+          sicurezza: 'var(--color-category-sicurezza)',
+          'lavori-quota': 'var(--color-category-lavori-quota)',
+          'spazi-confinati': 'var(--color-category-spazi-confinati)',
+        },
+      },
+      backgroundImage: {
+        'gradient-medical': 'linear-gradient(135deg, #0d9488 0%, #10b981 100%)',
+        'gradient-medical-light': 'linear-gradient(135deg, #f0fdfa 0%, #d1fae5 100%)',
+        'gradient-safety-high': 'linear-gradient(135deg, var(--color-safety-high-500) 0%, var(--color-safety-high-700) 100%)',
       },
       animation: {
         'fade-in': 'fadeIn 0.3s ease-in-out',
+        'fade-out': 'fadeOut 0.2s ease-in-out',
         'scale-in': 'scaleIn 0.3s ease-in-out',
         'slide-up': 'slideUp 0.3s ease-in-out',
         'slide-down': 'slideDown 0.3s ease-in-out',
@@ -53,6 +149,10 @@ export default {
         fadeIn: {
           '0%': { opacity: 0 },
           '100%': { opacity: 1 },
+        },
+        fadeOut: {
+          '0%': { opacity: 1 },
+          '100%': { opacity: 0 },
         },
         scaleIn: {
           '0%': { opacity: 0, transform: 'scale(0.95)' },

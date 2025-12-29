@@ -86,12 +86,18 @@ router.get('/', authenticateToken(), requirePermission('read:documents'), async 
 /**
  * POST /api/v1/registri-presenze/generate
  * Generate attendance register from template
+ * Accepts either sessionId (CourseSession UUID) OR scheduleId + sessionIndex + sessionDate
  */
 router.post('/generate',
   authenticateToken(),
   requirePermission('create:documents'),
   [
-    body('sessionId').notEmpty().withMessage('Session ID is required'),
+    body('sessionId').optional().isString(),
+    body('scheduleId').optional().isString(),
+    body('sessionIndex').optional().isInt(),
+    body('sessionDate').optional().isString(),
+    body('sessionStart').optional().isString(),
+    body('sessionEnd').optional().isString(),
     body('formatoreId').notEmpty().withMessage('Formatore ID is required'),
     body('templateId').optional().isString(),
     body('attendanceData').optional().isArray(),
@@ -106,29 +112,80 @@ router.post('/generate',
         return res.status(400).json({ error: 'Validation error', details: errors.array() });
       }
 
-      const { sessionId, formatoreId, templateId, attendanceData } = req.body;
+      const { sessionId, scheduleId, sessionIndex, sessionDate, sessionStart, sessionEnd, formatoreId, templateId, attendanceData } = req.body;
       const tenantId = req.user.tenantId;
       const userId = req.user.id;
 
-      // Verify session exists and get schedule
-      const session = await prisma.courseSession.findFirst({
-        where: { id: sessionId, tenantId, deletedAt: null },
-        include: {
-          schedule: {
-            include: {
-              course: true,
-              companies: {
-                include: { company: true }
-              }
-            }
-          },
-          trainer: true,
-          coTrainer: true
-        }
-      });
+      let session = null;
+      let schedule = null;
 
+      // Try to find session by sessionId first (if it's a valid CourseSession UUID)
+      if (sessionId && !sessionId.includes('-session-')) {
+        session = await prisma.courseSession.findFirst({
+          where: { id: sessionId, tenantId, deletedAt: null },
+          include: {
+            schedule: {
+              include: {
+                course: true,
+                companies: {
+                  include: { company: true }
+                }
+              }
+            },
+            trainer: true,
+            coTrainer: true
+          }
+        });
+      }
+
+      // If no valid session found, try to get schedule directly
       if (!session) {
-        return res.status(404).json({ error: 'Session not found' });
+        // Extract scheduleId from composite sessionId or use provided scheduleId
+        let effectiveScheduleId = scheduleId;
+        if (!effectiveScheduleId && sessionId && sessionId.includes('-session-')) {
+          // Parse composite sessionId: "scheduleId-session-date-index"
+          effectiveScheduleId = sessionId.split('-session-')[0];
+        }
+
+        if (!effectiveScheduleId) {
+          return res.status(400).json({ error: 'Either a valid sessionId or scheduleId is required' });
+        }
+
+        schedule = await prisma.courseSchedule.findFirst({
+          where: { id: effectiveScheduleId, tenantId, deletedAt: null },
+          include: {
+            course: true,
+            companies: {
+              include: { company: true }
+            },
+            sessions: {
+              where: { deletedAt: null },
+              include: {
+                trainer: true,
+                coTrainer: true
+              },
+              orderBy: { date: 'asc' }
+            }
+          }
+        });
+
+        if (!schedule) {
+          return res.status(404).json({ error: 'Schedule not found' });
+        }
+
+        // Create a virtual session object from the schedule data
+        session = {
+          id: sessionId || `${effectiveScheduleId}-session-${sessionIndex || 0}`,
+          scheduleId: schedule.id,
+          date: sessionDate ? new Date(sessionDate) : new Date(),
+          start: sessionStart || '09:00',
+          end: sessionEnd || '18:00',
+          trainerId: formatoreId,
+          schedule: schedule,
+          trainer: schedule.sessions?.[sessionIndex || 0]?.trainer || null,
+          coTrainer: schedule.sessions?.[sessionIndex || 0]?.coTrainer || null,
+          _isVirtual: true // Flag to indicate this is not a real CourseSession
+        };
       }
 
       // Verify formatore exists
@@ -151,12 +208,12 @@ router.post('/generate',
         }
       } else {
         template = await prisma.templateLink.findFirst({
-          where: { 
-            tenantId, 
-            type: 'ATTENDANCE_REGISTER', 
+          where: {
+            tenantId,
+            type: 'ATTENDANCE_REGISTER',
             isDefault: true,
             isActive: true,
-            deletedAt: null 
+            deletedAt: null
           }
         });
         if (!template) {
@@ -167,14 +224,18 @@ router.post('/generate',
       // Get or create attendance records
       let participants = [];
       if (attendanceData && attendanceData.length > 0) {
-        // Use provided attendance data
+        // Use provided attendance data - IMPORTANTE: include company per avere companyName
         participants = await Promise.all(
           attendanceData.map(async (data) => {
             const person = await prisma.person.findFirst({
-              where: { id: data.personId, tenantId, deletedAt: null }
+              where: { id: data.personId, tenantId, deletedAt: null },
+              include: {
+                company: true // Includi company per ottenere ragioneSociale/name
+              }
             });
             return person ? {
               ...person,
+              companyName: person.company?.ragioneSociale || person.company?.name || '',
               present: data.present || false,
               hours: data.hours || 0
             } : null;
@@ -182,45 +243,47 @@ router.post('/generate',
         );
         participants = participants.filter(p => p !== null);
       } else {
-        // Get participants from schedule companies
-        const scheduleCompanies = await prisma.scheduleCompany.findMany({
-          where: { scheduleId: session.schedule.id },
+        // CORREZIONE: Get participants from CourseEnrollment, NOT all company employees
+        // Prende solo i partecipanti effettivamente iscritti al corso
+        const enrollments = await prisma.courseEnrollment.findMany({
+          where: {
+            scheduleId: session.schedule.id,
+            tenantId,
+            deletedAt: null
+          },
           include: {
-            company: {
+            person: {
               include: {
-                employees: {
-                  where: { deletedAt: null },
-                  include: { person: true }
-                }
+                company: true
               }
             }
           }
         });
 
-        participants = scheduleCompanies.flatMap(sc => 
-          sc.company.employees.map(emp => ({
-            ...emp.person,
+        participants = enrollments
+          .filter(e => e.person)
+          .map(enrollment => ({
+            ...enrollment.person,
+            companyName: enrollment.person.company?.ragioneSociale || enrollment.person.company?.name || '',
             present: false,
             hours: 0
-          }))
-        );
+          }));
       }
 
       // Generate document using template system
-      const document = await documentService.generateDocument(
-        template.id,
-        {
-          entityType: 'session',
-          entityId: sessionId,
+      const document = await documentService.generateDocument({
+        templateId: template.id,
+        entityType: 'session',
+        entityId: sessionId,
+        userId,
+        tenantId,
+        options: {
           formatoreId: formatoreId,
           participants: participants,
-          options: {
-            scheduleId: session.scheduleId
-          }
-        },
-        userId,
-        tenantId
-      );
+          scheduleId: session.scheduleId,
+          strict: false // Permetti generazione anche con marker mancanti
+        }
+      });
 
       // Get progressive number for this register
       const year = new Date().getFullYear();
@@ -254,7 +317,7 @@ router.post('/generate',
             markers: document.markers,
             generatedBy: userId,
             fileSize: document.fileSize,
-            nomeFile: document.filename,
+            nomeFile: document.fileName || document.file?.filename,
             url: document.fileUrl,
             dataGenerazione: new Date(),
             numeroProgressivo: existingRegistro.numeroProgressivo,
@@ -272,7 +335,7 @@ router.post('/generate',
             markers: document.markers,
             generatedBy: userId,
             fileSize: document.fileSize,
-            nomeFile: document.filename,
+            nomeFile: document.fileName || document.file?.filename,
             url: document.fileUrl,
             numeroProgressivo,
             annoProgressivo: year,
@@ -484,6 +547,106 @@ router.get('/:id/download', authenticateToken(), requirePermission('read:documen
     res.status(500).json({ error: 'Failed to download registro presenze' });
   }
 });
+
+/**
+ * GET /api/v1/registri-presenze/schedule/:scheduleId/download-zip
+ * Download multiple registers as ZIP for a schedule
+ */
+router.get('/schedule/:scheduleId/download-zip',
+  authenticateToken(),
+  requirePermission('read:documents'),
+  async (req, res) => {
+    try {
+      const { scheduleId } = req.params;
+      const { ids } = req.query;
+      const tenantId = req.user.tenantId;
+
+      // Build where clause
+      const where = {
+        scheduledCourseId: scheduleId,
+        tenantId,
+        deletedAt: null
+      };
+
+      // If specific IDs provided, filter by them
+      if (ids) {
+        const idList = ids.split(',').filter(Boolean);
+        if (idList.length > 0) {
+          where.id = { in: idList };
+        }
+      }
+
+      const registri = await prisma.registroPresenze.findMany({
+        where,
+        include: {
+          session: true
+        },
+        orderBy: { dataGenerazione: 'asc' }
+      });
+
+      if (registri.length === 0) {
+        return res.status(404).json({ error: 'No registers found for this schedule' });
+      }
+
+      // Import archiver for ZIP creation
+      const archiver = (await import('archiver')).default;
+      const path = await import('path');
+      const fs = await import('fs');
+
+      // Set response headers for ZIP download
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', `attachment; filename="registri_presenze_${scheduleId}.zip"`);
+
+      // Create archive
+      const archive = archiver('zip', { zlib: { level: 9 } });
+      archive.pipe(res);
+
+      // Add each register to the archive
+      for (const registro of registri) {
+        if (registro.url) {
+          try {
+            // Get the file path from URL
+            const filePath = registro.url.replace(/^\/uploads\//, '');
+            const fullPath = path.join(process.cwd(), 'uploads', filePath);
+
+            if (fs.existsSync(fullPath)) {
+              // Generate a friendly filename based on session date
+              const sessionDate = registro.session?.date
+                ? new Date(registro.session.date).toISOString().split('T')[0]
+                : registro.id;
+              const fileName = `registro_presenze_${sessionDate}.pdf`;
+
+              archive.file(fullPath, { name: fileName });
+            }
+          } catch (fileError) {
+            logger.warn('Failed to add file to ZIP', {
+              registroId: registro.id,
+              error: fileError.message
+            });
+          }
+        }
+      }
+
+      await archive.finalize();
+
+      logger.info('Registers ZIP downloaded', {
+        component: 'registri-presenze-routes',
+        action: 'download-zip',
+        scheduleId,
+        count: registri.length,
+        personId: req.user?.id
+      });
+    } catch (error) {
+      logger.error('Failed to create registers ZIP', {
+        component: 'registri-presenze-routes',
+        action: 'download-zip',
+        error: error.message,
+        personId: req.user?.id
+      });
+      res.status(500).json({ error: 'Failed to create ZIP file' });
+    }
+  }
+);
 
 /**
  * ⚠️ IMPORTANTE: Questa route è posizionata DOPO tutte le route specifiche

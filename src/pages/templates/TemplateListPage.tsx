@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { 
+import {
   FileText,
   Download,
   Pencil,
@@ -14,11 +14,12 @@ import EntityListLayout from '../../components/layouts/EntityListLayout';
 import ResizableTable, { ResizableTableColumn } from '../../components/shared/ResizableTable';
 import { FilterPanel } from '../../components/shared/filters/FilterPanel';
 import { templateService } from '../../services/templateService';
-import { 
-  Template, 
-  TemplateType, 
+import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
+import {
+  Template,
+  TemplateType,
   TemplateFormat,
-  TemplateListParams 
+  TemplateListParams
 } from '../../types/templates';
 
 interface DataRow extends Record<string, unknown> {
@@ -39,22 +40,23 @@ interface DataRow extends Record<string, unknown> {
 const TemplateListPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  
+  const { confirm, confirmDelete } = useConfirmDialog();
+
   // State
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(false);
   const [alert, setAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  
+
   // Selection
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectAll, setSelectAll] = useState(false);
-  
+
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilters, setActiveFilters] = useState<Record<string, string>>({});
   const [activeSort, setActiveSort] = useState<{ field: string, direction: 'asc' | 'desc' } | undefined>(undefined);
-  
+
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -95,7 +97,7 @@ const TemplateListPage: React.FC = () => {
   useEffect(() => {
     const openModal = searchParams.get('openModal');
     const templateId = searchParams.get('templateId');
-    
+
     if (openModal === 'true') {
       if (templateId) {
         navigate(`/templates/${templateId}`);
@@ -112,8 +114,9 @@ const TemplateListPage: React.FC = () => {
 
   // Actions
   const handleDelete = async (id: string) => {
-    if (!confirm('Sei sicuro di voler eliminare questo template?')) return;
-    
+    const shouldDelete = await confirmDelete('template');
+    if (!shouldDelete) return;
+
     try {
       await templateService.delete(id);
       setAlert({ type: 'success', message: 'Template eliminato con successo' });
@@ -126,8 +129,14 @@ const TemplateListPage: React.FC = () => {
 
   const handleDeleteSelected = async () => {
     if (!selectedIds.length) return;
-    if (!confirm(`Sei sicuro di voler eliminare ${selectedIds.length} template?`)) return;
-    
+    const shouldDelete = await confirm({
+      title: 'Conferma eliminazione multipla',
+      message: `Sei sicuro di voler eliminare ${selectedIds.length} template? L'operazione non può essere annullata.`,
+      confirmLabel: `Elimina ${selectedIds.length} template`,
+      variant: 'danger'
+    });
+    if (!shouldDelete) return;
+
     setLoading(true);
     try {
       await Promise.all(selectedIds.map(id => templateService.delete(id)));
@@ -170,7 +179,7 @@ const TemplateListPage: React.FC = () => {
   };
 
   const handleSelect = (id: string) => {
-    setSelectedIds(prev => 
+    setSelectedIds(prev =>
       prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
     );
   };
@@ -274,11 +283,10 @@ const TemplateListPage: React.FC = () => {
       width: 100,
       sortable: true,
       renderCell: (row: DataRow) => (
-        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-          row.stato === 'Attivo' 
-            ? 'bg-green-100 text-green-800' 
+        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${row.stato === 'Attivo'
+            ? 'bg-green-100 text-green-800'
             : 'bg-gray-100 text-gray-800'
-        }`}>
+          }`}>
           {row.stato}
         </span>
       )
@@ -418,7 +426,7 @@ const TemplateListPage: React.FC = () => {
               className="flex-1 px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          
+
           {/* Filters */}
           <FilterPanel
             filters={filters}
@@ -431,9 +439,8 @@ const TemplateListPage: React.FC = () => {
     >
       {/* Alert */}
       {alert && (
-        <div className={`mb-4 p-4 rounded-md ${
-          alert.type === 'success' ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
-        }`}>
+        <div className={`mb-4 p-4 rounded-md ${alert.type === 'success' ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
+          }`}>
           <div className="flex items-center justify-between">
             <span>{alert.message}</span>
             <button onClick={() => setAlert(null)} className="text-gray-500 hover:text-gray-700">

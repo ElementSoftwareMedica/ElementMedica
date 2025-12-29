@@ -50,28 +50,28 @@ export const DateTimeManager: React.FC<DateTimeManagerProps> = ({
   // Calcola suggerimenti per completare la programmazione
   const getSuggestions = useCallback(() => {
     if (courseDuration <= 0) return null;
-    
+
     const remainingHours = hoursLeft;
     if (remainingHours <= 0) return null;
 
     // Suggerisci sessioni aggiuntive
     const suggestedSessions = [];
     let remaining = remainingHours;
-    
+
     // Sessioni da 8 ore (giornata intera)
     const fullDays = Math.floor(remaining / 8);
     if (fullDays > 0) {
       suggestedSessions.push(`${fullDays} giornata${fullDays > 1 ? 'e' : ''} intera (8h)`);
       remaining -= fullDays * 8;
     }
-    
+
     // Sessioni da 4 ore (mezza giornata)
     const halfDays = Math.floor(remaining / 4);
     if (halfDays > 0) {
       suggestedSessions.push(`${halfDays} mezza giornata (4h)`);
       remaining -= halfDays * 4;
     }
-    
+
     // Ore rimanenti
     if (remaining > 0) {
       suggestedSessions.push(`${remaining}h aggiuntive`);
@@ -136,6 +136,10 @@ export const DateTimeManager: React.FC<DateTimeManagerProps> = ({
                 locale="it"
                 placeholderText="Seleziona data"
                 className="w-full border rounded-full px-4 py-2"
+                calendarClassName="shadow-lg border border-gray-200 rounded-lg"
+                wrapperClassName="w-full"
+                popperClassName="z-50"
+                popperPlacement="bottom-start"
               />
             </div>
 
@@ -145,16 +149,22 @@ export const DateTimeManager: React.FC<DateTimeManagerProps> = ({
                 <Label>Inizio</Label>
                 <Input
                   type="time"
+                  step="900"
                   value={dateEntry.start || ''}
                   onChange={(e) => onUpdateDateTime(idx, 'start', e.target.value)}
+                  placeholder="09:00"
+                  className="text-base"
                 />
               </div>
               <div>
                 <Label>Fine</Label>
                 <Input
                   type="time"
+                  step="900"
                   value={dateEntry.end || ''}
                   onChange={(e) => onUpdateDateTime(idx, 'end', e.target.value)}
+                  placeholder="18:00"
+                  className="text-base"
                 />
               </div>
             </div>
@@ -220,16 +230,15 @@ export const DateTimeManager: React.FC<DateTimeManagerProps> = ({
       ))}
 
       {/* Enhanced Hours Summary */}
-      <div className={`p-4 rounded-lg border-2 ${
-        hoursLeft === 0 ? 'bg-green-50 border-green-200' : 
-        hoursLeft > 0 ? 'bg-orange-50 border-orange-200' : 
-        'bg-red-50 border-red-200'
-      }`}>
+      <div className={`p-4 rounded-lg border-2 ${hoursLeft === 0 ? 'bg-green-50 border-green-200' :
+          hoursLeft > 0 ? 'bg-orange-50 border-orange-200' :
+            'bg-red-50 border-red-200'
+        }`}>
         <div className="flex items-center mb-2">
           <Clock className="w-5 h-5 mr-2" />
           <h4 className="font-semibold">Riepilogo Ore Corso</h4>
         </div>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
           <div className="flex items-center">
             <span className="font-medium">Ore programmate:</span>
@@ -237,7 +246,7 @@ export const DateTimeManager: React.FC<DateTimeManagerProps> = ({
               {totalSelectedHours}h
             </span>
           </div>
-          
+
           {courseDuration > 0 && (
             <>
               <div className="flex items-center">
@@ -246,14 +255,13 @@ export const DateTimeManager: React.FC<DateTimeManagerProps> = ({
                   {courseDuration}h
                 </span>
               </div>
-              
+
               <div className="flex items-center">
                 <span className="font-medium">Ore rimanenti:</span>
-                <span className={`ml-2 px-2 py-1 rounded-full flex items-center ${
-                  hoursLeft === 0 ? 'bg-green-100 text-green-800' :
-                  hoursLeft > 0 ? 'bg-orange-100 text-orange-800' :
-                  'bg-red-100 text-red-800'
-                }`}>
+                <span className={`ml-2 px-2 py-1 rounded-full flex items-center ${hoursLeft === 0 ? 'bg-green-100 text-green-800' :
+                    hoursLeft > 0 ? 'bg-orange-100 text-orange-800' :
+                      'bg-red-100 text-red-800'
+                  }`}>
                   {hoursLeft === 0 ? (
                     <CheckCircle className="w-3 h-3 mr-1" />
                   ) : (

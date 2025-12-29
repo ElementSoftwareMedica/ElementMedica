@@ -76,6 +76,8 @@ export const DeletionRequestTab: React.FC<DeletionRequestTabProps> = ({ hook }) 
   const [requestForm, setRequestForm] = useState<DeletionRequestFormData>({
     reason: '',
     confirmEmail: '',
+    anonymize: false,
+    confirmDeletion: false,
     additionalInfo: ''
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
@@ -85,7 +87,7 @@ export const DeletionRequestTab: React.FC<DeletionRequestTabProps> = ({ hook }) 
   const stats = getDeletionStats();
   const latestRequest = getLatestRequest();
 
-  const handleFormChange = (field: keyof DeletionRequestFormData, value: string) => {
+  const handleFormChange = (field: keyof DeletionRequestFormData, value: string | boolean) => {
     setRequestForm(prev => ({ ...prev, [field]: value }));
     
     // Clear error for this field
@@ -111,6 +113,8 @@ export const DeletionRequestTab: React.FC<DeletionRequestTabProps> = ({ hook }) 
       setRequestForm({
         reason: '',
         confirmEmail: '',
+        anonymize: false,
+        confirmDeletion: false,
         additionalInfo: ''
       });
       setFormErrors({});
@@ -248,59 +252,58 @@ export const DeletionRequestTab: React.FC<DeletionRequestTabProps> = ({ hook }) 
       </Alert>
 
       {/* Stats Cards */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" color="primary" gutterBottom>
-                {stats.total}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Total Requests
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
+      <Box
+        sx={{
+          mb: 4,
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' },
+          gap: 3
+        }}
+      >
+        <Card>
+          <CardContent>
+            <Typography variant="h6" color="primary" gutterBottom>
+              {stats.total}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Total Requests
+            </Typography>
+          </CardContent>
+        </Card>
         
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" color="warning.main" gutterBottom>
-                {stats.pending}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Pending Review
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
+        <Card>
+          <CardContent>
+            <Typography variant="h6" color="warning.main" gutterBottom>
+              {stats.pending}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Pending Review
+            </Typography>
+          </CardContent>
+        </Card>
         
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" color="success.main" gutterBottom>
-                {stats.completed}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Completed
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
+        <Card>
+          <CardContent>
+            <Typography variant="h6" color="success.main" gutterBottom>
+              {stats.completed}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Completed
+            </Typography>
+          </CardContent>
+        </Card>
         
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" color="error.main" gutterBottom>
-                {stats.rejected}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Rejected
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
+        <Card>
+          <CardContent>
+            <Typography variant="h6" color="error.main" gutterBottom>
+              {stats.rejected}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Rejected
+            </Typography>
+          </CardContent>
+        </Card>
+      </Box>
 
       {/* Latest Request Status */}
       {latestRequest && (
@@ -314,7 +317,7 @@ export const DeletionRequestTab: React.FC<DeletionRequestTabProps> = ({ hook }) 
               {getStatusIcon(latestRequest.status)}
               <Chip
                 label={latestRequest.status}
-                color={getStatusColor(latestRequest.status)}
+                color={getStatusColor(latestRequest.status) as 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning'}
                 variant="outlined"
               />
               <Typography variant="body2" color="text.secondary">
@@ -400,7 +403,7 @@ export const DeletionRequestTab: React.FC<DeletionRequestTabProps> = ({ hook }) 
                             {getStatusIcon(request.status)}
                             <Chip
                               label={request.status}
-                              color={getStatusColor(request.status)}
+                              color={getStatusColor(request.status) as 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning'}
                               size="small"
                               variant="outlined"
                             />

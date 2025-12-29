@@ -214,7 +214,7 @@ const GoogleDocsPreview: React.FC<GoogleDocsPreviewProps> = ({
           
           {generatedFile && (
             <Button
-              variant="link"
+              variant="ghost"
               size="sm"
               onClick={() => setShowPreview(!showPreview)}
               className="text-blue-600"

@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { 
+import {
   Building2,
   Plus,
   Users
 } from 'lucide-react';
 import { apiGet } from '../../services/api';
+import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
 import { useToast } from '../../hooks/useToast';
 import TabPills from '../ui/TabPills';
 import SiteCard from './SiteCard';
@@ -74,6 +75,7 @@ const MultiSiteManager: React.FC<MultiSiteManagerProps> = ({ companyId, fetchInt
     siteName: string;
   }>({ type: null, siteId: '', siteName: '' });
   const { showToast } = useToast();
+  const { confirmDelete } = useConfirmDialog();
 
   const fetchData = useCallback(async () => {
     if (!fetchInternals) {
@@ -85,7 +87,7 @@ const MultiSiteManager: React.FC<MultiSiteManagerProps> = ({ companyId, fetchInt
       const sitesResponse = await apiGet(`/api/v1/company-sites/company/${companyId}`) as { sites: CompanySite[] };
       const sitesData = sitesResponse.sites || [];
       setSites(sitesData);
-      const emps = await getEmployeesService({ companyId });
+      const emps = await getEmployeesService({ companyId: Number(companyId) });
       setEmployees(emps as unknown as Employee[]);
       if (sitesData.length > 0 && activeTab === 'company') {
         setActiveTab('company');
@@ -108,13 +110,14 @@ const MultiSiteManager: React.FC<MultiSiteManagerProps> = ({ companyId, fetchInt
   };
 
   const handleDelete = async (siteId: string) => {
-    if (!confirm('Sei sicuro di voler eliminare questa sede?')) return;
+    const confirmed = await confirmDelete('Sei sicuro di voler eliminare questa sede?');
+    if (!confirmed) return;
 
     try {
       await apiGet(`/api/company-sites/${siteId}`, { method: 'DELETE' });
       await fetchData();
       showToast({ message: 'Sede eliminata con successo', type: 'success' });
-      
+
       // Reset active tab if deleted site was selected
       if (activeTab === siteId) {
         setActiveTab('company');
@@ -133,9 +136,9 @@ const MultiSiteManager: React.FC<MultiSiteManagerProps> = ({ companyId, fetchInt
   const handleFormSuccess = () => {
     fetchData();
     handleFormClose();
-    showToast({ 
-      message: editingSite ? 'Sede aggiornata con successo' : 'Sede creata con successo', 
-      type: 'success' 
+    showToast({
+      message: editingSite ? 'Sede aggiornata con successo' : 'Sede creata con successo',
+      type: 'success'
     });
   };
 
@@ -296,7 +299,7 @@ const MultiSiteManager: React.FC<MultiSiteManagerProps> = ({ companyId, fetchInt
                 Nessun dipendente trovato
               </h3>
               <p className="text-gray-500">
-                {activeTab === 'company' 
+                {activeTab === 'company'
                   ? 'Non ci sono dipendenti in questa azienda.'
                   : 'Non ci sono dipendenti assegnati a questa sede.'
                 }

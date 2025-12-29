@@ -6,6 +6,7 @@ import { Label } from '../../design-system/atoms/Label';
 import { Badge } from '../../design-system/atoms/Badge';
 import { apiGet, apiDelete, apiPost, apiPut } from '../../services/api';
 import { toast } from 'react-hot-toast';
+import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
 
 interface Reparto {
   id: string;
@@ -47,6 +48,7 @@ const RepartoManager: React.FC<RepartoManagerProps> = ({ siteId, siteName }) => 
     nome: '',
     responsabileId: ''
   });
+  const { confirmDelete } = useConfirmDialog();
 
   useEffect(() => {
     loadReparti();
@@ -67,7 +69,7 @@ const RepartoManager: React.FC<RepartoManagerProps> = ({ siteId, siteName }) => 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
       if (editingReparto) {
         // Update existing reparto
@@ -78,7 +80,7 @@ const RepartoManager: React.FC<RepartoManagerProps> = ({ siteId, siteName }) => 
         await apiPost(`/api/v1/reparto/site/${siteId}`, formData);
         toast.success('Reparto creato con successo');
       }
-      
+
       resetForm();
       loadReparti();
     } catch (error) {
@@ -97,7 +99,8 @@ const RepartoManager: React.FC<RepartoManagerProps> = ({ siteId, siteName }) => 
   };
 
   const handleDelete = async (repartoId: string) => {
-    if (!confirm('Sei sicuro di voler eliminare questo reparto?')) {
+    const confirmed = await confirmDelete('Sei sicuro di voler eliminare questo reparto?');
+    if (!confirmed) {
       return;
     }
 
@@ -142,7 +145,7 @@ const RepartoManager: React.FC<RepartoManagerProps> = ({ siteId, siteName }) => 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Reparti - {siteName}</CardTitle>
-          <Button 
+          <Button
             onClick={() => setShowForm(!showForm)}
             variant={showForm ? "outline" : "primary"}
           >
@@ -151,7 +154,7 @@ const RepartoManager: React.FC<RepartoManagerProps> = ({ siteId, siteName }) => 
         </CardHeader>
         <CardContent>
           {showForm && (
-            <form onSubmit={handleSubmit} className="space-y-4 mb-6 p-4 border rounded-lg bg-gray-50">
+            <form onSubmit={handleSubmit} className="space-y-4 mb-6 p-4 border rounded-lg bg-gray-50" noValidate>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="nome">Nome Reparto *</Label>

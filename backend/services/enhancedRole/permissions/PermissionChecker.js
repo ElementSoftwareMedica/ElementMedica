@@ -35,7 +35,7 @@ export async function hasPermission(personId, permission, context = {}) {
     });
 
     // Verifica se l'utente è super admin o admin
-    const hasGlobalAdmin = userRoles.some(role => 
+    const hasGlobalAdmin = userRoles.some(role =>
       role.roleType === ROLE_TYPES.SUPER_ADMIN ||
       role.roleType === ROLE_TYPES.ADMIN
     );
@@ -47,7 +47,7 @@ export async function hasPermission(personId, permission, context = {}) {
     // Verifica i permessi di default per i ruoli di sistema
     for (const role of userRoles) {
       const defaultPermissions = getDefaultPermissions(role.roleType);
-      
+
       if (defaultPermissions.includes(permission)) {
         // Verifica il contesto se necessario
         if (role.companyId && companyId) {
@@ -147,8 +147,11 @@ export async function getUserPermissions(personId, tenantId = null) {
     // Aggiungi permessi avanzati (AdvancedPermission) - convertiti in formato standard
     personRoles.forEach(personRole => {
       personRole.advancedPermissions.forEach(advPerm => {
-        const permission = `${advPerm.action.toUpperCase()}_${advPerm.resource.toUpperCase()}`;
-        allPermissions.add(permission);
+        // Guard against undefined action or resource
+        if (advPerm.action && advPerm.resource) {
+          const permission = `${advPerm.action.toUpperCase()}_${advPerm.resource.toUpperCase()}`;
+          allPermissions.add(permission);
+        }
       });
     });
 
@@ -165,10 +168,10 @@ export async function getUserPermissions(personId, tenantId = null) {
 
     // Verifica se l'utente ha ruoli personalizzati e aggiungi i loro permessi
     customRoles.forEach(customRole => {
-      const hasCustomRole = userRoles.some(role => 
+      const hasCustomRole = userRoles.some(role =>
         role.roleType === `CUSTOM_${customRole.id}`
       );
-      
+
       if (hasCustomRole) {
         customRole.permissions.forEach(customPerm => {
           allPermissions.add(customPerm.permission);
@@ -233,7 +236,7 @@ export async function getAdvancedPermissions(personId, resource, action, tenantI
 export async function canAccessResource(personId, resource, resourceId, action, tenantId) {
   try {
     const permissions = await getAdvancedPermissions(personId, resource, action, tenantId);
-    
+
     if (permissions.length === 0) {
       return await hasPermission(personId, `${resource}.${action}`, { tenantId });
     }
@@ -243,12 +246,12 @@ export async function canAccessResource(personId, resource, resourceId, action, 
       if (permission.scope === 'global') {
         return true;
       }
-      
+
       if (permission.conditions) {
         const conditionsMet = await evaluateConditions(
-          permission.conditions, 
-          personId, 
-          resourceId, 
+          permission.conditions,
+          personId,
+          resourceId,
           tenantId
         );
         if (conditionsMet) {
@@ -295,7 +298,7 @@ export async function evaluateConditions(conditions, personId, resourceId, tenan
           select: { companyId: true }
         })
       ]);
-      
+
       return userPerson?.companyId === resourcePerson?.companyId;
     }
 
@@ -314,7 +317,7 @@ export async function filterDataByPermissions(personId, resource, action, data, 
     // BYPASS TEMPORANEO: Verifica se l'utente è admin
     const person = await prisma.person.findUnique({
       where: { id: personId },
-      select: { 
+      select: {
         globalRole: true,
         email: true,
         personRoles: {
@@ -326,15 +329,19 @@ export async function filterDataByPermissions(personId, resource, action, data, 
 
     // Se è admin o super admin, restituisci tutti i dati
     if (person?.globalRole === 'ADMIN' || person?.globalRole === 'SUPER_ADMIN' ||
-        person?.personRoles?.some(role => role.roleType === 'ADMIN' || role.roleType === 'SUPER_ADMIN')) {
+      person?.personRoles?.some(role => role.roleType === 'ADMIN' || role.roleType === 'SUPER_ADMIN')) {
       return data;
     }
 
     const permissions = await getAdvancedPermissions(personId, resource, action, tenantId);
-    
+
     if (permissions.length === 0) {
       // Nessun permesso avanzato, restituisci i dati completi se ha il permesso base
       // Converte il formato resource.action in ACTION_RESOURCE (es. employees.view -> VIEW_EMPLOYEES)
+      // Guard against undefined action or resource
+      if (!action || !resource) {
+        return null;
+      }
       const permissionName = `${action.toUpperCase()}_${resource.toUpperCase()}`;
       const hasBasicPermission = await hasPermission(personId, permissionName, { tenantId });
       return hasBasicPermission ? data : null;
@@ -348,7 +355,7 @@ export async function filterDataByPermissions(personId, resource, action, data, 
       if (permission.scope === 'global' || permission.scope === 'tenant') {
         hasGlobalAccess = true;
       }
-      
+
       if (permission.allowedFields && Array.isArray(permission.allowedFields)) {
         permission.allowedFields.forEach(field => allowedFields.add(field));
       }
@@ -382,7 +389,7 @@ export function filterObjectFields(obj, allowedFields) {
   }
 
   const filtered = {};
-  
+
   // Se non ci sono campi specificati, restituisci l'oggetto completo
   if (allowedFields.size === 0) {
     return obj;

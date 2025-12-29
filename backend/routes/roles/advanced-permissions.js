@@ -15,15 +15,155 @@ import { logRoleOperation, auditRoleChanges } from './middleware/logging.js';
 import { validateAdvancedPermissions } from './middleware/validation.js';
 
 // Import delle utilità
-import { 
-  createSuccessResponse, 
+import {
+  createSuccessResponse,
   createErrorResponse,
-  groupPermissionsByResource 
+  groupPermissionsByResource
 } from './utils/helpers.js';
 import { validateAdvancedPermission } from './utils/validators.js';
 
 const router = express.Router();
 const prisma = new PrismaClient();
+
+// ========================================
+// ROUTES STATICHE (PRIMA delle routes con :roleType)
+// ========================================
+
+/**
+ * GET /api/roles/relation-definitions
+ * Ottiene tutte le definizioni di relazione per scope "relational"
+ */
+router.get('/relation-definitions',
+  requireRoleManagement,
+  logRoleOperation('GET_RELATION_DEFINITIONS'),
+  async (req, res) => {
+    try {
+      const tenantId = req.tenant?.id || req.person?.tenantId;
+
+      const definitions = await prisma.relationDefinition.findMany({
+        where: {
+          OR: [
+            { tenantId },
+            { tenantId: null, isSystem: true }
+          ],
+          deletedAt: null
+        },
+        orderBy: [
+          { isSystem: 'desc' },
+          { name: 'asc' }
+        ]
+      });
+
+      res.json(createSuccessResponse({
+        definitions,
+        count: definitions.length
+      }, 'Relation definitions retrieved successfully'));
+
+    } catch (error) {
+      logger.error('Error getting relation definitions', {
+        error: error.message,
+        tenantId: req.tenant?.id || req.person?.tenantId
+      });
+
+      res.status(500).json(createErrorResponse(
+        'Failed to get relation definitions',
+        error.message
+      ));
+    }
+  }
+);
+
+/**
+ * POST /api/roles/test-data-filter
+ * Testa il filtro dati per un utente e risorsa specifici (SOLO DEVELOPMENT)
+ */
+router.post('/test-data-filter',
+  requireRoleManagement,
+  logRoleOperation('TEST_DATA_FILTER'),
+  async (req, res) => {
+    // Solo in development
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(404).json(createErrorResponse(
+        'Not found',
+        'This endpoint is only available in development mode'
+      ));
+    }
+
+    try {
+      const { resource, action = 'read' } = req.body;
+      const tenantId = req.tenant?.id || req.person?.tenantId;
+      const personId = req.person?.id;
+
+      if (!resource) {
+        return res.status(400).json(createErrorResponse(
+          'Validation error',
+          'resource is required'
+        ));
+      }
+
+      // Import dinamico per evitare dipendenze circolari
+      const { permissionInheritanceService } = await import('../../services/permission-inheritance.js');
+      const { relationResolver } = await import('../../services/relation-resolver.js');
+
+      // Verifica accesso
+      const accessCheck = await permissionInheritanceService.canAccessResource(
+        personId,
+        tenantId,
+        resource,
+        action
+      );
+
+      if (!accessCheck.allowed) {
+        return res.json(createSuccessResponse({
+          allowed: false,
+          reason: accessCheck.reason,
+          resource,
+          action
+        }, 'Access denied'));
+      }
+
+      // Costruisci filtro relazionale se applicabile
+      let dataFilter = null;
+      if (accessCheck.permission.scope === 'relational') {
+        dataFilter = await relationResolver.buildRelationalFilter(
+          personId,
+          tenantId,
+          accessCheck.permission
+        );
+      }
+
+      res.json(createSuccessResponse({
+        allowed: true,
+        permission: {
+          resource: accessCheck.permission.resource,
+          action: accessCheck.permission.action,
+          scope: accessCheck.permission.scope,
+          relationType: accessCheck.permission.relationType,
+          allowedFields: accessCheck.permission.allowedFields,
+          deniedFields: accessCheck.permission.deniedFields
+        },
+        dataFilter,
+        effectiveRoles: accessCheck.roles
+      }, 'Data filter test successful'));
+
+    } catch (error) {
+      logger.error('Error testing data filter', {
+        error: error.message,
+        stack: error.stack,
+        requestData: req.body
+      });
+
+      res.status(500).json(createErrorResponse(
+        'Failed to test data filter',
+        error.message
+      ));
+    }
+  }
+);
+
+// ========================================
+// ROUTES DINAMICHE (con :roleType)
+// ========================================
 
 /**
  * GET /api/roles/:roleType/advanced-permissions
@@ -94,7 +234,7 @@ router.get('/:roleType/advanced-permissions',
         totalPermissions: rolePermissions.length,
         activePermissions: rolePermissions.filter(rp => !rp.permission.deletedAt).length,
         resourcesCount: Object.keys(groupedPermissions).length,
-        lastUpdated: rolePermissions.length > 0 
+        lastUpdated: rolePermissions.length > 0
           ? Math.max(...rolePermissions.map(rp => new Date(rp.updatedAt || rp.createdAt).getTime()))
           : null
       };

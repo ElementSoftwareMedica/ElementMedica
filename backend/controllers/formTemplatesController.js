@@ -8,29 +8,36 @@ const prisma = new PrismaClient();
 // Schema di validazione per form template
 const formTemplateSchema = z.object({
   name: z.string().min(1, 'Nome template richiesto'),
-  description: z.string().optional(),
+  description: z.string().optional().default(''),
   type: z.enum(['CONTACT', 'JOB_APPLICATION', 'QUOTE_REQUEST', 'CONSULTATION', 'COURSE_TEST', 'COURSE_EVALUATION', 'PERSON_DATA_COLLECTION', 'COURSE_ENROLLMENT', 'CUSTOM_FORM']),
-  schema: z.object({}).passthrough(),
+  schema: z.object({}).passthrough().optional().default({}),
   validationRules: z.object({}).optional(),
   conditionalFields: z.object({}).optional(),
-  isActive: z.boolean().default(true)
+  isActive: z.boolean().default(true),
+  isPublic: z.boolean().default(false),
+  allowAnonymous: z.boolean().default(false),
+  settings: z.object({}).passthrough().optional(),
+  redirectUrl: z.string().optional().default('')
 });
 
 const formFieldSchema = z.object({
+  id: z.string().optional(),
   name: z.string().min(1, 'Nome campo richiesto'),
   label: z.string().min(1, 'Label campo richiesta'),
-  type: z.enum(['text', 'email', 'tel', 'textarea', 'select', 'checkbox', 'radio', 'date', 'number', 'file']),
+  type: z.enum(['text', 'email', 'tel', 'textarea', 'select', 'checkbox', 'radio', 'date', 'number', 'file', 'rating', 'signature', 'hidden']),
   required: z.boolean().default(false),
   placeholder: z.string().optional(),
   helpText: z.string().optional(),
+  sectionId: z.string().optional(),
+  isActive: z.boolean().default(true),
   options: z.array(z.object({
     value: z.string(),
     label: z.string()
   })).optional(),
-  validation: z.object({}).optional(),
-  conditional: z.object({}).optional(),
+  validation: z.object({}).passthrough().optional(),
+  conditional: z.object({}).passthrough().optional(),
   order: z.number().default(0)
-});
+}).passthrough();
 
 /**
  * GET /api/v1/form-templates
@@ -70,9 +77,33 @@ const getFormTemplates = async (req, res) => {
       prisma.form_templates.count({ where })
     ]);
 
+    // Count submissions for each template (by templateName or formTemplateId in metadata)
+    const templatesWithCount = await Promise.all(
+      templates.map(async (template) => {
+        const submissionsCount = await prisma.contactSubmission.count({
+          where: {
+            tenantId,
+            OR: [
+              { templateName: template.name },
+              {
+                metadata: {
+                  path: ['formTemplateId'],
+                  equals: template.id
+                }
+              }
+            ]
+          }
+        });
+        return {
+          ...template,
+          submissionsCount
+        };
+      })
+    );
+
     res.json({
       success: true,
-      data: templates,
+      data: templatesWithCount,
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
@@ -155,7 +186,7 @@ const getFormTemplate = async (req, res) => {
 const createFormTemplate = async (req, res) => {
   try {
     const { tenantId, id: userId } = req.person;
-    
+
     // Validazione dati
     const validatedData = formTemplateSchema.parse(req.body);
     const { fields = [] } = req.body;
@@ -190,15 +221,29 @@ const createFormTemplate = async (req, res) => {
 
       // Crea campi se presenti
       if (fields.length > 0) {
-        const validatedFields = fields.map((field, index) => ({
-          ...formFieldSchema.parse(field),
-          id: crypto.randomUUID(),
-          templateId: template.id,
-          order: field.order || index
-        }));
+        const fieldsToCreate = fields.map((field, index) => {
+          // Valida e estrae solo i campi consentiti dal DB
+          const validated = formFieldSchema.parse(field);
+          return {
+            id: crypto.randomUUID(),
+            templateId: template.id,
+            name: validated.name,
+            label: validated.label,
+            type: validated.type,
+            required: validated.required ?? false,
+            placeholder: validated.placeholder || null,
+            helpText: validated.helpText || null,
+            sectionId: validated.sectionId || null,
+            options: validated.options || null,
+            validation: validated.validation || null,
+            conditional: validated.conditional || null,
+            order: validated.order ?? index,
+            isActive: validated.isActive ?? true
+          };
+        });
 
         await tx.form_fields.createMany({
-          data: validatedFields
+          data: fieldsToCreate
         });
       }
 
@@ -255,7 +300,7 @@ const updateFormTemplate = async (req, res) => {
   try {
     const { id } = req.params;
     const { tenantId } = req.person;
-    
+
     // Validazione dati
     const validatedData = formTemplateSchema.partial().parse(req.body);
     const { fields } = req.body;

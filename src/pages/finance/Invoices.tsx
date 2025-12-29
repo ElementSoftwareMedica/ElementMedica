@@ -7,6 +7,8 @@ import { SearchBarControls } from '../../design-system/molecules/SearchBarContro
 import ResizableTable from '../../components/shared/ResizableTable';
 import { sanitizeErrorMessage } from '../../utils/errorUtils';
 import { Company } from '../../types';
+import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
+import { useToast } from '../../hooks/useToast';
 
 interface Invoice {
   id: string;
@@ -39,7 +41,7 @@ const DropdownMenu: React.FC<{ children: (close: () => void) => React.ReactNode;
   }, [open]);
 
   // Portal rendering
-  const [menuPos, setMenuPos] = useState<{top: number, left: number} | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number, left: number } | null>(null);
   const triggerRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
@@ -53,7 +55,7 @@ const DropdownMenu: React.FC<{ children: (close: () => void) => React.ReactNode;
   }, [open]);
 
   return (
-    <div ref={ref} className="relative inline-block text-left" style={{overflow: 'visible'}}>
+    <div ref={ref} className="relative inline-block text-left" style={{ overflow: 'visible' }}>
       <span ref={triggerRef} onClick={() => setOpen(o => !o)}>{trigger}</span>
       {open && menuPos && ReactDOM.createPortal(
         <div ref={menuRef} style={{ position: 'absolute', zIndex: 99999, left: menuPos.left, top: menuPos.top, background: '#fffbe6', minWidth: '8rem', boxShadow: '0 8px 24px rgba(0,0,0,0.18)' }} className="w-32 bg-white border border-gray-200 rounded shadow-lg">
@@ -90,9 +92,11 @@ const Invoices: React.FC<InvoicesProps> = ({
   selectedIds,
   setSelectedIds
 }) => {
+  const { confirm } = useConfirmDialog();
+  const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>();
 
   useEffect(() => {
     fetchInvoices();
@@ -126,7 +130,7 @@ const Invoices: React.FC<InvoicesProps> = ({
       alert(userMessage);
     }
   };
-  
+
   // Opzioni di filtro per le fatture
   const invoiceFilterOptions = [
     {
@@ -238,10 +242,10 @@ const Invoices: React.FC<InvoicesProps> = ({
       renderCell: (invoice: Invoice) => invoice.payment_date ? new Date(invoice.payment_date).toLocaleDateString('it-IT') : '-'
     }
   ];
-  
+
   // Filtra le fatture in base alla ricerca
   let filteredInvoices = invoices;
-  
+
   if (searchTerm) {
     const lowercaseSearchTerm = searchTerm.toLowerCase();
     filteredInvoices = invoices.filter(
@@ -250,14 +254,14 @@ const Invoices: React.FC<InvoicesProps> = ({
         (invoice.company?.ragioneSociale || '').toLowerCase().includes(lowercaseSearchTerm)
     );
   }
-  
+
   // Applica filtri specifici
   if (activeFilters.status) {
     filteredInvoices = filteredInvoices.filter(
       (invoice) => invoice.status === activeFilters.status
     );
   }
-  
+
   if (activeFilters.company) {
     filteredInvoices = filteredInvoices.filter(
       (invoice) => invoice.company?.ragioneSociale === activeFilters.company
@@ -274,7 +278,7 @@ const Invoices: React.FC<InvoicesProps> = ({
           placeholder="Cerca fatture..."
         />
       </div>
-      
+
       <div className="flex items-center gap-2">
         <SearchBarControls
           onToggleSelectionMode={() => {
@@ -283,15 +287,22 @@ const Invoices: React.FC<InvoicesProps> = ({
           }}
           isSelectionMode={selectionMode}
           selectedCount={selectedIds.length}
-          onDeleteSelected={() => {
+          onDeleteSelected={async () => {
             if (selectedIds.length === 0) {
-              alert('Nessuna fattura selezionata');
+              showToast({ message: 'Nessuna fattura selezionata', type: 'warning' });
               return;
             }
-            if (confirm(`Sei sicuro di voler eliminare ${selectedIds.length} fatture?`)) {
+            const shouldDelete = await confirm({
+              title: 'Conferma eliminazione multipla',
+              message: `Sei sicuro di voler eliminare ${selectedIds.length} fatture? L'operazione non può essere annullata.`,
+              confirmLabel: `Elimina ${selectedIds.length} fatture`,
+              variant: 'danger'
+            });
+            if (shouldDelete) {
               setInvoices(invoices.filter(i => !selectedIds.includes(i.id)));
               setSelectedIds([]);
               setSelectionMode(false);
+              showToast({ message: `${selectedIds.length} fatture eliminate con successo`, type: 'success' });
             }
           }}
           onExportSelected={() => console.log('Export selected', selectedIds)}
@@ -302,11 +313,15 @@ const Invoices: React.FC<InvoicesProps> = ({
           filterOptions={invoiceFilterOptions}
           sortOptions={invoiceSortOptions}
           onFilterChange={(filters) => {
-            setActiveFilters(filters);
+            setActiveFilters(filters as Record<string, string>); // Filters are always strings
           }}
           activeFilters={activeFilters}
           activeSort={activeSort}
-          onSortChange={setActiveSort}
+          onSortChange={(sort) => {
+            if (sort && sort.field && sort.direction) {
+              setActiveSort({ field: sort.field, direction: sort.direction });
+            }
+          }}
         />
       </div>
     </div>
@@ -315,7 +330,7 @@ const Invoices: React.FC<InvoicesProps> = ({
   return (
     <div>
       <SearchFilterBar />
-      
+
       {loading ? (
         <div className="text-center py-8 text-gray-500">Caricamento...</div>
       ) : error ? (

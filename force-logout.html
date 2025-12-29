@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Forza Logout - ElementMedica</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2563eb;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #64748b;
+            margin-bottom: 30px;
+        }
+        button {
+            background: #dc2626;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 6px;
+            cursor: pointer;
+            width: 100%;
+            margin-bottom: 20px;
+        }
+        button:hover {
+            background: #b91c1c;
+        }
+        button.verify {
+            background: #16a34a;
+        }
+        button.verify:hover {
+            background: #15803d;
+        }
+        button.open-app {
+            background: #2563eb;
+        }
+        button.open-app:hover {
+            background: #1d4ed8;
+        }
+        .status {
+            padding: 15px;
+            border-radius: 6px;
+            margin: 20px 0;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 14px;
+            white-space: pre-wrap;
+            display: none;
+        }
+        .status.show {
+            display: block;
+        }
+        .status.info {
+            background: #dbeafe;
+            border-left: 4px solid #2563eb;
+        }
+        .status.success {
+            background: #dcfce7;
+            border-left: 4px solid #16a34a;
+        }
+        .status.error {
+            background: #fee2e2;
+            border-left: 4px solid #dc2626;
+        }
+        .instructions {
+            background: #fef3c7;
+            border-left: 4px solid #f59e0b;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 20px 0;
+        }
+        .instructions h3 {
+            margin-top: 0;
+            color: #92400e;
+        }
+        .instructions ol {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        .instructions li {
+            margin: 8px 0;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Forza Logout Completo</h1>
+        <p class="subtitle">Sistema di pulizia storage e token per ElementMedica</p>
+
+        <div class="instructions">
+            <h3>📋 Istruzioni:</h3>
+            <ol>
+                <li><strong>Step 1:</strong> Click "Forza Logout" qui sotto</li>
+                <li><strong>Step 2:</strong> Attendi il completamento (3 secondi)</li>
+                <li><strong>Step 3:</strong> Click "Apri Applicazione"</li>
+                <li><strong>Step 4:</strong> Fai login con admin@example.com / Admin123!</li>
+                <li><strong>Step 5:</strong> Vai a /settings/templates</li>
+                <li><strong>Step 6:</strong> Torna qui e click "Verifica Token"</li>
+            </ol>
+        </div>
+
+        <button onclick="forceLogout()">🧹 FORZA LOGOUT</button>
+
+        <button class="open-app hidden" id="openAppBtn" onclick="openApp()">
+            🚀 Apri Applicazione (http://localhost:5173)
+        </button>
+
+        <button class="verify hidden" id="verifyBtn" onclick="verifyToken()">
+            ✅ Verifica Token Aggiornato
+        </button>
+
+        <div id="status" class="status"></div>
+    </div>
+
+    <script>
+        function log(message, type = 'info') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.className = 'status show ' + type;
+            statusDiv.textContent = message;
+        }
+
+        function forceLogout() {
+            log('🧹 Inizio pulizia forzata...\n', 'info');
+            
+            try {
+                // Salva le chiavi prima
+                const oldKeys = Object.keys(localStorage);
+                log('🧹 Inizio pulizia forzata...\n📦 Keys trovate: ' + oldKeys.length + '\n', 'info');
+
+                // Clear localStorage
+                localStorage.clear();
+                log('🧹 Pulizia in corso...\n✅ localStorage pulito\n', 'info');
+
+                // Clear sessionStorage
+                sessionStorage.clear();
+                log('🧹 Pulizia in corso...\n✅ localStorage pulito\n✅ sessionStorage pulito\n', 'info');
+
+                // Clear cookies
+                const cookies = document.cookie.split(";");
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i];
+                    const eqPos = cookie.indexOf("=");
+                    const name = eqPos > -1 ? cookie.substr(0, eqPos) : cookie;
+                    document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
+                }
+
+                // Verifica pulizia
+                const remainingKeys = Object.keys(localStorage);
+                
+                if (remainingKeys.length === 0) {
+                    setTimeout(() => {
+                        log(
+                            '✅✅✅ PULIZIA COMPLETATA CON SUCCESSO ✅✅✅\n\n' +
+                            '📦 Keys rimanenti: 0\n' +
+                            '🍪 Cookies eliminati\n' +
+                            '💾 Session storage pulito\n\n' +
+                            '👉 Ora click "Apri Applicazione" e fai re-login!',
+                            'success'
+                        );
+                        document.getElementById('openAppBtn').classList.remove('hidden');
+                    }, 1000);
+                } else {
+                    log(
+                        '⚠️ Pulizia parziale\n\n' +
+                        'Keys rimanenti: ' + remainingKeys.length + '\n' +
+                        'Prova a chiudere completamente il browser e riaprirlo.',
+                        'error'
+                    );
+                }
+
+            } catch (error) {
+                log('❌ Errore durante la pulizia:\n' + error.message, 'error');
+            }
+        }
+
+        function openApp() {
+            log('🚀 Apertura applicazione...\n\nSi aprirà una nuova finestra con http://localhost:5173\n\nDopo il login, torna qui e click "Verifica Token"', 'info');
+            window.open('http://localhost:5173', '_blank');
+            
+            setTimeout(() => {
+                document.getElementById('verifyBtn').classList.remove('hidden');
+            }, 2000);
+        }
+
+        async function verifyToken() {
+            log('🔍 Verifica token in corso...\n', 'info');
+
+            try {
+                // Apri l'applicazione per accedere al suo localStorage
+                const appWindow = window.open('http://localhost:5173', 'app');
+                
+                setTimeout(() => {
+                    try {
+                        // Prova ad accedere al localStorage dell'app
+                        const token = appWindow.localStorage.getItem('access_token');
+                        const permsString = appWindow.localStorage.getItem('permissions');
+                        
+                        if (!token) {
+                            log('❌ Nessun token trovato\n\n👉 Hai fatto login nell\'applicazione?', 'error');
+                            appWindow.close();
+                            return;
+                        }
+
+                        // Decodifica JWT
+                        const payload = JSON.parse(atob(token.split('.')[1]));
+                        const issued = new Date(payload.iat * 1000);
+                        const expires = new Date(payload.exp * 1000);
+                        const now = new Date();
+                        const minutesAgo = Math.round((now - issued) / 1000 / 60);
+
+                        // Conta permessi
+                        let templatePermsCount = 0;
+                        if (permsString) {
+                            const perms = JSON.parse(permsString);
+                            const allKeys = Object.keys(perms);
+                            const templateKeys = allKeys.filter(k => 
+                                k.includes('TEMPLATE') || k.includes('template') || k.includes('google')
+                            );
+                            templatePermsCount = templateKeys.length;
+                        }
+
+                        // Risultato
+                        let result = '🔍 VERIFICA TOKEN\n\n';
+                        result += '📅 Token emesso: ' + issued.toLocaleString('it-IT') + '\n';
+                        result += '⏰ Token scade: ' + expires.toLocaleString('it-IT') + '\n';
+                        result += '⏱️  Età token: ' + minutesAgo + ' minuti\n';
+                        result += '🔑 Permessi template/google: ' + templatePermsCount + '\n\n';
+
+                        if (minutesAgo < 10 && templatePermsCount >= 20) {
+                            result += '✅✅✅ TOKEN AGGIORNATO CON SUCCESSO! ✅✅✅\n\n';
+                            result += 'Il token è fresco (' + minutesAgo + ' minuti) e ha tutti i permessi (' + templatePermsCount + ').\n\n';
+                            result += '👉 Vai a /settings/templates - Non dovrebbero esserci più errori 401!';
+                            log(result, 'success');
+                        } else if (templatePermsCount < 20) {
+                            result += '❌ TOKEN NON AGGIORNATO\n\n';
+                            result += 'Il token ha solo ' + templatePermsCount + ' permessi invece di 25+.\n\n';
+                            result += '👉 Prova:\n';
+                            result += '1. Fai logout dall\'applicazione\n';
+                            result += '2. Torna qui e click "Forza Logout" di nuovo\n';
+                            result += '3. Re-login';
+                            log(result, 'error');
+                        } else {
+                            result += '⚠️ TOKEN VECCHIO\n\n';
+                            result += 'Il token ha ' + minutesAgo + ' minuti ed è probabilmente vecchio.\n\n';
+                            result += '👉 Ripeti la procedura di logout/login.';
+                            log(result, 'error');
+                        }
+
+                        appWindow.close();
+
+                    } catch (error) {
+                        log('❌ Errore accesso localStorage:\n\n' + error.message + '\n\n⚠️ Potrebbe essere un problema di CORS.\n\n👉 Verifica manualmente: F12 → Console nell\'app:\n\nJSON.parse(localStorage.getItem("permissions"))', 'error');
+                        appWindow.close();
+                    }
+                }, 1000);
+
+            } catch (error) {
+                log('❌ Errore durante la verifica:\n' + error.message, 'error');
+            }
+        }
+    </script>
+</body>
+</html>

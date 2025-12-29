@@ -1,7 +1,8 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../../design-system/utils';
-import { Button } from '../../../design-system/atoms/Button';
+import { Button, ButtonVariant } from '../../../design-system/atoms/Button';
+import { AlertCircle } from 'lucide-react';
 
 interface FormProps {
   onSubmit: (e: React.FormEvent) => void;
@@ -16,13 +17,16 @@ interface FormProps {
   buttonContainerClassName?: string;
   submitButtonClassName?: string;
   cancelButtonClassName?: string;
-  submitButtonVariant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'link' | 'danger';
-  cancelButtonVariant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'link' | 'danger';
+  submitButtonVariant?: ButtonVariant;
+  cancelButtonVariant?: ButtonVariant;
   hideButtons?: boolean;
+  /** Disabilita la validazione nativa del browser (default: true per usare validazione elegante) */
+  noValidate?: boolean;
 }
 
 /**
  * Componente Form riutilizzabile per standardizzare i form dell'applicazione
+ * Usa noValidate di default per abilitare la validazione elegante personalizzata
  */
 const Form: React.FC<FormProps> = ({
   onSubmit,
@@ -39,44 +43,33 @@ const Form: React.FC<FormProps> = ({
   cancelButtonClassName,
   submitButtonVariant = 'primary',
   cancelButtonVariant = 'outline',
-  hideButtons = false
+  hideButtons = false,
+  noValidate = true  // Default true per disabilitare tooltip nativi
 }) => {
   const { t } = useTranslation();
-  
-  const defaultSubmitLabel = isEditing 
-    ? t('common.save') 
+
+  const defaultSubmitLabel = isEditing
+    ? t('common.save')
     : t('common.create');
-  
+
   const defaultCancelLabel = t('common.cancel');
-  
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSubmit(e);
   };
-  
+
   return (
-    <form onSubmit={handleSubmit} className={cn("space-y-4", className)}>
+    <form onSubmit={handleSubmit} className={cn("space-y-4", className)} noValidate={noValidate}>
       {error && (
-        <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-4">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                <path
-                  fillRule="evenodd"
-                  d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            </div>
-            <div className="ml-3">
-              <p className="text-sm text-red-700">{error}</p>
-            </div>
-          </div>
+        <div className="flex items-start gap-2 px-4 py-3 rounded-lg border bg-red-50 border-red-200 mb-4 animate-slide-down">
+          <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0 text-red-500" />
+          <span className="text-sm font-medium text-red-700">{error}</span>
         </div>
       )}
-      
+
       {children}
-      
+
       {!hideButtons && (
         <div className={cn("flex justify-end space-x-3 pt-4", buttonContainerClassName)}>
           {onCancel && (
@@ -90,12 +83,12 @@ const Form: React.FC<FormProps> = ({
               {cancelLabel || defaultCancelLabel}
             </Button>
           )}
-          
+
           <Button
             type="submit"
             variant={submitButtonVariant}
             className={submitButtonClassName}
-            isLoading={isLoading}
+            loading={isLoading}
           >
             {submitLabel || defaultSubmitLabel}
           </Button>

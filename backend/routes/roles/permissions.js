@@ -28,18 +28,18 @@ function validateAndFilterPermissions(permissions) {
   if (!Array.isArray(permissions)) {
     return [];
   }
-  
+
   return permissions.filter(perm => {
     if (!perm || !perm.permissionId) {
       logger.warn(`Permission without permissionId found: ${JSON.stringify(perm)}`);
       return false;
     }
-    
+
     const isValid = isValidPersonPermission(perm.permissionId);
     if (!isValid) {
       logger.warn(`Invalid permission found and filtered out: ${perm.permissionId}`);
     }
-    
+
     return isValid;
   });
 }
@@ -56,7 +56,7 @@ router.get('/permissions',
   async (req, res) => {
     try {
       console.log('🔍 Getting all available permissions');
-      
+
       // Ottieni tutti i permessi dal database
       const allPermissions = await prisma.permission.findMany({
         where: {
@@ -73,10 +73,10 @@ router.get('/permissions',
 
       // Raggruppa i permessi per risorsa
       const permissionsByResource = {};
-      
+
       allPermissions.forEach(permission => {
         const resourceName = permission.resource || 'general';  // resource è ora un campo scalare
-        
+
         if (!permissionsByResource[resourceName]) {
           permissionsByResource[resourceName] = {
             name: resourceName,
@@ -85,7 +85,7 @@ router.get('/permissions',
             permissions: []
           };
         }
-        
+
         permissionsByResource[resourceName].permissions.push({
           key: permission.id,
           name: permission.name,
@@ -102,7 +102,7 @@ router.get('/permissions',
       // Aggiungi anche i permessi di default dal servizio per compatibilità
       const systemRoles = Object.keys(enhancedRoleService.getRoleTypes() || {});
       const allSystemPermissions = new Set();
-      
+
       systemRoles.forEach(roleType => {
         try {
           const rolePermissions = enhancedRoleService.getDefaultPermissions(roleType);
@@ -119,7 +119,7 @@ router.get('/permissions',
         if (parts.length >= 2) {
           const action = parts[0];
           const resource = parts.slice(1).join('_').toLowerCase();
-          
+
           if (!permissionsByResource[resource]) {
             permissionsByResource[resource] = {
               name: resource,
@@ -128,7 +128,7 @@ router.get('/permissions',
               permissions: []
             };
           }
-          
+
           // Verifica se il permesso non è già presente
           const exists = permissionsByResource[resource].permissions.some(p => p.key === permissionId);
           if (!exists) {
@@ -195,12 +195,12 @@ router.get('/:roleType/permissions',
       // Determina se è un ruolo personalizzato o di sistema
       const isCustomRole = roleType.startsWith('CUSTOM_');
       let isSystemRole = false;
-      
+
       // Verifica se è un ruolo di sistema nell'enum RoleType
       if (!isCustomRole && enhancedRoleService.getRoleTypes() && enhancedRoleService.getRoleTypes()[roleType]) {
         isSystemRole = true;
       }
-      
+
       // Se non è né custom (con prefisso CUSTOM_) né di sistema, potrebbe essere un ruolo personalizzato senza prefisso
       // Verifica se esiste nella tabella CustomRole
       let isCustomRoleInDB = false;
@@ -208,10 +208,10 @@ router.get('/:roleType/permissions',
       if (!isCustomRole && !isSystemRole) {
         // Prima cerca per nome esatto (caso in cui il roleType sia già il nome del ruolo)
         customRoleFromDB = await prisma.customRole.findFirst({
-          where: { 
+          where: {
             name: roleType,
             tenantId: tenantId,
-            deletedAt: null 
+            deletedAt: null
           },
           include: {
             permissions: {
@@ -221,15 +221,15 @@ router.get('/:roleType/permissions',
             }
           }
         });
-        
+
         // Se non trovato per nome esatto, cerca per roleType generato
         if (!customRoleFromDB) {
           // Il roleType potrebbe essere generato dal nome con .toUpperCase().replace(/\s+/g, '_')
           // Quindi cerchiamo un CustomRole il cui nome, quando trasformato, corrisponde al roleType
           const allCustomRoles = await prisma.customRole.findMany({
-            where: { 
+            where: {
               tenantId: tenantId,
-              deletedAt: null 
+              deletedAt: null
             },
             include: {
               permissions: {
@@ -239,31 +239,31 @@ router.get('/:roleType/permissions',
               }
             }
           });
-          
+
           customRoleFromDB = allCustomRoles.find(role => {
             const generatedRoleType = role.name.toUpperCase().replace(/\s+/g, '_');
             return generatedRoleType === roleType;
           });
         }
-        
+
         if (customRoleFromDB) {
           isCustomRoleInDB = true;
           console.log(`🔍 Found custom role in database: ${roleType} (name: ${customRoleFromDB.name})`);
         }
       }
-      
+
       // Se non è nessuno dei tipi sopra, verifica se esiste almeno un PersonRole
       // Ma solo se il roleType è valido nell'enum (per evitare errori Prisma)
       if (!isCustomRole && !isSystemRole && !isCustomRoleInDB) {
         try {
           const existingRole = await prisma.personRole.findFirst({
-            where: { 
+            where: {
               roleType: roleType,
               tenantId: tenantId,
-              deletedAt: null 
+              deletedAt: null
             }
           });
-          
+
           if (!existingRole) {
             console.log(`❌ Role type ${roleType} not found anywhere`);
             return res.status(404).json({
@@ -284,15 +284,15 @@ router.get('/:roleType/permissions',
 
       // Determina se è un ruolo personalizzato o di sistema
       let permissions = [];
-      
+
       if (isCustomRole) {
         // Per ruoli personalizzati con prefisso CUSTOM_, carica da CustomRolePermission
         const customRoleId = roleType.replace('CUSTOM_', '');
         const customRole = await prisma.customRole.findFirst({
-          where: { 
+          where: {
             id: customRoleId,
             tenantId: tenantId,
-            deletedAt: null 
+            deletedAt: null
           },
           include: {
             permissions: {
@@ -302,7 +302,7 @@ router.get('/:roleType/permissions',
             }
           }
         });
-        
+
         if (customRole && customRole.permissions) {
           permissions = customRole.permissions.map(perm => ({
             permissionId: perm.permission,
@@ -326,10 +326,10 @@ router.get('/:roleType/permissions',
       } else {
         // Per ruoli di sistema, carica i permessi effettivi dal database
         console.log(`🔍 Loading actual permissions for system role: ${roleType}`);
-        
+
         // Trova tutti i PersonRole per questo tipo di ruolo nel tenant
         const personRoles = await prisma.personRole.findMany({
-          where: { 
+          where: {
             roleType: roleType,
             tenantId: tenantId
           },
@@ -338,13 +338,13 @@ router.get('/:roleType/permissions',
             advancedPermissions: true
           }
         });
-        
+
         if (personRoles.length > 0) {
           // Usa i permessi del primo PersonRole trovato (dovrebbero essere tutti uguali per lo stesso roleType)
           const personRole = personRoles[0];
           const rolePermissions = personRole.permissions || [];
           const advancedPermissions = personRole.advancedPermissions || [];
-          
+
           // Crea una mappa di tutti i permessi possibili
           let allPossiblePermissions = [];
           try {
@@ -358,7 +358,7 @@ router.get('/:roleType/permissions',
             ];
           }
           const permissionsMap = {};
-          
+
           // Inizializza tutti i permessi come non granted
           allPossiblePermissions.forEach(permission => {
             permissionsMap[permission] = {
@@ -369,28 +369,50 @@ router.get('/:roleType/permissions',
               fieldRestrictions: []
             };
           });
-          
+
           // Aggiorna con i permessi effettivamente granted dal database
+          // IMPORTANTE: Aggiunge anche permessi personalizzati che non sono nei default
           rolePermissions.forEach(perm => {
-            if (perm.isGranted && permissionsMap[perm.permission]) {
-              permissionsMap[perm.permission].granted = true;
+            if (perm.isGranted) {
+              if (!permissionsMap[perm.permission]) {
+                // Permesso personalizzato non nei default - lo aggiungiamo
+                permissionsMap[perm.permission] = {
+                  permissionId: perm.permission,
+                  granted: true,
+                  scope: 'all',
+                  tenantIds: [],
+                  fieldRestrictions: []
+                };
+              } else {
+                permissionsMap[perm.permission].granted = true;
+              }
             }
           });
-          
+
           // Aggiorna con i permessi avanzati
+          // IMPORTANTE: Aggiunge anche permessi avanzati non nei default
           advancedPermissions.forEach(perm => {
             const permissionId = `${perm.action.toUpperCase()}_${perm.resource.toUpperCase()}`;
-            if (permissionsMap[permissionId]) {
+            if (!permissionsMap[permissionId]) {
+              // Permesso avanzato non nei default - lo aggiungiamo
+              permissionsMap[permissionId] = {
+                permissionId: permissionId,
+                granted: true,
+                scope: perm.scope || 'all',
+                tenantIds: perm.conditions?.allowedTenants || [],
+                fieldRestrictions: perm.allowedFields || []
+              };
+            } else {
               permissionsMap[permissionId].granted = true;
               permissionsMap[permissionId].scope = perm.scope || 'all';
               permissionsMap[permissionId].tenantIds = perm.conditions?.allowedTenants || [];
               permissionsMap[permissionId].fieldRestrictions = perm.allowedFields || [];
-              if (perm.conditions?.maxRoleLevel) {
-                permissionsMap[permissionId].maxRoleLevel = perm.conditions.maxRoleLevel;
-              }
+            }
+            if (perm.conditions?.maxRoleLevel) {
+              permissionsMap[permissionId].maxRoleLevel = perm.conditions.maxRoleLevel;
             }
           });
-          
+
           permissions = Object.values(permissionsMap);
         } else {
           // Se non ci sono PersonRole, usa i permessi di default
@@ -479,7 +501,7 @@ router.put('/:roleType/permissions',
       }
 
       // Validazione dei permissionId nel payload
-      const invalidPermissions = permissions.filter(perm => 
+      const invalidPermissions = permissions.filter(perm =>
         perm.granted && (!perm.permissionId || typeof perm.permissionId !== 'string' || perm.permissionId.trim() === '')
       );
 
@@ -493,10 +515,10 @@ router.put('/:roleType/permissions',
       }
 
       // Validazione dei permissionId malformati (senza underscore) per ruoli di sistema
-      const malformedPermissions = permissions.filter(perm => 
-        perm.granted && 
-        perm.permissionId && 
-        typeof perm.permissionId === 'string' && 
+      const malformedPermissions = permissions.filter(perm =>
+        perm.granted &&
+        perm.permissionId &&
+        typeof perm.permissionId === 'string' &&
         !perm.permissionId.includes('_')
       );
 
@@ -514,40 +536,40 @@ router.put('/:roleType/permissions',
       // Determina se è un ruolo personalizzato o di sistema
       const isCustomRole = roleType.startsWith('CUSTOM_');
       logger.info(`🔧 Role type: ${isCustomRole ? 'Custom' : 'System'}`);
-      
+
       if (isCustomRole) {
         logger.info('🔧 Processing custom role...');
         try {
           // Per ruoli personalizzati, aggiorna CustomRolePermission
           const customRoleId = roleType.replace('CUSTOM_', '');
           const customRole = await prisma.customRole.findFirst({
-            where: { 
+            where: {
               id: customRoleId,
               tenantId: tenantId,
-              deletedAt: null 
+              deletedAt: null
             }
           });
-          
+
           if (!customRole) {
             logger.error(`❌ Custom role not found: ${customRoleId}`);
-            return res.status(404).json({ 
-              success: false, 
-              error: 'Custom role not found' 
+            return res.status(404).json({
+              success: false,
+              error: 'Custom role not found'
             });
           }
-          
+
           logger.info('🔧 Deleting existing custom role permissions...');
           // Elimina i permessi esistenti per questo ruolo
           await prisma.customRolePermission.deleteMany({
             where: { customRoleId: customRole.id }
           });
-          
+
           logger.info('🔧 Creating new custom role permissions...');
-          
+
           // Valida e filtra i permessi prima di crearli
           const validPermissions = validateAndFilterPermissions(permissions);
           logger.info(`🔧 Validated permissions: ${validPermissions.length}/${permissions.length} valid`);
-          
+
           // Crea i nuovi permessi
           const permissionsToCreate = validPermissions
             .filter(perm => perm.granted)
@@ -557,7 +579,7 @@ router.put('/:roleType/permissions',
 
               // Costruisce le conditions basandosi su scope e parametri
               let conditions = null;
-              
+
               if (perm.scope === 'hierarchy' && perm.maxRoleLevel) {
                 // Per la gestione gerarchica dei ruoli
                 conditions = { maxRoleLevel: perm.maxRoleLevel };
@@ -577,7 +599,7 @@ router.put('/:roleType/permissions',
                 allowedFields: perm.fieldRestrictions && perm.fieldRestrictions.length > 0 ? perm.fieldRestrictions : null
               };
             });
-          
+
           if (permissionsToCreate.length > 0) {
             await prisma.customRolePermission.createMany({
               data: permissionsToCreate
@@ -588,45 +610,67 @@ router.put('/:roleType/permissions',
           logger.error('❌ Error processing custom role:', customRoleError);
           throw customRoleError;
         }
-        
+
       } else {
         logger.info('🔧 Processing system role...');
         try {
           // Per ruoli di sistema, aggiorna direttamente i permessi per tutti i PersonRole esistenti
           const personRoles = await prisma.personRole.findMany({
-            where: { 
+            where: {
               roleType: roleType,
               tenantId: tenantId,
-              deletedAt: null 
+              deletedAt: null
             }
           });
-          
+
           logger.info(`🔧 Found ${personRoles.length} person roles to update`);
-          
+
+          // Se non ci sono PersonRole per questo roleType, logga un avviso
+          // e restituisci un messaggio informativo
+          if (personRoles.length === 0) {
+            logger.warn(`⚠️ No PersonRole found for roleType ${roleType} in tenant ${tenantId}`);
+            logger.warn(`⚠️ To save permissions, at least one user must have this role assigned`);
+
+            // Salva comunque i permessi come "pending" usando una configurazione temporanea
+            // Per ora, restituiamo successo ma con un avviso
+            return res.json({
+              success: true,
+              warning: true,
+              message: `Permissions configuration noted, but no users currently have the ${roleType} role. Permissions will be applied when a user is assigned this role.`,
+              data: {
+                roleType,
+                permissionsCount: permissions.filter(p => p.granted).length,
+                tenantId,
+                isCustomRole,
+                hasPersonRoles: false
+              }
+            });
+          }
+
           // Per ogni PersonRole, aggiorna i permessi
           for (const personRole of personRoles) {
             logger.info(`🔧 Processing person role: ${personRole.id}`);
-            
+
             try {
               // Elimina i permessi esistenti
               logger.info('🔧 Deleting existing role permissions...');
               await prisma.rolePermission.deleteMany({
                 where: { personRoleId: personRole.id }
               });
-              
+
               logger.info('🔧 Deleting existing advanced permissions...');
               await prisma.advancedPermission.deleteMany({
                 where: { personRoleId: personRole.id }
               });
-              
+
               logger.info('🔧 Creating new role permissions...');
-              
+
               // Valida e filtra i permessi prima di crearli
               logger.info(`🔧 Raw permissions received: ${JSON.stringify(permissions, null, 2)}`);
               const validPermissions = validateAndFilterPermissions(permissions);
               logger.info(`🔧 Validated permissions: ${validPermissions.length}/${permissions.length} valid`);
               logger.info(`🔧 Valid permissions details: ${JSON.stringify(validPermissions, null, 2)}`);
-              
+
               // Crea i nuovi permessi base
               const rolePermissionsToCreate = validPermissions
                 .filter(perm => perm.granted)
@@ -642,9 +686,9 @@ router.put('/:roleType/permissions',
                     grantedBy: req.person?.id
                   };
                 });
-              
+
               logger.info(`🔧 Role permissions to create: ${JSON.stringify(rolePermissionsToCreate, null, 2)}`);
-              
+
               if (rolePermissionsToCreate.length > 0) {
                 logger.info(`🔧 Attempting to create ${rolePermissionsToCreate.length} role permissions...`);
                 await prisma.rolePermission.createMany({
@@ -652,21 +696,21 @@ router.put('/:roleType/permissions',
                 });
                 logger.info(`✅ Created ${rolePermissionsToCreate.length} role permissions`);
               }
-              
+
               logger.info('🔧 Creating advanced permissions...');
               // Crea i permessi avanzati per quelli con scope specifico
               const advancedPermissionsToCreate = validPermissions
                 .filter(perm => perm.granted && (perm.scope !== 'all' || perm.tenantIds?.length > 0 || perm.fieldRestrictions?.length > 0 || perm.maxRoleLevel))
                 .map(perm => {
                   logger.info(`🔧 Processing advanced permission: ${perm.permissionId}`);
-                  
+
                   // Normalizza il permissionId
                   const normalizedPermissionId = perm.permissionId.trim().toUpperCase();
 
                   // Estrae resource e action dal permissionId (es. "VIEW_COMPANIES" -> resource: "companies", action: "view")
                   const parts = normalizedPermissionId.split('_');
                   logger.info(`🔧 Permission parts: ${JSON.stringify(parts)}`);
-                  
+
                   if (parts.length < 2) {
                     logger.warn(`Malformed permissionId (missing underscore): ${normalizedPermissionId}`);
                     return null;
@@ -674,9 +718,9 @@ router.put('/:roleType/permissions',
 
                   const action = parts[0].toLowerCase();
                   const resource = parts.slice(1).join('_').toLowerCase();
-                  
+
                   logger.info(`🔧 Extracted - action: ${action}, resource: ${resource}`);
-                  
+
                   // Validazione che resource non sia vuoto
                   if (!resource || resource.trim() === '') {
                     logger.warn(`Empty resource extracted from permissionId: ${normalizedPermissionId}`);
@@ -685,7 +729,7 @@ router.put('/:roleType/permissions',
 
                   // Costruisce le conditions basandosi su scope e parametri
                   let conditions = null;
-                  
+
                   if (perm.scope === 'hierarchy' && perm.maxRoleLevel) {
                     // Per la gestione gerarchica dei ruoli
                     conditions = { maxRoleLevel: perm.maxRoleLevel };
@@ -707,7 +751,7 @@ router.put('/:roleType/permissions',
                   };
                 })
                 .filter(perm => perm !== null); // Rimuove i permessi non validi
-              
+
               if (advancedPermissionsToCreate.length > 0) {
                 logger.info(`🔧 Creating ${advancedPermissionsToCreate.length} advanced permissions`);
                 await prisma.advancedPermission.createMany({

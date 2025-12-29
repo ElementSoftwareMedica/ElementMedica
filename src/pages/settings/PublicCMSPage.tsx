@@ -8,7 +8,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../design-system/mo
 import { LoadingFallback } from '../../components/ui/LoadingFallback';
 import { Alert, AlertDescription } from '../../components/ui/alert';
 import { ImageUpload } from '../../components/ui/image-upload';
-import { 
+import {
   Briefcase,
   Building,
   Globe,
@@ -121,8 +121,8 @@ interface FormSectionProps {
 }
 
 const FormSection: React.FC<FormSectionProps> = ({ title, subtitle, icon, children }) => (
-  <Card 
-    title={title} 
+  <Card
+    title={title}
     subtitle={subtitle}
     className="space-y-4"
   >
@@ -178,20 +178,20 @@ const useFormValidation = (data: CMSData) => {
 
   const validateField = (path: string, value: string) => {
     const newErrors = { ...errors };
-    
+
     if (!value.trim()) {
       newErrors[path] = 'Questo campo è obbligatorio';
     } else {
       delete newErrors[path];
     }
-    
+
     setErrors(newErrors);
     return !newErrors[path];
   };
 
   const validateAll = () => {
     const newErrors: Record<string, string> = {};
-    
+
     // Validazione campi obbligatori
     const requiredFields = [
       'homepage.heroTitle',
@@ -236,12 +236,12 @@ const PublicCMSPage: React.FC = () => {
     setFormData(prev => {
       const newData = { ...prev };
       let current = newData as any;
-      
+
       for (let i = 0; i < keys.length - 1; i++) {
         current[keys[i]] = { ...current[keys[i]] };
         current = current[keys[i]];
       }
-      
+
       current[keys[keys.length - 1]] = value;
       return newData;
     });
@@ -275,7 +275,7 @@ const PublicCMSPage: React.FC = () => {
   // Salvataggio
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!validateAll()) {
       console.error('Errori di validazione nel form');
       return;
@@ -354,7 +354,7 @@ const PublicCMSPage: React.FC = () => {
       )}
 
       {/* Contenuto principale con componenti riutilizzabili */}
-      <form onSubmit={onSubmit}>
+      <form onSubmit={onSubmit} noValidate>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList>
             {tabsConfig.map(tab => (

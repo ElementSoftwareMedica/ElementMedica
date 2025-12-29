@@ -85,36 +85,36 @@ const EntityFormField: React.FC<EntityFormFieldProps> = ({
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const selectRef = useRef<HTMLSelectElement>(null);
-  
+
   // Ensure value is properly formatted for display
   const displayValue = value !== undefined && value !== null ? String(value) : '';
-  
+
   // Get display label for select options
   const getOptionLabel = () => {
     if (!value || !options.length) return '';
     const option = options.find(opt => opt.value === String(value));
     return option ? option.label : '';
   };
-  
+
   // Reset search term when value changes or component mounts
   useEffect(() => {
     if (fieldType === 'select' && searchable && value) {
       setSearchTerm('');
     }
   }, [value, fieldType, searchable]);
-  
+
   // Handle direct input change
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     console.log(`Field ${name} changed:`, e.target.value);
     onChange(e);
   };
-  
+
   // Handle search input change
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(e.target.value);
     setIsDropdownOpen(true);
   };
-  
+
   // Handle dropdown option click
   const handleOptionClick = (optionValue: string) => {
     // Create synthetic event for onChange handler
@@ -124,39 +124,42 @@ const EntityFormField: React.FC<EntityFormFieldProps> = ({
         value: optionValue
       }
     } as React.ChangeEvent<HTMLSelectElement>;
-    
+
     onChange(syntheticEvent);
     setSearchTerm('');
     setIsDropdownOpen(false);
   };
-  
+
   // Dimensioni del campo in base alla proprietà size
   const sizeClasses = {
     sm: 'h-8 text-xs',
     md: 'h-10 text-sm',
     lg: 'h-12 text-base',
   };
-  
+
   // Stile dell'input in base alla variante
   const variantClasses = {
-    default: 'rounded-md',
+    default: 'rounded-xl',
     pill: 'rounded-full',
   };
-  
-  // Classe base per gli input
+
+  // Classe base per gli input - stile elegante con sfondo leggero
   const baseInputClass = `
     block w-full border 
-    ${error ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'} 
-    ${disabled ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : 'bg-white'} 
-    ${readOnly ? 'bg-gray-50' : ''}
-    shadow-sm focus:outline-none focus:ring-2 
-    transition-colors duration-200
+    ${error
+      ? 'border-red-300 bg-red-50/30 focus:border-red-500 focus:ring-red-500'
+      : 'border-gray-200 bg-gray-50/50 hover:bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-blue-500'
+    } 
+    ${disabled ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''} 
+    ${readOnly ? 'bg-gray-100/70' : ''}
+    shadow-sm focus:outline-none focus:ring-2 focus:ring-opacity-30
+    transition-all duration-200 ease-in-out
     ${variantClasses[variant]}
     ${fieldType !== 'textarea' ? sizeClasses[size] : ''}
     ${leftIcon ? 'pl-10' : ''}
     ${rightIcon ? 'pr-10' : ''}
   `;
-  
+
   // Classi per checkbox/radio
   const checkboxClass = `
     h-5 w-5 
@@ -165,7 +168,7 @@ const EntityFormField: React.FC<EntityFormFieldProps> = ({
     ${disabled ? 'bg-gray-100 text-gray-400' : 'text-blue-600'}
     transition-colors duration-200
   `;
-  
+
   // Renderizza il campo appropriato in base al tipo
   const renderField = () => {
     switch (fieldType) {
@@ -185,14 +188,14 @@ const EntityFormField: React.FC<EntityFormFieldProps> = ({
             {...rest}
           />
         );
-        
+
       case 'select':
         if (searchable) {
           // Filter options based on search term
-          const filteredOptions = options.filter(option => 
+          const filteredOptions = options.filter(option =>
             option.label.toLowerCase().includes(searchTerm.toLowerCase())
           );
-          
+
           return (
             <div className="relative">
               {leftIcon && (
@@ -213,7 +216,7 @@ const EntityFormField: React.FC<EntityFormFieldProps> = ({
                 readOnly={disabled}
                 disabled={disabled}
               />
-              <div 
+              <div
                 className="absolute inset-y-0 right-0 flex items-center pr-2 cursor-pointer"
                 onClick={() => {
                   setIsDropdownOpen(!isDropdownOpen);
@@ -226,7 +229,7 @@ const EntityFormField: React.FC<EntityFormFieldProps> = ({
                   <path d="M7 7l3-3 3 3m0 6l-3 3-3-3" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </div>
-              
+
               {isDropdownOpen && (
                 <div className="absolute z-10 mt-1 w-full bg-white shadow-lg rounded-md py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto max-h-60">
                   <div className="max-h-60 overflow-y-auto">
@@ -236,9 +239,8 @@ const EntityFormField: React.FC<EntityFormFieldProps> = ({
                       filteredOptions.map((option) => (
                         <div
                           key={option.value}
-                          className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
-                            value === option.value ? 'bg-blue-50' : ''
-                          }`}
+                          className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${value === option.value ? 'bg-blue-50' : ''
+                            }`}
                           onClick={() => handleOptionClick(option.value)}
                         >
                           {option.label}
@@ -248,7 +250,7 @@ const EntityFormField: React.FC<EntityFormFieldProps> = ({
                   </div>
                 </div>
               )}
-              
+
               {/* Hidden select for form submission - actually hidden now */}
               <select
                 ref={selectRef}
@@ -269,7 +271,7 @@ const EntityFormField: React.FC<EntityFormFieldProps> = ({
             </div>
           );
         }
-        
+
         return (
           <div className="relative">
             {leftIcon && (
@@ -301,7 +303,7 @@ const EntityFormField: React.FC<EntityFormFieldProps> = ({
             </div>
           </div>
         );
-        
+
       case 'checkbox':
         return (
           <div className="flex items-center">
@@ -318,7 +320,7 @@ const EntityFormField: React.FC<EntityFormFieldProps> = ({
             />
           </div>
         );
-        
+
       case 'radio':
         return (
           <div className="flex items-center">
@@ -335,7 +337,7 @@ const EntityFormField: React.FC<EntityFormFieldProps> = ({
             />
           </div>
         );
-        
+
       default:
         return (
           <div className="relative">
@@ -366,7 +368,7 @@ const EntityFormField: React.FC<EntityFormFieldProps> = ({
         );
     }
   };
-  
+
   // Render the complete field with label and error
   return (
     <div className={`mb-4 ${className}`}>
@@ -375,13 +377,13 @@ const EntityFormField: React.FC<EntityFormFieldProps> = ({
           {label} {required && <span className="text-red-500">*</span>}
         </label>
       </div>
-      
+
       {renderField()}
-      
+
       {helpText && !error && (
         <p className="mt-1 text-xs text-gray-500">{helpText}</p>
       )}
-      
+
       {error && (
         <p className="mt-1 text-xs text-red-500">{error}</p>
       )}

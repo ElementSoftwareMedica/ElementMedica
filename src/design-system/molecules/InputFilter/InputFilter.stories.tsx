@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/rules-of-hooks */
 import type { Meta, StoryObj } from '@storybook/react';
 import { InputFilter } from './InputFilter';
 import { Search, Filter, Mail, User } from 'lucide-react';
@@ -21,7 +22,7 @@ type Story = StoryObj<typeof meta>;
 // Template per gestire lo stato
 const Template = (args: any) => {
   const [value, setValue] = useState(args.value || '');
-  
+
   return (
     <InputFilter
       {...args}

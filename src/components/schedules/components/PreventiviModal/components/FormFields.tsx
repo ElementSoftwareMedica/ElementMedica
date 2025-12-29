@@ -45,7 +45,7 @@ export function FormFields({
   selectedConfig
 }: FormFieldsProps) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Prezzo Unitario */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">

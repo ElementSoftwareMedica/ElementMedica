@@ -40,7 +40,7 @@ router.get('/health', (req, res) => {
         dataDeletion: 'active',
         auditCompliance: 'active'
     };
-    
+
     res.json({
         status: 'healthy',
         timestamp: new Date().toISOString(),
@@ -99,7 +99,7 @@ router.get('/modules', authenticateAdvanced, (req, res) => {
             status: 'active'
         }
     ];
-    
+
     res.json({
         totalModules: modules.length,
         modules,
@@ -112,6 +112,8 @@ router.use('/consents', consentManagementRouter);
 router.use('/data-export', dataExportRouter);
 router.use('/data-deletion', dataDeletionRouter);
 router.use('/audit', auditComplianceRouter);
+// Alias for frontend compatibility (audit-logs → audit)
+router.use('/audit-logs', auditComplianceRouter);
 
 // Gestione errori globale per GDPR
 router.use((error, req, res, next) => {
@@ -123,7 +125,7 @@ router.use((error, req, res, next) => {
         method: req.method,
         personId: req.person?.id
     });
-    
+
     res.status(500).json({
         error: 'Internal GDPR system error',
         code: 'GDPR_SYSTEM_ERROR',

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { GDPREntityTemplate } from '../../templates/gdpr-entity-page/GDPREntityTemplate';
 import { DataTableColumn } from '../../components/shared/tables/DataTable';
 import { Badge } from '../../design-system';
-import { 
+import {
   Building2,
   Calendar,
   Mail,
@@ -12,20 +12,23 @@ import {
   Shield,
   User
 } from 'lucide-react';
-import { 
-  Person, 
-  FilterConfig, 
-  getRoleDisplayName, 
+import {
+  Person,
+  FilterConfig,
+  getRoleDisplayName,
   getActiveRoles,
-  getHighestRole 
+  getHighestRole
 } from '../../services/roleHierarchyService';
 import { usePersonFilters, useAllPersons, useAllPersonsForImport } from '../../hooks/usePersonFilters';
 import { useCompanies } from '../../hooks/useCompanies';
 import { PersonGDPRConfigFactory } from '../../config/personGDPRConfig';
 import { PersonPermissionChecker } from '../../config/personPermissions';
 import { PersonImportRefactored as PersonImport } from '../../components/persons/person-import';
+import EmployeeImportModal from '../../components/import/employee/EmployeeImportModal';
+import TrainerImportModal from '../../components/import/trainer/TrainerImportModal';
 import { useToast } from '../../hooks/useToast';
 import { apiPost } from '../../services/api';
+import { useTenant } from '../../context/TenantContext';
 
 export interface PersonsPageProps {
   filter?: FilterConfig;
@@ -46,10 +49,12 @@ export const PersonsPage: React.FC<PersonsPageProps> = ({
 }) => {
   const navigate = useNavigate();
   const { showToast } = useToast();
-  
+  const { currentTenant } = useTenant();
+
   // Stati per il modal di importazione
   const [showImportModal, setShowImportModal] = useState(false);
-  
+  const [refreshKey, setRefreshKey] = useState(0); // Key per forzare refresh del template
+
   // Hook per recuperare dati esistenti per l'importazione (inclusi soft-deleted)
   const { filteredPersons: existingPersonsForImport, refetch: refetchPersonsForImport } = useAllPersonsForImport();
   const { filteredPersons: existingPersons, refetch: refetchPersons } = useAllPersons();
@@ -69,6 +74,15 @@ export const PersonsPage: React.FC<PersonsPageProps> = ({
     }
   })();
 
+  // Singolare corretto per il dropdown "Aggiungi X"
+  const pageTitleSingular = (() => {
+    switch (filterType) {
+      case 'employees': return 'Dipendente';
+      case 'trainers': return 'Formatore';
+      default: return 'Persona';
+    }
+  })();
+
   const pageSubtitle = subtitle || (() => {
     switch (filterType) {
       case 'employees': return 'Gestione dipendenti aziendali';
@@ -78,149 +92,167 @@ export const PersonsPage: React.FC<PersonsPageProps> = ({
   })();
 
   // Configurazione colonne per la tabella
-  const getPersonsColumns = (): DataTableColumn<Person>[] => [
-    {
-      key: 'fullName',
-      label: 'Nome Completo',
-      sortable: true,
-      renderCell: (person) => (
-        <div className="flex items-center space-x-3">
-          <div className="flex-shrink-0">
-            <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center">
-              <User className="h-4 w-4 text-gray-500" />
-            </div>
-          </div>
-          <div>
-            <div className="text-sm font-medium text-gray-900">
-              {`${person.firstName} ${person.lastName}`}
-            </div>
-            <div className="text-sm text-gray-500">{person.email}</div>
-          </div>
-        </div>
-      )
-    },
-    {
-      key: 'email',
-      label: 'Email',
-      sortable: true,
-      renderCell: (person) => (
-        <a 
-          href={`mailto:${person.email}`} 
-          className="text-blue-600 hover:text-blue-800 flex items-center space-x-1"
-        >
-          <Mail className="h-4 w-4" />
-          <span>{person.email}</span>
-        </a>
-      )
-    },
-    {
-      key: 'phone',
-      label: 'Telefono',
-      sortable: true,
-      renderCell: (person) => person.phone ? (
-        <div className="flex items-center space-x-1">
-          <Phone className="h-4 w-4 text-gray-400" />
-          <span>{person.phone}</span>
-        </div>
-      ) : (
-        <span className="text-gray-400">N/A</span>
-      )
-    },
-    {
-      key: 'profile',
-      label: 'Profilo Professionale',
-      sortable: true,
-      renderCell: (person: Person) => {
-        const highestRole = getHighestRole(person);
-        return (
-          <span className="text-gray-900">
-            {highestRole ? getRoleDisplayName(highestRole.roleType) : 'N/A'}
-          </span>
-        );
-      }
-    },
-    {
-      key: 'roles',
-      label: 'Ruoli',
-      sortable: false,
-      renderCell: (person) => {
-        const activeRoles = getActiveRoles(person);
-        const highestRole = getHighestRole(person);
-        
-        return (
-          <div className="flex flex-wrap gap-1">
-            {activeRoles.length > 0 ? (
-              activeRoles.map(role => (
-                <Badge 
-                  key={role.id} 
-                  variant={role.id === highestRole?.id ? "default" : "outline"}
-                  className="text-xs"
-                >
-                  {getRoleDisplayName(role.roleType)}
-                </Badge>
-              ))
-            ) : (
-              <span className="text-gray-400 text-sm">Nessun ruolo</span>
-            )}
-          </div>
-        );
-      }
-    },
-    {
-      key: 'company',
-      label: 'Azienda',
-      sortable: true,
-      renderCell: (person) => person.company ? (
-        <div className="flex items-center space-x-1">
-          <Building2 className="h-4 w-4 text-gray-400" />
-          <span>{person.company.ragioneSociale}</span>
-        </div>
-      ) : (
-        <span className="text-gray-400">N/A</span>
-      )
-    },
-    {
-      key: 'status',
-      label: 'Stato',
-      sortable: true,
-      renderCell: (person) => {
-        const getStatusVariant = (status: string) => {
-          switch (status) {
-            case 'Active': return 'default';
-            case 'Inactive': return 'secondary';
-            case 'Pending': return 'outline';
-            default: return 'secondary';
-          }
-        };
+  const getPersonsColumns = (): DataTableColumn<Person>[] => {
+    // Colonne comuni
+    const commonColumns: DataTableColumn<Person>[] = [
+      {
+        key: 'lastName',
+        label: 'Nome Completo',
+        sortable: true,
+        renderCell: (person) => {
+          // Subtitle: per trainers mostra data nascita, per employees mostra azienda
+          const subtitle = filterType === 'trainers' && person.birthDate
+            ? new Date(person.birthDate).toLocaleDateString('it-IT')
+            : (person.personRoles?.find(r => r.roleType === 'EMPLOYEE' && !r.deletedAt)?.company?.ragioneSociale ||
+              person.company?.ragioneSociale);
 
-        const getStatusLabel = (status: string) => {
-          switch (status) {
-            case 'Active': return 'Attivo';
-            case 'Inactive': return 'Inattivo';
-            case 'Pending': return 'In attesa';
-            default: return status;
-          }
-        };
-
-        return (
-          <Badge variant={getStatusVariant(person.status) as any}>
-            {getStatusLabel(person.status)}
-          </Badge>
-        );
+          return (
+            <div className="flex items-center space-x-3">
+              <div className="flex-shrink-0">
+                <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center">
+                  <User className="h-4 w-4 text-gray-500" />
+                </div>
+              </div>
+              <div>
+                <div className="text-sm font-medium text-gray-900">
+                  {`${person.lastName} ${person.firstName}`}
+                </div>
+                <div className="text-sm text-gray-500">
+                  {subtitle ? (
+                    <div className="flex items-center gap-1">
+                      {filterType === 'trainers' ? (
+                        <Calendar className="h-3 w-3" />
+                      ) : (
+                        <Building2 className="h-3 w-3" />
+                      )}
+                      {subtitle}
+                    </div>
+                  ) : (
+                    <span className="text-gray-400">
+                      {filterType === 'trainers' ? 'Data nascita non disponibile' : 'Nessuna azienda'}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        }
+      },
+      {
+        key: 'phone',
+        label: 'Telefono',
+        sortable: true,
+        renderCell: (person) => person.phone ? (
+          <div className="flex items-center space-x-1">
+            <Phone className="h-4 w-4 text-gray-400" />
+            <span>{person.phone}</span>
+          </div>
+        ) : (
+          <span className="text-gray-400">N/A</span>
+        )
       }
-    },
-    {
-      key: 'createdAt',
-      label: 'Creato il',
-      sortable: true,
-      renderCell: (person) => (
-        <div className="flex items-center space-x-1">
-          <Calendar className="h-4 w-4 text-gray-400" />
-          <span>{new Date(person.createdAt).toLocaleDateString('it-IT')}</span>
-        </div>
-      )
+    ];
+
+    // Colonne specifiche per employees
+    const employeeColumns: DataTableColumn<Person>[] = [
+      {
+        key: 'profile',
+        label: 'Profilo Professionale',
+        sortable: true,
+        renderCell: (person: Person) => {
+          const profile = person.title;
+          return (
+            <span className="text-gray-900">
+              {profile || 'N/A'}
+            </span>
+          );
+        }
+      },
+      {
+        key: 'site',
+        label: 'Sede',
+        sortable: true,
+        renderCell: (person: Person) => {
+          const site = person.site;
+          return site ? (
+            <span className="text-gray-900">{site.siteName}</span>
+          ) : (
+            <span className="text-gray-400">N/A</span>
+          );
+        }
+      },
+      {
+        key: 'hiringDate',
+        label: 'Data Assunzione',
+        sortable: true,
+        renderCell: (person: Person) => {
+          const hiringDate = person.hiredDate;
+          return hiringDate ? (
+            <div className="flex items-center space-x-1">
+              <Calendar className="h-4 w-4 text-gray-400" />
+              <span>{new Date(hiringDate).toLocaleDateString('it-IT')}</span>
+            </div>
+          ) : (
+            <span className="text-gray-400">N/A</span>
+          );
+        }
+      }
+    ];
+
+    // Colonne specifiche per trainers
+    const trainerColumns: DataTableColumn<Person>[] = [
+      {
+        key: 'certifications',
+        label: 'Certificazioni',
+        sortable: false,
+        renderCell: (person: Person) => {
+          const certs = person.certifications;
+          return certs && certs.length > 0 ? (
+            <span className="text-gray-900 text-sm">
+              {certs.join(', ')}
+            </span>
+          ) : (
+            <span className="text-gray-400">Nessuna</span>
+          );
+        }
+      },
+      {
+        key: 'city',
+        label: 'Città',
+        sortable: true,
+        renderCell: (person: Person) => {
+          const city = person.residenceCity;
+          return city ? (
+            <span className="text-gray-900">{city}</span>
+          ) : (
+            <span className="text-gray-400">N/A</span>
+          );
+        }
+      },
+      {
+        key: 'hourlyRate',
+        label: 'Prezzo/h',
+        sortable: true,
+        renderCell: (person: Person) => {
+          const rate = person.hourlyRate;
+          return rate ? (
+            <span className="text-gray-900 font-medium">€{Number(rate).toFixed(2)}</span>
+          ) : (
+            <span className="text-gray-400">N/A</span>
+          );
+        }
+      }
+    ];
+
+    // Combina colonne in base al tipo
+    if (filterType === 'trainers') {
+      return [...commonColumns, ...trainerColumns];
+    } else if (filterType === 'employees') {
+      return [...commonColumns, ...employeeColumns];
+    } else {
+      return commonColumns;
     }
-  ];
+  };
 
   // Configurazione filtri
   const filterOptions = useMemo(() => {
@@ -229,9 +261,10 @@ export const PersonsPage: React.FC<PersonsPageProps> = ({
         key: 'status',
         label: 'Stato',
         options: [
-          { label: 'Attivo', value: 'Active' },
-          { label: 'Inattivo', value: 'Inactive' },
-          { label: 'In attesa', value: 'Pending' }
+          { label: 'Attivo', value: 'ACTIVE' },
+          { label: 'Inattivo', value: 'INACTIVE' },
+          { label: 'In attesa', value: 'PENDING' },
+          { label: 'Sospeso', value: 'SUSPENDED' }
         ]
       }
     ];
@@ -445,6 +478,20 @@ export const PersonsPage: React.FC<PersonsPageProps> = ({
     }
   };
 
+  const handleViewPerson = (person: Person) => {
+    switch (filterType) {
+      case 'employees':
+        navigate(`/employees/${person.id}`);
+        break;
+      case 'trainers':
+        navigate(`/trainers/${person.id}`);
+        break;
+      default:
+        navigate(`/persons/${person.id}`);
+        break;
+    }
+  };
+
   const handleEditPerson = (person: Person) => {
     switch (filterType) {
       case 'employees':
@@ -465,7 +512,7 @@ export const PersonsPage: React.FC<PersonsPageProps> = ({
     if (data && data.length > 0) {
       return handleImportPersons(data);
     }
-    
+
     // Apri SUBITO il modal per evitare la percezione di "doppio clic" e aggiorna i dati in background
     setShowImportModal(true);
 
@@ -526,66 +573,91 @@ export const PersonsPage: React.FC<PersonsPageProps> = ({
 
   // Query params statici per filtrare lato backend in base al tipo virtuale
   const staticQueryParams = useMemo(() => {
-    if (filterType === 'employees') return { roleType: 'EMPLOYEE' } as const;
+    if (filterType === 'employees') return {
+      roleType: 'EMPLOYEE',
+      sortBy: 'lastName',
+      sortOrder: 'asc'
+    } as const;
     if (filterType === 'trainers') return { roleType: 'TRAINER' } as const;
     return undefined;
   }, [filterType]);
 
   return (
-    <div className="space-y-6">
-      {/* Header personalizzato */}
-      <div className="border-b border-gray-200 pb-4">
-        <h1 className="text-2xl font-bold text-gray-900">{pageTitle}</h1>
-        <p className="text-gray-600 mt-1">{pageSubtitle}</p>
-        
-        {/* Indicatore livello GDPR */}
-        <div className="mt-2">
-          <Badge 
-            variant={gdprConfig.gdprLevel === 'comprehensive' ? 'default' : 'outline'}
-            className="text-xs"
-          >
-            GDPR: {gdprConfig.gdprLevel === 'comprehensive' ? 'Completo' : 'Standard'}
-          </Badge>
-        </div>
-      </div>
-
+    <>
       {/* Template GDPR */}
       <GDPREntityTemplate<Person>
+        key={refreshKey} // Forza re-mount quando refreshKey cambia
         entityName={gdprConfig.entityType}
         entityNamePlural="persons"
-        entityDisplayName={gdprConfig.displayName}
-        entityDisplayNamePlural={gdprConfig.displayName}
-        
+        entityDisplayName={pageTitleSingular}
+        entityDisplayNamePlural={pageTitle}
+
         readPermission={permissions.read}
         writePermission={(permissions as any).write || (permissions as any).create}
         deletePermission={permissions.delete}
         exportPermission={permissions.export}
-        
+
         apiEndpoint="/api/v1/persons"
-        
+
         columns={getPersonsColumns()}
         searchFields={['firstName', 'lastName', 'email']}
         filterOptions={filterOptions}
-        
+        staticQueryParams={{
+          ...staticQueryParams,
+          sortBy: 'lastName',
+          sortOrder: 'asc'
+        }}
+
         csvHeaders={csvHeaders}
         csvTemplateData={csvTemplateData}
-        
+
         onCreateEntity={handleCreatePerson}
+        onViewEntity={handleViewPerson}
         onEditEntity={handleEditPerson}
         onImportEntities={handleImportEntities}
-        
+
         cardConfig={cardConfig}
-        
+
         enableBatchOperations={gdprConfig.gdprLevel === 'comprehensive'}
         enableImportExport={true}
         enableColumnSelector={true}
         enableAdvancedFilters={true}
         defaultViewMode="table"
-        staticQueryParams={staticQueryParams}
       />
 
-      {/* Modal di importazione */}
-      {showImportModal && (
+      {/* Modal di importazione - usa modali specifici per employees/trainers */}
+      {showImportModal && filterType === 'employees' && (
+        <EmployeeImportModal
+          isOpen={showImportModal}
+          onClose={() => setShowImportModal(false)}
+          companies={existingCompanies || []}
+          tenantId={currentTenant?.id || ''}
+          onImportComplete={async () => {
+            await refetchPersonsForImport();
+            await refetchPersons();
+            await refreshCompanies();
+            setShowImportModal(false);
+            // Forza refresh del GDPREntityTemplate incrementando la key
+            setRefreshKey(prev => prev + 1);
+          }}
+        />
+      )}
+
+      {showImportModal && filterType === 'trainers' && (
+        <TrainerImportModal
+          isOpen={showImportModal}
+          onClose={() => setShowImportModal(false)}
+          onImportComplete={async () => {
+            await refetchPersonsForImport();
+            await refetchPersons();
+            setShowImportModal(false);
+            // Forza refresh del GDPREntityTemplate incrementando la key
+            setRefreshKey(prev => prev + 1);
+          }}
+        />
+      )}
+
+      {showImportModal && filterType !== 'employees' && filterType !== 'trainers' && (
         <PersonImport
           onImport={handleImportPersons}
           onClose={() => setShowImportModal(false)}
@@ -598,7 +670,7 @@ export const PersonsPage: React.FC<PersonsPageProps> = ({
           }}
         />
       )}
-    </div>
+    </>
   );
 };
 

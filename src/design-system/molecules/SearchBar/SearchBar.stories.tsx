@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/rules-of-hooks */
 import type { Meta, StoryObj } from '@storybook/react';
 import { SearchBar } from './SearchBar';
 import { useState } from 'react';
@@ -88,7 +89,7 @@ export const WithoutClearButton: Story = {
 export const Controlled: Story = {
   render: (args) => {
     const [value, setValue] = useState('Valore controllato');
-    
+
     return (
       <div className="space-y-4">
         <SearchBar
@@ -140,7 +141,7 @@ export const InteractiveExample: Story = {
   render: () => {
     const [searchResults, setSearchResults] = useState<string[]>([]);
     const [isSearching, setIsSearching] = useState(false);
-    
+
     const mockData = [
       'Apple iPhone 14',
       'Samsung Galaxy S23',
@@ -149,20 +150,20 @@ export const InteractiveExample: Story = {
       'Xiaomi Mi 13',
       'Huawei P50',
     ];
-    
+
     const handleSearch = (query: string) => {
       setIsSearching(true);
-      
+
       // Simulate API call
       setTimeout(() => {
-        const results = mockData.filter(item => 
+        const results = mockData.filter(item =>
           item.toLowerCase().includes(query.toLowerCase())
         );
         setSearchResults(results);
         setIsSearching(false);
       }, 500);
     };
-    
+
     return (
       <div className="w-96 space-y-4">
         <SearchBar
@@ -171,11 +172,11 @@ export const InteractiveExample: Story = {
           searchOnType
           debounceMs={300}
         />
-        
+
         {isSearching && (
           <div className="text-sm text-gray-500">Ricerca in corso...</div>
         )}
-        
+
         {searchResults.length > 0 && (
           <div className="border rounded-lg p-3">
             <h4 className="font-medium mb-2">Risultati ({searchResults.length}):</h4>
@@ -188,7 +189,7 @@ export const InteractiveExample: Story = {
             </ul>
           </div>
         )}
-        
+
         {!isSearching && searchResults.length === 0 && (
           <div className="text-sm text-gray-500">
             Nessun risultato trovato

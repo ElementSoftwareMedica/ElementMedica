@@ -10,30 +10,30 @@ interface StepCourseDetailsProps {
   formData: FormData;
   onFormDataChange: (field: string, value: unknown) => void;
   setFormData: (data: Partial<FormData>) => void;
-  
+
   // Course data
   trainings: Training[];
   selectedCourse?: Training;
   setSelectedCourseDetails: (course: Training | undefined) => void;
-  
+
   // Trainers
   effectiveTrainers: Trainer[];
   filteredTrainers: Trainer[];
   allCoTrainers: Trainer[];
-  
+
   // Options
   dynamicRiskOptions: Option[];
   dynamicCourseTypeOptions: Option[];
   DELIVERY_MODES: Option[];
-  
+
   // Search
   courseSearch: string;
   setCourseSearch: (value: string) => void;
-  
+
   // Date/Time handlers
   handleDateChange: (index: number, field: 'date' | 'start' | 'end', value: string) => void;
   handleRemoveDate: (index: number) => void;
-  
+
   // Computed values
   totalSelectedHours: number;
   courseDuration: number;
@@ -123,7 +123,7 @@ export const StepCourseDetails: React.FC<StepCourseDetailsProps> = ({
           if (Object.keys(updates).length) setFormData(updates);
         }}
       />
-      
+
       <DateTimeManager
         dates={formData.dates}
         trainers={effectiveTrainers}
@@ -133,22 +133,37 @@ export const StepCourseDetails: React.FC<StepCourseDetailsProps> = ({
           if (field === 'date' || field === 'start' || field === 'end') {
             handleDateChange(index, field, value);
           } else if (field === 'trainerId' || field === 'coTrainerId') {
-            const newDates = formData.dates.map((date, i: number) => 
+            const newDates = formData.dates.map((date, i: number) =>
               i === index ? { ...date, [field]: value } : date
             );
             setFormData({ dates: newDates });
           }
         }}
-        onAddDateTime={() => setFormData({
-          dates: [...formData.dates, { date: '', start: '09:00', end: '13:00', trainerId: '', coTrainerId: '' }]
-        })}
+        onAddDateTime={() => {
+          // Calcola end time basato sulle ore rimanenti
+          const startTime = '09:00';
+          const [startHours, startMinutes] = startTime.split(':').map(Number);
+          const startInMinutes = startHours * 60 + startMinutes;
+
+          // Se ci sono ore rimanenti, pre-compila con quelle, altrimenti default 4 ore
+          const durationInHours = hoursLeft > 0 ? hoursLeft : 4;
+          const endInMinutes = startInMinutes + (durationInHours * 60);
+
+          const endHours = Math.floor(endInMinutes / 60);
+          const endMinutes = endInMinutes % 60;
+          const endTime = `${String(endHours).padStart(2, '0')}:${String(endMinutes).padStart(2, '0')}`;
+
+          setFormData({
+            dates: [...formData.dates, { date: '', start: startTime, end: endTime, trainerId: '', coTrainerId: '' }]
+          });
+        }}
         onRemoveDateTime={handleRemoveDate}
         formatDate={formatDate}
         totalSelectedHours={totalSelectedHours}
         courseDuration={courseDuration}
         hoursLeft={hoursLeft}
       />
-      
+
       <div>
         <Label>Note</Label>
         <textarea

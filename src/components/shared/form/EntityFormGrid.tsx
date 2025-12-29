@@ -27,14 +27,14 @@ const EntityFormGrid: React.FC<EntityFormGridProps> = ({
     3: 'grid-cols-1 md:grid-cols-3',
     4: 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4',
   };
-  
+
   // Classi per lo spazio tra le colonne
   const gapClasses = {
     sm: 'gap-3',
     md: 'gap-5',
     lg: 'gap-6',
   };
-  
+
   return (
     <div className={`grid ${columnClasses[columns]} ${gapClasses[gap]} ${className}`}>
       {children}
@@ -57,7 +57,7 @@ export const EntityFormFullWidthField: React.FC<{
 };
 
 /**
- * Componente per creare una sezione nel form con titolo
+ * Componente per creare una sezione nel form con titolo - stile elegante
  */
 export const EntityFormSection: React.FC<{
   title: string;
@@ -67,11 +67,13 @@ export const EntityFormSection: React.FC<{
 }> = ({ title, description, children, className = '' }) => {
   return (
     <div className={`mb-8 ${className}`}>
-      <div className="mb-4">
-        <h3 className="text-lg font-medium text-gray-800">{title}</h3>
+      <div className="mb-5 pb-3 border-b border-gray-100">
+        <h3 className="text-lg font-semibold text-gray-800">{title}</h3>
         {description && <p className="text-sm text-gray-500 mt-1">{description}</p>}
       </div>
-      {children}
+      <div className="bg-gradient-to-br from-gray-50/30 to-blue-50/20 rounded-2xl p-5 border border-gray-100/50">
+        {children}
+      </div>
     </div>
   );
 };

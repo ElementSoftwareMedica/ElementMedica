@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
 import { PublicLayout } from '../../components/public/PublicLayout';
 import { PublicButton } from '../../components/public/PublicButton';
+import { ValidationMessage } from '../../components/ui/ValidationMessage';
+import { AlertCircle, CheckCircle } from 'lucide-react';
+
+type FormField = 'name' | 'email' | 'phone' | 'position' | 'experience' | 'motivation' | 'cv' | 'privacy';
 
 const CareersPage: React.FC = () => {
   const [selectedPosition, setSelectedPosition] = useState<string | null>(null);
@@ -13,6 +17,18 @@ const CareersPage: React.FC = () => {
     motivation: '',
     cv: null as File | null
   });
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
+  const [touched, setTouched] = useState<Record<FormField, boolean>>({
+    name: false,
+    email: false,
+    phone: false,
+    position: false,
+    experience: false,
+    motivation: false,
+    cv: false,
+    privacy: false
+  });
+  const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
   const openPositions = [
     {
@@ -123,13 +139,98 @@ const CareersPage: React.FC = () => {
       ...prev,
       cv: file
     }));
+    setTouched(prev => ({ ...prev, cv: true }));
+  };
+
+  // Validazione campi
+  const getFieldError = (field: FormField): string | undefined => {
+    if (!touched[field]) return undefined;
+
+    switch (field) {
+      case 'name':
+        if (!applicationForm.name.trim()) return 'Inserisci il tuo nome completo';
+        break;
+      case 'email':
+        if (!applicationForm.email.trim()) return 'Inserisci la tua email';
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(applicationForm.email)) return 'Inserisci un\'email valida';
+        break;
+      case 'phone':
+        if (!applicationForm.phone.trim()) return 'Inserisci il tuo numero di telefono';
+        break;
+      case 'position':
+        if (!applicationForm.position) return 'Seleziona una posizione';
+        break;
+      case 'experience':
+        if (!applicationForm.experience.trim()) return 'Descrivi la tua esperienza';
+        break;
+      case 'motivation':
+        if (!applicationForm.motivation.trim()) return 'Inserisci una lettera di motivazione';
+        break;
+      case 'cv':
+        if (!applicationForm.cv) return 'Carica il tuo CV';
+        break;
+      case 'privacy':
+        if (!privacyAccepted) return 'Devi accettare l\'informativa sulla privacy';
+        break;
+    }
+    return undefined;
+  };
+
+  const handleBlur = (field: FormField) => {
+    setTouched(prev => ({ ...prev, [field]: true }));
+  };
+
+  const validateAllFields = (): boolean => {
+    const allFields: FormField[] = ['name', 'email', 'phone', 'position', 'experience', 'motivation', 'cv', 'privacy'];
+    const newTouched: Record<FormField, boolean> = {} as Record<FormField, boolean>;
+    let isValid = true;
+
+    allFields.forEach(field => {
+      newTouched[field] = true;
+      // Check validation
+      const value = field === 'privacy' ? privacyAccepted :
+        field === 'cv' ? applicationForm.cv :
+          applicationForm[field as keyof typeof applicationForm];
+      if (!value || (typeof value === 'string' && !value.trim())) {
+        isValid = false;
+      }
+      if (field === 'email' && applicationForm.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(applicationForm.email)) {
+        isValid = false;
+      }
+    });
+
+    setTouched(newTouched);
+    return isValid;
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!validateAllFields()) {
+      return;
+    }
+
     // TODO: Implementare invio candidatura
     console.log('Application data:', applicationForm);
-    alert('Candidatura inviata con successo! Ti contatteremo presto.');
+    setSubmitStatus('success');
+    // Reset form after success
+    setTimeout(() => {
+      setSubmitStatus('idle');
+      setApplicationForm({
+        name: '',
+        email: '',
+        phone: '',
+        position: '',
+        experience: '',
+        motivation: '',
+        cv: null
+      });
+      setPrivacyAccepted(false);
+      setTouched({
+        name: false, email: false, phone: false, position: false,
+        experience: false, motivation: false, cv: false, privacy: false
+      });
+    }, 3000);
   };
 
   return (
@@ -142,7 +243,7 @@ const CareersPage: React.FC = () => {
               Lavora con Noi
             </h1>
             <p className="mt-6 max-w-3xl mx-auto text-xl text-gray-600">
-              Unisciti al nostro team di professionisti della sicurezza sul lavoro. 
+              Unisciti al nostro team di professionisti della sicurezza sul lavoro.
               Cresci con noi in un ambiente stimolante e all'avanguardia.
             </p>
           </div>
@@ -157,7 +258,7 @@ const CareersPage: React.FC = () => {
               Perché Lavorare con Element Formazione
             </h2>
             <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-              Offriamo un ambiente di lavoro dinamico, opportunità di crescita e la possibilità 
+              Offriamo un ambiente di lavoro dinamico, opportunità di crescita e la possibilità
               di fare la differenza nel campo della sicurezza sul lavoro
             </p>
           </div>
@@ -165,7 +266,7 @@ const CareersPage: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             <div className="text-center p-6">
               <div className="bg-primary-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                  <span className="text-2xl">🚀</span>
+                <span className="text-2xl">🚀</span>
               </div>
               <h3 className="text-lg font-semibold text-gray-900 mb-2">Crescita Professionale</h3>
               <p className="text-gray-600">Opportunità di formazione continua e sviluppo delle competenze</p>
@@ -332,69 +433,94 @@ const CareersPage: React.FC = () => {
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-6" noValidate>
+            {submitStatus === 'success' && (
+              <div className="flex items-start gap-2 px-4 py-3 rounded-lg border bg-green-50 border-green-200 animate-slide-down">
+                <CheckCircle className="w-5 h-5 mt-0.5 flex-shrink-0 text-green-500" />
+                <div>
+                  <span className="text-sm font-medium text-green-700">Candidatura inviata con successo!</span>
+                  <p className="text-sm text-green-600 mt-1">Ti contatteremo al più presto.</p>
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <div>
                 <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
-                  Nome e Cognome *
+                  Nome e Cognome <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   id="name"
                   name="name"
-                  required
                   value={applicationForm.name}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  onBlur={() => handleBlur('name')}
+                  className={`w-full px-4 py-3 border rounded-lg transition-colors duration-200 ${getFieldError('name')
+                      ? 'border-red-300 focus:ring-red-200 focus:border-red-500'
+                      : 'border-gray-300 focus:ring-blue-200 focus:border-blue-500'
+                    } focus:ring-2 focus:outline-none`}
                   placeholder="Il tuo nome completo"
                 />
+                <ValidationMessage message={getFieldError('name')} />
               </div>
-              
+
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                  Email *
+                  Email <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="email"
                   id="email"
                   name="email"
-                  required
                   value={applicationForm.email}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  onBlur={() => handleBlur('email')}
+                  className={`w-full px-4 py-3 border rounded-lg transition-colors duration-200 ${getFieldError('email')
+                      ? 'border-red-300 focus:ring-red-200 focus:border-red-500'
+                      : 'border-gray-300 focus:ring-blue-200 focus:border-blue-500'
+                    } focus:ring-2 focus:outline-none`}
                   placeholder="la-tua-email@esempio.com"
                 />
+                <ValidationMessage message={getFieldError('email')} />
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <div>
                 <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-2">
-                  Telefono *
+                  Telefono <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="tel"
                   id="phone"
                   name="phone"
-                  required
                   value={applicationForm.phone}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  onBlur={() => handleBlur('phone')}
+                  className={`w-full px-4 py-3 border rounded-lg transition-colors duration-200 ${getFieldError('phone')
+                      ? 'border-red-300 focus:ring-red-200 focus:border-red-500'
+                      : 'border-gray-300 focus:ring-blue-200 focus:border-blue-500'
+                    } focus:ring-2 focus:outline-none`}
                   placeholder="+39 123 456 7890"
                 />
+                <ValidationMessage message={getFieldError('phone')} />
               </div>
-              
+
               <div>
                 <label htmlFor="position" className="block text-sm font-medium text-gray-700 mb-2">
-                  Posizione di Interesse *
+                  Posizione di Interesse <span className="text-red-500">*</span>
                 </label>
                 <select
                   id="position"
                   name="position"
-                  required
                   value={applicationForm.position}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  onBlur={() => handleBlur('position')}
+                  className={`w-full px-4 py-3 border rounded-lg transition-colors duration-200 ${getFieldError('position')
+                      ? 'border-red-300 focus:ring-red-200 focus:border-red-500'
+                      : 'border-gray-300 focus:ring-blue-200 focus:border-blue-500'
+                    } focus:ring-2 focus:outline-none`}
                 >
                   <option value="">Seleziona una posizione</option>
                   {openPositions.map((position) => (
@@ -404,73 +530,92 @@ const CareersPage: React.FC = () => {
                   ))}
                   <option value="candidatura-spontanea">Candidatura Spontanea</option>
                 </select>
+                <ValidationMessage message={getFieldError('position')} />
               </div>
             </div>
 
             <div>
               <label htmlFor="experience" className="block text-sm font-medium text-gray-700 mb-2">
-                Esperienza Professionale *
+                Esperienza Professionale <span className="text-red-500">*</span>
               </label>
               <textarea
                 id="experience"
                 name="experience"
-                required
                 rows={4}
                 value={applicationForm.experience}
                 onChange={handleInputChange}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                onBlur={() => handleBlur('experience')}
+                className={`w-full px-4 py-3 border rounded-lg transition-colors duration-200 ${getFieldError('experience')
+                    ? 'border-red-300 focus:ring-red-200 focus:border-red-500'
+                    : 'border-gray-300 focus:ring-blue-200 focus:border-blue-500'
+                  } focus:ring-2 focus:outline-none`}
                 placeholder="Descrivi brevemente la tua esperienza professionale nel settore..."
               />
+              <ValidationMessage message={getFieldError('experience')} />
             </div>
 
             <div>
               <label htmlFor="motivation" className="block text-sm font-medium text-gray-700 mb-2">
-                Lettera di Motivazione *
+                Lettera di Motivazione <span className="text-red-500">*</span>
               </label>
               <textarea
                 id="motivation"
                 name="motivation"
-                required
                 rows={4}
                 value={applicationForm.motivation}
                 onChange={handleInputChange}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                onBlur={() => handleBlur('motivation')}
+                className={`w-full px-4 py-3 border rounded-lg transition-colors duration-200 ${getFieldError('motivation')
+                    ? 'border-red-300 focus:ring-red-200 focus:border-red-500'
+                    : 'border-gray-300 focus:ring-blue-200 focus:border-blue-500'
+                  } focus:ring-2 focus:outline-none`}
                 placeholder="Spiega perché vorresti lavorare con noi e cosa puoi portare al nostro team..."
               />
+              <ValidationMessage message={getFieldError('motivation')} />
             </div>
 
             <div>
               <label htmlFor="cv" className="block text-sm font-medium text-gray-700 mb-2">
-                Curriculum Vitae *
+                Curriculum Vitae <span className="text-red-500">*</span>
               </label>
               <input
                 type="file"
                 id="cv"
                 name="cv"
-                required
                 accept=".pdf,.doc,.docx"
                 onChange={handleFileChange}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className={`w-full px-4 py-3 border rounded-lg transition-colors duration-200 ${getFieldError('cv')
+                    ? 'border-red-300 focus:ring-red-200 focus:border-red-500'
+                    : 'border-gray-300 focus:ring-blue-200 focus:border-blue-500'
+                  } focus:ring-2 focus:outline-none`}
               />
               <p className="text-sm text-gray-500 mt-1">
                 Formati accettati: PDF, DOC, DOCX (max 5MB)
               </p>
+              <ValidationMessage message={getFieldError('cv')} />
             </div>
 
-            <div className="flex items-start">
-              <input
-                type="checkbox"
-                id="privacy-careers"
-                required
-                className="mt-1 mr-3 h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
-              />
-              <label htmlFor="privacy-careers" className="text-sm text-gray-600">
-                Accetto il trattamento dei dati personali secondo la{' '}
-                <a href="#" className="text-primary-600 hover:text-primary-700 underline">
-                  Privacy Policy
-                </a>{' '}
-                e autorizzo l'utilizzo del CV per processi di selezione. *
-              </label>
+            <div>
+              <div className="flex items-start">
+                <input
+                  type="checkbox"
+                  id="privacy-careers"
+                  checked={privacyAccepted}
+                  onChange={(e) => {
+                    setPrivacyAccepted(e.target.checked);
+                    setTouched(prev => ({ ...prev, privacy: true }));
+                  }}
+                  className="mt-1 mr-3 h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                />
+                <label htmlFor="privacy-careers" className="text-sm text-gray-600">
+                  Accetto il trattamento dei dati personali secondo la{' '}
+                  <a href="#" className="text-primary-600 hover:text-primary-700 underline">
+                    Privacy Policy
+                  </a>{' '}
+                  e autorizzo l'utilizzo del CV per processi di selezione. <span className="text-red-500">*</span>
+                </label>
+              </div>
+              <ValidationMessage message={getFieldError('privacy')} />
             </div>
 
             <PublicButton type="submit" size="lg" className="w-full">

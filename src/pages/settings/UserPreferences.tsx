@@ -87,7 +87,7 @@ const UserPreferences: React.FC = () => {
     await updatePreferences({ timeFormat });
   };
 
-  const handleNotificationChange = async (path: string, value: boolean) => {
+  const handleNotificationChange = async (path: string, value: boolean | string) => {
     if (!preferences) return;
     
     const pathParts = path.split('.');
@@ -238,7 +238,7 @@ const UserPreferences: React.FC = () => {
                 <Label htmlFor="language">Lingua</Label>
                 <Select
                   value={preferences?.language || 'it'}
-                  onValueChange={handleLanguageChange}
+                  onValueChange={(value) => { void handleLanguageChange(value as LanguageCode); }}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -282,10 +282,10 @@ const UserPreferences: React.FC = () => {
 
               {/* Date Format */}
               <div className="space-y-2">
-                <Label htmlFor="dateFormat">Formato Data</Label>
+                <Label htmlFor="dateFormat">Formato data</Label>
                 <Select
                   value={preferences?.dateFormat || 'DD/MM/YYYY'}
-                  onValueChange={handleDateFormatChange}
+                  onValueChange={(value) => { void handleDateFormatChange(value as 'DD/MM/YYYY' | 'MM/DD/YYYY' | 'YYYY-MM-DD'); }}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -300,10 +300,10 @@ const UserPreferences: React.FC = () => {
 
               {/* Time Format */}
               <div className="space-y-2">
-                <Label htmlFor="timeFormat">Formato Ora</Label>
+                <Label htmlFor="timeFormat">Formato ora</Label>
                 <Select
                   value={preferences?.timeFormat || '24h'}
-                  onValueChange={handleTimeFormatChange}
+                  onValueChange={(value) => { void handleTimeFormatChange(value as '12h' | '24h'); }}
                 >
                   <SelectTrigger>
                     <SelectValue />

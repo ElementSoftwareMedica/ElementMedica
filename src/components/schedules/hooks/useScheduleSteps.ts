@@ -173,10 +173,11 @@ export function useScheduleSteps({
 
   // Task 3 e 4: Navigazione libera
   // - Se in modifica (isEditing=true): tutti gli step sono sempre accessibili
-  // - Se in creazione: tutti gli step diventano accessibili dopo essere stati visitati
+  // - Se in creazione: step precedenti sempre accessibili, step successivi se già visitati
   const canNavigateToStep = (step: number) => {
     if (isEditing) return true; // Task 4: In modifica, tutti gli step sempre accessibili
-    return visitedSteps.has(step); // Task 3: In creazione, solo step visitati
+    // Consenti navigazione a step precedenti o step già visitati
+    return step <= currentStep || visitedSteps.has(step);
   };
 
   const handleNext = () => {
@@ -189,22 +190,23 @@ export function useScheduleSteps({
 
   const handleStepClick = (step: number) => {
     if (canNavigateToStep(step)) {
+      setVisitedSteps(prev => new Set(prev).add(step)); // Mark clicked step as visited
       setCurrentStep(step);
     }
   };
 
-  return { 
-    currentStep, 
+  return {
+    currentStep,
     setCurrentStep: (step: number) => {
       setVisitedSteps(prev => new Set(prev).add(step));
       setCurrentStep(step);
     },
-    isStep0Valid, 
-    isStep1Valid, 
+    isStep0Valid,
+    isStep1Valid,
     isCompletelyValid,
     getValidationIssues,
-    stepItems, 
-    handleNext, 
+    stepItems,
+    handleNext,
     handleBack,
     canNavigateToStep,
     handleStepClick,

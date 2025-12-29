@@ -98,8 +98,9 @@ export const AdminGDPR: React.FC = () => {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
+  const formatDate = (date: string | Date) => {
+    const dateObj = typeof date === 'string' ? new Date(date) : date;
+    return dateObj.toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -404,7 +405,7 @@ export const AdminGDPR: React.FC = () => {
           <Button
             onClick={handleProcessRequest}
             disabled={processing || (processDialog.action === 'reject' && !processingNotes.trim())}
-            variant={processDialog.action === 'approve' ? 'default' : 'destructive'}
+            variant={processDialog.action === 'approve' ? 'primary' : 'destructive'}
           >
             {processing ? (
               <RefreshCw className="h-4 w-4 mr-2 animate-spin" />

@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { 
+import {
   AlertTriangle,
   Download,
   RotateCcw,
@@ -17,6 +17,7 @@ import { Card } from '../../design-system/molecules/Card/Card';
 import { Button } from '../../design-system/atoms/Button/Button';
 import { Input } from '../../design-system/atoms/Input/Input';
 import { useAuth } from '../../context/AuthContext';
+import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
 
 // Toast notification function (simplified)
 const toast = {
@@ -37,10 +38,11 @@ interface AdminSettingsProps {
 
 const AdminSettings: React.FC<AdminSettingsProps> = ({ className = '' }) => {
   const { hasPermission } = useAuth();
+  const { confirm } = useConfirmDialog();
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('system');
   const [hasChanges, setHasChanges] = useState(false);
-  
+
   // Mock settings state - in a real app, this would come from an API
   const [settings, setSettings] = useState({
     system: {
@@ -116,10 +118,10 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ className = '' }) => {
     try {
       // Simulate API call
       await new Promise(resolve => setTimeout(resolve, 1000));
-      
+
       // In a real app, make API call here
       // await apiClient.put('/api/admin/settings', settings);
-      
+
       setHasChanges(false);
       toast.success('Impostazioni salvate con successo');
     } catch {
@@ -130,10 +132,15 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ className = '' }) => {
   };
 
   const handleResetSettings = async () => {
-    if (!confirm('Sei sicuro di voler ripristinare tutte le impostazioni ai valori predefiniti?')) {
-      return;
-    }
-    
+    const confirmed = await confirm({
+      title: 'Ripristina Impostazioni',
+      message: 'Sei sicuro di voler ripristinare tutte le impostazioni ai valori predefiniti?',
+      variant: 'warning',
+      confirmLabel: 'Ripristina',
+      cancelLabel: 'Annulla'
+    });
+    if (!confirmed) return;
+
     setLoading(true);
     try {
       // Reset to default values
@@ -164,7 +171,7 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ className = '' }) => {
   const handleImportSettings = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    
+
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
@@ -195,7 +202,7 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ className = '' }) => {
             Configura le impostazioni di sistema e le funzionalità avanzate.
           </p>
         </div>
-        
+
         <div className="flex items-center gap-2">
           <Button
             onClick={handleExportSettings}
@@ -206,7 +213,7 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ className = '' }) => {
             <Download className="w-4 h-4" />
             Esporta
           </Button>
-          
+
           <div className="relative">
             <input
               type="file"
@@ -223,7 +230,7 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ className = '' }) => {
               Importa
             </Button>
           </div>
-          
+
           <Button
             onClick={handleResetSettings}
             variant="outline"
@@ -233,7 +240,7 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ className = '' }) => {
             <RotateCcw className="w-4 h-4" />
             Reset
           </Button>
-          
+
           {hasChanges && (
             <Button
               onClick={handleSaveSettings}
@@ -271,22 +278,20 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ className = '' }) => {
         <div className="flex border-b border-gray-200">
           <button
             onClick={() => setActiveTab('system')}
-            className={`flex items-center gap-2 px-4 py-2 border-b-2 transition-colors ${
-              activeTab === 'system'
+            className={`flex items-center gap-2 px-4 py-2 border-b-2 transition-colors ${activeTab === 'system'
                 ? 'border-blue-500 text-blue-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
+              }`}
           >
             <Server className="w-4 h-4" />
             <span className="hidden sm:inline">Sistema</span>
           </button>
           <button
             onClick={() => setActiveTab('permissions')}
-            className={`flex items-center gap-2 px-4 py-2 border-b-2 transition-colors ${
-              activeTab === 'permissions'
+            className={`flex items-center gap-2 px-4 py-2 border-b-2 transition-colors ${activeTab === 'permissions'
                 ? 'border-blue-500 text-blue-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
+              }`}
           >
             <Shield className="w-4 h-4" />
             <span className="hidden sm:inline">Permessi</span>
@@ -311,7 +316,7 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ className = '' }) => {
                       onChange={(e) => handleSettingChange('system', 'siteName', e.target.value)}
                     />
                   </div>
-                  
+
                   <div className="space-y-2">
                     <label htmlFor="adminEmail" className="block text-sm font-medium">Email Amministratore</label>
                     <Input
@@ -344,7 +349,7 @@ const PermissionsManagement: React.FC = () => {
     { id: '2', name: 'Manager User', email: 'manager@example.com', role: 'Manager' },
     { id: '3', name: 'Employee User', email: 'employee@example.com', role: 'Employee' }
   ]);
-  
+
   const [permissions] = useState([
     { resource: 'companies', actions: ['read', 'create', 'update', 'delete'] },
     { resource: 'employees', actions: ['read', 'create', 'update', 'delete'] },
@@ -353,7 +358,7 @@ const PermissionsManagement: React.FC = () => {
     { resource: 'reports', actions: ['read', 'create', 'export'] },
     { resource: 'settings', actions: ['read', 'update'] }
   ]);
-  
+
   const [userPermissions, setUserPermissions] = useState<Record<string, Record<string, string[]>>>({
     '1': { // Admin - all permissions
       companies: ['read', 'create', 'update', 'delete'],
@@ -380,18 +385,18 @@ const PermissionsManagement: React.FC = () => {
       settings: []
     }
   });
-  
+
   const handlePermissionToggle = async (userId: string, resource: string, action: string) => {
     const currentPermissions = userPermissions[userId]?.[resource] || [];
     const hasPermission = currentPermissions.includes(action);
-    
+
     let newPermissions;
     if (hasPermission) {
       newPermissions = currentPermissions.filter(p => p !== action);
     } else {
       newPermissions = [...currentPermissions, action];
     }
-    
+
     setUserPermissions(prev => ({
       ...prev,
       [userId]: {
@@ -399,7 +404,7 @@ const PermissionsManagement: React.FC = () => {
         [resource]: newPermissions
       }
     }));
-    
+
     // Here you would make an API call to update permissions
     try {
       // await apiClient.put(`/api/admin/users/${userId}/permissions`, {
@@ -420,11 +425,11 @@ const PermissionsManagement: React.FC = () => {
       }));
     }
   };
-  
+
   const assignAllCompaniesPermissions = async () => {
     const adminUser = users.find(u => u.role === 'Admin');
     if (!adminUser) return;
-    
+
     try {
       // Assign all companies permissions to admin
       setUserPermissions(prev => ({
@@ -434,18 +439,18 @@ const PermissionsManagement: React.FC = () => {
           companies: ['read', 'create', 'update', 'delete']
         }
       }));
-      
+
       // Here you would make an API call
       // await apiClient.put(`/api/admin/users/${adminUser.id}/permissions/companies`, {
       //   actions: ['read', 'create', 'update', 'delete']
       // });
-      
+
       toast.success('Tutti i permessi Companies assegnati all\'Admin');
     } catch {
       toast.error('Errore nell\'assegnazione dei permessi Companies');
     }
   };
-  
+
   return (
     <div className="space-y-6">
       <Card>
@@ -460,7 +465,7 @@ const PermissionsManagement: React.FC = () => {
               Assegna Permessi Companies ad Admin
             </Button>
           </div>
-          
+
           <div className="space-y-6">
             {users.map(user => (
               <div key={user.id} className="border rounded-lg p-4">
@@ -469,15 +474,14 @@ const PermissionsManagement: React.FC = () => {
                     <h4 className="font-medium">{user.name}</h4>
                     <p className="text-sm text-gray-600">{user.email} - {user.role}</p>
                   </div>
-                  <span className={`px-2 py-1 rounded text-xs font-medium ${
-                    user.role === 'Admin' ? 'bg-red-100 text-red-800' :
-                    user.role === 'Manager' ? 'bg-blue-100 text-blue-800' :
-                    'bg-gray-100 text-gray-800'
-                  }`}>
+                  <span className={`px-2 py-1 rounded text-xs font-medium ${user.role === 'Admin' ? 'bg-red-100 text-red-800' :
+                      user.role === 'Manager' ? 'bg-blue-100 text-blue-800' :
+                        'bg-gray-100 text-gray-800'
+                    }`}>
                     {user.role}
                   </span>
                 </div>
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {permissions.map(permission => (
                     <div key={permission.resource} className="border rounded p-3">

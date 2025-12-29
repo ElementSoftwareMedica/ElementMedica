@@ -82,7 +82,7 @@ class CMSController {
       });
 
     } catch (error) {
-      logger.error('Error getting CMS courses:', error);
+      logger.error('Error getting CMS Course:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to retrieve courses',

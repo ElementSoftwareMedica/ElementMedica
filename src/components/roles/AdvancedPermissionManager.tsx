@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { 
+import {
   BookOpen,
   Building,
   Building2,
@@ -28,8 +28,8 @@ import {
   X
 } from 'lucide-react';
 import { advancedPermissionsService } from '../../services/advancedPermissions';
-import type { EntityDefinition, EntityPermission } from '../../services/advancedPermissions';
-import type { Person } from '../../hooks/useRoles';
+import type { EntityDefinition, EntityPermission, PermissionScope } from '../../services/advancedPermissions';
+import type { Person } from '../../types';
 
 interface Role {
   type: string;
@@ -76,7 +76,7 @@ const AdvancedPermissionManager: React.FC<AdvancedPermissionManagerProps> = ({
   ], []);
 
   // Mappa delle icone per le entità ottimizzata
-  const entityIcons: Record<string, React.ComponentType<{ className?: string; size?: number }>> = useMemo(() => ({
+  const entityIcons: Record<string, React.ComponentType<any>> = useMemo(() => ({
     persons: Users,
     companies: Building2,
     courses: BookOpen,
@@ -110,7 +110,7 @@ const AdvancedPermissionManager: React.FC<AdvancedPermissionManagerProps> = ({
     const totalEntities = entities.length;
     const entitiesWithPermissions = new Set(permissions.map(p => p.entity)).size;
     const totalPermissions = permissions.length;
-    
+
     return {
       totalEntities,
       entitiesWithPermissions,
@@ -126,15 +126,15 @@ const AdvancedPermissionManager: React.FC<AdvancedPermissionManagerProps> = ({
         setLoading(true);
         setError(null);
         const entityDefinitions = await advancedPermissionsService.getEntityDefinitions();
-        
+
         // Aggiungo le icone alle entità
         const entitiesWithIcons = entityDefinitions.map(entity => ({
           ...entity,
           icon: getEntityIcon(entity.name)
         }));
-        
+
         setEntities(entitiesWithIcons);
-        
+
         // Seleziona automaticamente la prima entità se non ce n'è una selezionata
         if (entitiesWithIcons.length > 0 && !selectedEntity) {
           setSelectedEntity(entitiesWithIcons[0]);
@@ -183,12 +183,12 @@ const AdvancedPermissionManager: React.FC<AdvancedPermissionManagerProps> = ({
     return permissions.some(p => p.entity === entity && p.action === action as 'create' | 'read' | 'update' | 'delete');
   }, [permissions]);
 
-  const updatePermission = useCallback(async (entity: string, action: string, scope: 'all' | 'tenant' | 'own' | 'none', fields?: string[]) => {
+  const updatePermission = useCallback(async (entity: string, action: string, scope: PermissionScope | 'none', fields?: string[]) => {
     if (isUpdating) return; // Previeni click multipli
-    
+
     setIsUpdating(true);
     console.log('Permissions changed:', { entity, action, scope, fields });
-    
+
     try {
       if (scope === 'none') {
         // Rimuovi il permesso se esiste
@@ -199,13 +199,13 @@ const AdvancedPermissionManager: React.FC<AdvancedPermissionManagerProps> = ({
       }
 
       const existingPermissionIndex = permissions.findIndex(p => p.entity === entity && p.action === action);
-      
+
       if (existingPermissionIndex >= 0) {
         // Aggiorna permesso esistente
         const newPermissions = [...permissions];
         newPermissions[existingPermissionIndex] = {
           ...newPermissions[existingPermissionIndex],
-          scope: scope as 'all' | 'tenant' | 'own',
+          scope: scope as PermissionScope,
           fields: fields || newPermissions[existingPermissionIndex].fields
         };
         setPermissions(newPermissions);
@@ -215,7 +215,7 @@ const AdvancedPermissionManager: React.FC<AdvancedPermissionManagerProps> = ({
         const newPermission: EntityPermission = {
           entity,
           action: action as 'create' | 'read' | 'update' | 'delete',
-          scope: scope as 'all' | 'tenant' | 'own',
+          scope: scope as PermissionScope,
           fields: fields || []
         };
         const newPermissions = [...permissions, newPermission];
@@ -258,7 +258,7 @@ const AdvancedPermissionManager: React.FC<AdvancedPermissionManagerProps> = ({
   // Funzione per applicare permessi rapidi
   const applyQuickPermissions = useCallback((entity: string, permissionType: 'full' | 'readonly' | 'none') => {
     const newPermissions = permissions.filter(p => p.entity !== entity);
-    
+
     if (permissionType === 'full') {
       actions.forEach(action => {
         newPermissions.push({
@@ -276,7 +276,7 @@ const AdvancedPermissionManager: React.FC<AdvancedPermissionManagerProps> = ({
         fields: []
       });
     }
-    
+
     setPermissions(newPermissions);
     onPermissionsChange(newPermissions);
   }, [permissions, actions, onPermissionsChange]);
@@ -344,8 +344,8 @@ const AdvancedPermissionManager: React.FC<AdvancedPermissionManagerProps> = ({
                 </span>
                 <div className="flex items-center space-x-1">
                   <div className="w-16 bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                    <div
+                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
                       style={{ width: `${permissionStats.coverage}%` }}
                     ></div>
                   </div>
@@ -354,16 +354,15 @@ const AdvancedPermissionManager: React.FC<AdvancedPermissionManagerProps> = ({
               </div>
             </div>
           </div>
-          
+
           <div className="flex items-center space-x-3">
             <button
               type="button"
               onClick={() => setShowAdvanced(!showAdvanced)}
-              className={`px-4 py-2 rounded-lg border transition-colors ${
-                showAdvanced 
-                  ? 'bg-blue-50 border-blue-200 text-blue-700' 
-                  : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
-              }`}
+              className={`px-4 py-2 rounded-lg border transition-colors ${showAdvanced
+                ? 'bg-blue-50 border-blue-200 text-blue-700'
+                : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
+                }`}
             >
               <Filter className="w-4 h-4 mr-2 inline" />
               Vista Avanzata
@@ -398,20 +397,19 @@ const AdvancedPermissionManager: React.FC<AdvancedPermissionManagerProps> = ({
               />
             </div>
           </div>
-          
+
           {/* Lista entità ottimizzata */}
           <div className="flex-1 overflow-y-auto">
             {filteredEntities.map((entity) => {
               const IconComponent = entity.icon;
               const entityPermissions = permissions.filter(p => p.entity === entity.name);
               const hasPermissions = entityPermissions.length > 0;
-              
+
               return (
                 <div
                   key={entity.id}
-                  className={`border-b border-gray-200 ${
-                    selectedEntity?.id === entity.id ? 'bg-blue-50 border-blue-200' : 'bg-white hover:bg-gray-50'
-                  }`}
+                  className={`border-b border-gray-200 ${selectedEntity?.id === entity.id ? 'bg-blue-50 border-blue-200' : 'bg-white hover:bg-gray-50'
+                    }`}
                 >
                   <button
                     type="button"
@@ -433,7 +431,7 @@ const AdvancedPermissionManager: React.FC<AdvancedPermissionManagerProps> = ({
                       <ChevronRight className={`w-4 h-4 ${selectedEntity?.id === entity.id ? 'text-blue-600' : 'text-gray-400'}`} />
                     </div>
                   </button>
-                  
+
                   {/* Azioni rapide */}
                   <div className="px-4 pb-3 flex space-x-2">
                     <button
@@ -473,19 +471,19 @@ const AdvancedPermissionManager: React.FC<AdvancedPermissionManagerProps> = ({
                 <div className="flex items-center space-x-3">
                   {selectedEntity.icon && React.createElement(selectedEntity.icon, { className: "w-5 h-5 text-blue-600" })}
                   <div>
-                     <h3 className="font-semibold text-gray-900">{selectedEntity.displayName}</h3>
-                     <p className="text-sm text-gray-600">Configura permessi CRUD e scope per questa entità</p>
-                   </div>
+                    <h3 className="font-semibold text-gray-900">{selectedEntity.displayName}</h3>
+                    <p className="text-sm text-gray-600">Configura permessi CRUD e scope per questa entità</p>
+                  </div>
                 </div>
               </div>
-              
+
               {/* Configurazione permessi ottimizzata */}
               <div className="flex-1 overflow-y-auto p-6">
                 <div className="grid gap-6">
                   {actions.map((action) => {
                     const permission = getPermission(selectedEntity.name, action.name);
                     const ActionIcon = action.icon;
-                    
+
                     return (
                       <div key={action.id} className={`border rounded-xl p-4 ${action.borderColor} ${action.bgColor}`}>
                         <div className="flex items-center justify-between mb-4">
@@ -499,26 +497,25 @@ const AdvancedPermissionManager: React.FC<AdvancedPermissionManagerProps> = ({
                             </div>
                           </div>
                         </div>
-                        
+
                         {/* Scope selection */}
                         <div className="grid grid-cols-2 gap-3 mb-4">
                           {scopes.map((scope) => {
                             const ScopeIcon = scope.icon;
                             const isSelected = permission?.scope === scope.name;
-                            
+
                             return (
                               <button
                                 type="button"
                                 key={scope.id}
                                 disabled={isUpdating}
-                                onClick={() => updatePermission(selectedEntity.name, action.name, scope.name as 'all' | 'tenant' | 'own')}
-                                className={`p-3 rounded-lg border-2 transition-all duration-200 text-left ${
-                                  isUpdating 
-                                    ? 'opacity-50 cursor-not-allowed border-gray-200 bg-gray-50'
-                                    : isSelected 
-                                      ? 'border-blue-500 bg-blue-50 shadow-md' 
-                                      : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                                }`}
+                                onClick={() => updatePermission(selectedEntity.name, action.name, scope.name as PermissionScope)}
+                                className={`p-3 rounded-lg border-2 transition-all duration-200 text-left ${isUpdating
+                                  ? 'opacity-50 cursor-not-allowed border-gray-200 bg-gray-50'
+                                  : isSelected
+                                    ? 'border-blue-500 bg-blue-50 shadow-md'
+                                    : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                                  }`}
                               >
                                 <div className="flex items-center space-x-2 mb-1">
                                   <ScopeIcon className={`w-4 h-4 ${isUpdating ? 'text-gray-400' : isSelected ? 'text-blue-600' : 'text-gray-500'}`} />
@@ -531,18 +528,17 @@ const AdvancedPermissionManager: React.FC<AdvancedPermissionManagerProps> = ({
                               </button>
                             );
                           })}
-                          
+
                           <button
                             type="button"
                             disabled={isUpdating}
                             onClick={() => updatePermission(selectedEntity.name, action.name, 'none')}
-                            className={`p-3 rounded-lg border-2 transition-all duration-200 text-left ${
-                              isUpdating 
-                                ? 'opacity-50 cursor-not-allowed border-gray-200 bg-gray-50'
-                                : !permission 
-                                  ? 'border-red-500 bg-red-50 shadow-md' 
-                                  : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                            }`}
+                            className={`p-3 rounded-lg border-2 transition-all duration-200 text-left ${isUpdating
+                              ? 'opacity-50 cursor-not-allowed border-gray-200 bg-gray-50'
+                              : !permission
+                                ? 'border-red-500 bg-red-50 shadow-md'
+                                : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                              }`}
                           >
                             <div className="flex items-center space-x-2 mb-1">
                               <X className={`w-4 h-4 ${isUpdating ? 'text-gray-400' : !permission ? 'text-red-600' : 'text-gray-500'}`} />
@@ -554,7 +550,7 @@ const AdvancedPermissionManager: React.FC<AdvancedPermissionManagerProps> = ({
                             <p className="text-xs text-gray-600">Rimuovi completamente questo permesso</p>
                           </button>
                         </div>
-                        
+
                         {/* Campi specifici (solo se avanzato e permesso attivo) */}
                         {showAdvanced && permission && (
                           <div className="border-t pt-4">
@@ -565,17 +561,16 @@ const AdvancedPermissionManager: React.FC<AdvancedPermissionManagerProps> = ({
                             <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
                               {selectedEntity.fields.map((field) => {
                                 const isSelected = permission.fields?.includes(field.id) ?? true;
-                                
+
                                 return (
                                   <button
                                     type="button"
                                     key={field.id}
                                     onClick={() => toggleField(selectedEntity.name, action.name, field.id)}
-                                    className={`p-2 rounded border text-left transition-colors ${
-                                      isSelected 
-                                        ? 'border-green-500 bg-green-50 text-green-900' 
-                                        : 'border-gray-200 hover:border-gray-300 text-gray-700'
-                                    }`}
+                                    className={`p-2 rounded border text-left transition-colors ${isSelected
+                                      ? 'border-green-500 bg-green-50 text-green-900'
+                                      : 'border-gray-200 hover:border-gray-300 text-gray-700'
+                                      }`}
                                   >
                                     <div className="flex items-center justify-between">
                                       <div className="flex items-center space-x-2">

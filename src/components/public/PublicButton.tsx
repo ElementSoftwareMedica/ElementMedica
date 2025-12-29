@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { cn } from '../../design-system/utils';
 
 interface PublicButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'outline' | 'ghost';
+  variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'medical';
   size?: 'sm' | 'md' | 'lg';
   children: React.ReactNode;
   className?: string;
@@ -52,6 +52,13 @@ export const PublicButton: React.FC<PublicButtonProps> = ({
       'hover:bg-secondary-700',
       'focus:ring-secondary-500',
       'shadow-md hover:shadow-lg'
+    ],
+    medical: [
+      'bg-teal-600 text-white',
+      'hover:bg-teal-700',
+      'focus:ring-teal-400',
+      'shadow-lg hover:shadow-xl',
+      'font-bold'
     ],
     outline: [
       'border-2 border-primary-600 text-primary-600 bg-transparent',

@@ -265,7 +265,7 @@ export const GDPRDeletionRequestModal: React.FC<GDPRDeletionRequestModalProps> =
                           )} />
                           <div>
                             <div className="text-sm font-medium text-gray-900">
-                              {formatDate(request.createdAt)}
+                              {formatDate(request.requestedAt)}
                             </div>
                             <div className="text-xs text-gray-500">
                               {statusConfig.label} - {getReasonDescription(request.reason)}

@@ -1,0 +1,18 @@
+#!/bin/bash
+
+echo "🔄 Testing CSS Fix..."
+echo ""
+echo "1. CSS file location: src/index.css"
+echo "2. Database has 5 buttons with !text-teal classes"
+echo "3. New CSS uses attribute selectors [class*=\"!text-teal-XXX\"]"
+echo ""
+echo "✅ TO TEST:"
+echo "   1. Hard refresh browser: Cmd+Shift+R (Mac) or Ctrl+Shift+R (Windows)"
+echo "   2. Or clear cache and reload"
+echo "   3. Check button 'Contattaci' on homepage-medica"
+echo "   4. Color should be dark teal #134e4a (NOT white)"
+echo ""
+echo "🔍 Inspect element and check computed color value:"
+echo "   Should see: color: rgb(19, 78, 74) !important"
+echo ""
+echo "If still white, open DevTools → Network → Check index.css is loading"

@@ -38,10 +38,17 @@ class CMSService {
         deletedAt: null
       };
 
-      // Non-admin users are filtered by their tenant
-      if (!isAdmin && tenantId) {
+      // Filtro tenant:
+      // - Non-admin: sempre filtrato per il proprio tenant
+      // - Admin: se tenantId specificato, filtra; altrimenti vede tutti
+      if (!isAdmin) {
+        // Utenti normali: sempre filtro per tenant
+        where.tenantId = tenantId;
+      } else if (tenantId) {
+        // Admin con tenantId specifico: filtra per quel tenant
         where.tenantId = tenantId;
       }
+      // Admin senza tenantId: vede tutte le pagine (nessun filtro tenant)
 
       if (status) {
         where.status = status;
@@ -109,18 +116,25 @@ class CMSService {
    * @param {string} tenantId - Tenant ID per multi-tenancy
    * @returns {Promise<Object>} Page completa
    */
-  async getPage(id, tenantId) {
-    if (!tenantId) {
+  async getPage(id, tenantId, isGlobalAdmin = false) {
+    if (!tenantId && !isGlobalAdmin) {
       throw new Error('tenantId is required');
     }
 
     try {
+      // Gli admin globali possono vedere pagine di qualsiasi tenant
+      const whereClause = {
+        id,
+        deletedAt: null
+      };
+
+      // Filtra per tenant solo se non è admin globale
+      if (!isGlobalAdmin) {
+        whereClause.tenantId = tenantId;
+      }
+
       const page = await prisma.cMSPage.findFirst({
-        where: {
-          id,
-          tenantId,
-          deletedAt: null
-        }
+        where: whereClause
       });
 
       if (!page) {
@@ -262,27 +276,32 @@ class CMSService {
    * @param {string} tenantId - Tenant ID
    * @returns {Promise<Object>} Updated page
    */
-  async updatePage(id, data, tenantId) {
-    if (!tenantId) {
+  async updatePage(id, data, tenantId, isGlobalAdmin = false) {
+    if (!tenantId && !isGlobalAdmin) {
       throw new Error('tenantId is required');
     }
 
     try {
-      // Verifica esistenza
+      // Verifica esistenza - admin globali possono modificare qualsiasi pagina
+      const whereClause = { id, deletedAt: null };
+      if (!isGlobalAdmin) {
+        whereClause.tenantId = tenantId;
+      }
+
       const existing = await prisma.cMSPage.findFirst({
-        where: { id, tenantId, deletedAt: null }
+        where: whereClause
       });
 
       if (!existing) {
         throw new Error('Page not found');
       }
 
-      // Se cambio slug, verifica unicità
+      // Se cambio slug, verifica unicità (nel tenant della pagina)
       if (data.slug && data.slug !== existing.slug) {
         const slugExists = await prisma.cMSPage.findFirst({
           where: {
             slug: data.slug,
-            tenantId,
+            tenantId: existing.tenantId, // Usa il tenant della pagina esistente
             deletedAt: null,
             id: { not: id }
           }

@@ -13,6 +13,7 @@ export interface Training {
   title?: string;
   name?: string;
   serviceType?: string;
+  pricePerPerson?: number;
   price?: number;
 }
 

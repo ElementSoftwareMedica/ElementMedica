@@ -48,17 +48,42 @@ export interface PreventiviListParams {
   limit?: number;
 }
 
+/**
+ * Parse preventivo amounts from string to number
+ */
+function parsePreventivo(p: any): Preventivo {
+  return {
+    ...p,
+    prezzoTotale: typeof p.prezzoTotale === 'string' ? parseFloat(p.prezzoTotale) || 0 : (p.prezzoTotale || 0),
+    imponibile: typeof p.imponibile === 'string' ? parseFloat(p.imponibile) || 0 : (p.imponibile || 0),
+    importoIva: typeof p.importoIva === 'string' ? parseFloat(p.importoIva) || 0 : (p.importoIva || 0),
+    importoFinale: typeof p.importoFinale === 'string' ? parseFloat(p.importoFinale) || 0 : (p.importoFinale || 0),
+    percentualeIva: typeof p.percentualeIva === 'string' ? parseFloat(p.percentualeIva) || 0 : (p.percentualeIva || 0),
+    aliquotaIva: typeof p.aliquotaIva === 'string' ? parseFloat(p.aliquotaIva) || 0 : (p.aliquotaIva || 0),
+  };
+}
+
 class PreventiviService {
-  private basePath = '/preventivi';
+  private basePath = '/api/v1/preventivi';
 
   /**
    * List preventivi with filters
    */
   async list(params?: PreventiviListParams): Promise<Preventivo[]> {
     const response = await api.get(this.basePath, { params });
-    // Backend returns { success, data: [...], pagination }
+    // Backend returns { success, data: { preventivi: [...], pagination... } }
     const responseData = response.data as any;
-    return (responseData?.data || responseData) as Preventivo[];
+    // Handle paginated response: data.preventivi or direct data array
+    let preventivi: any[] = [];
+    if (responseData?.data?.preventivi) {
+      preventivi = responseData.data.preventivi;
+    } else if (Array.isArray(responseData?.data)) {
+      preventivi = responseData.data;
+    } else if (Array.isArray(responseData)) {
+      preventivi = responseData;
+    }
+    // Parse all amounts from string to number
+    return preventivi.map(parsePreventivo);
   }
 
   /**
@@ -67,7 +92,8 @@ class PreventiviService {
   async getById(id: string): Promise<Preventivo> {
     const response = await api.get(`${this.basePath}/${id}`);
     const responseData = response.data as any;
-    return (responseData?.data || responseData) as Preventivo;
+    const preventivo = responseData?.data || responseData;
+    return parsePreventivo(preventivo);
   }
 
   /**
@@ -78,6 +104,7 @@ class PreventiviService {
     corsoId?: string;
     scheduleId?: string;
     tipoServizio: string;
+    quantita?: number;
     prezzoTotale: number;
     imponibile: number;
     importoIva: number;
@@ -111,7 +138,7 @@ class PreventiviService {
    * Update preventivo status
    */
   async updateStatus(id: string, stato: string): Promise<Preventivo> {
-    const response = await api.patch(`${this.basePath}/${id}/stato`, { stato });
+    const response = await api.put(`${this.basePath}/${id}/stato`, { nuovoStato: stato });
     const responseData = response.data as any;
     return (responseData?.data || responseData) as Preventivo;
   }
@@ -120,8 +147,8 @@ class PreventiviService {
    * Apply sconto to preventivo
    */
   async applySconto(id: string, codiceSconto: string): Promise<Preventivo> {
-    const response = await api.post(`${this.basePath}/${id}/applica-sconto`, { 
-      codiceSconto 
+    const response = await api.post(`${this.basePath}/${id}/applica-sconto`, {
+      codiceSconto
     });
     const responseData = response.data as any;
     return (responseData?.data || responseData) as Preventivo;
@@ -142,39 +169,39 @@ class PreventiviService {
   async download(id: string): Promise<void> {
     try {
       console.log('📄 Attempting to download preventivo PDF:', id);
-      
+
       const response = await api.get(`${this.basePath}/${id}/pdf`, {
         responseType: 'blob'
       });
-      
+
       console.log('📄 PDF response received:', {
         status: response.status,
         contentType: response.headers['content-type'],
         dataSize: response.data?.size || 0
       });
-      
+
       const url = window.URL.createObjectURL(new Blob([response.data as BlobPart]));
       const link = document.createElement('a');
       link.href = url;
-      
+
       const contentDisposition = response.headers['content-disposition'];
       let fileName = `preventivo_${id}.pdf`;
-      
+
       if (contentDisposition) {
         const match = contentDisposition.match(/filename="?(.+?)"?$/);
         if (match?.[1]) {
           fileName = match[1];
         }
       }
-      
+
       console.log('📄 Downloading as:', fileName);
-      
+
       link.setAttribute('download', fileName);
       document.body.appendChild(link);
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
-      
+
       console.log('✅ Download initiated successfully');
     } catch (error: any) {
       console.error('❌ PDF Download Error:', {

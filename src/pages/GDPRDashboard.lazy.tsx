@@ -9,9 +9,10 @@ import { LazyRoute } from '../router/LazyRoute';
 const GDPRDashboard = lazy(() => import('./GDPRDashboard'));
 
 const GDPRDashboardLazy = () => (
-  <LazyRoute>
-    <GDPRDashboard />
-  </LazyRoute>
+  <LazyRoute
+    component={GDPRDashboard}
+    loadingMessage="Caricamento GDPR Dashboard..."
+  />
 );
 
 export default GDPRDashboardLazy;

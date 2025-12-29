@@ -78,11 +78,17 @@ export const ConsentManagementTab: React.FC<ConsentManagementTabProps> = ({ hook
 
     try {
       setProcessingConsent(confirmDialog.type);
-      
+
       if (confirmDialog.action === 'grant') {
-        await grantConsent(confirmDialog.type);
+        await grantConsent({
+          consentType: confirmDialog.type,
+          purpose: `User granted ${confirmDialog.type} consent`
+        });
       } else {
-        await withdrawConsent(confirmDialog.type);
+        await withdrawConsent({
+          consentType: confirmDialog.type,
+          reason: 'User withdrew consent'
+        });
       }
     } catch (error) {
       console.error('Error processing consent:', error);
@@ -102,7 +108,9 @@ export const ConsentManagementTab: React.FC<ConsentManagementTabProps> = ({ hook
 
   const formatConsentDate = (consent: { grantedAt?: Date; withdrawnAt?: Date } | null) => {
     if (!consent) return 'Never';
-    return format(new Date(consent.grantedAt || consent.withdrawnAt), 'PPp');
+    const date = consent.grantedAt || consent.withdrawnAt;
+    if (!date) return 'Never';
+    return format(new Date(date), 'PPp');
   };
 
   if (loading && consents.length === 0) {
@@ -123,14 +131,14 @@ export const ConsentManagementTab: React.FC<ConsentManagementTabProps> = ({ hook
         <Typography variant="h6" component="h2">
           Consent Management
         </Typography>
-        
+
         <Stack direction="row" spacing={1} alignItems="center">
           <Chip
             label={`${stats.granted}/${stats.total} Granted`}
             color={stats.granted === stats.total ? 'success' : 'warning'}
             size="small"
           />
-          
+
           <Tooltip title="Refresh consent data">
             <IconButton onClick={refreshConsents} disabled={loading} size="small">
               <RefreshIcon />
@@ -147,46 +155,47 @@ export const ConsentManagementTab: React.FC<ConsentManagementTabProps> = ({ hook
       )}
 
       {/* Overview Cards */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} md={4}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" color="primary" gutterBottom>
-                {stats.granted}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Active Consents
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        
-        <Grid item xs={12} md={4}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" color="warning.main" gutterBottom>
-                {stats.withdrawn}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Withdrawn Consents
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        
-        <Grid item xs={12} md={4}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" color="info.main" gutterBottom>
-                {Math.round((stats.granted / stats.total) * 100)}%
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Compliance Rate
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
+      <Box
+        sx={{
+          mb: 4,
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' },
+          gap: 3
+        }}
+      >
+        <Card>
+          <CardContent>
+            <Typography variant="h6" color="primary" gutterBottom>
+              {stats.granted}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Active Consents
+            </Typography>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent>
+            <Typography variant="h6" color="warning.main" gutterBottom>
+              {stats.withdrawn}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Withdrawn Consents
+            </Typography>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent>
+            <Typography variant="h6" color="info.main" gutterBottom>
+              {Math.round((stats.granted / stats.total) * 100)}%
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Compliance Rate
+            </Typography>
+          </CardContent>
+        </Card>
+      </Box>
 
       {/* Consent Types List */}
       <Card>
@@ -194,7 +203,7 @@ export const ConsentManagementTab: React.FC<ConsentManagementTabProps> = ({ hook
           <Typography variant="h6" gutterBottom>
             Consent Preferences
           </Typography>
-          
+
           <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
             Manage your consent for different types of data processing. You can withdraw consent at any time.
           </Typography>
@@ -224,19 +233,19 @@ export const ConsentManagementTab: React.FC<ConsentManagementTabProps> = ({ hook
                         </Stack>
                       }
                       secondary={
-                        <Box sx={{ mt: 1 }}>
-                          <Typography variant="body2" color="text.secondary">
+                        <span style={{ display: 'block', marginTop: 8 }}>
+                          <Typography component="span" variant="body2" color="text.secondary" sx={{ display: 'block' }}>
                             {config.description}
                           </Typography>
                           {consent && (
-                            <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                            <Typography component="span" variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
                               Last updated: {formatConsentDate(consent)}
                             </Typography>
                           )}
-                        </Box>
+                        </span>
                       }
                     />
-                    
+
                     <ListItemSecondaryAction>
                       <FormControlLabel
                         control={
@@ -251,7 +260,7 @@ export const ConsentManagementTab: React.FC<ConsentManagementTabProps> = ({ hook
                       />
                     </ListItemSecondaryAction>
                   </ListItem>
-                  
+
                   {index < Object.keys(CONSENT_TYPES).length - 1 && <Divider />}
                 </React.Fragment>
               );
@@ -269,8 +278,8 @@ export const ConsentManagementTab: React.FC<ConsentManagementTabProps> = ({ hook
               Your Rights Under GDPR
             </Typography>
             <Typography variant="body2">
-              You have the right to withdraw consent at any time. Withdrawing consent will not affect 
-              the lawfulness of processing based on consent before its withdrawal. Some features may 
+              You have the right to withdraw consent at any time. Withdrawing consent will not affect
+              the lawfulness of processing based on consent before its withdrawal. Some features may
               become unavailable if you withdraw certain consents.
             </Typography>
           </Box>
@@ -287,22 +296,22 @@ export const ConsentManagementTab: React.FC<ConsentManagementTabProps> = ({ hook
         <DialogTitle>
           {confirmDialog.action === 'grant' ? 'Grant Consent' : 'Withdraw Consent'}
         </DialogTitle>
-        
+
         <DialogContent>
           {confirmDialog.type && (
             <Box>
               <Typography variant="body1" gutterBottom>
                 Are you sure you want to {confirmDialog.action} consent for:
               </Typography>
-              
+
               <Typography variant="subtitle1" color="primary" gutterBottom>
                 {CONSENT_TYPES[confirmDialog.type]?.label}
               </Typography>
-              
+
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                 {CONSENT_TYPES[confirmDialog.type]?.description}
               </Typography>
-              
+
               {confirmDialog.action === 'withdraw' && (
                 <Alert severity="warning">
                   Withdrawing this consent may limit certain features or functionality.
@@ -311,16 +320,16 @@ export const ConsentManagementTab: React.FC<ConsentManagementTabProps> = ({ hook
             </Box>
           )}
         </DialogContent>
-        
+
         <DialogActions>
-          <Button 
+          <Button
             onClick={() => setConfirmDialog({ open: false, type: null, action: 'grant' })}
             disabled={processingConsent !== null}
           >
             Cancel
           </Button>
-          
-          <Button 
+
+          <Button
             onClick={handleConfirmAction}
             variant="contained"
             disabled={processingConsent !== null}

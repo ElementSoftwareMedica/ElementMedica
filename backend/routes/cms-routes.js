@@ -14,9 +14,424 @@ import logger from '../utils/logger.js';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs/promises';
+import cmsService from '../services/cmsService.js';
 
 const { authenticate } = authMiddleware;
 const router = express.Router();
+
+// ============================================
+// CMS PAGES ENDPOINTS
+// ============================================
+
+/**
+ * GET /api/v1/cms/pages
+ * Lista tutte le pagine CMS
+ */
+router.get('/pages', authenticate, requirePermissions('VIEW_CMS_PAGES'), [
+  query('status').optional().isIn(['draft', 'published', 'scheduled']),
+  query('search').optional().isString().trim(),
+  query('page').optional().isInt({ min: 1 }).toInt(),
+  query('limit').optional().isInt({ min: 1, max: 100 }).toInt(),
+  query('tenantId').optional().isString().trim() // Filtro per tenant specifico (solo admin)
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid parameters',
+        details: errors.array()
+      });
+    }
+
+    const isGlobalAdmin = req.user.globalRole === 'ADMIN' || req.user.globalRole === 'SUPER_ADMIN';
+
+    // Determina il tenantId da usare per il filtro
+    // Gli admin globali di default vedono tutte le pagine (null), ma possono filtrare per tenant specifico
+    // Gli altri utenti vedono solo il proprio tenant
+    let filterTenantId;
+    if (isGlobalAdmin) {
+      // Admin: se specifica un tenantId, usa quello; altrimenti null (tutte le pagine)
+      if (req.query.tenantId && req.query.tenantId !== 'all') {
+        filterTenantId = req.query.tenantId;
+      } else {
+        filterTenantId = null; // Vede tutte le pagine
+      }
+    } else {
+      // Utente normale: sempre filtrato per il proprio tenant
+      filterTenantId = req.user.tenantId;
+    }
+
+    const result = await cmsService.listPages({
+      tenantId: filterTenantId,
+      isAdmin: isGlobalAdmin,
+      status: req.query.status,
+      search: req.query.search,
+      page: parseInt(req.query.page || 1),
+      limit: parseInt(req.query.limit || 20)
+    });
+
+    res.json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    logger.error('Failed to list CMS pages', {
+      component: 'cms-routes',
+      error: error.message,
+      tenantId: req.user?.tenantId
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/v1/cms/pages/slug/:slug
+ * Ottieni pagina CMS per slug (endpoint pubblico per frontend)
+ * 
+ * NOTA: Questo endpoint NON richiede autenticazione per permettere
+ * al frontend pubblico di recuperare i contenuti delle pagine.
+ * Restituisce solo pagine pubblicate.
+ */
+router.get('/pages/slug/:slug', [
+  param('slug').isString().trim().notEmpty()
+], async (req, res) => {
+  try {
+    logger.info('CMS page slug endpoint called', {
+      component: 'cms-routes',
+      slug: req.params.slug,
+      path: req.path,
+      method: req.method
+    });
+
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid slug parameter'
+      });
+    }
+
+    // Brand detection - usa tenantId dal middleware se presente
+    const whereClause = {
+      slug: req.params.slug,
+      isPublished: true, // Solo pagine pubblicate
+      deletedAt: null
+    };
+
+    // Se il middleware ha iniettato il tenantId, filtra per brand
+    if (req.brandTenantId) {
+      whereClause.tenantId = req.brandTenantId;
+      logger.info('CMS page query with tenant filter', {
+        component: 'cms-routes',
+        slug: req.params.slug,
+        tenantId: req.brandTenantId
+      });
+    }
+
+    const page = await prisma.cMSPage.findFirst({
+      where: whereClause
+    });
+
+    if (!page) {
+      return res.status(404).json({
+        success: false,
+        error: 'Page not found',
+        details: req.brandTenantId ? `No page found for slug "${req.params.slug}" in tenant "${req.brandTenantId}"` : undefined
+      });
+    }
+
+    res.json({
+      success: true,
+      data: page
+    });
+  } catch (error) {
+    logger.error('Failed to get CMS page by slug', {
+      component: 'cms-routes',
+      error: error.message,
+      slug: req.params.slug
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error'
+    });
+  }
+});
+
+/**
+ * GET /api/v1/cms/pages/:id
+ * Ottieni singola pagina CMS per ID (autenticato)
+ */
+router.get('/pages/:id', authenticate, requirePermissions('VIEW_CMS_PAGES'), [
+  param('id').isString()
+], async (req, res) => {
+  try {
+    // Gli admin globali possono vedere pagine di qualsiasi tenant
+    const isGlobalAdmin = req.user.globalRole === 'ADMIN' || req.user.globalRole === 'SUPER_ADMIN';
+    const page = await cmsService.getPage(req.params.id, req.user.tenantId, isGlobalAdmin);
+
+    res.json({
+      success: true,
+      data: page
+    });
+  } catch (error) {
+    logger.error('Failed to get CMS page', {
+      component: 'cms-routes',
+      error: error.message,
+      pageId: req.params.id
+    });
+
+    if (error.message === 'Page not found') {
+      return res.status(404).json({
+        success: false,
+        error: 'Page not found'
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error'
+    });
+  }
+});
+
+/**
+ * POST /api/v1/cms/pages
+ * Crea nuova pagina CMS
+ */
+router.post('/pages', authenticate, requirePermissions('CREATE_CMS_PAGES'), [
+  body('slug').isString().trim().notEmpty(),
+  body('title').isString().trim().notEmpty(),
+  body('content').optional().isObject(),
+  body('blocks').optional().isArray(),
+  body('layout').optional().isIn(['full-width', 'boxed', 'sidebar-left', 'sidebar-right']),
+  body('seoTitle').optional().isString().trim(),
+  body('seoDescription').optional().isString().trim()
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid parameters',
+        details: errors.array()
+      });
+    }
+
+    const page = await cmsService.createPage({
+      ...req.body,
+      tenantId: req.user.tenantId
+    }, req.user.id);
+
+    res.status(201).json({
+      success: true,
+      data: page
+    });
+  } catch (error) {
+    logger.error('Failed to create CMS page', {
+      component: 'cms-routes',
+      error: error.message,
+      slug: req.body.slug
+    });
+
+    if (error.message === 'Slug already exists') {
+      return res.status(409).json({
+        success: false,
+        error: 'Slug already exists'
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error'
+    });
+  }
+});
+
+/**
+ * PATCH /api/v1/cms/pages/:id
+ * Aggiorna pagina CMS
+ */
+router.patch('/pages/:id', authenticate, requirePermissions('EDIT_CMS_PAGES'), [
+  param('id').isString(),
+  body('slug').optional().isString().trim(),
+  body('title').optional().isString().trim(),
+  body('content').optional().isObject(),
+  body('blocks').optional().isArray(),
+  body('layout').optional().isIn(['full-width', 'boxed', 'sidebar-left', 'sidebar-right']),
+  body('seoTitle').optional().isString().trim(),
+  body('seoDescription').optional().isString().trim()
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid parameters',
+        details: errors.array()
+      });
+    }
+
+    // Gli admin globali possono modificare pagine di qualsiasi tenant
+    const isGlobalAdmin = req.user.globalRole === 'ADMIN' || req.user.globalRole === 'SUPER_ADMIN';
+    const page = await cmsService.updatePage(
+      req.params.id,
+      req.body,
+      req.user.tenantId,
+      isGlobalAdmin
+    );
+
+    res.json({
+      success: true,
+      data: page
+    });
+  } catch (error) {
+    logger.error('Failed to update CMS page', {
+      component: 'cms-routes',
+      error: error.message,
+      pageId: req.params.id
+    });
+
+    if (error.message === 'Page not found') {
+      return res.status(404).json({
+        success: false,
+        error: 'Page not found'
+      });
+    }
+
+    if (error.message === 'Slug already exists') {
+      return res.status(409).json({
+        success: false,
+        error: 'Slug already exists'
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error'
+    });
+  }
+});
+
+/**
+ * POST /api/v1/cms/pages/:id/publish
+ * Pubblica pagina CMS
+ */
+router.post('/pages/:id/publish', authenticate, requirePermissions('PUBLISH_CMS_PAGES'), [
+  param('id').isString()
+], async (req, res) => {
+  try {
+    const page = await cmsService.publishPage(req.params.id, req.user.tenantId);
+
+    res.json({
+      success: true,
+      data: page
+    });
+  } catch (error) {
+    logger.error('Failed to publish CMS page', {
+      component: 'cms-routes',
+      error: error.message,
+      pageId: req.params.id
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error'
+    });
+  }
+});
+
+/**
+ * POST /api/v1/cms/pages/:id/unpublish
+ * Unpublish pagina CMS
+ */
+router.post('/pages/:id/unpublish', authenticate, requirePermissions('EDIT_CMS_PAGES'), [
+  param('id').isString()
+], async (req, res) => {
+  try {
+    const page = await cmsService.unpublishPage(req.params.id, req.user.tenantId);
+
+    res.json({
+      success: true,
+      data: page
+    });
+  } catch (error) {
+    logger.error('Failed to unpublish CMS page', {
+      component: 'cms-routes',
+      error: error.message,
+      pageId: req.params.id
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error'
+    });
+  }
+});
+
+/**
+ * DELETE /api/v1/cms/pages/:id
+ * Elimina pagina CMS (soft delete)
+ */
+router.delete('/pages/:id', authenticate, requirePermissions('DELETE_CMS_PAGES'), [
+  param('id').isString()
+], async (req, res) => {
+  try {
+    const page = await cmsService.deletePage(req.params.id, req.user.tenantId);
+
+    res.json({
+      success: true,
+      data: page
+    });
+  } catch (error) {
+    logger.error('Failed to delete CMS page', {
+      component: 'cms-routes',
+      error: error.message,
+      pageId: req.params.id
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error'
+    });
+  }
+});
+
+/**
+ * POST /api/v1/cms/pages/:id/duplicate
+ * Duplica pagina CMS
+ */
+router.post('/pages/:id/duplicate', authenticate, requirePermissions('CREATE_CMS_PAGES'), [
+  param('id').isString()
+], async (req, res) => {
+  try {
+    const page = await cmsService.duplicatePage(
+      req.params.id,
+      req.user.tenantId,
+      req.user.id
+    );
+
+    res.status(201).json({
+      success: true,
+      data: page
+    });
+  } catch (error) {
+    logger.error('Failed to duplicate CMS page', {
+      component: 'cms-routes',
+      error: error.message,
+      pageId: req.params.id
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error'
+    });
+  }
+});
+
+// ============================================
+// EXISTING ROUTES (courses, media, etc.)
+// ============================================
 
 // Configurazione multer per upload immagini
 const storage = multer.diskStorage({
@@ -371,7 +786,7 @@ router.post('/upload/image', authenticate, requirePermissions('CMS_MANAGE_MEDIA'
         mimeType: file.mimetype,
         size: file.size,
         url: `/uploads/cms/${file.filename}`,
-        altText: req.body.altText || '',
+        alt: req.body.alt || '',
         tenantId,
         uploadedBy: userId
       }
@@ -391,7 +806,7 @@ router.post('/upload/image', authenticate, requirePermissions('CMS_MANAGE_MEDIA'
         url: mediaRecord.url,
         filename: mediaRecord.filename,
         originalName: mediaRecord.originalName,
-        altText: mediaRecord.altText,
+        alt: mediaRecord.alt,
         size: mediaRecord.size,
         mimeType: mediaRecord.mimeType,
         createdAt: mediaRecord.createdAt
@@ -452,7 +867,7 @@ router.get('/media', authenticate, requirePermissions('VIEW_CMS'), [
           filename: true,
           originalName: true,
           url: true,
-          altText: true,
+          alt: true,
           size: true,
           mimeType: true,
           createdAt: true

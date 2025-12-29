@@ -229,4 +229,17 @@ export const DropdownMenuItem: React.FC<DropdownMenuItemProps> = ({
   );
 };
 
+export const DropdownMenuSeparator: React.FC<{ className?: string }> = ({ 
+  className 
+}) => {
+  return (
+    <div 
+      className={cn(
+        '-mx-1 my-1 h-px bg-gray-200',
+        className
+      )} 
+    />
+  );
+};
+
 export default DropdownMenu;

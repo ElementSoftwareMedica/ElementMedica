@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/rules-of-hooks */
 import type { Meta, StoryObj } from '@storybook/react';
 import { SearchBarControls } from './SearchBarControls';
 import { useState } from 'react';
@@ -24,7 +25,7 @@ const Template = (args: any) => {
   const [searchValue, setSearchValue] = useState(args.searchValue || '');
   const [activeFilters, setActiveFilters] = useState(args.activeFilters || {});
   const [activeSort, setActiveSort] = useState(args.activeSort || null);
-  
+
   return (
     <SearchBarControls
       {...args}
@@ -34,12 +35,12 @@ const Template = (args: any) => {
         args.onSearch(value);
       }}
       activeFilters={activeFilters}
-      onFilterChange={(filters) => {
+      onFilterChange={(filters: Record<string, unknown>) => {
         setActiveFilters(filters);
         args.onFilterChange(filters);
       }}
       activeSort={activeSort}
-      onSortChange={(sort) => {
+      onSortChange={(sort: { field: string; order: string } | null) => {
         setActiveSort(sort);
         args.onSortChange(sort);
       }}

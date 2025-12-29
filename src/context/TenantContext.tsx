@@ -14,13 +14,7 @@ export interface TenantContextType {
   hasPermission: (resource: string, action: string) => boolean;
   isLoading: boolean;
   error: string | null;
-  refreshTenant: () => Promise<void>;
-}
-
-export interface Permission {
-  resource: string;
-  action: string;
-  scope?: string;
+  loadTenant: () => Promise<void>;
 }
 
 // Context

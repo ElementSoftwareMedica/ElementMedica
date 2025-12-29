@@ -1,12 +1,12 @@
-import { EntityPermission } from '../../../services/advancedPermissions';
+import { EntityPermission, RelationType, PermissionScope } from '../../../services/advancedPermissions';
 import { PERMISSION_ACTIONS } from './constants';
 
 /**
  * Trova un permesso specifico nell'array dei permessi
  */
 export const getPermission = (
-  permissions: EntityPermission[], 
-  entity: string, 
+  permissions: EntityPermission[],
+  entity: string,
   action: string
 ): EntityPermission | undefined => {
   return (Array.isArray(permissions) ? permissions : [])
@@ -15,18 +15,24 @@ export const getPermission = (
 
 /**
  * Aggiorna o crea un permesso nell'array
+ * Supporta scope 'relational' con relationType
  */
 export const updatePermissionInArray = (
   permissions: EntityPermission[],
   entity: string,
   action: string,
-  scope: 'all' | 'tenant' | 'own' | 'none',
-  fields?: string[]
+  scope: PermissionScope | 'none',
+  options?: {
+    fields?: string[];
+    deniedFields?: string[];
+    relationType?: RelationType;
+    priority?: number;
+  }
 ): EntityPermission[] => {
   const currentPermissions = Array.isArray(permissions) ? permissions : [];
   const newPermissions = [...currentPermissions];
   const existingIndex = newPermissions.findIndex(p => p.entity === entity && p.action === action);
-  
+
   if (scope === 'none') {
     if (existingIndex !== -1) {
       newPermissions.splice(existingIndex, 1);
@@ -37,18 +43,82 @@ export const updatePermissionInArray = (
       entity,
       action: action as 'read' | 'create' | 'update' | 'delete',
       scope,
-      fields: fields,
+      // IMPORTANTE: granted deve essere true per salvare il permesso
+      granted: true,
+      fields: options?.fields ?? existingPermission?.fields,
+      deniedFields: options?.deniedFields ?? existingPermission?.deniedFields,
       // Mantieni i tenantIds esistenti se il scope è 'tenant'
-      tenantIds: scope === 'tenant' ? (existingPermission?.tenantIds || []) : undefined
+      tenantIds: scope === 'tenant' ? (existingPermission?.tenantIds || []) : undefined,
+      // Relazione per scope 'relational'
+      relationType: scope === 'relational' ? (options?.relationType ?? existingPermission?.relationType) : undefined,
+      // Priorità per risoluzione conflitti
+      priority: options?.priority ?? existingPermission?.priority ?? 0,
+      // Mantieni lo stato di ereditarietà
+      isInherited: existingPermission?.isInherited ?? false,
+      sourceRoleId: existingPermission?.sourceRoleId
     };
-    
+
     if (existingIndex !== -1) {
       newPermissions[existingIndex] = permission;
     } else {
       newPermissions.push(permission);
     }
   }
-  
+
+  return newPermissions;
+};
+
+/**
+ * Aggiorna il tipo di relazione per un permesso con scope 'relational'
+ */
+export const updatePermissionRelationType = (
+  permissions: EntityPermission[],
+  entity: string,
+  action: string,
+  relationType: RelationType | null
+): EntityPermission[] => {
+  const currentPermissions = Array.isArray(permissions) ? permissions : [];
+  const newPermissions = [...currentPermissions];
+  const permissionIndex = newPermissions.findIndex(p => p.entity === entity && p.action === action);
+
+  if (permissionIndex !== -1) {
+    const permission = { ...newPermissions[permissionIndex] };
+    permission.relationType = relationType ?? undefined;
+    newPermissions[permissionIndex] = permission;
+  }
+
+  return newPermissions;
+};
+
+/**
+ * Aggiorna i campi negati (deniedFields) per un permesso specifico
+ */
+export const updatePermissionDeniedFields = (
+  permissions: EntityPermission[],
+  entity: string,
+  action: string,
+  fieldId: string,
+  add: boolean = true
+): EntityPermission[] => {
+  const currentPermissions = Array.isArray(permissions) ? permissions : [];
+  const newPermissions = [...currentPermissions];
+  const permissionIndex = newPermissions.findIndex(p => p.entity === entity && p.action === action);
+
+  if (permissionIndex !== -1) {
+    const permission = { ...newPermissions[permissionIndex] };
+    const currentDeniedFields = permission.deniedFields || [];
+
+    if (add) {
+      if (!currentDeniedFields.includes(fieldId)) {
+        permission.deniedFields = [...currentDeniedFields, fieldId];
+      }
+    } else {
+      permission.deniedFields = currentDeniedFields.filter(f => f !== fieldId);
+    }
+
+    newPermissions[permissionIndex] = permission;
+  }
+
   return newPermissions;
 };
 
@@ -65,11 +135,11 @@ export const updatePermissionFields = (
   const currentPermissions = Array.isArray(permissions) ? permissions : [];
   const newPermissions = [...currentPermissions];
   const permissionIndex = newPermissions.findIndex(p => p.entity === entity && p.action === action);
-  
+
   if (permissionIndex !== -1) {
     const permission = newPermissions[permissionIndex];
     const currentFields = permission.fields || [];
-    
+
     if (add) {
       if (!currentFields.includes(fieldId)) {
         permission.fields = [...currentFields, fieldId];
@@ -78,7 +148,7 @@ export const updatePermissionFields = (
       permission.fields = currentFields.filter(f => f !== fieldId);
     }
   }
-  
+
   return newPermissions;
 };
 
@@ -89,17 +159,18 @@ export const updatePermissionTenants = (
   permissions: EntityPermission[],
   entity: string,
   action: string,
-  tenantId: number,
+  tenantId: string,
   selected: boolean
 ): EntityPermission[] => {
-  const currentPermissions = Array.isArray(permissions) ? permissions : [];
-  const newPermissions = [...currentPermissions];
-  const permissionIndex = newPermissions.findIndex(p => p.entity === entity && p.action === action);
-  
-  if (permissionIndex !== -1) {
+  const newPermissions = [...permissions];
+  const permissionIndex = newPermissions.findIndex(
+    p => p.entity === entity && p.action === action
+  );
+
+  if (permissionIndex >= 0) {
     const permission = newPermissions[permissionIndex];
     const currentTenantIds = permission.tenantIds || [];
-    
+
     if (selected) {
       // Aggiungi tenant se non già presente
       if (!currentTenantIds.includes(tenantId)) {
@@ -110,7 +181,7 @@ export const updatePermissionTenants = (
       permission.tenantIds = currentTenantIds.filter(id => id !== tenantId);
     }
   }
-  
+
   return newPermissions;
 };
 
@@ -122,24 +193,26 @@ export const applyBulkPermissions = (
   entity: string,
   selectedActions: Set<string>,
   operation: 'scope' | 'fields' | 'tenants',
-  value: string | string[] | number | number[],
+  value: string | string[],
   add: boolean = true
 ): EntityPermission[] => {
   let newPermissions = [...permissions];
-  
+
   selectedActions.forEach(action => {
     switch (operation) {
       case 'scope':
-        newPermissions = updatePermissionInArray(newPermissions, entity, action, value);
+        // value deve essere uno scope valido per operation='scope'
+        const scopeValue = value as 'all' | 'tenant' | 'own' | 'none';
+        newPermissions = updatePermissionInArray(newPermissions, entity, action, scopeValue);
         break;
-        
+
       case 'fields':
         const fieldIds = Array.isArray(value) ? value : [value];
         fieldIds.forEach(fieldId => {
           newPermissions = updatePermissionFields(newPermissions, entity, action, fieldId, add);
         });
         break;
-        
+
       case 'tenants':
         const tenantIds = Array.isArray(value) ? value : [value];
         tenantIds.forEach(tenantId => {
@@ -148,7 +221,7 @@ export const applyBulkPermissions = (
         break;
     }
   });
-  
+
   return newPermissions;
 };
 
@@ -164,7 +237,7 @@ export const getAllActionNames = (): Set<string> => {
  */
 export const hasAllTenants = (
   permission: EntityPermission | undefined,
-  allTenantIds: number[]
+  allTenantIds: string[]
 ): boolean => {
   if (!permission?.tenantIds) return false;
   return allTenantIds.every(id => permission.tenantIds!.includes(id));
@@ -178,7 +251,7 @@ export const filterEntities = <T extends { name: string; displayName: string }>(
   searchTerm: string
 ): T[] => {
   if (!searchTerm.trim()) return entities;
-  
+
   const term = searchTerm.toLowerCase();
   return entities.filter(entity =>
     entity.displayName.toLowerCase().includes(term) ||

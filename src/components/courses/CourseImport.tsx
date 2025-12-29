@@ -42,6 +42,7 @@ const csvHeaderMap: Record<string, string> = {
   'Prezzo per persona': 'pricePerPerson',
   'Max partecipanti': 'maxPeople',
   'Stato': 'status',
+  // 'Normativa' e 'Certificazioni' già definiti sopra (legacy headers)
 
   // Alias comuni aggiuntivi per robustezza
   'Durata': 'duration',
@@ -70,18 +71,18 @@ const numericFields = [
 // Normalizza un valore numerico, gestendo vari formati di input
 const normalizeNumericValue = (value: unknown): string => {
   if (value === null || value === undefined || value === '') return '';
-  
+
   // Converti in stringa
   let strValue = String(value).trim();
-  
+
   // Gestisci formati con virgola come separatore decimale (es. "1,5")
   if (/^\d+,\d+$/.test(strValue)) {
     strValue = strValue.replace(',', '.');
   }
-  
+
   // Rimuovi caratteri non numerici (eccetto punto decimale)
   strValue = strValue.replace(/[^\d.]/g, '');
-  
+
   return strValue;
 };
 
@@ -89,10 +90,10 @@ const normalizeNumericValue = (value: unknown): string => {
 const normalizeRiskLevel = (value: unknown): Course['riskLevel'] | undefined => {
   if (!value) return undefined;
   const v = String(value).trim().toUpperCase();
-  if (['ALTO','MEDIO','BASSO','A','B','C'].includes(v)) return v as any;
+  if (['ALTO', 'MEDIO', 'BASSO', 'A', 'B', 'C'].includes(v)) return v as any;
   // mapping comuni
   if (['HIGH'].includes(v)) return 'ALTO';
-  if (['MID','MEDIUM'].includes(v)) return 'MEDIO';
+  if (['MID', 'MEDIUM'].includes(v)) return 'MEDIO';
   if (['LOW'].includes(v)) return 'BASSO';
   return undefined;
 };
@@ -101,20 +102,20 @@ const normalizeRiskLevel = (value: unknown): Course['riskLevel'] | undefined => 
 const normalizeCourseType = (value: unknown): Course['courseType'] | undefined => {
   if (!value) return undefined;
   const v = String(value).trim().toUpperCase();
-  if (['PRIMO_CORSO','AGGIORNAMENTO'].includes(v)) return v as any;
-  if (['BASE','PRIMO','PRIMOCORSO','PRIMO CORSO'].includes(v)) return 'PRIMO_CORSO';
-  if (['UPDATE','AGG','AGG.','AGGIORNA','AGGIORNAMENTO CORSO'].includes(v)) return 'AGGIORNAMENTO';
+  if (['PRIMO_CORSO', 'AGGIORNAMENTO'].includes(v)) return v as any;
+  if (['BASE', 'PRIMO', 'PRIMOCORSO', 'PRIMO CORSO'].includes(v)) return 'PRIMO_CORSO';
+  if (['UPDATE', 'AGG', 'AGG.', 'AGGIORNA', 'AGGIORNAMENTO CORSO'].includes(v)) return 'AGGIORNAMENTO';
   return undefined;
 };
 
 // Validazione personalizzata per i corsi
 const validateCourse = (course: CourseImportData): string[] => {
   const errors: string[] = [];
-  
+
   if (!course.title || (typeof course.title === 'string' && course.title.trim() === '')) {
     errors.push('Il titolo del corso è obbligatorio');
   }
-  
+
   if (!course.code || (typeof course.code === 'string' && course.code.trim() === '')) {
     errors.push('Il codice del corso è obbligatorio');
   }
@@ -129,14 +130,14 @@ const validateCourse = (course: CourseImportData): string[] => {
     const n = normalizeCourseType(course.courseType);
     if (!n) errors.push('Tipo corso non valido (ammessi: PRIMO_CORSO/Base, AGGIORNAMENTO)');
   }
-  
+
   // Verifica per i campi numerici
   numericFields.forEach(field => {
     if (course[field as keyof CourseImportData] && isNaN(Number(normalizeNumericValue(course[field as keyof CourseImportData])))) {
       errors.push(`${field} deve essere un numero`);
     }
   });
-  
+
   return errors;
 };
 
@@ -155,12 +156,12 @@ const CourseImport: React.FC<CourseImportProps> = ({
   const customProcessFile = async (file: File): Promise<CourseImportData[]> => {
     try {
       // Processa il file e ottieni i dati grezzi
-      const processedData = await defaultProcessFile(file, csvHeaderMap);
-      
+      const processedData = await defaultProcessFile(file, csvHeaderMap, ',');
+
       // Converti i campi numerici in formato standard
       const dataWithNormalizedNumbers = processedData.map(course => {
         const normalized = { ...course };
-        
+
         // Normalizza i campi numerici
         numericFields.forEach(field => {
           if (normalized[field] !== undefined && normalized[field] !== null && normalized[field] !== '') {
@@ -170,16 +171,16 @@ const CourseImport: React.FC<CourseImportProps> = ({
             }
           }
         });
-        
+
         return normalized;
       });
-      
+
       // Applica il Title Case ai campi specificati
       const formattedData = dataWithNormalizedNumbers.map(course => {
         // Crea una copia dell'oggetto corso
         return applyTitleCaseToFields({ ...course }, titleCaseFields);
       });
-      
+
       // Normalizza riskLevel e courseType
       const dataWithEnums = formattedData.map(course => {
         const withEnums = { ...course } as any;
@@ -187,24 +188,24 @@ const CourseImport: React.FC<CourseImportProps> = ({
         if (withEnums.courseType) withEnums.courseType = normalizeCourseType(withEnums.courseType);
         return withEnums;
       });
-      
+
       // Cerca corrispondenze con corsi esistenti tramite il codice (uniqueField)
       const dataWithIds = dataWithEnums.map(course => {
         // Se il corso ha un codice, cerca corrispondenze
         if (course.code && typeof course.code === 'string') {
           const normalizedCode = course.code.trim().toLowerCase();
-          const existingByCode = existingCourses?.find(existing => 
+          const existingByCode = existingCourses?.find(existing =>
             existing.code && existing.code.trim().toLowerCase() === normalizedCode
           );
-          
+
           if (existingByCode) {
             return { ...course, id: existingByCode.id, _isExisting: true };
           }
         }
-        
+
         return course;
       });
-      
+
       return dataWithIds;
     } catch (error) {
       showToast({
@@ -220,9 +221,9 @@ const CourseImport: React.FC<CourseImportProps> = ({
     if (isProcessing) {
       return;
     }
-    
+
     setIsProcessing(true);
-    
+
     try {
       // Verifica che i dati siano validi
       if (!Array.isArray(data) || data.length === 0) {
@@ -233,63 +234,63 @@ const CourseImport: React.FC<CourseImportProps> = ({
         setIsProcessing(false);
         return;
       }
-      
+
       // Processa i dati per assicurarsi che i campi numerici siano numeri
       const processedData = data.map(course => {
         // Create completely new object to avoid reference issues
         const cleanCourse: Partial<Course> = {};
-        
+
         // Copy all non-numeric fields as is
         Object.keys(course).forEach(key => {
-          if (key !== 'validityYears' && 
-              key !== 'price' && 
-              key !== 'pricePerPerson' && 
-              key !== 'maxPeople') {
+          if (key !== 'validityYears' &&
+            key !== 'price' &&
+            key !== 'pricePerPerson' &&
+            key !== 'maxPeople') {
             (cleanCourse as Record<string, unknown>)[key] = (course as Record<string, unknown>)[key];
           }
         });
-        
+
         // Handle numeric fields with proper null checking
-         if (course.validityYears !== undefined && course.validityYears !== null) {
-           const numValue = parseFloat(String(course.validityYears));
-           cleanCourse.validityYears = isNaN(numValue) ? undefined : numValue;
-         }
-         
-         if (course.duration !== undefined && course.duration !== null) {
-           cleanCourse.duration = String(course.duration).replace(/[^\d]/g, '');
-         }
-         
-         if (course.price !== undefined && course.price !== null) {
-           const numValue = parseFloat(String(course.price));
-           cleanCourse.price = isNaN(numValue) ? undefined : numValue;
-         }
-         
-         if (course.pricePerPerson !== undefined && course.pricePerPerson !== null) {
-           const numValue = parseFloat(String(course.pricePerPerson));
-           cleanCourse.pricePerPerson = isNaN(numValue) ? undefined : numValue;
-         }
-         
-         if (course.maxPeople !== undefined && course.maxPeople !== null) {
-           const numValue = parseFloat(String(course.maxPeople));
-           cleanCourse.maxPeople = isNaN(numValue) ? undefined : numValue;
-         }
-        
+        if (course.validityYears !== undefined && course.validityYears !== null) {
+          const numValue = parseFloat(String(course.validityYears));
+          cleanCourse.validityYears = isNaN(numValue) ? undefined : numValue;
+        }
+
+        if (course.duration !== undefined && course.duration !== null) {
+          cleanCourse.duration = String(course.duration).replace(/[^\d]/g, '');
+        }
+
+        if (course.price !== undefined && course.price !== null) {
+          const numValue = parseFloat(String(course.price));
+          cleanCourse.price = isNaN(numValue) ? undefined : numValue;
+        }
+
+        if (course.pricePerPerson !== undefined && course.pricePerPerson !== null) {
+          const numValue = parseFloat(String(course.pricePerPerson));
+          cleanCourse.pricePerPerson = isNaN(numValue) ? undefined : numValue;
+        }
+
+        if (course.maxPeople !== undefined && course.maxPeople !== null) {
+          const numValue = parseFloat(String(course.maxPeople));
+          cleanCourse.maxPeople = isNaN(numValue) ? undefined : numValue;
+        }
+
         // renewalDuration should remain a string
         if (course.renewalDuration !== undefined) {
           cleanCourse.renewalDuration = String(course.renewalDuration);
         }
-        
+
         return cleanCourse;
       });
-      
+
       // Passa i dati processati alla funzione di import
       await onImport(processedData, overwriteIds);
-      
+
       showToast({
         message: "Importazione completata con successo",
         type: "success"
       });
-      
+
       onClose();
     } catch (error) {
       showToast({

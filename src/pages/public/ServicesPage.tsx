@@ -204,7 +204,7 @@ const ServicesPage: React.FC = () => {
             <PublicButton 
               variant="outline" 
               size="lg" 
-              className="border-white text-white hover:bg-white hover:text-primary-600"
+              className="border-white text-white hover:bg-white hover:text-cyan-800"
               to="/contatti"
               onClick={() => {
                 trackCtaEvent({ resource: 'public', action: 'cta_click', details: { label: 'Contattaci Ora', href: '/contatti', section: 'ServicesPage' } });

@@ -1,12 +1,16 @@
 import React from 'react';
 import { BrowserRouter } from 'react-router-dom';
+import { HelmetProvider } from 'react-helmet-async';
 import { QueryProvider } from './QueryProvider';
 import { AuthProvider } from '../context/AuthContext';
 import { TenantProvider } from '../context/TenantContext';
+import { TenantFilterProvider } from '../context/TenantFilterContext';
 import { AppStateProvider } from '../context/AppStateContext';
 import { ToastProvider } from '../context/ToastContext';
 import { PreferencesProvider } from '../context/PreferencesContext';
 import { AreaThemeProvider } from '../design-system/themes/AreaThemeProvider';
+import { ScrollToTop } from '../components/shared/ScrollToTop';
+import { ConfirmDialogProvider } from '../contexts/ConfirmDialogContext';
 
 /**
  * Provider principale che combina tutti i provider necessari
@@ -19,21 +23,28 @@ interface AppProvidersProps {
 export const AppProviders: React.FC<AppProvidersProps> = ({ children }) => {
   return (
     <BrowserRouter>
-      <AreaThemeProvider>
-        <QueryProvider>
-          <AuthProvider>
-            <TenantProvider>
-              <AppStateProvider>
-                <PreferencesProvider>
-                  <ToastProvider>
-                    {children}
-                  </ToastProvider>
-                </PreferencesProvider>
-              </AppStateProvider>
-            </TenantProvider>
-          </AuthProvider>
-        </QueryProvider>
-      </AreaThemeProvider>
+      <ScrollToTop />
+      <HelmetProvider>
+        <AreaThemeProvider>
+          <QueryProvider>
+            <AuthProvider>
+              <TenantProvider>
+                <TenantFilterProvider>
+                  <AppStateProvider>
+                    <PreferencesProvider>
+                      <ToastProvider>
+                        <ConfirmDialogProvider>
+                          {children}
+                        </ConfirmDialogProvider>
+                      </ToastProvider>
+                    </PreferencesProvider>
+                  </AppStateProvider>
+                </TenantFilterProvider>
+              </TenantProvider>
+            </AuthProvider>
+          </QueryProvider>
+        </AreaThemeProvider>
+      </HelmetProvider>
     </BrowserRouter>
   );
 };
@@ -47,13 +58,17 @@ export const TestProviders: React.FC<AppProvidersProps> = ({ children }) => {
       <QueryProvider>
         <AuthProvider>
           <TenantProvider>
-            <AppStateProvider>
-              <PreferencesProvider>
-                <ToastProvider>
-                  {children}
-                </ToastProvider>
-              </PreferencesProvider>
-            </AppStateProvider>
+            <TenantFilterProvider>
+              <AppStateProvider>
+                <PreferencesProvider>
+                  <ToastProvider>
+                    <ConfirmDialogProvider>
+                      {children}
+                    </ConfirmDialogProvider>
+                  </ToastProvider>
+                </PreferencesProvider>
+              </AppStateProvider>
+            </TenantFilterProvider>
           </TenantProvider>
         </AuthProvider>
       </QueryProvider>

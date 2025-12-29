@@ -60,8 +60,21 @@ const CMSManager: React.FC<CMSManagerProps> = ({ className = '' }) => {
   // Brands
   const brands = getAllBrands();
 
-  // Queries
-  const { data, isLoading, error, refetch } = useCMSPages(filters);
+  // Calcola il tenantId basato sul brand selezionato
+  const selectedTenantId = useMemo(() => {
+    if (selectedBrand === 'all') return undefined;
+    const brand = brands.find(b => b.id === selectedBrand);
+    return brand?.backend.tenantId;
+  }, [selectedBrand, brands]);
+
+  // Combina i filtri con il tenantId del brand
+  const combinedFilters = useMemo<CMSPageListFilters>(() => ({
+    ...filters,
+    tenantId: selectedTenantId,
+  }), [filters, selectedTenantId]);
+
+  // Queries - usa combinedFilters invece di filters
+  const { data, isLoading, error, refetch } = useCMSPages(combinedFilters);
   const deleteMutation = useDeleteCMSPage();
   const publishMutation = usePublishCMSPage();
   const unpublishMutation = useUnpublishCMSPage();

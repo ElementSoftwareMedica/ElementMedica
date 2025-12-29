@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/rules-of-hooks */
 /**
  * Design System - Modal Component Stories
  * Week 8 Implementation - Component Library
@@ -54,7 +55,7 @@ type Story = StoryObj<typeof Modal>;
 // Modal wrapper for stories
 const ModalWrapper = (args: any) => {
   const [isOpen, setIsOpen] = useState(false);
-  
+
   return (
     <div className="p-4">
       <Button onClick={() => setIsOpen(true)}>Open Modal</Button>
@@ -110,7 +111,7 @@ export const WithFooter: Story = {
 export const Sizes: Story = {
   render: () => {
     const [openModal, setOpenModal] = useState<string | null>(null);
-    
+
     const sizes = [
       { key: 'sm', label: 'Small' },
       { key: 'md', label: 'Medium' },
@@ -118,7 +119,7 @@ export const Sizes: Story = {
       { key: 'xl', label: 'Extra Large' },
       { key: 'full', label: 'Full Width' }
     ];
-    
+
     return (
       <div className="p-4 space-x-2">
         {sizes.map(({ key, label }) => (
@@ -126,7 +127,7 @@ export const Sizes: Story = {
             {label} Modal
           </Button>
         ))}
-        
+
         {sizes.map(({ key, label }) => (
           <Modal
             key={key}
@@ -149,13 +150,13 @@ export const Sizes: Story = {
 export const Variants: Story = {
   render: () => {
     const [openModal, setOpenModal] = useState<string | null>(null);
-    
+
     const variants = [
       { key: 'default', label: 'Default (Top)' },
       { key: 'centered', label: 'Centered' },
       { key: 'drawer', label: 'Drawer (Bottom)' }
     ];
-    
+
     return (
       <div className="p-4 space-x-2">
         {variants.map(({ key, label }) => (
@@ -163,7 +164,7 @@ export const Variants: Story = {
             {label}
           </Button>
         ))}
-        
+
         {variants.map(({ key, label }) => (
           <Modal
             key={key}
@@ -196,7 +197,7 @@ export const Loading: Story = {
 export const NoCloseButton: Story = {
   render: () => {
     const [isOpen, setIsOpen] = useState(false);
-    
+
     return (
       <div className="p-4">
         <Button onClick={() => setIsOpen(true)}>Open Modal</Button>
@@ -229,17 +230,17 @@ export const FormModal: Story = {
       email: '',
       message: ''
     });
-    
+
     const handleSubmit = (e: React.FormEvent) => {
       e.preventDefault();
       console.log('Form submitted:', formData);
       setIsOpen(false);
     };
-    
+
     const handleChange = (field: string) => (e: any) => {
       setFormData(prev => ({ ...prev, [field]: e.target.value }));
     };
-    
+
     return (
       <div className="p-4">
         <Button onClick={() => setIsOpen(true)}>Open Form Modal</Button>
@@ -269,7 +270,7 @@ export const FormModal: Story = {
               onChange={handleChange('name')}
               placeholder="Enter your full name"
             />
-            
+
             <FormField
               name="email"
               label="Email Address"
@@ -279,7 +280,7 @@ export const FormModal: Story = {
               onChange={handleChange('email')}
               placeholder="Enter your email address"
             />
-            
+
             <FormField
               name="message"
               label="Message"
@@ -302,41 +303,41 @@ export const ConfirmModalStory: Story = {
   render: () => {
     const [isOpen, setIsOpen] = useState(false);
     const [variant, setVariant] = useState<'danger' | 'warning' | 'info'>('info');
-    
+
     const handleConfirm = () => {
       console.log('Confirmed!');
       setIsOpen(false);
     };
-    
+
     return (
       <div className="p-4 space-x-2">
-        <Button 
+        <Button
           onClick={() => { setVariant('info'); setIsOpen(true); }}
         >
           Info Confirm
         </Button>
-        <Button 
+        <Button
           variant="outline"
           onClick={() => { setVariant('warning'); setIsOpen(true); }}
         >
           Warning Confirm
         </Button>
-        <Button 
+        <Button
           variant="destructive"
           onClick={() => { setVariant('danger'); setIsOpen(true); }}
         >
           Danger Confirm
         </Button>
-        
+
         <ConfirmModal
-          isOpen={isOpen}
-          onClose={() => setIsOpen(false)}
+          open={isOpen}
+          onCancel={() => setIsOpen(false)}
           onConfirm={handleConfirm}
           title={`${variant.charAt(0).toUpperCase() + variant.slice(1)} Confirmation`}
           message={`This is a ${variant} confirmation dialog. Are you sure you want to proceed?`}
           variant={variant}
-          confirmText="Yes, proceed"
-          cancelText="Cancel"
+          confirmLabel="Yes, proceed"
+          cancelLabel="Cancel"
         />
       </div>
     );
@@ -355,11 +356,11 @@ export const NestedModals: Story = {
   render: () => {
     const [firstModal, setFirstModal] = useState(false);
     const [secondModal, setSecondModal] = useState(false);
-    
+
     return (
       <div className="p-4">
         <Button onClick={() => setFirstModal(true)}>Open First Modal</Button>
-        
+
         <Modal
           isOpen={firstModal}
           onClose={() => setFirstModal(false)}
@@ -375,7 +376,7 @@ export const NestedModals: Story = {
             </Button>
           </div>
         </Modal>
-        
+
         <Modal
           isOpen={secondModal}
           onClose={() => setSecondModal(false)}

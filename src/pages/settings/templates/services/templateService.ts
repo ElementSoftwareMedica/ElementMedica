@@ -25,8 +25,19 @@ const apiClient = axios.create({
   withCredentials: true,
 });
 
-// Add auth token interceptor
+// Add auth token interceptor with method validation
 apiClient.interceptors.request.use((config) => {
+  // CRITICAL FIX: Validate HTTP method FIRST for ALL requests
+  try {
+    if (!config.method || typeof config.method !== 'string' || config.method.trim() === '') {
+      config.method = 'GET';
+    } else {
+      config.method = config.method.toUpperCase();
+    }
+  } catch {
+    config.method = 'GET';
+  }
+
   const token = localStorage.getItem('token');
   if (token && config.headers) {
     config.headers.Authorization = `Bearer ${token}`;

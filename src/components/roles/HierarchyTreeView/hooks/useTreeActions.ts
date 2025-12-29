@@ -44,13 +44,20 @@ export const useTreeActions = ({
 
   const canEditRole = (roleType: string): boolean => {
     if (!currentUserHierarchy) return false;
-    
-    // Se l'utente ha ALL_PERMISSIONS o è SUPER_ADMIN, può modificare tutto
+
+    // Se l'utente ha ALL_PERMISSIONS o è SUPER_ADMIN/ADMIN, può modificare tutto
     if (currentUserHierarchy.assignablePermissions?.includes('ALL_PERMISSIONS') ||
-        currentUserHierarchy.userRoles?.includes('SUPER_ADMIN')) {
+      currentUserHierarchy.userRoles?.includes('SUPER_ADMIN') ||
+      currentUserHierarchy.userRoles?.includes('ADMIN')) {
       return true;
     }
-    
+
+    // Fallback: se l'utente ha globalRole ADMIN, permettiamo modifiche
+    const userPersonInfo = currentUserHierarchy.personRoles?.[0]?.person || currentUserHierarchy;
+    if (userPersonInfo?.globalRole === 'ADMIN' || userPersonInfo?.globalRole === 'SUPER_ADMIN') {
+      return true;
+    }
+
     // I ruoli assegnabili potrebbero essere oggetti con proprietà type/name
     return currentUserHierarchy.assignableRoles?.some((role: any) => {
       const roleTypeToCheck = typeof role === 'object' ? (role.type || role.name) : role;
@@ -61,23 +68,31 @@ export const useTreeActions = ({
   const hasPermission = (permission: string): boolean => {
     console.log('🔍 Checking permission:', permission);
     console.log('📊 currentUserHierarchy:', currentUserHierarchy);
-    
+
     if (!currentUserHierarchy) {
       console.log('❌ No currentUserHierarchy found');
       return false;
     }
-    
-    // Se l'utente ha ALL_PERMISSIONS o è SUPER_ADMIN, ha tutti i permessi
+
+    // Se l'utente ha ALL_PERMISSIONS o è SUPER_ADMIN/ADMIN, ha tutti i permessi
     if (currentUserHierarchy.assignablePermissions?.includes('ALL_PERMISSIONS') ||
-        currentUserHierarchy.userRoles?.includes('SUPER_ADMIN')) {
-      console.log('✅ User has ALL_PERMISSIONS or SUPER_ADMIN');
+      currentUserHierarchy.userRoles?.includes('SUPER_ADMIN') ||
+      currentUserHierarchy.userRoles?.includes('ADMIN')) {
+      console.log('✅ User has ALL_PERMISSIONS or SUPER_ADMIN/ADMIN role');
       return true;
     }
-    
+
+    // Fallback: se l'utente ha globalRole ADMIN, permettiamo tutto
+    const userPersonInfo = currentUserHierarchy.personRoles?.[0]?.person || currentUserHierarchy;
+    if (userPersonInfo?.globalRole === 'ADMIN' || userPersonInfo?.globalRole === 'SUPER_ADMIN') {
+      console.log('✅ User has globalRole ADMIN/SUPER_ADMIN, granting permission');
+      return true;
+    }
+
     const hasPermissionResult = currentUserHierarchy.assignablePermissions?.includes(permission) || false;
     console.log(`🎯 Permission ${permission} result:`, hasPermissionResult);
     console.log('📋 Available permissions:', currentUserHierarchy.assignablePermissions);
-    
+
     return hasPermissionResult;
   };
 
@@ -92,7 +107,7 @@ export const useTreeActions = ({
 
   const startEditing = (node: TreeNode) => {
     if (!canEditRole(node.roleType)) return;
-    
+
     setEditingNode(node.id);
     setFormData({
       name: node.name,
@@ -105,9 +120,9 @@ export const useTreeActions = ({
 
   const startCreating = (parentId: string | null, parentNode?: TreeNode | null) => {
     if (!hasPermission('CREATE_ROLES')) return;
-    
+
     const newLevel = parentNode ? parentNode.level + 1 : 1;
-    
+
     setCreatingChild(parentId);
     setFormData({
       name: '',
@@ -137,7 +152,7 @@ export const useTreeActions = ({
           });
         }
       }
-      
+
       // Ricarica i dati
       if (onReload) {
         await onReload();
@@ -150,7 +165,7 @@ export const useTreeActions = ({
 
   const deleteRole = async (nodeId: string) => {
     if (!canEditRole(nodeId) || !hasPermission('DELETE_ROLES')) return;
-    
+
     if (window.confirm('Sei sicuro di voler eliminare questo ruolo? Questa azione non può essere annullata.')) {
       try {
         if (callbacks?.onDelete) {

@@ -1,13 +1,16 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Phone, Mail, MapPin, Clock, Facebook, Linkedin, Instagram } from 'lucide-react';
+import { useBrandConfig } from '../../hooks/useBrandConfig';
 
 /**
- * Footer pubblico per Element Formazione
+ * Footer pubblico multi-brand
  * Include informazioni aziendali, contatti e link utili
+ * Supporta Element Formazione e Element Medica
  */
 export const PublicFooter: React.FC = () => {
   const currentYear = new Date().getFullYear();
+  const brandConfig = useBrandConfig();
 
   return (
     <footer className="bg-gray-900 text-white">
@@ -17,43 +20,58 @@ export const PublicFooter: React.FC = () => {
           {/* Company Info */}
           <div className="space-y-4">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-primary-600 rounded-full flex items-center justify-center">
-              <span className="text-white font-bold text-lg">E</span>
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                brandConfig.theme === 'medical' ? 'bg-cyan-600' : 'bg-primary-600'
+              }`}>
+              <span className="text-white font-bold text-lg">
+                {brandConfig.displayName.charAt(0)}
+              </span>
             </div>
               <div>
-                <h3 className="text-xl font-bold">Element Formazione</h3>
+                <h3 className="text-xl font-bold">{brandConfig.displayName}</h3>
                 <p className="text-gray-400 text-sm">
-                  Sicurezza e Formazione Professionale
+                  {brandConfig.tagline}
                 </p>
               </div>
             </div>
             <p className="text-gray-300 text-sm leading-relaxed">
-              Leader nella formazione sulla sicurezza sul lavoro e servizi di consulenza. 
-              Offriamo soluzioni complete per la conformità normativa e la sicurezza aziendale.
+              {brandConfig.description}
             </p>
             {/* Social Links */}
             <div className="flex space-x-4">
-                <a 
-                  href="#" 
-                  className="text-gray-400 hover:text-primary-400 transition-colors"
-                  aria-label="Facebook"
-                >
-                  <Facebook className="w-5 h-5" />
-                </a>
-                <a 
-                  href="#" 
-                  className="text-gray-400 hover:text-primary-400 transition-colors"
-                  aria-label="LinkedIn"
-                >
-                  <Linkedin className="w-5 h-5" />
-                </a>
-                <a 
-                  href="#" 
-                  className="text-gray-400 hover:text-primary-400 transition-colors"
-                  aria-label="Instagram"
-                >
-                  <Instagram className="w-5 h-5" />
-                </a>
+                {brandConfig.social.facebook && (
+                  <a 
+                    href={brandConfig.social.facebook} 
+                    className="text-gray-400 hover:text-primary-400 transition-colors"
+                    aria-label="Facebook"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Facebook className="w-5 h-5" />
+                  </a>
+                )}
+                {brandConfig.social.linkedin && (
+                  <a 
+                    href={brandConfig.social.linkedin} 
+                    className="text-gray-400 hover:text-primary-400 transition-colors"
+                    aria-label="LinkedIn"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Linkedin className="w-5 h-5" />
+                  </a>
+                )}
+                {brandConfig.social.instagram && (
+                  <a 
+                    href={brandConfig.social.instagram} 
+                    className="text-gray-400 hover:text-primary-400 transition-colors"
+                    aria-label="Instagram"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Instagram className="w-5 h-5" />
+                  </a>
+                )}
               </div>
           </div>
 
@@ -129,28 +147,30 @@ export const PublicFooter: React.FC = () => {
                 <MapPin className="w-5 h-5 text-primary-400 mt-0.5 flex-shrink-0" />
                 <div>
                   <p className="text-gray-300">
-                    Via Lanari, 14<br />
-                    35129 Padova (PD)<br />
-                    Italia
+                    {brandConfig.contacts.address.split(',').map((line, i) => (
+                      <React.Fragment key={i}>
+                        {line.trim()}{i < brandConfig.contacts.address.split(',').length - 1 && <br />}
+                      </React.Fragment>
+                    ))}
                   </p>
                 </div>
               </div>
               <div className="flex items-center space-x-3">
                 <Phone className="w-5 h-5 text-primary-400 flex-shrink-0" />
                 <a 
-                  href="tel: 351 318 1574" 
+                  href={`tel:${brandConfig.contacts.phone.replace(/\s/g, '')}`} 
                   className="text-gray-300 hover:text-white transition-colors"
                 >
-                  351 318 1574
+                  {brandConfig.contacts.phone}
                 </a>
               </div>
               <div className="flex items-center space-x-3">
                 <Mail className="w-5 h-5 text-primary-400 flex-shrink-0" />
                 <a 
-                  href="mailto:info@elementformazione.com" 
+                  href={`mailto:${brandConfig.contacts.email}`} 
                   className="text-gray-300 hover:text-white transition-colors"
                 >
-                  info@elementformazione.com
+                  {brandConfig.contacts.email}
                 </a>
               </div>
               <div className="flex items-start space-x-3">

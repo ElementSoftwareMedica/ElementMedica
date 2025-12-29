@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/rules-of-hooks */
 import type { Meta, StoryObj } from '@storybook/react';
 import { ViewModeToggleButton } from './ViewModeToggleButton';
 import { useState } from 'react';
@@ -24,7 +25,7 @@ type Story = StoryObj<typeof meta>;
 // Template per gestire lo stato
 const Template = (args: any) => {
   const [viewMode, setViewMode] = useState(args.viewMode);
-  
+
   return (
     <ViewModeToggleButton
       {...args}

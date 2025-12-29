@@ -16,6 +16,7 @@ interface ExistingEvent {
     co_trainer_id?: string | number;
     trainerId?: string | number;
     coTrainerId?: string | number;
+    sessionId?: string; // ID reale della CourseSession
   }>;
   location?: string;
   max_participants?: number;
@@ -23,10 +24,15 @@ interface ExistingEvent {
   delivery_mode?: DeliveryMode | '';
   risk_level?: RiskLevel | '';
   course_type?: CourseType | '';
+  isPublic?: boolean;
   employees?: Array<{ id: string | number }>;
   employee_ids?: Array<string | number>;
   companies?: Array<{ id: string | number }>;
   company_ids?: Array<string | number>;
+  attendance?: Array<{
+    date: string;
+    employee_ids: (string | number)[];
+  }>;
 }
 
 // Align FormData to shared type to avoid duplication and drift
@@ -36,33 +42,34 @@ type FormData = ScheduleFormData;
 interface ScheduleModalState {
   // Form data
   formData: FormData;
-  
+
   // Selections
   selectedPersons: Set<string | number>;
   selectedCompanies: Set<string | number>;
-  
+
   // Attendance
   attendance: Record<number, (string | number)[]>;
-  
+
   // UI State
   currentStep: number;
+  visitedSteps: Set<number>; // Track visited steps for navigation
   loading: boolean;
   error: string | null;
-  
+
   // Search states
   courseSearch: string;
   companySearch: string;
   personSearch: string;
   personTab: string | number;
   selectedDayIdx: number;
-  
+
   // Modal state
   showStatusMenu: boolean;
   isEditing: boolean;
 }
 
 // Action types
- type ScheduleModalAction =
+type ScheduleModalAction =
   | { type: 'SET_FORM_DATA'; payload: Partial<FormData> }
   | { type: 'SET_FORM_FIELD'; payload: { field: string; value: unknown } }
   | { type: 'TOGGLE_COMPANY'; payload: string | number }
@@ -71,6 +78,7 @@ interface ScheduleModalState {
   | { type: 'DESELECT_ALL_PERSONS' }
   | { type: 'SET_ATTENDANCE'; payload: { dateIdx: number; personIds: (string | number)[] } }
   | { type: 'SET_CURRENT_STEP'; payload: number }
+  | { type: 'ADD_VISITED_STEP'; payload: number }
   | { type: 'SET_LOADING'; payload: boolean }
   | { type: 'SET_ERROR'; payload: string | null }
   | { type: 'SET_COURSE_SEARCH'; payload: string }
@@ -86,20 +94,20 @@ interface ScheduleModalState {
 interface ScheduleModalContextType {
   state: ScheduleModalState;
   dispatch: React.Dispatch<ScheduleModalAction>;
-  
+
   // Data props
   trainings: Training[];
   trainers: Trainer[];
   companies: Company[];
   persons: Person[];
-  
+
   // Computed values
   canProceedToStep: (step: number) => boolean;
   totalSelectedHours: number;
   courseDuration: number;
   hoursLeft: number;
   selectedCourse: Training | undefined;
-  
+
   // Action creators
   actions: {
     setFormData: (data: Partial<FormData>) => void;
@@ -135,12 +143,14 @@ const initialState: ScheduleModalState = {
     delivery_mode: '' as DeliveryMode | '',
     risk_level: '' as RiskLevel | '',
     course_type: '' as CourseType | '',
+    isPublic: false,
     dates: [{ date: '', start: '09:00', end: '13:00', trainerId: '' as string | number, coTrainerId: '' as string | number }]
   },
   selectedPersons: new Set(),
   selectedCompanies: new Set(),
   attendance: {},
   currentStep: 0,
+  visitedSteps: new Set([0]), // Step 0 always visited initially
   loading: false,
   error: null,
   courseSearch: '',
@@ -160,13 +170,13 @@ function scheduleModalReducer(state: ScheduleModalState, action: ScheduleModalAc
         ...state,
         formData: { ...state.formData, ...action.payload }
       };
-      
+
     case 'SET_FORM_FIELD':
       return {
         ...state,
         formData: { ...state.formData, [action.payload.field]: action.payload.value }
       };
-      
+
     case 'TOGGLE_COMPANY': {
       const newSelected = new Set(state.selectedCompanies);
       if (newSelected.has(action.payload)) {
@@ -176,21 +186,21 @@ function scheduleModalReducer(state: ScheduleModalState, action: ScheduleModalAc
       }
       return { ...state, selectedCompanies: newSelected };
     }
-    
+
     case 'TOGGLE_PERSON': {
       const newSelected = new Set(state.selectedPersons);
       const isAdding = !newSelected.has(action.payload);
-      
+
       if (isAdding) {
         newSelected.add(action.payload);
       } else {
         newSelected.delete(action.payload);
       }
-      
+
       // ✅ AUTO-SELECT: Quando aggiungi un partecipante, aggiungilo a tutte le sessioni
       const newAttendance = { ...state.attendance };
       const numDates = state.formData.dates?.length || 0;
-      
+
       if (isAdding) {
         // Aggiungi a tutte le sessioni esistenti
         for (let i = 0; i < numDates; i++) {
@@ -205,40 +215,40 @@ function scheduleModalReducer(state: ScheduleModalState, action: ScheduleModalAc
           newAttendance[i] = (newAttendance[i] || []).filter(id => id !== action.payload);
         }
       }
-      
-      return { 
-        ...state, 
+
+      return {
+        ...state,
         selectedPersons: newSelected,
         attendance: newAttendance
       };
     }
-    
+
     case 'SELECT_ALL_PERSONS': {
       const allPersons = new Set([...state.selectedPersons, ...action.payload]);
-      
+
       // ✅ AUTO-SELECT: Aggiungi tutti i nuovi partecipanti a tutte le sessioni
       const newAttendance = { ...state.attendance };
       const numDates = state.formData.dates?.length || 0;
-      
+
       for (let i = 0; i < numDates; i++) {
         const currentAttendees = new Set(newAttendance[i] || []);
         action.payload.forEach(personId => currentAttendees.add(personId));
         newAttendance[i] = Array.from(currentAttendees);
       }
-      
+
       return {
         ...state,
         selectedPersons: allPersons,
         attendance: newAttendance
       };
     }
-      
+
     case 'DESELECT_ALL_PERSONS':
       return {
         ...state,
         selectedPersons: new Set()
       };
-      
+
     case 'SET_ATTENDANCE':
       return {
         ...state,
@@ -247,40 +257,46 @@ function scheduleModalReducer(state: ScheduleModalState, action: ScheduleModalAc
           [action.payload.dateIdx]: action.payload.personIds
         }
       };
-      
+
     case 'SET_CURRENT_STEP':
       return { ...state, currentStep: action.payload };
-      
+
+    case 'ADD_VISITED_STEP': {
+      const newVisited = new Set(state.visitedSteps);
+      newVisited.add(action.payload);
+      return { ...state, visitedSteps: newVisited };
+    }
+
     case 'SET_LOADING':
       return { ...state, loading: action.payload };
-      
+
     case 'SET_ERROR':
       return { ...state, error: action.payload };
-      
+
     case 'SET_COURSE_SEARCH':
       return { ...state, courseSearch: action.payload };
-      
+
     case 'SET_COMPANY_SEARCH':
       return { ...state, companySearch: action.payload };
-      
+
     case 'SET_PERSON_SEARCH':
       return { ...state, personSearch: action.payload };
-      
+
     case 'SET_PERSON_TAB':
       return { ...state, personTab: action.payload };
-      
+
     case 'SET_SELECTED_DAY_IDX':
       return { ...state, selectedDayIdx: action.payload };
-      
+
     case 'SET_SHOW_STATUS_MENU':
       return { ...state, showStatusMenu: action.payload };
-      
+
     case 'SET_IS_EDITING':
       return { ...state, isEditing: action.payload };
-      
+
     case 'RESET_STATE':
       return initialState;
-      
+
     default:
       return state;
   }
@@ -305,6 +321,12 @@ interface ScheduleModalProviderProps {
   existingEvent?: ExistingEvent;
   initialDate?: string;
   initialTime?: string | { start: string; end: string };
+  /** Pre-selezione corso per riprogrammazione rapida */
+  preSelectedCourseId?: string | null;
+  /** Pre-selezione dipendenti per riprogrammazione rapida */
+  preSelectedPersonIds?: string[];
+  /** Pre-selezione aziende per riprogrammazione rapida */
+  preSelectedCompanyIds?: string[];
 }
 
 // Provider Component
@@ -316,7 +338,10 @@ export const ScheduleModalProvider: React.FC<ScheduleModalProviderProps> = ({
   persons = [],
   existingEvent = {},
   initialDate,
-  initialTime
+  initialTime,
+  preSelectedCourseId,
+  preSelectedPersonIds = [],
+  preSelectedCompanyIds = []
 }) => {
   // DEBUG: Log props ricevute dal provider
   console.debug('[ScheduleModalProvider] Props ricevute:', {
@@ -352,6 +377,8 @@ export const ScheduleModalProvider: React.FC<ScheduleModalProviderProps> = ({
     end: d?.end ?? d?.endTime ?? '13:00',
     trainerId: (d?.trainerId ?? d?.trainer_id ?? '') as string | number,
     coTrainerId: (d?.coTrainerId ?? d?.co_trainer_id ?? '') as string | number,
+    // Preserva il sessionId se presente (per schedule esistenti)
+    sessionId: d?.sessionId ?? d?.session_id ?? undefined,
   });
 
   // Deriva formData iniziale da existingEvent se presente
@@ -365,9 +392,14 @@ export const ScheduleModalProvider: React.FC<ScheduleModalProviderProps> = ({
 
     const mappedDates = rawDates.map(mapDateEntry);
 
+    // Pre-selezione corso se specificato (per riprogrammazione rapida)
+    const trainingId = preSelectedCourseId
+      ?? existingEvent?.training_id
+      ?? base.training_id;
+
     return {
       ...base,
-      training_id: (existingEvent?.training_id ?? base.training_id) as string | number,
+      training_id: trainingId as string | number,
       // trainer_id/co_trainer_id mantengono valori default: sono per fallback e non per-sessione
       location: (existingEvent?.location ?? base.location) as string,
       max_participants: (existingEvent?.max_participants ?? base.max_participants) as number,
@@ -375,24 +407,59 @@ export const ScheduleModalProvider: React.FC<ScheduleModalProviderProps> = ({
       delivery_mode: (existingEvent?.delivery_mode ?? base.delivery_mode) as DeliveryMode | '',
       risk_level: (existingEvent?.risk_level ?? base.risk_level) as RiskLevel | '',
       course_type: (existingEvent?.course_type ?? base.course_type) as CourseType | '',
+      isPublic: ((existingEvent as any)?.isPublic ?? base.isPublic) as boolean,
       dates: mappedDates as any,
     };
-  }, [existingEvent, initialDates]);
+  }, [existingEvent, initialDates, preSelectedCourseId]);
 
-  // Inizializza selezioni da existingEvent se presenti
+  // Inizializza selezioni da existingEvent o pre-selezione (riprogrammazione rapida)
   const initialSelectedPersons = React.useMemo(() => {
+    // Prima prova pre-selezione (riprogrammazione rapida)
+    if (preSelectedPersonIds.length > 0) {
+      return new Set(preSelectedPersonIds);
+    }
+    // Poi existingEvent
     const ids = (existingEvent as any)?.employee_ids
       ?? (existingEvent as any)?.employees?.map((e: any) => e?.id)
       ?? [];
     return new Set(ids.filter((v: any) => v !== undefined && v !== null));
-  }, [existingEvent]);
+  }, [existingEvent, preSelectedPersonIds]);
 
   const initialSelectedCompanies = React.useMemo(() => {
+    // Prima prova pre-selezione (riprogrammazione rapida)
+    if (preSelectedCompanyIds.length > 0) {
+      return new Set(preSelectedCompanyIds);
+    }
+    // Poi existingEvent
     const ids = (existingEvent as any)?.company_ids
       ?? (existingEvent as any)?.companies?.map((c: any) => c?.id)
       ?? [];
     return new Set(ids.filter((v: any) => v !== undefined && v !== null));
-  }, [existingEvent]);
+  }, [existingEvent, preSelectedCompanyIds]);
+
+  // Inizializza attendance da existingEvent se presente, altrimenti da initialSelectedPersons
+  const initialAttendance = React.useMemo(() => {
+    // Se existingEvent ha attendance differenziato, usalo
+    if (existingEvent?.attendance && Array.isArray(existingEvent.attendance)) {
+      const attendanceMap: Record<number, (string | number)[]> = {};
+      existingEvent.attendance.forEach((session, idx) => {
+        if (session.employee_ids && Array.isArray(session.employee_ids)) {
+          attendanceMap[idx] = session.employee_ids;
+        }
+      });
+      return attendanceMap;
+    }
+    // Altrimenti, se ci sono partecipanti iniziali, aggiungili a tutte le sessioni
+    if (initialSelectedPersons.size > 0 && initialFormData.dates) {
+      const attendanceMap: Record<number, (string | number)[]> = {};
+      const allPersonIds = Array.from(initialSelectedPersons) as (string | number)[];
+      initialFormData.dates.forEach((_, idx) => {
+        attendanceMap[idx] = allPersonIds;
+      });
+      return attendanceMap;
+    }
+    return {};
+  }, [existingEvent, initialSelectedPersons, initialFormData.dates]);
 
   const [state, dispatch] = useReducer(
     scheduleModalReducer,
@@ -401,6 +468,7 @@ export const ScheduleModalProvider: React.FC<ScheduleModalProviderProps> = ({
       formData: initialFormData,
       selectedPersons: initialSelectedPersons as Set<string | number>,
       selectedCompanies: initialSelectedCompanies as Set<string | number>,
+      attendance: initialAttendance,
       isEditing: !!(existingEvent && (existingEvent as any).id),
     }
   );
@@ -415,6 +483,14 @@ export const ScheduleModalProvider: React.FC<ScheduleModalProviderProps> = ({
     deselectAllPersons: () => dispatch({ type: 'DESELECT_ALL_PERSONS' }),
     setAttendance: (dateIdx: number, personIds: (string | number)[]) => dispatch({ type: 'SET_ATTENDANCE', payload: { dateIdx, personIds } }),
     setCurrentStep: (step: number) => dispatch({ type: 'SET_CURRENT_STEP', payload: step }),
+    addVisitedStep: (step: number) => dispatch({ type: 'ADD_VISITED_STEP', payload: step }),
+    canNavigateToStep: (step: number): boolean => {
+      const isEditing = state.isEditing;
+      const currentStep = state.currentStep;
+      const visitedSteps = state.visitedSteps;
+      if (isEditing) return true; // In modifica, tutti gli step accessibili
+      return step <= currentStep || visitedSteps.has(step); // Consenti step precedenti o visitati
+    },
     setLoading: (loading: boolean) => dispatch({ type: 'SET_LOADING', payload: loading }),
     setError: (error: string | null) => dispatch({ type: 'SET_ERROR', payload: error }),
     setCourseSearch: (search: string) => dispatch({ type: 'SET_COURSE_SEARCH', payload: search }),
@@ -425,40 +501,22 @@ export const ScheduleModalProvider: React.FC<ScheduleModalProviderProps> = ({
     setShowStatusMenu: (show: boolean) => dispatch({ type: 'SET_SHOW_STATUS_MENU', payload: show }),
     setIsEditing: (editing: boolean) => dispatch({ type: 'SET_IS_EDITING', payload: editing }),
     resetState: () => dispatch({ type: 'RESET_STATE' })
-  }), []);
-
-  // ✅ SYNC ATTENDANCE: Quando ci sono partecipanti iniziali, aggiungili a tutte le sessioni
-  React.useEffect(() => {
-    if (initialSelectedPersons.size > 0 && state.formData.dates) {
-      const numDates = state.formData.dates.length;
-      const allPersonIds = Array.from(initialSelectedPersons) as (string | number)[];
-      
-      for (let i = 0; i < numDates; i++) {
-        // Popola attendance solo se non già presente
-        if (!state.attendance[i] || state.attendance[i].length === 0) {
-          dispatch({ 
-            type: 'SET_ATTENDANCE', 
-            payload: { dateIdx: i, personIds: allPersonIds } 
-          });
-        }
-      }
-    }
-  }, []); // Run only once on mount
+  }), [state.isEditing, state.currentStep, state.visitedSteps]); // ✅ FIX: Aggiunte dipendenze per canNavigateToStep
 
   // Computed values
   const totalSelectedHours = useMemo(() => {
     if (!state.formData.dates || state.formData.dates.length === 0) return 0;
-    
+
     return state.formData.dates.reduce((total, date) => {
       if (!date.start || !date.end) return total;
-      
+
       const startMinutes = timeStringToMinutes(date.start);
       const endMinutes = timeStringToMinutes(date.end);
-      
+
       if (endMinutes > startMinutes) {
         return total + (endMinutes - startMinutes) / 60;
       }
-      
+
       return total;
     }, 0);
   }, [state.formData.dates]);
@@ -470,15 +528,15 @@ export const ScheduleModalProvider: React.FC<ScheduleModalProviderProps> = ({
     if (typeof duration === 'string') return parseFloat(duration) || 0;
     return 0;
   }, [trainings, state.formData.training_id]);
-  
+
   const hoursLeft = useMemo(() => {
     return Math.max(0, courseDuration - totalSelectedHours);
   }, [courseDuration, totalSelectedHours]);
-  
+
   const selectedCourse = useMemo(() => {
     return trainings.find(t => t.id === state.formData.training_id);
   }, [trainings, state.formData.training_id]);
-  
+
   const canProceedToStep = useCallback((step: number): boolean => {
     switch (step) {
       case 1: // Company/Person selection
@@ -508,7 +566,7 @@ export const ScheduleModalProvider: React.FC<ScheduleModalProviderProps> = ({
     selectedCourse,
     actions
   };
-  
+
   return (
     <ScheduleModalContext.Provider value={contextValue}>
       {children}

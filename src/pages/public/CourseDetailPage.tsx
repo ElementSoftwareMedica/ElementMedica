@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { PublicLayout } from '../../components/public/PublicLayout';
 import { PublicButton } from '../../components/public/PublicButton';
+import { apiGet } from '../../services/api';
 
 interface Course {
   id: string;
@@ -26,6 +27,9 @@ interface Course {
 
 const CourseDetailPage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
+  const [course, setCourse] = useState<Course | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [requestForm, setRequestForm] = useState({
     name: '',
     email: '',
@@ -35,56 +39,37 @@ const CourseDetailPage: React.FC = () => {
     requestType: 'info'
   });
 
-  // Mock data - in produzione verrebbe caricato dal backend
-  const course: Course = {
-    id: '1',
-    title: 'Sicurezza Generale per Lavoratori - Rischio Basso',
-    shortDescription: 'Corso base sulla sicurezza sul lavoro per tutti i settori',
-    fullDescription: 'Corso completo di formazione generale e specifica per lavoratori operanti in settori a rischio basso secondo il D.Lgs. 81/08. Il corso fornisce le competenze necessarie per identificare, valutare e gestire i rischi presenti negli ambienti di lavoro, promuovendo una cultura della sicurezza e della prevenzione.',
-    category: 'Sicurezza Generale',
-    subcategory: 'Formazione Base',
-    riskLevel: 'BASSO',
-    courseType: 'PRIMO_CORSO',
-    duration: 8,
-    maxParticipants: 20,
-    slug: 'sicurezza-generale-lavoratori-basso',
-    price: 120,
-    certification: 'Attestato di frequenza riconosciuto secondo D.Lgs. 81/08',
-    program: [
-      'Concetti di rischio, danno, prevenzione, protezione',
-      'Organizzazione della prevenzione aziendale',
-      'Diritti, doveri e sanzioni per i vari soggetti aziendali',
-      'Organi di vigilanza, controllo e assistenza',
-      'Rischi infortuni, meccanici generali, elettrici generali',
-      'Macchine e attrezzature, cadute dall\'alto',
-      'Rischi da esplosione, rischi chimici, nebbie, oli, fumi, vapori, polveri',
-      'Etichettatura, rischi cancerogeni, biologici, fisici',
-      'Rumore, vibrazione, radiazioni, microclima e illuminazione',
-      'Videoterminali, DPI, organizzazione del lavoro',
-      'Ambienti di lavoro, stress lavoro-correlato',
-      'Movimentazione manuale carichi, movimentazione merci',
-      'Segnaletica, emergenze, procedure di sicurezza',
-      'Procedure organizzative per il primo soccorso',
-      'Incidenti e infortuni mancati'
-    ],
-    requirements: [
-      'Nessun requisito specifico',
-      'Conoscenza base della lingua italiana',
-      'Maggiore età'
-    ],
-    objectives: [
-      'Acquisire conoscenze sui concetti di base della sicurezza sul lavoro',
-      'Identificare i principali rischi presenti negli ambienti di lavoro',
-      'Comprendere i diritti e doveri dei lavoratori in materia di sicurezza',
-      'Apprendere le procedure di emergenza e primo soccorso',
-      'Sviluppare una cultura della prevenzione e della sicurezza'
-    ]
-  };
+  // Carica il corso dal backend usando lo slug
+  useEffect(() => {
+    const loadCourse = async () => {
+      if (!slug) {
+        setError('Corso non specificato');
+        setLoading(false);
+        return;
+      }
+
+      try {
+        setLoading(true);
+        setError(null);
+        // Tenta di caricare il corso dall'API
+        const response = await apiGet<Course>(`/api/v1/courses/slug/${slug}`);
+        setCourse(response);
+      } catch (err: any) {
+        console.error('Error loading course:', err);
+        setError('Corso non trovato');
+        setCourse(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadCourse();
+  }, [slug]);
 
   const getRiskLevelLabel = (riskLevel: string) => {
     const levels = {
       'ALTO': 'Rischio Alto',
-      'MEDIO': 'Rischio Medio', 
+      'MEDIO': 'Rischio Medio',
       'BASSO': 'Rischio Basso',
       'A': 'Rischio A',
       'B': 'Rischio B',
@@ -111,6 +96,35 @@ const CourseDetailPage: React.FC = () => {
     console.log('Request data:', requestForm);
     alert('Richiesta inviata con successo! Ti contatteremo presto.');
   };
+
+  // Mostra loading
+  if (loading) {
+    return (
+      <PublicLayout>
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+        </div>
+      </PublicLayout>
+    );
+  }
+
+  // Mostra errore se corso non trovato
+  if (error || !course) {
+    return (
+      <PublicLayout>
+        <div className="flex flex-col items-center justify-center min-h-[400px] text-center px-4">
+          <svg className="w-16 h-16 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <h2 className="text-xl font-semibold text-gray-800 mb-2">Corso non trovato</h2>
+          <p className="text-gray-600 mb-4">{error || 'Il corso richiesto non esiste o non è più disponibile.'}</p>
+          <Link to="/corsi" className="text-purple-600 hover:text-purple-800 font-medium">
+            ← Torna ai corsi
+          </Link>
+        </div>
+      </PublicLayout>
+    );
+  }
 
   return (
     <PublicLayout>
@@ -241,10 +255,10 @@ const CourseDetailPage: React.FC = () => {
       <section className="py-16 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            
+
             {/* Main Content */}
             <div className="lg:col-span-2 space-y-8">
-              
+
               {/* Description */}
               <div className="bg-white rounded-2xl shadow-lg p-8">
                 <h2 className="text-2xl font-bold text-gray-900 mb-4">Descrizione del Corso</h2>
@@ -315,11 +329,11 @@ const CourseDetailPage: React.FC = () => {
 
             {/* Sidebar */}
             <div className="space-y-6">
-              
+
               {/* Request Form */}
               <div className="bg-white rounded-2xl shadow-lg p-6">
                 <h3 className="text-xl font-bold text-gray-900 mb-4">Richiedi Informazioni</h3>
-                <form onSubmit={handleSubmit} className="space-y-4">
+                <form onSubmit={handleSubmit} className="space-y-4" noValidate>
                   <div>
                     <label htmlFor="requestType" className="block text-sm font-medium text-gray-700 mb-1">
                       Tipo di Richiesta

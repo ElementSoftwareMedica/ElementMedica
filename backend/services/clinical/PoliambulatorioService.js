@@ -3,33 +3,57 @@
  * Business logic for polyclinic management
  * 
  * @module services/clinical/PoliambulatorioService
+ * @updated Project 45 - Added branch-aware support
  */
 
 import prisma from '../../config/prisma-optimization.js';
 import logger from '../../utils/logger.js';
+import { BRANCH_TYPES } from '../../utils/branchHelper.js';
+
+// Default branch for this entity
+const DEFAULT_BRANCH = BRANCH_TYPES.MEDICA;
 
 export class PoliambulatorioService {
+    // Allowed fields for Poliambulatorio model (Prisma schema)
+    static ALLOWED_FIELDS = [
+        'nome', 'codice', 'descrizione', 'indirizzo', 'citta', 'cap',
+        'provincia', 'telefono', 'email', 'pec', 'piva', 'codiceFiscale',
+        'direttoreSanitarioId', 'stato', 'orariApertura', 'createdBy'
+    ];
+
+    /**
+     * Filter data to only include allowed fields
+     */
+    static filterData(data) {
+        const filtered = {};
+        for (const field of this.ALLOWED_FIELDS) {
+            if (data[field] !== undefined) {
+                filtered[field] = data[field];
+            }
+        }
+        return filtered;
+    }
+
     /**
      * Create a new poliambulatorio
+     * @param {Object} data - Poliambulatorio data
+     * @param {string} tenantId - Tenant ID
+     * @param {string} branchType - Branch type (default: MEDICA)
      */
-    static async create(data, tenantId) {
+    static async create(data, tenantId, branchType = DEFAULT_BRANCH) {
         try {
+            // Filter data to only include allowed Prisma fields
+            const filteredData = this.filterData(data);
+
             const poliambulatorio = await prisma.poliambulatorio.create({
                 data: {
-                    ...data,
-                    tenantId
+                    ...filteredData,
+                    tenantId,
+                    branchType, // Project 45: Add branchType
                 },
                 include: {
-                    direttoreSanitario: {
-                        select: {
-                            id: true,
-                            firstName: true,
-                            lastName: true,
-                            email: true,
-                            registerCode: true
-                        }
-                    },
-                    ambulatori: true
+                    ambulatori: true,
+                    sedi: true
                 }
             });
 
@@ -37,7 +61,8 @@ export class PoliambulatorioService {
                 component: 'poliambulatorio-service',
                 action: 'create',
                 poliambulatorioId: poliambulatorio.id,
-                tenantId
+                tenantId,
+                branchType,
             });
 
             return poliambulatorio;
@@ -54,24 +79,41 @@ export class PoliambulatorioService {
 
     /**
      * Get poliambulatorio by ID
+     * @param {string} id - Poliambulatorio ID
+     * @param {string} tenantId - Tenant ID
+     * @param {string} branchType - Branch type (optional for backward compatibility)
      */
-    static async getById(id, tenantId) {
+    static async getById(id, tenantId, branchType = null) {
         try {
+            const where = {
+                id,
+                tenantId,
+                deletedAt: null
+            };
+
+            // Project 45: Add branchType filter if provided
+            if (branchType) {
+                where.branchType = branchType;
+            }
+
             const poliambulatorio = await prisma.poliambulatorio.findFirst({
-                where: {
-                    id,
-                    tenantId,
-                    deletedAt: null
-                },
+                where,
                 include: {
-                    direttoreSanitario: {
-                        select: {
-                            id: true,
-                            firstName: true,
-                            lastName: true,
-                            email: true,
-                            registerCode: true,
-                            specialties: true
+                    sedi: {
+                        where: { deletedAt: null },
+                        orderBy: { isPrincipale: 'desc' },
+                        include: {
+                            direttoreSanitario: {
+                                select: {
+                                    id: true,
+                                    firstName: true,
+                                    lastName: true,
+                                    email: true,
+                                    phone: true,
+                                    registerCode: true,
+                                    specialties: true
+                                }
+                            }
                         }
                     },
                     ambulatori: {
@@ -96,24 +138,59 @@ export class PoliambulatorioService {
 
     /**
      * Get all poliambulatori for tenant
+     * @param {string|null} tenantId - Tenant ID to filter by (user's primary tenant)
+     * @param {Object} options - Query options
+     * @param {boolean} options.showAllTenants - If true and user has multi-tenant access, show all accessible tenants
+     * @param {string} options.tenantIds - Comma-separated list of tenant IDs to filter by (for multi-tenant users)
+     * @param {string} branchType - Branch type (optional for backward compatibility)
      */
-    static async getAll(tenantId, options = {}) {
+    static async getAll(tenantId, options = {}, branchType = null) {
         try {
             const {
                 page = 1,
                 limit = 20,
                 search = '',
-                isActive = true,
+                stato,
                 orderBy = 'nome',
-                orderDir = 'asc'
+                orderDir = 'asc',
+                showAllTenants = false,
+                tenantIds = null,
+                accessibleTenantIds = [] // Array of tenant IDs the user has access to
             } = options;
 
             const skip = (page - 1) * limit;
 
+            // Determine tenant filter based on user's access
+            let tenantFilter = {};
+
+            if (tenantIds) {
+                // Filter by specific tenant IDs (must be in user's accessible tenants)
+                const requestedIds = tenantIds.split(',').map(id => id.trim());
+                const allowedIds = accessibleTenantIds.length > 0
+                    ? requestedIds.filter(id => accessibleTenantIds.includes(id))
+                    : requestedIds;
+
+                if (allowedIds.length > 0) {
+                    tenantFilter = { tenantId: { in: allowedIds } };
+                } else {
+                    // User has no access to requested tenants, fallback to primary tenant
+                    tenantFilter = tenantId ? { tenantId } : {};
+                }
+            } else if (showAllTenants && accessibleTenantIds.length > 0) {
+                // Show all accessible tenants
+                tenantFilter = { tenantId: { in: accessibleTenantIds } };
+            } else if (tenantId) {
+                // Default: filter by user's primary tenant only
+                tenantFilter = { tenantId };
+            }
+
+            // Build where clause
             const where = {
-                tenantId,
                 deletedAt: null,
-                ...(isActive !== undefined && { isActive }),
+                ...tenantFilter,
+                ...(stato && { stato }),
+                // Project 45: Add branchType filter if provided
+                ...(branchType && { branchType }),
                 ...(search && {
                     OR: [
                         { nome: { contains: search, mode: 'insensitive' } },
@@ -123,16 +200,24 @@ export class PoliambulatorioService {
                 })
             };
 
+            logger.debug('Poliambulatori query where clause', {
+                component: 'poliambulatorio-service',
+                action: 'getAll',
+                where: JSON.stringify(where),
+                tenantId,
+                tenantIds,
+                showAllTenants,
+                accessibleTenantIds
+            });
+
             const [poliambulatori, total] = await Promise.all([
                 prisma.poliambulatorio.findMany({
                     where,
                     include: {
-                        direttoreSanitario: {
-                            select: {
-                                id: true,
-                                firstName: true,
-                                lastName: true
-                            }
+                        sedi: {
+                            where: { deletedAt: null },
+                            take: 1,
+                            orderBy: { isPrincipale: 'desc' }
                         },
                         _count: {
                             select: { ambulatori: true }
@@ -179,20 +264,19 @@ export class PoliambulatorioService {
                 throw new Error('Poliambulatorio not found');
             }
 
+            // Filter data to only include allowed Prisma fields
+            const filteredData = this.filterData(data);
+
             const updated = await prisma.poliambulatorio.update({
                 where: { id },
                 data: {
-                    ...data,
+                    ...filteredData,
                     updatedAt: new Date()
                 },
                 include: {
-                    direttoreSanitario: {
-                        select: {
-                            id: true,
-                            firstName: true,
-                            lastName: true,
-                            email: true
-                        }
+                    sedi: {
+                        where: { deletedAt: null },
+                        orderBy: { isPrincipale: 'desc' }
                     },
                     ambulatori: {
                         where: { deletedAt: null }
@@ -292,17 +376,18 @@ export class PoliambulatorioService {
                 where: { id: poliambulatorioId },
                 data: { direttoreSanitarioId: direttoreId },
                 include: {
-                    direttoreSanitario: {
-                        select: {
-                            id: true,
-                            firstName: true,
-                            lastName: true,
-                            email: true,
-                            registerCode: true
-                        }
+                    sedi: {
+                        where: { deletedAt: null },
+                        orderBy: { isPrincipale: 'desc' }
+                    },
+                    ambulatori: {
+                        where: { deletedAt: null }
                     }
                 }
             });
+
+            // Attach direttore info manually since relation doesn't exist in schema
+            updated.direttoreSanitario = direttore;
 
             logger.info('Direttore sanitario assigned', {
                 component: 'poliambulatorio-service',
@@ -320,6 +405,412 @@ export class PoliambulatorioService {
                 error: error.message,
                 poliambulatorioId,
                 direttoreId,
+                tenantId
+            });
+            throw error;
+        }
+    }
+
+    /**
+     * Assign direttore sanitario to a specific sede
+     */
+    static async assignDirettoreSanitarioToSede(sedeId, direttoreId, tenantId) {
+        try {
+            // Verify sede exists and belongs to tenant
+            const sede = await prisma.sedePoliambulatorio.findFirst({
+                where: { id: sedeId, tenantId, deletedAt: null }
+            });
+
+            if (!sede) {
+                throw new Error('Sede not found');
+            }
+
+            // Verify direttore exists if provided
+            if (direttoreId) {
+                const direttore = await prisma.person.findFirst({
+                    where: { id: direttoreId, tenantId, deletedAt: null }
+                });
+
+                if (!direttore) {
+                    throw new Error('Direttore sanitario not found');
+                }
+            }
+
+            const updated = await prisma.sedePoliambulatorio.update({
+                where: { id: sedeId },
+                data: { direttoreSanitarioId: direttoreId },
+                include: {
+                    direttoreSanitario: {
+                        select: {
+                            id: true,
+                            firstName: true,
+                            lastName: true,
+                            email: true,
+                            phone: true,
+                            registerCode: true,
+                            specialties: true
+                        }
+                    },
+                    poliambulatorio: {
+                        select: { id: true, nome: true, codice: true }
+                    }
+                }
+            });
+
+            logger.info('Direttore sanitario assigned to sede', {
+                component: 'poliambulatorio-service',
+                action: 'assignDirettoreSanitarioToSede',
+                sedeId,
+                direttoreId,
+                tenantId
+            });
+
+            return updated;
+        } catch (error) {
+            logger.error('Failed to assign direttore sanitario to sede', {
+                component: 'poliambulatorio-service',
+                action: 'assignDirettoreSanitarioToSede',
+                error: error.message,
+                sedeId,
+                direttoreId,
+                tenantId
+            });
+            throw error;
+        }
+    }
+
+    /**
+     * Get all sedi for a poliambulatorio with direttori sanitari
+     */
+    static async getSedi(poliambulatorioId, tenantId) {
+        try {
+            const sedi = await prisma.sedePoliambulatorio.findMany({
+                where: {
+                    poliambulatorioId,
+                    tenantId,
+                    deletedAt: null
+                },
+                include: {
+                    direttoreSanitario: {
+                        select: {
+                            id: true,
+                            firstName: true,
+                            lastName: true,
+                            email: true,
+                            phone: true,
+                            registerCode: true,
+                            specialties: true
+                        }
+                    },
+                    _count: {
+                        select: { ambulatori: true }
+                    }
+                },
+                orderBy: [
+                    { isPrincipale: 'desc' },
+                    { nome: 'asc' }
+                ]
+            });
+
+            return sedi;
+        } catch (error) {
+            logger.error('Failed to get sedi', {
+                component: 'poliambulatorio-service',
+                action: 'getSedi',
+                error: error.message,
+                poliambulatorioId,
+                tenantId
+            });
+            throw error;
+        }
+    }
+
+    /**
+     * Create a new sede for a poliambulatorio
+     */
+    static async createSede(poliambulatorioId, data, tenantId) {
+        try {
+            // Verify poliambulatorio exists
+            const poliambulatorio = await prisma.poliambulatorio.findFirst({
+                where: { id: poliambulatorioId, tenantId, deletedAt: null }
+            });
+
+            if (!poliambulatorio) {
+                throw new Error('Poliambulatorio not found');
+            }
+
+            // Verify direttore if provided
+            if (data.direttoreSanitarioId) {
+                const direttore = await prisma.person.findFirst({
+                    where: { id: data.direttoreSanitarioId, tenantId, deletedAt: null }
+                });
+
+                if (!direttore) {
+                    throw new Error('Direttore sanitario not found');
+                }
+            }
+
+            // Extract nested relations from data
+            const { orariSettimanali, chiusureSpeciali, ...sedeData } = data;
+
+            // Build create data with nested relations
+            const createData = {
+                ...sedeData,
+                poliambulatorioId,
+                tenantId
+            };
+
+            // Add orari settimanali if provided
+            if (orariSettimanali && Array.isArray(orariSettimanali) && orariSettimanali.length > 0) {
+                createData.orariSettimanali = {
+                    create: orariSettimanali.map(orario => ({
+                        giornoSettimana: orario.giornoSettimana,
+                        fascia: orario.fascia || 1,
+                        oraInizio: orario.oraInizio,
+                        oraFine: orario.oraFine,
+                        isChiuso: orario.isChiuso || false,
+                        note: orario.note || null,
+                        tenantId
+                    }))
+                };
+            }
+
+            // Add chiusure speciali if provided
+            if (chiusureSpeciali && Array.isArray(chiusureSpeciali) && chiusureSpeciali.length > 0) {
+                createData.chiusureSpeciali = {
+                    create: chiusureSpeciali.map(chiusura => ({
+                        tipo: chiusura.tipo,
+                        nome: chiusura.nome,
+                        descrizione: chiusura.descrizione || null,
+                        dataInizio: chiusura.dataInizio ? new Date(chiusura.dataInizio) : null,
+                        dataFine: chiusura.dataFine ? new Date(chiusura.dataFine) : null,
+                        oraInizio: chiusura.oraInizio || null,
+                        oraFine: chiusura.oraFine || null,
+                        isParziale: chiusura.isParziale || false,
+                        ricorrente: chiusura.ricorrente || false,
+                        annoRiferimento: chiusura.annoRiferimento || null,
+                        attivo: chiusura.attivo !== false,
+                        tenantId
+                    }))
+                };
+            }
+
+            const sede = await prisma.sedePoliambulatorio.create({
+                data: createData,
+                include: {
+                    direttoreSanitario: {
+                        select: {
+                            id: true,
+                            firstName: true,
+                            lastName: true,
+                            email: true,
+                            phone: true,
+                            registerCode: true,
+                            specialties: true
+                        }
+                    },
+                    poliambulatorio: {
+                        select: { id: true, nome: true, codice: true }
+                    },
+                    orariSettimanali: true,
+                    chiusureSpeciali: true
+                }
+            });
+
+            logger.info('Sede created', {
+                component: 'poliambulatorio-service',
+                action: 'createSede',
+                sedeId: sede.id,
+                poliambulatorioId,
+                tenantId
+            });
+
+            return sede;
+        } catch (error) {
+            logger.error('Failed to create sede', {
+                component: 'poliambulatorio-service',
+                action: 'createSede',
+                error: error.message,
+                poliambulatorioId,
+                tenantId
+            });
+            throw error;
+        }
+    }
+
+    /**
+     * Update a sede
+     */
+    static async updateSede(sedeId, data, tenantId) {
+        try {
+            // Verify sede exists
+            const existing = await prisma.sedePoliambulatorio.findFirst({
+                where: { id: sedeId, tenantId, deletedAt: null }
+            });
+
+            if (!existing) {
+                throw new Error('Sede not found');
+            }
+
+            // Verify direttore if provided
+            if (data.direttoreSanitarioId) {
+                const direttore = await prisma.person.findFirst({
+                    where: { id: data.direttoreSanitarioId, tenantId, deletedAt: null }
+                });
+
+                if (!direttore) {
+                    throw new Error('Direttore sanitario not found');
+                }
+            }
+
+            // Extract nested relations from data
+            const { orariSettimanali, chiusureSpeciali, ...sedeData } = data;
+
+            // Use transaction for atomic update with relations
+            const updated = await prisma.$transaction(async (tx) => {
+                // Update orari settimanali if provided
+                if (orariSettimanali && Array.isArray(orariSettimanali)) {
+                    // Delete existing orari
+                    await tx.orarioSede.deleteMany({
+                        where: { sedeId, tenantId }
+                    });
+
+                    // Create new orari
+                    if (orariSettimanali.length > 0) {
+                        await tx.orarioSede.createMany({
+                            data: orariSettimanali.map(orario => ({
+                                sedeId,
+                                giornoSettimana: orario.giornoSettimana,
+                                fascia: orario.fascia || 1,
+                                oraInizio: orario.oraInizio,
+                                oraFine: orario.oraFine,
+                                isChiuso: orario.isChiuso || false,
+                                note: orario.note || null,
+                                tenantId
+                            }))
+                        });
+                    }
+                }
+
+                // Update chiusure speciali if provided
+                if (chiusureSpeciali && Array.isArray(chiusureSpeciali)) {
+                    // Delete existing chiusure
+                    await tx.chiusuraSpecialeSede.deleteMany({
+                        where: { sedeId, tenantId }
+                    });
+
+                    // Create new chiusure
+                    if (chiusureSpeciali.length > 0) {
+                        await tx.chiusuraSpecialeSede.createMany({
+                            data: chiusureSpeciali.map(chiusura => ({
+                                sedeId,
+                                tipo: chiusura.tipo,
+                                nome: chiusura.nome,
+                                descrizione: chiusura.descrizione || null,
+                                dataInizio: chiusura.dataInizio ? new Date(chiusura.dataInizio) : null,
+                                dataFine: chiusura.dataFine ? new Date(chiusura.dataFine) : null,
+                                oraInizio: chiusura.oraInizio || null,
+                                oraFine: chiusura.oraFine || null,
+                                isParziale: chiusura.isParziale || false,
+                                ricorrente: chiusura.ricorrente || false,
+                                annoRiferimento: chiusura.annoRiferimento || null,
+                                attivo: chiusura.attivo !== false,
+                                tenantId
+                            }))
+                        });
+                    }
+                }
+
+                // Update sede
+                return tx.sedePoliambulatorio.update({
+                    where: { id: sedeId },
+                    data: {
+                        ...sedeData,
+                        updatedAt: new Date()
+                    },
+                    include: {
+                        direttoreSanitario: {
+                            select: {
+                                id: true,
+                                firstName: true,
+                                lastName: true,
+                                email: true,
+                                phone: true,
+                                registerCode: true,
+                                specialties: true
+                            }
+                        },
+                        poliambulatorio: {
+                            select: { id: true, nome: true, codice: true }
+                        },
+                        orariSettimanali: true,
+                        chiusureSpeciali: true
+                    }
+                });
+            });
+
+            logger.info('Sede updated', {
+                component: 'poliambulatorio-service',
+                action: 'updateSede',
+                sedeId,
+                tenantId
+            });
+
+            return updated;
+        } catch (error) {
+            logger.error('Failed to update sede', {
+                component: 'poliambulatorio-service',
+                action: 'updateSede',
+                error: error.message,
+                sedeId,
+                tenantId
+            });
+            throw error;
+        }
+    }
+
+    /**
+     * Soft delete a sede
+     */
+    static async deleteSede(sedeId, tenantId) {
+        try {
+            // Verify sede exists
+            const existing = await prisma.sedePoliambulatorio.findFirst({
+                where: { id: sedeId, tenantId, deletedAt: null }
+            });
+
+            if (!existing) {
+                throw new Error('Sede not found');
+            }
+
+            // Check for ambulatori in this sede
+            const ambulatoriCount = await prisma.ambulatorio.count({
+                where: { sedeId, deletedAt: null }
+            });
+
+            if (ambulatoriCount > 0) {
+                throw new Error(`Cannot delete sede with ${ambulatoriCount} ambulatori`);
+            }
+
+            await prisma.sedePoliambulatorio.update({
+                where: { id: sedeId },
+                data: { deletedAt: new Date() }
+            });
+
+            logger.info('Sede deleted', {
+                component: 'poliambulatorio-service',
+                action: 'deleteSede',
+                sedeId,
+                tenantId
+            });
+
+            return { success: true };
+        } catch (error) {
+            logger.error('Failed to delete sede', {
+                component: 'poliambulatorio-service',
+                action: 'deleteSede',
+                error: error.message,
+                sedeId,
                 tenantId
             });
             throw error;
@@ -348,7 +839,7 @@ export class PoliambulatorioService {
                 appuntamentiInAttesa
             ] = await Promise.all([
                 prisma.ambulatorio.count({
-                    where: { poliambulatorioId, deletedAt: null, isActive: true }
+                    where: { poliambulatorioId, deletedAt: null, stato: 'ATTIVO' }
                 }),
                 prisma.appuntamento.count({
                     where: {

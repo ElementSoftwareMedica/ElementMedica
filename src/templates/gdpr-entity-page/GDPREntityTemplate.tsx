@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 import { useGDPRPermissions } from '../../hooks/useGDPRPermissions';
 import { useGDPREntityData } from '../../hooks/useGDPREntityData';
 import { useGDPREntityOperations } from '../../hooks/useGDPREntityOperations';
 import { DataTableColumn } from '../../components/shared/tables/DataTable';
 import { SearchBar, Badge } from '../../design-system';
-import { 
+import {
   Download,
   Edit,
   Eye,
@@ -36,42 +37,43 @@ export interface GDPREntityTemplateProps<T extends Record<string, any> & { id: s
   entityNamePlural: string;
   entityDisplayName: string;
   entityDisplayNamePlural: string;
-  
+
   // Permessi
   readPermission: string;
   writePermission: string;
   deletePermission: string;
   exportPermission?: string;
-  
+
   // API endpoints
   apiEndpoint: string;
-  
+
   // Configurazione colonne
   columns: DataTableColumn<T>[];
-  
+
   // Configurazione UI
   searchFields: (keyof T)[];
   filterOptions?: Array<{
-        key: string;
-        label: string;
-        options: Array<{ label: string; value: string }>;
-      }>;
+    key: string;
+    label: string;
+    options: Array<{ label: string; value: string }>;
+  }>;
   sortOptions?: Array<{ key: string; label: string }>;
-  
+
   // Parametri di query statici per filtrare lato backend (es. roleType)
   staticQueryParams?: Record<string, string | number | boolean>;
-  
+
   // Configurazione CSV
   csvHeaders: Array<{ key: string; label: string }> | Record<string, string>;
   csvTemplateData?: Record<string, any>[];
-  
+
   // Handlers personalizzati
   onCreateEntity?: () => void;
   onEditEntity?: (entity: T) => void;
+  onViewEntity?: (entity: T) => void;
   onDeleteEntity?: (id: string) => Promise<void>;
   onImportEntities?: (data: any[]) => Promise<void>;
   onExportEntities?: (entities: T[]) => void;
-  
+
   // Configurazione card per vista griglia
   cardConfig?: {
     titleField: keyof T;
@@ -97,13 +99,16 @@ export interface GDPREntityTemplateProps<T extends Record<string, any> & { id: s
     }>;
     description?: (entity: T) => string | undefined;
   };
-  
+
   // Configurazione avanzata
   enableBatchOperations?: boolean;
   enableImportExport?: boolean;
   enableColumnSelector?: boolean;
   enableAdvancedFilters?: boolean;
   defaultViewMode?: 'table' | 'grid';
+
+  // Sort di default
+  defaultSort?: { field: string; direction: 'asc' | 'desc' };
 }
 
 export function GDPREntityTemplate<T extends Record<string, any> & { id: string }>({
@@ -125,6 +130,7 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
   csvTemplateData,
   onCreateEntity,
   onEditEntity,
+  onViewEntity,
   onDeleteEntity,
   onImportEntities,
   onExportEntities,
@@ -133,10 +139,15 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
   enableImportExport = true,
   enableColumnSelector = true,
   enableAdvancedFilters = true,
-  defaultViewMode = 'table'
+  defaultViewMode = 'table',
+  defaultSort
 }: GDPREntityTemplateProps<T>): JSX.Element {
   const navigate = useNavigate();
-  
+  const { isLoading: authLoading, permissions: authPermissions } = useAuth();
+
+  // Controlla se i permessi sono ancora in fase di caricamento
+  const permissionsLoading = authLoading || Object.keys(authPermissions).length === 0;
+
   // Hook ottimizzati per GDPR
   const permissions = useGDPRPermissions({
     entityName,
@@ -146,14 +157,14 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
     deletePermission,
     exportPermission
   });
-  
+
   const { entities, loading, error, refetch, setEntities } = useGDPREntityData<T>({
     apiEndpoint,
     entityNamePlural,
     entityDisplayNamePlural,
     staticQueryParams
   });
-  
+
   const operations = useGDPREntityOperations({
     entityName,
     entityNamePlural,
@@ -162,19 +173,19 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
     onDeleteEntity,
     refetch
   });
-  
+
   const toast = useToast();
-  
+
   // Stati per ricerca e filtri
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilters, setActiveFilters] = useState<Record<string, string>>({});
-  const [activeSort, setActiveSort] = useState<{ field: string, direction: 'asc' | 'desc' } | undefined>(undefined);
-  
+  const [activeSort, setActiveSort] = useState<{ field: string, direction: 'asc' | 'desc' } | undefined>(defaultSort);
+
   // Stati per visualizzazione
   const [viewMode, setViewMode] = useState<'table' | 'grid'>(() => {
     return (localStorage.getItem(`${entityNamePlural}ViewMode`) as 'table' | 'grid') || defaultViewMode;
   });
-  
+
   // Stati per gestione colonne
   const [hiddenColumns, setHiddenColumns] = useState<string[]>(() => {
     try {
@@ -184,7 +195,7 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
       return [];
     }
   });
-  
+
   const [columnOrder, setColumnOrder] = useState<Record<string, number>>(() => {
     try {
       const saved = localStorage.getItem(`${entityNamePlural}-column-order`);
@@ -193,14 +204,24 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
       return {};
     }
   });
-  
+
   // Funzioni di verifica permessi (per compatibilità con il codice esistente)
   const canCreateEntity = () => permissions.canCreate;
   const canUpdateEntity = () => permissions.canUpdate;
   const canDeleteEntity = () => permissions.canDelete;
   const canExportEntity = () => permissions.canExport;
-  
-  // Verifica permessi
+
+  // Mostra loading mentre l'auth o i permessi si stanno caricando
+  if (permissionsLoading) {
+    return (
+      <div className="h-64 flex justify-center items-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+        <span className="ml-3 text-gray-500">Caricamento permessi...</span>
+      </div>
+    );
+  }
+
+  // Controlla permessi SOLO dopo che l'auth è stato caricato
   if (!permissions.canRead) {
     return (
       <div className="h-64 flex flex-col justify-center items-center text-center px-4">
@@ -214,12 +235,12 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
       </div>
     );
   }
-  
+
   // Salvataggio preferenze visualizzazione
   useEffect(() => {
     localStorage.setItem(`${entityNamePlural}ViewMode`, viewMode);
   }, [viewMode, entityNamePlural]);
-  
+
   // Gestione visibilità colonne
   const handleColumnVisibilityChange = (newHiddenColumns: string[]) => {
     setHiddenColumns(newHiddenColumns);
@@ -230,20 +251,20 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
     setColumnOrder(newColumnOrder);
     localStorage.setItem(`${entityNamePlural}-column-order`, JSON.stringify(newColumnOrder));
   };
-  
+
   // Le funzioni di gestione selezione ed eliminazione sono ora gestite dagli hook ottimizzati
-  const { 
-    selectedIds, 
-    selectAll, 
-    selectionMode, 
+  const {
+    selectedIds,
+    selectAll,
+    selectionMode,
     setSelectionMode,
-    handleSelectAll, 
-    handleSelectEntity: handleSelect, 
-    handleDeleteEntity: handleDelete, 
+    handleSelectAll,
+    handleSelectEntity: handleSelect,
+    handleDeleteEntity: handleDelete,
     handleBatchDelete: handleDeleteSelected,
-    clearSelection 
+    clearSelection
   } = operations;
-  
+
   // Filtraggio e ricerca
   const filteredEntities = useMemo(() => {
     // Validazione di sicurezza per assicurarsi che entities sia un array
@@ -251,9 +272,9 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
       console.error('GDPREntityTemplate: entities deve essere un array, ricevuto:', typeof entities, entities);
       return [];
     }
-    
+
     let filtered = entities;
-    
+
     // Applica filtri attivi
     Object.entries(activeFilters).forEach(([key, value]) => {
       if (value) {
@@ -263,7 +284,7 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
         });
       }
     });
-    
+
     // Applica ricerca
     if (searchQuery) {
       const searchLower = searchQuery.toLowerCase();
@@ -274,29 +295,29 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
         });
       });
     }
-    
+
     // Applica ordinamento
     if (activeSort) {
       filtered = [...filtered].sort((a, b) => {
         const valueA = a[activeSort.field];
         const valueB = b[activeSort.field];
-        
+
         if (valueA == null && valueB == null) return 0;
         if (valueA == null) return activeSort.direction === 'asc' ? -1 : 1;
         if (valueB == null) return activeSort.direction === 'asc' ? 1 : -1;
-        
+
         const compareValueA = typeof valueA === 'string' ? valueA.toLowerCase() : valueA;
         const compareValueB = typeof valueB === 'string' ? valueB.toLowerCase() : valueB;
-        
+
         if (compareValueA < compareValueB) return activeSort.direction === 'asc' ? -1 : 1;
         if (compareValueA > compareValueB) return activeSort.direction === 'asc' ? 1 : -1;
         return 0;
       });
     }
-    
+
     return filtered;
   }, [entities, activeFilters, searchQuery, searchFields, activeSort]);
-  
+
   // Sincronizzazione stato selectAll con selezione effettiva
   useEffect(() => {
     if (Array.isArray(filteredEntities) && filteredEntities.length > 0) {
@@ -310,9 +331,9 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
       operations.setSelectAll(false);
     }
   }, [filteredEntities, selectedIds, selectAll, operations]);
-  
 
-  
+
+
   // Memoized action handlers per evitare loop infiniti
   const handleViewEntity = useCallback((entity: T) => (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -334,8 +355,8 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
     if (onExportEntities) {
       onExportEntities([entity]);
     } else {
-      const headers = Array.isArray(csvHeaders) ? 
-        csvHeaders.reduce((acc, h) => ({ ...acc, [h.key]: h.label }), {}) : 
+      const headers = Array.isArray(csvHeaders) ?
+        csvHeaders.reduce((acc, h) => ({ ...acc, [h.key]: h.label }), {}) :
         csvHeaders;
       exportToCsv([entity], headers, `${entityName}_${entity.id}.csv`, ';');
     }
@@ -344,7 +365,7 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
   // Configurazione colonne con selezione
   const tableColumns: DataTableColumn<T>[] = useMemo(() => {
     const cols: DataTableColumn<T>[] = [];
-    
+
     // 1. Prima colonna: Azioni (sempre presente come prima colonna)
     const hasActionsColumn = columns.some(col => col.key === 'actions');
     if (!hasActionsColumn) {
@@ -355,10 +376,11 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
         width: 120,
         renderCell: (entity: T) => (
           <ActionButton
+            asPill={true}
             actions={[
-              { 
-                label: 'Visualizza', 
-                icon: <Eye className="h-4 w-4" />, 
+              {
+                label: 'Visualizza',
+                icon: <Eye className="h-4 w-4" />,
                 onClick: () => handleViewEntity(entity)(),
                 variant: 'default',
               },
@@ -386,7 +408,7 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
         )
       });
     }
-    
+
     // 2. Seconda colonna: Selezione (se in modalità selezione)
     if (selectionMode && enableBatchOperations) {
       cols.push({
@@ -423,18 +445,18 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
         )
       });
     }
-    
+
     // 3. Aggiungi tutte le altre colonne (esclusa quella azioni se già presente)
     const otherColumns = columns.filter(col => col.key !== 'actions');
     cols.push(...otherColumns);
-    
+
     return cols;
   }, [columns, selectionMode, enableBatchOperations, selectedIds, selectAll, permissions, handleViewEntity, handleEditEntity, handleDeleteEntity, handleExportEntity, handleSelect, handleSelectAll, filteredEntities]);
-  
+
   // Opzioni dropdown aggiungi
   const addOptions = useMemo(() => {
     const options = [];
-    
+
     if (permissions.canWrite) {
       options.push({
         label: `Aggiungi ${entityDisplayName.toLowerCase()}`,
@@ -442,7 +464,7 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
         onClick: onCreateEntity || (() => navigate(`/${entityNamePlural}/create`))
       });
     }
-    
+
     if (enableImportExport) {
       options.push(
         {
@@ -500,8 +522,8 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
           icon: <FileText className="h-4 w-4" />,
           onClick: () => {
             if (csvTemplateData) {
-              const headers = Array.isArray(csvHeaders) ? 
-                csvHeaders.reduce((acc, h) => ({ ...acc, [h.key]: h.label }), {}) : 
+              const headers = Array.isArray(csvHeaders) ?
+                csvHeaders.reduce((acc, h) => ({ ...acc, [h.key]: h.label }), {}) :
                 csvHeaders;
               exportToCsv(csvTemplateData, headers, `template_${entityNamePlural}.csv`, ';');
             } else {
@@ -528,14 +550,14 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
         }
       );
     }
-    
+
     return options;
   }, [entityDisplayName, entityNamePlural, enableImportExport, onCreateEntity, csvTemplateData, csvHeaders, toast, permissions, navigate, onImportEntities]);
-  
+
   // Azioni batch
   const batchActions = useMemo(() => {
     const actions = [];
-    
+
     if (permissions.canDelete) {
       actions.push({
         label: 'Elimina selezionati',
@@ -544,7 +566,7 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
         variant: 'danger' as const
       });
     }
-    
+
     if (enableImportExport && permissions.canExport) {
       actions.push({
         label: 'Esporta selezionati',
@@ -554,8 +576,8 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
           if (onExportEntities) {
             onExportEntities(selectedEntities);
           } else {
-            const headers = Array.isArray(csvHeaders) ? 
-              csvHeaders.reduce((acc, h) => ({ ...acc, [h.key]: h.label }), {}) : 
+            const headers = Array.isArray(csvHeaders) ?
+              csvHeaders.reduce((acc, h) => ({ ...acc, [h.key]: h.label }), {}) :
               csvHeaders;
             exportToCsv(selectedEntities, headers, `${entityNamePlural}_selezionati.csv`, ';');
           }
@@ -563,7 +585,7 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
         variant: 'default' as const
       });
     }
-    
+
     // Azione per annullare selezione
     actions.push({
       label: 'Annulla selezione',
@@ -573,15 +595,15 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
       },
       variant: 'default' as const
     });
-    
+
     return actions;
   }, [permissions, handleDeleteSelected, enableImportExport, entities, selectedIds, onExportEntities, csvHeaders, entityNamePlural, clearSelection]);
 
   // Azioni memoizzate per le card della vista griglia
   const getCardActions = useCallback((entity: T) => [
-    { 
-      label: 'Visualizza', 
-      icon: <Eye className="h-4 w-4" />, 
+    {
+      label: 'Visualizza',
+      icon: <Eye className="h-4 w-4" />,
       onClick: (e?: React.MouseEvent) => {
         if (e) e.stopPropagation();
         navigate(`/${entityNamePlural}/${entity.id}`);
@@ -614,8 +636,8 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
         if (onExportEntities) {
           onExportEntities([entity]);
         } else {
-          const headers = Array.isArray(csvHeaders) ? 
-            csvHeaders.reduce((acc, h) => ({ ...acc, [h.key]: h.label }), {}) : 
+          const headers = Array.isArray(csvHeaders) ?
+            csvHeaders.reduce((acc, h) => ({ ...acc, [h.key]: h.label }), {}) :
             csvHeaders;
           exportToCsv([entity], headers, `${entityName}_${entity.id}.csv`, ';');
         }
@@ -623,24 +645,24 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
       variant: 'default' as const,
     }] : [])
   ], [entityNamePlural, navigate, permissions.canWrite, onEditEntity, permissions.canDelete, handleDelete, enableImportExport, permissions.canExport, onExportEntities, csvHeaders, entityName]);
-  
+
   // Rendering card per vista griglia
   const renderEntityCard = (entity: T) => {
     if (!cardConfig) return null;
-    
+
     // Supporta sia configurazione field-based che function-based
     const title = cardConfig.title ? cardConfig.title(entity) : entity[cardConfig.titleField];
-    const subtitle = cardConfig.subtitle ? cardConfig.subtitle(entity) : 
+    const subtitle = cardConfig.subtitle ? cardConfig.subtitle(entity) :
       (cardConfig.subtitleField ? entity[cardConfig.subtitleField] : undefined);
-    const badgeData = cardConfig.badge ? cardConfig.badge(entity) : 
+    const badgeData = cardConfig.badge ? cardConfig.badge(entity) :
       (cardConfig.badgeField ? { text: entity[cardConfig.badgeField], variant: 'default' as const } : undefined);
-    const description = cardConfig.description ? cardConfig.description(entity) : 
+    const description = cardConfig.description ? cardConfig.description(entity) :
       (cardConfig.descriptionField ? entity[cardConfig.descriptionField] : undefined);
-    const iconElement = cardConfig.icon ? cardConfig.icon(entity) : 
+    const iconElement = cardConfig.icon ? cardConfig.icon(entity) :
       (cardConfig.iconField ? entity[cardConfig.iconField] : <FileText className="h-5 w-5 text-blue-600" />);
-    
+
     return (
-      <div 
+      <div
         key={entity.id}
         className="bg-white rounded-lg shadow overflow-hidden relative flex flex-col h-full cursor-pointer hover:shadow-md transition-all duration-200"
         onClick={() => {
@@ -651,10 +673,9 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
       >
         {/* Checkbox selezione */}
         {selectionMode && (
-          <div 
-            className={`absolute top-2 right-2 h-5 w-5 rounded border ${
-              selectedIds.includes(entity.id) ? 'bg-blue-500 border-blue-600' : 'bg-white border-gray-300'
-            } flex items-center justify-center z-10`}
+          <div
+            className={`absolute top-2 right-2 h-5 w-5 rounded border ${selectedIds.includes(entity.id) ? 'bg-blue-500 border-blue-600' : 'bg-white border-gray-300'
+              } flex items-center justify-center z-10`}
             onClick={(e: React.MouseEvent) => {
               e.stopPropagation();
               handleSelect(entity.id);
@@ -667,13 +688,13 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
             )}
           </div>
         )}
-        
+
         {/* Header */}
         <div className="flex items-center p-4">
           <div className="flex-shrink-0 h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
             {iconElement}
           </div>
-          
+
           <div className="ml-3 flex-grow min-w-0">
             <h3 className="text-base font-semibold text-gray-800 line-clamp-2 whitespace-normal">
               {title}
@@ -688,14 +709,14 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
             )}
           </div>
         </div>
-        
+
         {/* Contenuto */}
         <div className="px-4 pb-3 space-y-1.5 flex-grow">
           {/* Supporta sia additionalFields che fields */}
           {cardConfig.fields?.map((field, index) => {
             const value = field.value(entity);
             if (!value || value === 'N/A') return null;
-            
+
             return (
               <div key={index} className="flex items-baseline text-sm">
                 <span className="flex items-center">
@@ -706,11 +727,11 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
               </div>
             );
           })}
-          
+
           {cardConfig.additionalFields?.map(field => {
             const value = entity[field.key];
             if (!value) return null;
-            
+
             return (
               <div key={String(field.key)} className="flex items-baseline text-sm">
                 <span className="flex items-center">
@@ -723,16 +744,16 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
               </div>
             );
           })}
-          
+
           {description && (
             <div className="mt-2 text-sm text-gray-600 line-clamp-2">
               {description}
             </div>
           )}
         </div>
-        
+
         {/* Footer azioni */}
-        <div className="px-4 py-3 bg-white border-t border-gray-200 flex justify-end items-center mt-auto" style={{position: 'relative', maxWidth: '100%'}}>
+        <div className="px-4 py-3 bg-white border-t border-gray-200 flex justify-end items-center mt-auto" style={{ position: 'relative', maxWidth: '100%' }}>
           <ActionButton
             actions={getCardActions(entity)}
             asPill={true}
@@ -741,21 +762,15 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
       </div>
     );
   };
-  
+
   return (
-    <EntityListLayout 
+    <EntityListLayout
       title={entityDisplayNamePlural}
       subtitle={`Gestisci ${entityDisplayNamePlural.toLowerCase()}`}
       headerContent={
         <div className="space-y-4 mb-4">
-          {/* Prima riga: Descrizione con toggle switch e dropdown in linea */}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex-1">
-              <p className="text-gray-500">
-                Gestisci {entityDisplayNamePlural.toLowerCase()}, visualizza i dettagli e crea nuovi {entityDisplayNamePlural.toLowerCase()}.
-              </p>
-            </div>
-            
+          {/* Prima riga: Toggle switch e dropdown aggiungi */}
+          <div className="flex flex-wrap items-center justify-end gap-3">
             <div className="flex items-center gap-3">
               <ViewModeToggle
                 viewMode={viewMode}
@@ -763,7 +778,7 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
                 gridLabel="Griglia"
                 tableLabel="Tabella"
               />
-              
+
               {(canCreateEntity() || addOptions.length > 1) && (
                 <AddEntityDropdown
                   label={`Aggiungi ${entityDisplayName}`}
@@ -774,7 +789,7 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
               )}
             </div>
           </div>
-          
+
           {/* Seconda riga: Search bar a sinistra e pulsanti a destra */}
           <div className="flex items-center justify-between gap-4">
             <div className="flex-1 max-w-md">
@@ -787,10 +802,10 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
                 showClearButton={true}
               />
             </div>
-            
+
             <div className="flex items-center gap-2">
               {enableAdvancedFilters && filterOptions.length > 0 && (
-                <FilterPanel 
+                <FilterPanel
                   filterOptions={filterOptions.map(option => ({ value: option.key, label: option.label, options: option.options }))}
                   activeFilters={activeFilters}
                   onFilterChange={setActiveFilters}
@@ -800,7 +815,7 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
                   className="h-10"
                 />
               )}
-              
+
               {/* Pulsanti Colonne e Modifica su una sola riga */}
               <div className="flex items-center gap-2">
                 {enableColumnSelector && (
@@ -817,7 +832,7 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
                     buttonClassName="h-10 flex items-center gap-2"
                   />
                 )}
-                
+
                 {enableBatchOperations && canUpdateEntity() && (
                   <BatchEditButton
                     selectionMode={selectionMode}
@@ -873,7 +888,11 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
                 tableName={entityNamePlural}
                 onRowClick={(entity) => {
                   if (!selectionMode) {
-                    navigate(`/${entityNamePlural}/${entity.id}`);
+                    if (onViewEntity) {
+                      onViewEntity(entity as T);
+                    } else {
+                      navigate(`/${entityNamePlural}/${entity.id}`);
+                    }
                   }
                 }}
                 rowClassName={() => selectionMode ? '' : 'cursor-pointer hover:bg-gray-50'}

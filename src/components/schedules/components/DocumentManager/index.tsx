@@ -6,13 +6,14 @@
  * - Registri Presenze  
  * - Attestati di Partecipazione
  * - Preventivi
+ * - Test e Questionari
  * 
  * Refactored from 761L → 270L (-64%)
  * Architecture: Hooks Composition + Component Library
  */
 
-import React from 'react';
-import { FileText, Users, Award, Calculator, RefreshCw } from 'lucide-react';
+import React, { useState } from 'react';
+import { FileText, Users, Award, Calculator, RefreshCw, FileQuestion } from 'lucide-react';
 
 // Hooks
 import {
@@ -47,6 +48,9 @@ import type { DocumentManagerProps } from './types';
 // External components
 import RegenerateAttestatiModal from '../RegenerateAttestatiModal';
 import PreventiviModal from '../PreventiviModal';
+import GenerateRegistriModal from '../GenerateRegistriModal';
+import GenerateLettereModal from '../GenerateLettereModal';
+import TestManagerModal from '../TestManagerModal';
 
 export const DocumentManager: React.FC<DocumentManagerProps> = ({
   status,
@@ -103,22 +107,33 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
     downloadAttestato,
     downloadPreventivo,
     downloadAttestatiZip,
+    downloadLettereZip,
+    downloadRegistriZip,
     deleteLettera,
     deleteRegistro,
     deleteAttestato,
     deletePreventivo
-  } = useDocumentActions(refresh);
+  } = useDocumentActions(refresh, scheduleId);
 
   // Hook 4: UI state (modals)
   const {
     showRegenerateModal,
     showPreventiviModal,
+    showRegistriModal,
+    showLettereModal,
     editingPreventivo,
     openRegenerateModal,
     closeRegenerateModal,
     openPreventiviModal,
-    closePreventiviModal
+    closePreventiviModal,
+    openRegistriModal,
+    closeRegistriModal,
+    openLettereModal,
+    closeLettereModal
   } = useDocumentUI();
+
+  // State for Test modal
+  const [showTestModal, setShowTestModal] = useState(false);
 
   // Get status information
   const statusInfo = getStatusInfo(status);
@@ -170,80 +185,7 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
             Generazione Documenti
           </h4>
 
-          {/* 1. Lettere di Incarico */}
-          <DocumentSection
-            title="Lettere di Incarico"
-            description={`Genera ${trainers.length} lettera${trainers.length !== 1 ? 'e' : ''} per ${trainers.length > 0 ? 'i formatori' : 'nessun formatore'} del corso`}
-            icon={FileText}
-            color="blue"
-            count={lettereList.length}
-            canGenerate={canGenerateLettere(scheduleId, trainers)}
-            loading={loading.lettere}
-            warningMessage={trainers.length === 0 ? '⚠️ Nessun formatore selezionato' : undefined}
-            details={
-              trainers.length > 0 ? (
-                <span>{trainers.map(t => `${t.firstName} ${t.lastName}`).join(', ')}</span>
-              ) : undefined
-            }
-            onGenerate={generateLettere}
-            documents={lettereList}
-            onDownload={downloadLettera}
-            onDelete={deleteLettera}
-            getDocumentName={(doc) => 
-              doc.trainer ? `${doc.trainer.firstName} ${doc.trainer.lastName}` : doc.nomeFile
-            }
-            buttonText="Genera Lettere"
-          />
-
-          {/* 2. Registri Presenze */}
-          <DocumentSection
-            title="Registri Presenze"
-            description={`Genera ${dates.length} registro${dates.length !== 1 ? 'i' : ''} per ${dates.length > 0 ? 'le sessioni' : 'nessuna sessione'} del corso`}
-            icon={Users}
-            color="purple"
-            count={registriList.length}
-            canGenerate={canGenerateRegistri(scheduleId, dates)}
-            loading={loading.registri}
-            details={
-              dates.length > 0 ? (
-                <span>{dates.map((d, i) => `Sessione ${i + 1}: ${d.date}`).join(' • ')}</span>
-              ) : undefined
-            }
-            onGenerate={generateRegistri}
-            documents={registriList}
-            onDownload={downloadRegistro}
-            onDelete={deleteRegistro}
-            getDocumentName={(doc) => doc.fileName || `Registro ${doc.id}`}
-            buttonText="Genera Registri"
-          />
-
-          {/* 3. Attestati */}
-          <DocumentSection
-            title="Attestati di Partecipazione"
-            description={`Genera ${selectedPersons.length} attestato${selectedPersons.length !== 1 ? 'i' : ''} per ${selectedPersons.length > 0 ? 'i partecipanti' : 'nessun partecipante'}`}
-            icon={Award}
-            color="green"
-            count={attestatiList.length}
-            canGenerate={canGenerateAttestati(scheduleId, hasAttendance, selectedPersons)}
-            loading={loading.attestati}
-            warningMessage={
-              !hasAttendance
-                ? '⚠️ Disponibile dopo la registrazione delle presenze (Step 3)'
-                : undefined
-            }
-            onGenerate={openRegenerateModal}
-            documents={attestatiList}
-            showZipDownload={true}
-            onDownload={downloadAttestato}
-            onDelete={deleteAttestato}
-            onDownloadZip={() => downloadAttestatiZip(attestatiList.map(a => a.id))}
-            getDocumentName={(doc) =>
-              doc.person ? `${doc.person.firstName} ${doc.person.lastName}` : doc.fileName
-            }
-            buttonText="Genera Attestati"
-          />
-
-          {/* 4. Preventivi */}
+          {/* 1. Preventivi */}
           <DocumentSection
             title="Preventivi"
             description={`Genera preventivi per ${selectedCompanies.length} aziend${selectedCompanies.length !== 1 ? 'e' : 'a'}`}
@@ -268,11 +210,121 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
             onEdit={(doc) => openPreventiviModal(doc)}
             onDelete={deletePreventivo}
             getDocumentName={(doc) => {
-              const company = companies.find(c => c.id === doc.companyId);
-              return company ? getCompanyName(company) : `Preventivo #${doc.numero}/${doc.anno}`;
+              const company = companies.find(c => c.id === doc.aziendaId);
+              const companyName = company ? getCompanyName(company) : `Azienda ${doc.aziendaId || 'Sconosciuta'}`;
+
+              // Format: yyyy.mm.dd - nome azienda
+              const date = new Date(doc.dataEmissione || doc.createdAt);
+              const year = date.getFullYear();
+              const month = String(date.getMonth() + 1).padStart(2, '0');
+              const day = String(date.getDate()).padStart(2, '0');
+
+              return `${year}.${month}.${day} - ${companyName}`;
             }}
             buttonText="Genera Preventivi"
           />
+
+          {/* 2. Lettere di Incarico */}
+          <DocumentSection
+            title="Lettere di Incarico"
+            description={`Genera ${trainers.length} lettera${trainers.length !== 1 ? 'e' : ''} per ${trainers.length > 0 ? 'i formatori' : 'nessun formatore'} del corso`}
+            icon={FileText}
+            color="blue"
+            count={lettereList.length}
+            canGenerate={canGenerateLettere(scheduleId, trainers)}
+            loading={loading.lettere}
+            warningMessage={trainers.length === 0 ? '⚠️ Nessun formatore selezionato' : undefined}
+            details={
+              trainers.length > 0 ? (
+                <span>{trainers.map(t => `${t.firstName} ${t.lastName}`).join(', ')}</span>
+              ) : undefined
+            }
+            onGenerate={openLettereModal}
+            documents={lettereList}
+            onDownload={downloadLettera}
+            onDelete={deleteLettera}
+            getDocumentName={(doc) =>
+              doc.trainer ? `${doc.trainer.firstName} ${doc.trainer.lastName}` : doc.nomeFile
+            }
+            buttonText="Genera Lettere"
+            showZipDownload={true}
+            onDownloadZip={() => downloadLettereZip(lettereList.map(l => l.id))}
+          />
+
+          {/* 3. Registri Presenze */}
+          <DocumentSection
+            title="Registri Presenze"
+            description={`Genera ${dates.length} registr${dates.length !== 1 ? 'i' : 'o'} per ${dates.length > 0 ? 'le sessioni' : 'nessuna sessione'} del corso`}
+            icon={Users}
+            color="purple"
+            count={registriList.length}
+            canGenerate={canGenerateRegistri(scheduleId, dates)}
+            loading={loading.registri}
+            details={
+              dates.length > 0 ? (
+                <span>{dates.map((d, i) => `Sessione ${i + 1}: ${d.date}`).join(' • ')}</span>
+              ) : undefined
+            }
+            onGenerate={openRegistriModal}
+            documents={registriList}
+            onDownload={downloadRegistro}
+            onDelete={deleteRegistro}
+            getDocumentName={(doc) => doc.nomeFile || doc.fileName || `Registro ${doc.id}`}
+            buttonText="Genera Registri"
+            showZipDownload={true}
+            onDownloadZip={() => downloadRegistriZip(registriList.map(r => r.id))}
+          />
+
+          {/* 4. Attestati */}
+          <DocumentSection
+            title="Attestati di Partecipazione"
+            description={`Genera ${selectedPersons.length} attestat${selectedPersons.length !== 1 ? 'i' : 'o'} per ${selectedPersons.length > 0 ? 'i partecipanti' : 'nessun partecipante'}`}
+            icon={Award}
+            color="green"
+            count={attestatiList.length}
+            canGenerate={canGenerateAttestati(scheduleId, hasAttendance, selectedPersons)}
+            loading={loading.attestati}
+            warningMessage={
+              !hasAttendance
+                ? '⚠️ Disponibile dopo la registrazione delle presenze (Step 3)'
+                : undefined
+            }
+            onGenerate={openRegenerateModal}
+            documents={attestatiList}
+            showZipDownload={true}
+            onDownload={downloadAttestato}
+            onDelete={deleteAttestato}
+            onDownloadZip={() => downloadAttestatiZip(attestatiList.map(a => a.id))}
+            getDocumentName={(doc) =>
+              doc.person ? `${doc.person.firstName} ${doc.person.lastName}` : doc.fileName
+            }
+            buttonText="Genera Attestati"
+          />
+
+          {/* 5. Test e Questionari */}
+          <div className="border border-gray-200 rounded-lg p-4 hover:border-indigo-300 transition-colors">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-indigo-100">
+                  <FileQuestion className="h-5 w-5 text-indigo-600" />
+                </div>
+                <div>
+                  <h4 className="font-medium text-gray-900">Test e Questionari</h4>
+                  <p className="text-sm text-gray-500">
+                    Gestisci test iniziali, finali e valutazioni per i partecipanti
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowTestModal(true)}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-full text-sm font-medium hover:bg-indigo-700 transition-colors flex items-center gap-2"
+              >
+                <FileQuestion className="h-4 w-4" />
+                Gestisci Test
+              </button>
+            </div>
+          </div>
+
         </div>
 
         {/* Status Information */}
@@ -297,6 +349,8 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
           dates={dates as any}
           scheduleId={scheduleId}
           editingPreventivo={editingPreventivo}
+          attendance={attendance}
+          persons={persons}
           onPreventiviCreated={(ids) => {
             if (scheduleId) {
               refresh();
@@ -323,6 +377,57 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
           }))}
         existingAttestati={attestatiList}
         scheduleTitle="Corso"
+      />
+
+      {/* Modal: Genera Registri Presenze */}
+      <GenerateRegistriModal
+        isOpen={showRegistriModal}
+        onClose={closeRegistriModal}
+        scheduleId={scheduleId}
+        dates={dates}
+        attendance={attendance}
+        persons={persons}
+        companies={companies}
+        trainers={trainers}
+        onSuccess={refresh}
+      />
+
+      {/* Modal: Genera Lettere di Incarico */}
+      <GenerateLettereModal
+        isOpen={showLettereModal}
+        onClose={closeLettereModal}
+        scheduleId={scheduleId}
+        trainers={
+          // Filtra solo i trainers che hanno almeno una sessione assegnata (esclude coTrainers)
+          trainers
+            .filter(t => dates.some(d => String(d.trainerId) === String(t.id)))
+            .map(t => ({
+              id: String(t.id),
+              firstName: t.firstName,
+              lastName: t.lastName,
+              email: (t as any).email,
+              hourlyRate: (t as any).hourlyRate
+            }))
+        }
+        dates={dates}
+        onSuccess={refresh}
+      />
+
+      {/* Modal: Test e Questionari */}
+      <TestManagerModal
+        isOpen={showTestModal}
+        onClose={() => setShowTestModal(false)}
+        scheduleId={scheduleId}
+        courseId={selectedCourse?.id ? String(selectedCourse.id) : undefined}
+        riskLevel={(selectedCourse as any)?.riskLevel}
+        courseType={(selectedCourse as any)?.courseType}
+        courseName={selectedCourse?.name || selectedCourse?.nome || selectedCourse?.title}
+        persons={persons.map(p => ({
+          id: String(p.id),
+          firstName: p.firstName,
+          lastName: p.lastName,
+          email: (p as any).email
+        }))}
       />
     </div>
   );

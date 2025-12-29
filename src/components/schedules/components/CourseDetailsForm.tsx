@@ -25,6 +25,7 @@ interface CourseDetailsFormProps {
     delivery_mode?: string;
     risk_level?: string;
     course_type?: string;
+    isPublic?: boolean;
   };
   onFormDataChange: (field: string, value: unknown) => void;
   selectedCourse: Training | undefined;
@@ -87,8 +88,10 @@ export const CourseDetailsForm: React.FC<CourseDetailsFormProps> = ({
       ? { value: selectedCourse.title || selectedCourse.name, label: selectedCourse.title || selectedCourse.name }
       : null;
 
-  const riskValue = selectedCourse?.riskLevel || (formData.risk_level as string) || '';
-  const courseTypeValue = selectedCourse?.courseType || (formData.course_type as string) || '';
+  // FIX: Usa formData come fonte di verità per la selezione corrente delle pillole
+  // selectedCourse.riskLevel/courseType sono solo suggerimenti iniziali, non sovrascrivono la selezione utente
+  const riskValue = (formData.risk_level as string) || '';
+  const courseTypeValue = (formData.course_type as string) || '';
 
   // AUTOSELEZIONE: se esiste una sola opzione valida e nessun valore impostato, seleziona automaticamente
   useEffect(() => {
@@ -162,7 +165,7 @@ export const CourseDetailsForm: React.FC<CourseDetailsFormProps> = ({
           };
           pushUnique(trainings);
           items = Array.from(map.values()).slice(0, 500);
-          
+
           // ✅ NON ricaricare da server se abbiamo già i dati!
           // Questo evita timeout da RequestThrottler
         } else {
@@ -245,134 +248,134 @@ export const CourseDetailsForm: React.FC<CourseDetailsFormProps> = ({
     }
   };
 
-//Azioni per le pillole di rischio e tipo
-const riskActions: SelectionPillAction[] = (RISK_LEVEL_OPTIONS || []).map(opt => ({
-  label: opt.label,
-  onClick: () => onFormDataChange('risk_level', opt.value === riskValue ? '' : opt.value),
-  variant: (opt.value === riskValue ? 'primary' : 'secondary') as 'primary' | 'secondary'
-}));
+  //Azioni per le pillole di rischio e tipo
+  const riskActions: SelectionPillAction[] = (RISK_LEVEL_OPTIONS || []).map(opt => ({
+    label: opt.label,
+    onClick: () => onFormDataChange('risk_level', opt.value === riskValue ? '' : opt.value),
+    variant: (opt.value === riskValue ? 'primary' : 'secondary') as 'primary' | 'secondary'
+  }));
 
-const typeActions: SelectionPillAction[] = (COURSE_TYPE_OPTIONS || []).map(opt => ({
-  label: opt.label,
-  onClick: () => onFormDataChange('course_type', opt.value === courseTypeValue ? '' : opt.value),
-  variant: (opt.value === courseTypeValue ? 'primary' : 'secondary') as 'primary' | 'secondary'
-}));
+  const typeActions: SelectionPillAction[] = (COURSE_TYPE_OPTIONS || []).map(opt => ({
+    label: opt.label,
+    onClick: () => onFormDataChange('course_type', opt.value === courseTypeValue ? '' : opt.value),
+    variant: (opt.value === courseTypeValue ? 'primary' : 'secondary') as 'primary' | 'secondary'
+  }));
 
-// Fix: I campi devono essere abilitati quando c'è un corso selezionato E ci sono opzioni disponibili
-const hasRiskOptions = Array.isArray(RISK_LEVEL_OPTIONS) && RISK_LEVEL_OPTIONS.length > 0;
-const hasTypeOptions = Array.isArray(COURSE_TYPE_OPTIONS) && COURSE_TYPE_OPTIONS.length > 0;
-const riskDisabled = !selectedCourse || !hasRiskOptions;
-const typeDisabled = !selectedCourse || !hasTypeOptions;
+  // Fix: I campi devono essere abilitati quando c'è un corso selezionato E ci sono opzioni disponibili
+  const hasRiskOptions = Array.isArray(RISK_LEVEL_OPTIONS) && RISK_LEVEL_OPTIONS.length > 0;
+  const hasTypeOptions = Array.isArray(COURSE_TYPE_OPTIONS) && COURSE_TYPE_OPTIONS.length > 0;
+  const riskDisabled = !selectedCourse || !hasRiskOptions;
+  const typeDisabled = !selectedCourse || !hasTypeOptions;
 
-// Se ci sono più varianti (>1), non mostrare "Non applicabile" per evitare confusione
-const multipleVariants = (typeof variantsCount === 'number' ? variantsCount : 0) > 1;
-const showRiskNonApplicable = riskDisabled && !multipleVariants;
-const showTypeNonApplicable = typeDisabled && !multipleVariants;
+  // Se ci sono più varianti (>1), non mostrare "Non applicabile" per evitare confusione
+  const multipleVariants = (typeof variantsCount === 'number' ? variantsCount : 0) > 1;
+  const showRiskNonApplicable = riskDisabled && !multipleVariants;
+  const showTypeNonApplicable = typeDisabled && !multipleVariants;
 
-// Log di diagnostica leggero per le pillole (solo in sviluppo)
-useEffect(() => {
-  if (typeof window !== 'undefined' && (import.meta?.env?.MODE === 'development')) {
-    console.debug('[CourseDetailsForm] Pillole', {
-      selectedCourse: selectedCourse ? (selectedCourse.title || selectedCourse.name) : null,
-      variantsCount: typeof variantsCount === 'number' ? variantsCount : null,
-      risk: {
-        disabled: riskDisabled,
-        selected: riskValue,
-        options: (RISK_LEVEL_OPTIONS || []).map(o => o.value),
-      },
-      type: {
-        disabled: typeDisabled,
-        selected: courseTypeValue,
-        options: (COURSE_TYPE_OPTIONS || []).map(o => o.value),
-      },
-      pillsVisibility: {
-        multipleVariants,
-        showRiskNonApplicable,
-        showTypeNonApplicable,
-      }
-    });
-  }
-}, [
-  selectedCourse,
-  variantsCount,
-  riskDisabled,
-  typeDisabled,
-  riskValue,
-  courseTypeValue,
-  RISK_LEVEL_OPTIONS,
-  COURSE_TYPE_OPTIONS,
-  multipleVariants,
-  showRiskNonApplicable,
-  showTypeNonApplicable,
-]);
+  // Log di diagnostica leggero per le pillole (solo in sviluppo)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && (import.meta?.env?.MODE === 'development')) {
+      console.debug('[CourseDetailsForm] Pillole', {
+        selectedCourse: selectedCourse ? (selectedCourse.title || selectedCourse.name) : null,
+        variantsCount: typeof variantsCount === 'number' ? variantsCount : null,
+        risk: {
+          disabled: riskDisabled,
+          selected: riskValue,
+          options: (RISK_LEVEL_OPTIONS || []).map(o => o.value),
+        },
+        type: {
+          disabled: typeDisabled,
+          selected: courseTypeValue,
+          options: (COURSE_TYPE_OPTIONS || []).map(o => o.value),
+        },
+        pillsVisibility: {
+          multipleVariants,
+          showRiskNonApplicable,
+          showTypeNonApplicable,
+        }
+      });
+    }
+  }, [
+    selectedCourse,
+    variantsCount,
+    riskDisabled,
+    typeDisabled,
+    riskValue,
+    courseTypeValue,
+    RISK_LEVEL_OPTIONS,
+    COURSE_TYPE_OPTIONS,
+    multipleVariants,
+    showRiskNonApplicable,
+    showTypeNonApplicable,
+  ]);
 
-return (
-  <div className="space-y-4">
-    <h3 className="font-semibold text-gray-700">Dettagli del Corso</h3>
-    
-    {/* Course Selection - unique options by macro-corso */}
-    <div>
-      <Label>Corso *</Label>
-      <AsyncSelect
-        cacheOptions
-        defaultOptions={defaultCourseOptions}
-        loadOptions={loadCourseOptions}
-        value={selectedCourseOption}
-        onChange={async (option) => {
-          if (!option) {
-            onFormDataChange('training_id', '');
+  return (
+    <div className="space-y-6">
+      <h3 className="font-semibold text-gray-700">Dettagli del Corso</h3>
+
+      {/* Course Selection - unique options by macro-corso */}
+      <div className="mb-6">
+        <Label>Corso *</Label>
+        <AsyncSelect
+          cacheOptions
+          defaultOptions={defaultCourseOptions}
+          loadOptions={loadCourseOptions}
+          value={selectedCourseOption}
+          onChange={async (option) => {
+            if (!option) {
+              onFormDataChange('training_id', '');
+              onFormDataChange('risk_level', '');
+              onFormDataChange('course_type', '');
+              onCourseSelected?.(undefined);
+              onCourseSearchChange('');
+              return;
+            }
+            const macroTitle = (option as { value: string; label: string }).value as string;
+            // Non resettare training_id, solo risk_level e course_type
             onFormDataChange('risk_level', '');
             onFormDataChange('course_type', '');
-            onCourseSelected?.(undefined);
+
+            // Cerca il corso completo nei trainings per avere tutti i dati necessari
+            const fullCourse = trainings.find(t =>
+              (t.title || t.name) === macroTitle
+            );
+
+            if (fullCourse) {
+              // Usa il corso completo trovato nei trainings e imposta training_id
+              onFormDataChange('training_id', fullCourse.id);
+              onCourseSelected?.(fullCourse);
+            } else {
+              // Fallback: resetta training_id e crea un oggetto con il titolo per permettere la ricerca delle varianti
+              onFormDataChange('training_id', '');
+              onCourseSelected?.({
+                id: '',
+                title: macroTitle,
+                name: macroTitle,
+                // Aggiungi campi minimi per evitare errori
+                duration: undefined,
+                certifications: [],
+                riskLevel: undefined,
+                courseType: undefined
+              } as Training);
+            }
             onCourseSearchChange('');
-            return;
-          }
-          const macroTitle = (option as { value: string; label: string }).value as string;
-          // Non resettare training_id, solo risk_level e course_type
-          onFormDataChange('risk_level', '');
-          onFormDataChange('course_type', '');
-          
-          // Cerca il corso completo nei trainings per avere tutti i dati necessari
-          const fullCourse = trainings.find(t => 
-            (t.title || t.name) === macroTitle
-          );
-          
-          if (fullCourse) {
-            // Usa il corso completo trovato nei trainings e imposta training_id
-            onFormDataChange('training_id', fullCourse.id);
-            onCourseSelected?.(fullCourse);
-          } else {
-            // Fallback: resetta training_id e crea un oggetto con il titolo per permettere la ricerca delle varianti
-            onFormDataChange('training_id', '');
-            onCourseSelected?.({ 
-              id: '', 
-              title: macroTitle,
-              name: macroTitle,
-              // Aggiungi campi minimi per evitare errori
-              duration: undefined,
-              certifications: [],
-              riskLevel: undefined,
-              courseType: undefined
-            } as Training);
-          }
-          onCourseSearchChange('');
-        }}
-        noOptionsMessage={() => courseSearch ? 'Nessun corso trovato: prova con parole chiave diverse' : 'Inizia a digitare per cercare'}
-        placeholder="Seleziona un corso"
-        isClearable
-        classNamePrefix="react-select"
-        styles={{
-          ...selectStyles,
-          menuPortal: (base: SelectStylesBase) => ({ ...base, zIndex: 9999 })
-        }}
-        menuPortalTarget={menuPortalTarget}
-        inputValue={courseSearch}
-        onInputChange={(value, meta) => {
-          if (meta.action === 'input-change') onCourseSearchChange(value);
-        }}
-      />
-      
-      {selectedCourse && ((
+          }}
+          noOptionsMessage={() => courseSearch ? 'Nessun corso trovato: prova con parole chiave diverse' : 'Inizia a digitare per cercare'}
+          placeholder="Seleziona un corso"
+          isClearable
+          classNamePrefix="react-select"
+          styles={{
+            ...selectStyles,
+            menuPortal: (base: SelectStylesBase) => ({ ...base, zIndex: 9999 })
+          }}
+          menuPortalTarget={menuPortalTarget}
+          inputValue={courseSearch}
+          onInputChange={(value, meta) => {
+            if (meta.action === 'input-change') onCourseSearchChange(value);
+          }}
+        />
+
+        {selectedCourse && ((
           (selectedCourse.duration ||
             ((Array.isArray(selectedCourse?.certifications)
               ? selectedCourse!.certifications
@@ -382,109 +385,83 @@ return (
             ).length > 0) ||
             selectedCourse.riskLevel ||
             selectedCourse.courseType)
-        ) && (
-        <div className="mt-2 p-3 bg-blue-50 rounded border">
-          <div className="text-sm">
-            {/* Rimosso: nome corso duplicato */}
-            {selectedCourse.duration && (
-              <div className="text-gray-600">Durata: {selectedCourse.duration} ore</div>
+        ) && false
+        )}
+
+        {/* Risk Level + Course Type side-by-side */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 mt-8">
+          <div>
+            <Label>{`Livello di Rischio${hasRiskOptions ? ' *' : ''}`}</Label>
+            {showRiskNonApplicable ? (
+              <div className="text-sm text-gray-500 py-2">Non applicabile per questo corso</div>
+            ) : (
+              hasRiskOptions ? <SelectionPills actions={riskActions} className="mt-1" /> : null
             )}
-            {(
-              (Array.isArray(selectedCourse?.certifications)
-                ? selectedCourse!.certifications
-                : (typeof selectedCourse?.certifications === 'string'
-                  ? (selectedCourse!.certifications as unknown as string).split(',').map((c: string) => c.trim()).filter(Boolean)
-                  : [] as string[])
-              ).length > 0
-            ) && (
-              <div className="text-gray-600">
-                Certificazioni richieste: {
-                  (Array.isArray(selectedCourse?.certifications)
-                    ? selectedCourse!.certifications
-                    : (typeof selectedCourse?.certifications === 'string'
-                      ? (selectedCourse!.certifications as unknown as string).split(',').map((c: string) => c.trim()).filter(Boolean)
-                      : [] as string[])
-                  ).join(', ')
-                }
-              </div>
-            )}
-            {(selectedCourse.riskLevel || selectedCourse.courseType) && (
-              <div className="text-gray-600">
-                {selectedCourse.riskLevel && (
-                  <span className="mr-4">Rischio: {selectedCourse.riskLevel}</span>
-                )}
-                {selectedCourse.courseType && (
-                  <span>Tipo: {selectedCourse.courseType === 'PRIMO_CORSO' ? 'Primo corso' : 'Aggiornamento'}</span>
-                )}
-              </div>
+          </div>
+
+          <div>
+            <Label>{`Tipo Corso${hasTypeOptions ? ' *' : ''}`}</Label>
+            {showTypeNonApplicable ? (
+              <div className="text-sm text-gray-500 py-2">Non applicabile per questo corso</div>
+            ) : (
+              hasTypeOptions ? <SelectionPills actions={typeActions} className="mt-1" /> : null
             )}
           </div>
         </div>
-        )
-      )}
 
-      {/* Risk Level + Course Type side-by-side */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <Label>{`Livello di Rischio${hasRiskOptions ? ' *' : ''}`}</Label>
-          {showRiskNonApplicable ? (
-            <div className="text-sm text-gray-500 py-2">Non applicabile per questo corso</div>
-          ) : (
-            hasRiskOptions ? <SelectionPills actions={riskActions} className="mt-1" /> : null
-          )}
-        </div>
-
-        <div>
-          <Label>{`Tipo Corso${hasTypeOptions ? ' *' : ''}`}</Label>
-          {showTypeNonApplicable ? (
-            <div className="text-sm text-gray-500 py-2">Non applicabile per questo corso</div>
-          ) : (
-            hasTypeOptions ? <SelectionPills actions={typeActions} className="mt-1" /> : null
-          )}
-        </div>
-      </div>
-
-      {/* Location + Delivery Mode side-by-side */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <Label>Luogo *</Label>
-          <Input
-            type="text"
-            placeholder="Inserisci il luogo del corso"
-            value={formData.location}
-            onChange={(e) => onFormDataChange('location', e.target.value)}
-          />
-        </div>
-        <div>
-          <Label>Modalità di Erogazione</Label>
-          <Select
-            value={DELIVERY_MODES?.find(mode => mode.value === formData.delivery_mode) || null}
-            onChange={(option) => onFormDataChange('delivery_mode', option ? option.value : '')}
-            options={DELIVERY_MODES || []}
-            placeholder="Seleziona modalità"
-            isClearable
-            classNamePrefix="react-select"
-            styles={selectStyles}
-          />
-        </div>
-      </div>
-
-      {/* Trainer Information - Separata con margine */}
-      {filteredTrainers.length > 0 && (
-        <div className="bg-green-50 p-3 rounded border mt-4">
-          <div className="text-sm">
-            <div className="font-medium text-green-800 mb-1">
-              Formatori qualificati disponibili: {filteredTrainers.length}
-            </div>
-            <div className="text-gray-700">
-              Seleziona i formatori nella sezione "Date e Orari" per ogni sessione.
-            </div>
+        {/* Location + Delivery Mode side-by-side */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div>
+            <Label>Luogo</Label>
+            <Input
+              type="text"
+              placeholder="Inserisci il luogo del corso"
+              value={formData.location}
+              onChange={(e) => onFormDataChange('location', e.target.value)}
+            />
+          </div>
+          <div>
+            <Label>Modalità di Erogazione *</Label>
+            <Select
+              value={DELIVERY_MODES?.find(mode => mode.value === formData.delivery_mode) || null}
+              onChange={(option) => onFormDataChange('delivery_mode', option ? option.value : '')}
+              options={DELIVERY_MODES || []}
+              placeholder="Seleziona modalità"
+              isClearable
+              classNamePrefix="react-select"
+              styles={selectStyles}
+            />
           </div>
         </div>
-      )}
+
+        {/* Public Calendar Toggle - Integrated with layout */}
+        <div className="flex items-center gap-3 p-4 bg-gradient-to-r from-indigo-50 to-blue-50 rounded-lg border border-indigo-200 shadow-sm">
+          <div className="flex-shrink-0">
+            <input
+              type="checkbox"
+              id="isPublic"
+              checked={formData.isPublic || false}
+              onChange={(e) => onFormDataChange('isPublic', e.target.checked)}
+              className="w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500 cursor-pointer"
+            />
+          </div>
+          <label htmlFor="isPublic" className="flex-1 cursor-pointer">
+            <div className="flex items-center gap-2">
+              <span className="font-medium text-gray-900">🌐 Visibile nel Calendario Pubblico</span>
+              {formData.isPublic && (
+                <span className="px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded-full font-medium">
+                  Attivo
+                </span>
+              )}
+            </div>
+            <span className="text-sm text-gray-500 mt-0.5 block">
+              Rendi questo corso visibile nel calendario pubblico del sito web
+            </span>
+          </label>
+        </div>
+      </div>
     </div>
-  </div>
-);
+  );
 };
 
 export default CourseDetailsForm;

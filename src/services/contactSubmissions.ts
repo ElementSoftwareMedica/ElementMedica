@@ -9,6 +9,7 @@ export interface ContactSubmissionData {
   name: string;
   email: string;
   phone?: string;
+  company?: string;
   subject: string;
   message: string;
   privacyAccepted: boolean;
@@ -28,37 +29,41 @@ export interface ContactSubmissionResponse {
 export const submitContactForm = async (data: ContactSubmissionData): Promise<ContactSubmissionResponse> => {
   try {
     console.log('📤 Invio contact form:', data);
-    
-    const response = await apiPost<ContactSubmissionResponse>('/api/v1/submissions', data);
-    
+
+    // Usa l'endpoint pubblico per le submissions dai form pubblici
+    const response = await apiPost<ContactSubmissionResponse>('/api/public/contact-submissions', {
+      requestType: 'info', // Default type
+      ...data
+    });
+
     console.log('✅ Contact form inviato con successo:', response);
     return response;
   } catch (error: unknown) {
     console.error('❌ Errore invio contact form:', error);
-    
+
     // Type guard per errori con response
     const isAxiosError = (err: unknown): err is { response?: { status?: number; data?: { message?: string } } } => {
       return typeof err === 'object' && err !== null && 'response' in err;
     };
-    
+
     if (isAxiosError(error)) {
       // Gestione specifica per rate limiting
       if (error.response?.status === 429) {
         throw new Error('Troppe richieste. Riprova tra qualche minuto.');
       }
-      
+
       // Gestione per errori di validazione
       if (error.response?.status === 400) {
         const errorMessage = error.response?.data?.message || 'Dati non validi';
         throw new Error(errorMessage);
       }
-      
+
       // Gestione per errori del server
       if (error.response?.status && error.response.status >= 500) {
         throw new Error('Errore del server. Riprova più tardi.');
       }
     }
-    
+
     // Errore generico
     throw new Error('Errore nell\'invio del messaggio. Riprova più tardi.');
   }

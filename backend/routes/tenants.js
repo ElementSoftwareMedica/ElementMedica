@@ -22,7 +22,7 @@ router.use(authenticateToken());
 router.get('/', requireSuperAdmin, async (req, res) => {
   try {
     const { page = 1, limit = 20, search, isActive, billingPlan } = req.query;
-    
+
     const filters = {};
     if (search) filters.search = search;
     if (isActive !== undefined) filters.isActive = isActive === 'true';
@@ -56,7 +56,7 @@ router.get('/', requireSuperAdmin, async (req, res) => {
  */
 router.post('/', requireSuperAdmin, async (req, res) => {
   try {
-    const { name, slug, domain, settings, billingPlan } = req.body;
+    const { name, slug, domain, settings, billingPlan, enabledFeatures } = req.body;
 
     // Validazione input
     if (!name || !slug) {
@@ -80,7 +80,8 @@ router.post('/', requireSuperAdmin, async (req, res) => {
       slug,
       domain,
       settings,
-      billingPlan
+      billingPlan,
+      enabledFeatures
     });
 
     res.status(201).json({
@@ -90,7 +91,7 @@ router.post('/', requireSuperAdmin, async (req, res) => {
     });
   } catch (error) {
     console.error('[TENANTS_API] Error creating tenant:', error);
-    
+
     if (error.message.includes('already exists')) {
       return res.status(409).json({
         success: false,
@@ -116,9 +117,9 @@ router.get('/current', tenantMiddleware, validateUserTenant, async (req, res) =>
     console.log('[TENANTS_API] Getting current tenant for user:', req.person?.id);
     console.log('[TENANTS_API] User tenant ID:', req.person?.tenantId);
     console.log('[TENANTS_API] Tenant from middleware:', req.tenant?.id);
-    
+
     const tenant = req.tenant;
-    
+
     if (!tenant) {
       console.error('[TENANTS_API] No tenant found in request');
       return res.status(400).json({
@@ -126,11 +127,11 @@ router.get('/current', tenantMiddleware, validateUserTenant, async (req, res) =>
         error: 'No tenant information available'
       });
     }
-    
+
     console.log('[TENANTS_API] Getting stats for tenant:', tenant.id);
     // Ottieni statistiche del tenant
     const stats = await tenantService.getTenantStats(tenant.id);
-    
+
     console.log('[TENANTS_API] Getting billing info for tenant:', tenant.id);
     // Ottieni limiti del piano
     const billingInfo = await tenantService.checkBillingLimits(tenant.id);
@@ -182,7 +183,7 @@ router.get('/:id', async (req, res) => {
     }
 
     const tenant = await tenantService.getTenantById(id);
-    
+
     if (!tenant) {
       return res.status(404).json({
         success: false,
@@ -225,7 +226,7 @@ router.put('/:id', async (req, res) => {
 
     // Verifica permessi
     const isSuperAdmin = user.globalRole === 'SUPER_ADMIN';
-    const isTenantAdmin = user.companyId === id && 
+    const isTenantAdmin = user.companyId === id &&
       await enhancedRoleService.hasPermission(user.id, 'companies.update', { tenantId: id });
 
     if (!isSuperAdmin && !isTenantAdmin) {
@@ -256,7 +257,7 @@ router.put('/:id', async (req, res) => {
     });
   } catch (error) {
     console.error('[TENANTS_API] Error updating tenant:', error);
-    
+
     if (error.message.includes('already exists')) {
       return res.status(409).json({
         success: false,
@@ -341,7 +342,7 @@ router.get('/:id/stats', async (req, res) => {
  * @desc Assegna un ruolo a una persona nel tenant
  * @access Tenant Admin with user management permissions
  */
-router.post('/:id/users/:personId/roles', 
+router.post('/:id/users/:personId/roles',
   enhancedRoleService.requirePermission('users.manage_roles'),
   async (req, res) => {
     try {
@@ -391,9 +392,9 @@ router.delete('/:id/users/:personId/roles/:roleType',
       const { companyId } = req.query;
 
       const success = await enhancedRoleService.removeRole(
-        personId, 
-        tenantId, 
-        roleType, 
+        personId,
+        tenantId,
+        roleType,
         companyId || null
       );
 
@@ -429,7 +430,7 @@ router.get('/:id/users/:personId/roles', async (req, res) => {
     const user = req.person;
 
     // Verifica permessi: può vedere i propri ruoli o essere admin
-    const canView = user.id === personId || 
+    const canView = user.id === personId ||
       await enhancedRoleService.hasPermission(user.id, 'users.read', { tenantId });
 
     if (!canView) {

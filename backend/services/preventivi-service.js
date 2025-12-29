@@ -28,15 +28,29 @@ const IVA_RATES_BY_SERVICE = {
 
 /**
  * Transizioni di stato valide per i preventivi
+ * 
+ * Stati disponibili:
+ * - BOZZA: Preventivo in lavorazione
+ * - INVIATO: Inviato al cliente
+ * - VISUALIZZATO: Il cliente ha visualizzato
+ * - ACCETTATO: Accettato dal cliente
+ * - RIFIUTATO: Rifiutato dal cliente
+ * - SCADUTO: Preventivo scaduto (non più valido)
+ * - CONVERTITO: Convertito in fattura/ordine
+ * - FATTURATO: Generata fattura
+ * - ANNULLATO: Annullato manualmente
+ * - ARCHIVIATO: Stato finale archiviazione
  */
 const STATO_TRANSITIONS = {
-  BOZZA: ['INVIATO', 'ARCHIVIATO'],
-  INVIATO: ['VISUALIZZATO', 'ACCETTATO', 'RIFIUTATO', 'ARCHIVIATO'],
-  VISUALIZZATO: ['ACCETTATO', 'RIFIUTATO', 'ARCHIVIATO'],
-  ACCETTATO: ['FATTURATO', 'ANNULLATO'],
+  BOZZA: ['INVIATO', 'ACCETTATO', 'SCADUTO', 'ARCHIVIATO'],
+  INVIATO: ['VISUALIZZATO', 'ACCETTATO', 'RIFIUTATO', 'SCADUTO', 'ARCHIVIATO'],
+  VISUALIZZATO: ['ACCETTATO', 'RIFIUTATO', 'SCADUTO', 'ARCHIVIATO'],
+  ACCETTATO: ['FATTURATO', 'CONVERTITO', 'ANNULLATO'],
   RIFIUTATO: ['ARCHIVIATO'],
-  FATTURATO: [],
-  ANNULLATO: [],
+  SCADUTO: ['ARCHIVIATO'],
+  CONVERTITO: ['FATTURATO', 'ARCHIVIATO'],
+  FATTURATO: ['ARCHIVIATO'],
+  ANNULLATO: ['ARCHIVIATO'],
   ARCHIVIATO: []
 };
 
@@ -61,7 +75,7 @@ const STATO_TRANSITIONS = {
 export function calculatePreventivoTotals(data) {
   try {
     const prezzoTotale = Number(data.prezzoTotale);
-    
+
     // Calcola sconto totale
     let scontoTotale = 0;
     if (data.sconti && Array.isArray(data.sconti)) {
@@ -69,10 +83,10 @@ export function calculatePreventivoTotals(data) {
     } else if (data.scontoTotale !== undefined) {
       scontoTotale = Number(data.scontoTotale);
     }
-    
+
     // Calcola imponibile (base imponibile dopo sconti, prima IVA)
     const imponibile = Math.max(0, prezzoTotale - scontoTotale);
-    
+
     // Determina aliquota IVA
     let aliquotaIva = 22.00; // Default
     if (data.aliquotaIva !== undefined) {
@@ -80,13 +94,13 @@ export function calculatePreventivoTotals(data) {
     } else if (data.tipoServizio && IVA_RATES_BY_SERVICE[data.tipoServizio]) {
       aliquotaIva = IVA_RATES_BY_SERVICE[data.tipoServizio];
     }
-    
+
     // Calcola IVA
     const importoIva = calculateIva(imponibile, aliquotaIva);
-    
+
     // Calcola importo finale (con IVA)
     const importoFinale = imponibile + importoIva;
-    
+
     return {
       prezzoTotale: Number(prezzoTotale.toFixed(2)),
       scontoTotale: Number(scontoTotale.toFixed(2)),
@@ -94,11 +108,11 @@ export function calculatePreventivoTotals(data) {
       aliquotaIva: Number(aliquotaIva.toFixed(2)),
       importoIva: Number(importoIva.toFixed(2)),
       importoFinale: Number(importoFinale.toFixed(2)),
-      risparmioPercentuale: prezzoTotale > 0 
+      risparmioPercentuale: prezzoTotale > 0
         ? Number(((scontoTotale / prezzoTotale) * 100).toFixed(2))
         : 0
     };
-    
+
   } catch (error) {
     logger.error('Error calculating preventivo totals', {
       component: 'preventivi-service',
@@ -146,7 +160,7 @@ export function determineIvaRate(tipoServizio) {
  */
 export async function applyDiscount(preventivoId, codiceId, options = {}) {
   const client = options.transaction || prisma;
-  
+
   try {
     // Recupera preventivo corrente
     const preventivo = await client.preventivo.findUnique({
@@ -158,46 +172,46 @@ export async function applyDiscount(preventivoId, codiceId, options = {}) {
         }
       }
     });
-    
+
     if (!preventivo) {
       throw new Error('Preventivo non trovato');
     }
-    
+
     // Recupera codice sconto
     const codice = await client.codiceSconto.findUnique({
       where: { id: codiceId }
     });
-    
+
     if (!codice) {
       throw new Error('Codice sconto non trovato');
     }
-    
+
     // Verifica che codice non sia già applicato
     const alreadyApplied = preventivo.sconti.some(s => s.codiceId === codiceId);
     if (alreadyApplied) {
       throw new Error('Codice sconto già applicato a questo preventivo');
     }
-    
+
     // Verifica cumulabilità se ci sono già altri sconti
     if (preventivo.sconti.length > 0 && !codice.cumulabile) {
       throw new Error('Codice non cumulabile: rimuovere gli altri sconti prima');
     }
-    
+
     const existingNonCumulable = preventivo.sconti.find(s => !s.codice.cumulabile);
     if (existingNonCumulable) {
       throw new Error('Preventivo ha già uno sconto non cumulabile applicato');
     }
-    
+
     // Calcola importo sconto
     const prezzoBase = Number(preventivo.prezzoTotale);
     let importoSconto = 0;
-    
+
     if (codice.tipoSconto === 'PERCENTUALE') {
       importoSconto = (prezzoBase * Number(codice.valore)) / 100;
     } else {
       importoSconto = Math.min(Number(codice.valore), prezzoBase);
     }
-    
+
     // Crea snapshot dello sconto
     const now = new Date();
     const preventivoSconto = await client.preventivoSconto.create({
@@ -208,20 +222,20 @@ export async function applyDiscount(preventivoId, codiceId, options = {}) {
         nomeCodice: codice.nome,
         descrizioneCodice: codice.descrizione,
         tipoSconto: codice.tipoSconto,
-        valoreScontoCodice: Number(codice.valore),
+        valoreSconto: Number(codice.valore),
         importoScontato: importoSconto,
         applicatoIl: now,
-        applicatoDa: options.userId || null,
+        applicatoDa: options.userId,
         tenantId: preventivo.tenantId
       }
     });
-    
+
     // Incrementa contatore utilizzo codice
     await client.codiceSconto.update({
       where: { id: codiceId },
       data: { utilizzoCorrente: { increment: 1 } }
     });
-    
+
     // Ricalcola totali preventivo
     const nuovoScontoTotale = Number(preventivo.scontoTotale) + importoSconto;
     const totali = calculatePreventivoTotals({
@@ -229,7 +243,7 @@ export async function applyDiscount(preventivoId, codiceId, options = {}) {
       scontoTotale: nuovoScontoTotale,
       aliquotaIva: Number(preventivo.aliquotaIva)
     });
-    
+
     // Aggiorna preventivo
     const preventivoAggiornato = await client.preventivo.update({
       where: { id: preventivoId },
@@ -247,7 +261,7 @@ export async function applyDiscount(preventivoId, codiceId, options = {}) {
         }
       }
     });
-    
+
     logger.info('Discount applied to preventivo', {
       component: 'preventivi-service',
       function: 'applyDiscount',
@@ -258,13 +272,13 @@ export async function applyDiscount(preventivoId, codiceId, options = {}) {
       nuovoScontoTotale: totali.scontoTotale,
       nuovoImportoFinale: totali.importoFinale
     });
-    
+
     return {
       preventivo: preventivoAggiornato,
       sconto: preventivoSconto,
       totali
     };
-    
+
   } catch (error) {
     logger.error('Error applying discount', {
       component: 'preventivi-service',
@@ -292,7 +306,7 @@ export async function applyDiscount(preventivoId, codiceId, options = {}) {
  */
 export async function removeDiscount(preventivoId, scontoId, options = {}) {
   const client = options.transaction || prisma;
-  
+
   try {
     // Recupera preventivo e sconto
     const preventivo = await client.preventivo.findUnique({
@@ -303,11 +317,11 @@ export async function removeDiscount(preventivoId, scontoId, options = {}) {
         }
       }
     });
-    
+
     if (!preventivo) {
       throw new Error('Preventivo non trovato');
     }
-    
+
     const sconto = await client.preventivoSconto.findFirst({
       where: {
         id: scontoId,
@@ -315,11 +329,11 @@ export async function removeDiscount(preventivoId, scontoId, options = {}) {
         deletedAt: null
       }
     });
-    
+
     if (!sconto) {
       throw new Error('Sconto non trovato o già rimosso');
     }
-    
+
     // Soft delete sconto
     const now = new Date();
     await client.preventivoSconto.update({
@@ -329,20 +343,20 @@ export async function removeDiscount(preventivoId, scontoId, options = {}) {
         deletedBy: options.userId || null
       }
     });
-    
+
     // Decrementa contatore utilizzo codice
     const codice = await client.codiceSconto.findUnique({
       where: { id: sconto.codiceId },
       select: { utilizzoCorrente: true }
     });
-    
+
     if (codice && codice.utilizzoCorrente > 0) {
       await client.codiceSconto.update({
         where: { id: sconto.codiceId },
         data: { utilizzoCorrente: { decrement: 1 } }
       });
     }
-    
+
     // Ricalcola totali preventivo
     const nuovoScontoTotale = Number(preventivo.scontoTotale) - Number(sconto.importoScontato);
     const totali = calculatePreventivoTotals({
@@ -350,7 +364,7 @@ export async function removeDiscount(preventivoId, scontoId, options = {}) {
       scontoTotale: Math.max(0, nuovoScontoTotale),
       aliquotaIva: Number(preventivo.aliquotaIva)
     });
-    
+
     // Aggiorna preventivo
     const preventivoAggiornato = await client.preventivo.update({
       where: { id: preventivoId },
@@ -368,7 +382,7 @@ export async function removeDiscount(preventivoId, scontoId, options = {}) {
         }
       }
     });
-    
+
     logger.info('Discount removed from preventivo', {
       component: 'preventivi-service',
       function: 'removeDiscount',
@@ -378,12 +392,12 @@ export async function removeDiscount(preventivoId, scontoId, options = {}) {
       nuovoScontoTotale: totali.scontoTotale,
       nuovoImportoFinale: totali.importoFinale
     });
-    
+
     return {
       preventivo: preventivoAggiornato,
       totali
     };
-    
+
   } catch (error) {
     logger.error('Error removing discount', {
       component: 'preventivi-service',
@@ -406,13 +420,13 @@ export async function removeDiscount(preventivoId, scontoId, options = {}) {
 export function validateStateTransition(currentStato, newStato) {
   const allowedTransitions = STATO_TRANSITIONS[currentStato] || [];
   const isValid = allowedTransitions.includes(newStato);
-  
+
   return {
     valid: isValid,
     currentStato,
     newStato,
     allowedTransitions,
-    error: !isValid 
+    error: !isValid
       ? `Transizione non valida: ${currentStato} → ${newStato}. Stati consentiti: ${allowedTransitions.join(', ')}`
       : null
   };
@@ -431,7 +445,7 @@ export function validateStateTransition(currentStato, newStato) {
 export async function generateNumeroPreventivo(tenantId, anno = null) {
   try {
     const targetYear = anno || new Date().getFullYear();
-    
+
     // Trova l'ultimo numero per questo tenant e anno
     const lastPreventivo = await prisma.preventivo.findFirst({
       where: {
@@ -447,9 +461,9 @@ export async function generateNumeroPreventivo(tenantId, anno = null) {
         numero: true
       }
     });
-    
+
     let sequenza = 1;
-    
+
     if (lastPreventivo) {
       // Estrai sequenza dall'ultimo numero
       const match = lastPreventivo.numero.match(/PREV-\d{4}-(\d+)/);
@@ -457,10 +471,10 @@ export async function generateNumeroPreventivo(tenantId, anno = null) {
         sequenza = parseInt(match[1], 10) + 1;
       }
     }
-    
+
     // Formatta numero con padding
     const numeroPreventivo = `PREV-${targetYear}-${String(sequenza).padStart(4, '0')}`;
-    
+
     logger.debug('Generated preventivo number', {
       component: 'preventivi-service',
       function: 'generateNumeroPreventivo',
@@ -469,9 +483,9 @@ export async function generateNumeroPreventivo(tenantId, anno = null) {
       sequenza,
       numero: numeroPreventivo
     });
-    
+
     return numeroPreventivo;
-    
+
   } catch (error) {
     logger.error('Error generating preventivo number', {
       component: 'preventivi-service',
@@ -500,17 +514,17 @@ export async function getPreventivoStats(preventivoId) {
         }
       }
     });
-    
+
     if (!preventivo) {
       throw new Error('Preventivo non trovato');
     }
-    
+
     const prezzoTotale = Number(preventivo.prezzoTotale);
     const scontoTotale = Number(preventivo.scontoTotale);
     const imponibile = Number(preventivo.imponibile);
     const importoIva = Number(preventivo.importoIva);
     const importoFinale = Number(preventivo.importoFinale);
-    
+
     return {
       prezzoOriginale: prezzoTotale,
       scontoTotale,
@@ -522,7 +536,7 @@ export async function getPreventivoStats(preventivoId) {
       importoFinale,
       ivaPercentuale: imponibile > 0 ? ((importoIva / imponibile) * 100).toFixed(2) : 0
     };
-    
+
   } catch (error) {
     logger.error('Error getting preventivo stats', {
       component: 'preventivi-service',
@@ -611,6 +625,11 @@ async function generatePDF({ preventivoId, userId, tenantId }) {
     preventivo.persona = persona;
     preventivo.corso = corso;
 
+    // 1e. Carica tenant per header/footer template
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId }
+    });
+
     // 2. Trova template "Preventivo"
     const template = await prisma.templateLink.findFirst({
       where: {
@@ -624,16 +643,50 @@ async function generatePDF({ preventivoId, userId, tenantId }) {
     });
 
     if (!template) {
+      logger.error('Template PREVENTIVO non trovato', {
+        function: 'generatePDF',
+        tenantId,
+        preventivoId,
+        message: 'Nessun template PREVENTIVO attivo trovato per questo tenant'
+      });
       throw new Error('Template "Preventivo" non trovato. Configurare template prima di generare PDF.');
     }
+
+    logger.info('Template PREVENTIVO selezionato', {
+      function: 'generatePDF',
+      templateId: template.id,
+      templateName: template.name,
+      templateVersion: template.version,
+      tenantId,
+      preventivoId
+    });
 
     // 3. Build marker data
     const markerData = _buildMarkerData(preventivo);
 
+    // 3b. Aggiungi dati tenant per header/footer
+    markerData.tenant = {
+      name: tenant?.name || 'Element Medica S.r.l.',
+      address: tenant?.address || 'Via Roma 123',
+      city: tenant?.city || '20100 Milano (MI)',
+      vatNumber: tenant?.vatNumber || tenant?.piva || '12345678901',
+      phone: tenant?.phone || '',
+      email: tenant?.email || '',
+      website: tenant?.website || '',
+      // Logo HTML condizionale
+      logoHtml: tenant?.logoUrl
+        ? `<img src="${tenant.logoUrl}" alt="${tenant.name}">`
+        : `<span style="font-size: 14pt; font-weight: 700; color: #1e40af;">${tenant?.name || 'Element Medica S.r.l.'}</span>`
+    };
+
+    // 3c. Template v12 non ha più bisogno di rimuovere riga sconto 
+    // perché totaliHtml è già generato correttamente in _buildMarkerData
+    let templateContent = template.content;
+
     // 4. Genera documento con DocumentService
     const getDocumentService = (await import('./documentService.js')).default;
     const documentService = getDocumentService();
-    
+
     const result = await documentService.generateDocument({
       templateId: template.id,
       entityType: 'PREVENTIVO',
@@ -643,7 +696,8 @@ async function generatePDF({ preventivoId, userId, tenantId }) {
       tenantId,
       options: {
         strict: false, // Permetti marker mancanti
-        markers: markerData // Pass direttamente come markers, non customData
+        markers: markerData, // Pass direttamente come markers, non customData
+        customTemplate: templateContent // Template modificato senza riga sconto
       }
     });
 
@@ -663,18 +717,32 @@ async function generatePDF({ preventivoId, userId, tenantId }) {
       });
     }
 
-    // 6. Generate custom filename with company name and date
+    // 6. Generate custom filename: yyyy.mm.dd - Preventivo "ragione sociale"
     const pdfBuffer = result.file.buffer;
-    
+
     let customFilename = result.fileName;
     if (azienda?.ragioneSociale) {
       const companyName = azienda.ragioneSociale
-        .replace(/[^a-zA-Z0-9\s]/g, '_') // Replace special chars with underscore
-        .replace(/\s+/g, '_') // Replace spaces with underscore
+        .replace(/[^a-zA-Z0-9\sàèìòùáéíóúÀÈÌÒÙÁÉÍÓÚ]/g, '') // Keep letters, numbers, spaces and accented chars
+        .trim()
         .substring(0, 50); // Limit length
-      
-      const date = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-      customFilename = `Preventivo_${companyName}_${date}.pdf`;
+
+      // Use dataEmissione if available, otherwise current date
+      const dateToUse = preventivo.dataEmissione ? new Date(preventivo.dataEmissione) : new Date();
+      const yyyy = dateToUse.getFullYear();
+      const mm = String(dateToUse.getMonth() + 1).padStart(2, '0');
+      const dd = String(dateToUse.getDate()).padStart(2, '0');
+      const dateFormatted = `${yyyy}.${mm}.${dd}`; // Format: yyyy.mm.dd
+      customFilename = `${dateFormatted} - Preventivo ${companyName}.pdf`;
+    } else if (persona) {
+      // Fallback to persona name if no company
+      const personName = `${persona.firstName || ''} ${persona.lastName || ''}`.trim().substring(0, 50);
+      const dateToUse = preventivo.dataEmissione ? new Date(preventivo.dataEmissione) : new Date();
+      const yyyy = dateToUse.getFullYear();
+      const mm = String(dateToUse.getMonth() + 1).padStart(2, '0');
+      const dd = String(dateToUse.getDate()).padStart(2, '0');
+      const dateFormatted = `${yyyy}.${mm}.${dd}`;
+      customFilename = `${dateFormatted} - Preventivo ${personName}.pdf`;
     }
 
     logger.info('PDF generated successfully', {
@@ -719,36 +787,83 @@ async function generatePDF({ preventivoId, userId, tenantId }) {
  */
 function _buildMarkerData(preventivo) {
   // Parse dettagliServizio JSON
-  const dettagli = typeof preventivo.dettagliServizio === 'string' 
-    ? JSON.parse(preventivo.dettagliServizio) 
+  const dettagli = typeof preventivo.dettagliServizio === 'string'
+    ? JSON.parse(preventivo.dettagliServizio)
     : preventivo.dettagliServizio || {};
 
+  // Helper per formattare date dd/mm/yyyy
+  const formatDate = (date) => {
+    if (!date) return '-';
+    const d = new Date(date);
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+  };
+
+  // Estrai voci dal dettagliServizio
+  const vociRaw = dettagli.voci || [];
+  const voci = vociRaw.map((v, index) => ({
+    numero: index + 1,
+    descrizione: v.descrizione || v.titoloServizio || 'Servizio',
+    quantita: v.quantita || 1,
+    prezzoUnitario: Number(v.prezzoUnitario || v.importo || 0).toFixed(2),
+    subtotale: Number(v.subtotale || v.prezzoTotale || v.importo || 0).toFixed(2)
+  }));
+
+  // Se non ci sono voci, crea una voce singola dal preventivo
+  if (voci.length === 0) {
+    voci.push({
+      numero: 1,
+      descrizione: preventivo.titoloServizio || 'Servizio',
+      quantita: 1,
+      prezzoUnitario: Number(preventivo.prezzoTotale || 0).toFixed(2),
+      subtotale: Number(preventivo.prezzoTotale || 0).toFixed(2)
+    });
+  }
+
   const data = {
+    // Array voci per template {{#each voci}}
+    voci,
+
     preventivo: {
       id: preventivo.id,
       numeroProgressivo: preventivo.numeroProgressivo || '-',
       annoProgressivo: preventivo.annoProgressivo || new Date().getFullYear(),
       stato: preventivo.stato,
-      dataCreazione: preventivo.dataEmissione,
-      dataInvio: preventivo.dataInvio,
-      dataAccettazione: preventivo.dataAccettazione,
-      dataValidita: preventivo.dataScadenza || _addDays(preventivo.dataEmissione, 30),
-      tipoServizio: preventivo.tipoServizio,
-      prezzoTotale: preventivo.prezzoTotale,
-      speseAccessorie: dettagli.speseAccessorie || 0,
-      subtotale: Number(preventivo.prezzoTotale) + Number(dettagli.speseAccessorie || 0),
-      scontoApplicato: preventivo.sconti && preventivo.sconti.length > 0,
-      scontoCodice: preventivo.sconti?.[0]?.codice?.codice || preventivo.sconti?.[0]?.codiceTesto || null,
-      scontoPercentuale: preventivo.sconti?.[0]?.codice?.percentuale || preventivo.sconti?.[0]?.valoreSconto || null,
-      importoSconto: preventivo.scontoTotale || 0,
-      imponibile: preventivo.imponibile,
-      percentualeIva: preventivo.aliquotaIva,
-      importoIva: preventivo.importoIva,
-      importoFinale: preventivo.importoFinale,
-      note: preventivo.note || '',
+      dataCreazione: formatDate(preventivo.dataEmissione),
+      dataEmissione: formatDate(preventivo.dataEmissione),
+      dataInvio: formatDate(preventivo.dataInvio),
+      dataAccettazione: formatDate(preventivo.dataAccettazione),
+      dataValidita: formatDate(preventivo.dataScadenza || _addDays(preventivo.dataEmissione, 30)),
+      dataScadenza: formatDate(preventivo.dataScadenza || _addDays(preventivo.dataEmissione, 30)),
+      tipoServizio: _getTipoServizioLabel(preventivo.tipoServizio),
+      titoloServizio: preventivo.titoloServizio || 'Servizio',
+      prezzoTotale: Number(preventivo.prezzoTotale).toFixed(2),
+      prezzoUnitario: preventivo.quantita && preventivo.quantita > 0
+        ? (Number(preventivo.prezzoTotale) / Number(preventivo.quantita)).toFixed(2)
+        : Number(preventivo.prezzoTotale).toFixed(2),
+      speseAccessorie: Number(dettagli.speseAccessorie || 0).toFixed(2),
+      subtotale: (Number(preventivo.prezzoTotale) + Number(dettagli.speseAccessorie || 0)).toFixed(2),
+      scontoApplicato: preventivo.scontoTotale > 0, // True solo se sconto > 0
+      codiceSconto: preventivo.sconti?.[0]?.codiceTesto || preventivo.sconti?.[0]?.codice?.codice || '',
+      scontoCodice: preventivo.sconti?.[0]?.codiceTesto || preventivo.sconti?.[0]?.codice?.codice || '',
+      scontoPercentuale: preventivo.sconti?.[0]?.valoreSconto || preventivo.sconti?.[0]?.codice?.valore || null,
+      importoSconto: Number(preventivo.scontoTotale || 0).toFixed(2),
+      imponibile: Number(preventivo.imponibile).toFixed(2),
+      aliquotaIva: Number(preventivo.aliquotaIva).toFixed(2),
+      percentualeIva: Number(preventivo.aliquotaIva).toFixed(2),
+      importoIva: Number(preventivo.importoIva).toFixed(2),
+      importoFinale: Number(preventivo.importoFinale).toFixed(2),
+      note: preventivo.note || '',  // SOLO note utente, NON dettagli corso
       linkAccettazione: dettagli.linkAccettazione || '',
-      numPartecipanti: dettagli.numPartecipanti || preventivo.quantita || 0
-    }
+      numPartecipanti: preventivo.quantita || dettagli.numPartecipanti || 0,
+      partecipanti: preventivo.quantita || dettagli.numPartecipanti || '',
+      metodoPagamento: dettagli.metodoPagamento || '30gg data fattura'
+    },
+
+    // Alias cliente per compatibilità template (popolato dopo)
+    cliente: {}
   };
 
   // Azienda cliente (se presente)
@@ -769,9 +884,27 @@ function _buildMarkerData(preventivo) {
       email: preventivo.azienda.email,
       phone: preventivo.azienda.telefono
     };
-    
+
     // Alias azienda per marker
     data.azienda = data.company;
+
+    // Alias cliente per template
+    data.cliente = {
+      nome: preventivo.azienda.ragioneSociale,
+      ragioneSociale: preventivo.azienda.ragioneSociale,
+      partitaIva: preventivo.azienda.partitaIva,
+      codiceFiscale: preventivo.azienda.codiceFiscale,
+      indirizzo: preventivo.azienda.indirizzo,
+      cap: preventivo.azienda.cap,
+      citta: preventivo.azienda.citta,
+      provincia: preventivo.azienda.provincia,
+      indirizzoCompleto: preventivo.azienda.indirizzo
+        ? `${preventivo.azienda.indirizzo}, ${preventivo.azienda.cap || ''} ${preventivo.azienda.citta || ''} ${preventivo.azienda.provincia ? `(${preventivo.azienda.provincia})` : ''}`.trim().replace(/\s+/g, ' ')
+        : '',
+      email: preventivo.azienda.email,
+      telefono: preventivo.azienda.telefono,
+      rappresentanteLegale: preventivo.azienda.rappresentanteLegale
+    };
   }
 
   // Persona cliente (se presente e non azienda)
@@ -789,15 +922,73 @@ function _buildMarkerData(preventivo) {
         city: preventivo.persona.city,
         province: preventivo.persona.province,
         postalCode: preventivo.persona.postalCode,
-        full: preventivo.persona.address ? 
-          `${preventivo.persona.address}, ${preventivo.persona.postalCode} ${preventivo.persona.city} (${preventivo.persona.province})` 
+        full: preventivo.persona.address ?
+          `${preventivo.persona.address}, ${preventivo.persona.postalCode} ${preventivo.persona.city} (${preventivo.persona.province})`
           : ''
       }
+    };
+
+    // Alias cliente per template (persona)
+    data.cliente = {
+      nome: `${preventivo.persona.firstName} ${preventivo.persona.lastName}`,
+      firstName: preventivo.persona.firstName,
+      lastName: preventivo.persona.lastName,
+      codiceFiscale: preventivo.persona.fiscalCode,
+      indirizzo: preventivo.persona.address,
+      cap: preventivo.persona.postalCode,
+      citta: preventivo.persona.city,
+      provincia: preventivo.persona.province,
+      indirizzoCompleto: preventivo.persona.address ?
+        `${preventivo.persona.address}, ${preventivo.persona.postalCode} ${preventivo.persona.city} (${preventivo.persona.province})`
+        : '',
+      email: preventivo.persona.email,
+      telefono: preventivo.persona.phone
     };
   }
 
   // Corso (se presente)
   if (preventivo.corso) {
+    // Funzione helper per determinare se è un corso RLS
+    const isRLSCourse = (title) => {
+      if (!title) return false;
+      const normalizedTitle = title.toLowerCase();
+      return (
+        normalizedTitle.includes('rls') ||
+        normalizedTitle.includes('rappresentante dei lavoratori') ||
+        normalizedTitle.includes('rappresentante lavoratori sicurezza')
+      );
+    };
+
+    // Funzione helper per formattare riskLevel con supporto RLS
+    const formatRiskLevel = (riskLevel, courseTitle) => {
+      if (!riskLevel || riskLevel === 'N/A') return 'N/A';
+      const isRLS = isRLSCourse(courseTitle);
+
+      if (isRLS) {
+        const rlsLabels = {
+          'ALTO': '>50 Dipendenti',
+          'MEDIO': '15-50 Dipendenti',
+          'BASSO': '<50 Dipendenti',
+          'A': '>50 Dipendenti',
+          'B': '15-50 Dipendenti',
+          'C': '<50 Dipendenti'
+        };
+        return rlsLabels[riskLevel] || riskLevel;
+      }
+
+      const standardLabels = {
+        'ALTO': 'Rischio Alto',
+        'MEDIO': 'Rischio Medio',
+        'BASSO': 'Rischio Basso',
+        'A': 'Categoria A',
+        'B': 'Categoria B',
+        'C': 'Categoria C'
+      };
+      return standardLabels[riskLevel] || riskLevel;
+    };
+
+    const formattedRiskLevel = formatRiskLevel(preventivo.corso.riskLevel, preventivo.corso.title);
+
     data.course = {
       id: preventivo.corso.id,
       title: preventivo.corso.title,
@@ -805,12 +996,111 @@ function _buildMarkerData(preventivo) {
       duration: preventivo.corso.duration,
       category: preventivo.corso.category,
       regulation: preventivo.corso.regulation,
-      description: preventivo.corso.description
+      description: preventivo.corso.description,
+      riskLevel: formattedRiskLevel,
+      courseType: preventivo.corso.courseType || 'N/A'
     };
-    
+
     // Alias corso per marker
     data.corso = data.course;
+
+    // Genera HTML per meta corso (per template v11/v12)
+    // Duration può essere un numero o una stringa con "ore"/"h", normalizza
+    const durationValue = data.corso.duration
+      ? String(data.corso.duration).replace(/\s*(ore|h)\s*/i, '')
+      : '-';
+    const durationDisplay = durationValue !== '-' ? `${durationValue}h` : '-';
+
+    data.corso.metaHtml = `
+    <div class="service-meta">
+      <span>Cod. <strong>${data.corso.code || '-'}</strong></span>
+      <span>Durata <strong>${durationDisplay}</strong></span>
+      ${data.corso.category ? `<span>${data.corso.category}</span>` : ''}
+      ${data.corso.riskLevel && data.corso.riskLevel !== 'N/A' ? `<span><strong>${data.corso.riskLevel}</strong></span>` : ''}
+    </div>`;
+
+    // Genera HTML per box corso completo (per template v11)
+    data.corso.boxHtml = `
+  <div class="service-box">
+    <h3>${data.corso.title || 'Servizio'}</h3>
+    ${data.corso.metaHtml}
+  </div>`;
+  } else {
+    // Se non c'è corso, marker vuoto
+    data.corso = { metaHtml: '', boxHtml: '' };
   }
+
+  // ========================================
+  // MARKER HTML COMPOSITI per template v12
+  // ========================================
+
+  // 1. Voci HTML (tabella righe)
+  data.vociHtml = data.voci.map(v => `
+      <tr>
+        <td class="num">${v.numero}</td>
+        <td>${v.descrizione}</td>
+        <td class="qty">${v.quantita}</td>
+        <td class="price">€ ${v.prezzoUnitario}</td>
+        <td class="total">€ ${v.subtotale}</td>
+      </tr>`).join('\n');
+
+  // 2. Totali HTML (con/senza sconto)
+  let totaliHtml = '';
+  if (data.preventivo.scontoApplicato && parseFloat(data.preventivo.importoSconto) > 0) {
+    totaliHtml += `
+      <div class="total-row original">
+        <span class="label">Subtotale</span>
+        <span class="value">€ ${data.preventivo.prezzoTotale}</span>
+      </div>
+      <div class="total-row discount">
+        <span class="label">Sconto${data.preventivo.scontoPercentuale ? ` ${data.preventivo.scontoPercentuale}%` : ''}</span>
+        <span class="value">-€ ${data.preventivo.importoSconto}</span>
+      </div>`;
+  }
+  totaliHtml += `
+      <div class="total-row">
+        <span class="label">Imponibile</span>
+        <span class="value">€ ${data.preventivo.imponibile}</span>
+      </div>
+      <div class="total-row">
+        <span class="label">IVA ${data.preventivo.percentualeIva}%</span>
+        <span class="value">€ ${data.preventivo.importoIva}</span>
+      </div>
+      <div class="total-row final">
+        <span class="label">TOTALE</span>
+        <span class="value">€ ${data.preventivo.importoFinale}</span>
+      </div>`;
+  data.totaliHtml = totaliHtml;
+
+  // 3. Note HTML (condizionale)
+  data.noteHtml = data.preventivo.note ? `
+  <div class="notes-box">
+    <h4>Note:</h4>
+    <p>${data.preventivo.note}</p>
+  </div>` : '';
+
+  // 4. Cliente dettagli HTML
+  let clienteDettagli = '';
+  if (data.cliente.partitaIva) {
+    clienteDettagli += `<p><span class="label">P.IVA:</span> <span class="value">${data.cliente.partitaIva}</span></p>`;
+  }
+  if (data.cliente.codiceFiscale) {
+    clienteDettagli += `<p><span class="label">C.F.:</span> <span class="value">${data.cliente.codiceFiscale}</span></p>`;
+  }
+  if (data.cliente.indirizzoCompleto) {
+    clienteDettagli += `<p style="font-size: 9pt; color: #6b7280;">${data.cliente.indirizzoCompleto}</p>`;
+  }
+  data.cliente.dettagliHtml = clienteDettagli;
+
+  // 5. Partecipanti HTML (condizionale)
+  data.preventivo.partecipantiHtml = data.preventivo.partecipanti
+    ? `<p><span class="label">Partecipanti:</span> <span class="value">${data.preventivo.partecipanti}</span></p>`
+    : '';
+
+  // 6. Numero preventivo formattato
+  data.preventivo.numero = data.preventivo.numeroProgressivo && data.preventivo.annoProgressivo
+    ? `PREV-${data.preventivo.annoProgressivo}-${String(data.preventivo.numeroProgressivo).padStart(4, '0')}`
+    : `PREV-${new Date().getFullYear()}-XXXX`;
 
   return data;
 }
@@ -823,6 +1113,23 @@ function _addDays(date, days) {
   const result = new Date(date);
   result.setDate(result.getDate() + days);
   return result;
+}
+
+/**
+ * Converte enum TipoServizio in label leggibile
+ * @private
+ */
+function _getTipoServizioLabel(tipoServizio) {
+  const labels = {
+    'CORSO': 'Formazione',
+    'DVR': 'DVR',
+    'RSPP': 'RSPP',
+    'MEDICO_COMPETENTE': 'Medicina del Lavoro',
+    'CONSULENZA': 'Consulenza',
+    'COMPENSO_FORMATORE': 'Compenso Formatore',
+    'ALTRO': 'Altro'
+  };
+  return labels[tipoServizio] || tipoServizio || 'Servizio';
 }
 
 export default {

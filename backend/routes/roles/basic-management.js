@@ -14,10 +14,10 @@ import logger from '../../utils/logger.js';
 // Import dei middleware
 import { requireRoleManagement } from './middleware/auth.js';
 import { logRoleOperation, auditRoleChanges } from './middleware/logging.js';
-import { 
+import {
   validateCreateRole,
   validateUpdateRole,
-  validatePagination 
+  validatePagination
 } from './middleware/validation.js';
 
 const router = express.Router();
@@ -51,7 +51,7 @@ function createErrorResponse(error, details = null) {
 function createPaginationResponse(data, totalCount, page, limit) {
   const totalPages = Math.ceil(totalCount / limit);
   const currentPage = parseInt(page);
-  
+
   return {
     data,
     pagination: {
@@ -74,40 +74,40 @@ function calculateOffset(page, limit) {
 function filterRoleData(data) {
   const allowedFields = ['name', 'description', 'permissions', 'isActive'];
   const filtered = {};
-  
+
   allowedFields.forEach(field => {
     if (data[field] !== undefined) {
       filtered[field] = data[field];
     }
   });
-  
+
   return filtered;
 }
 
 // Valida i dati del ruolo
 function validateRoleData(data, isUpdate = false) {
   const errors = [];
-  
+
   if (!isUpdate && !data.name) {
     errors.push('Name is required');
   }
-  
+
   if (data.name && (typeof data.name !== 'string' || data.name.trim().length === 0)) {
     errors.push('Name must be a non-empty string');
   }
-  
+
   if (data.description && typeof data.description !== 'string') {
     errors.push('Description must be a string');
   }
-  
+
   if (data.permissions && !Array.isArray(data.permissions)) {
     errors.push('Permissions must be an array');
   }
-  
+
   if (data.isActive !== undefined && typeof data.isActive !== 'boolean') {
     errors.push('isActive must be a boolean');
   }
-  
+
   return {
     isValid: errors.length === 0,
     errors
@@ -117,7 +117,7 @@ function validateRoleData(data, isUpdate = false) {
 // Filtra i dati utente per la risposta
 function filterUserData(user) {
   if (!user) return null;
-  
+
   return {
     id: user.id,
     email: user.email,
@@ -142,7 +142,7 @@ function transformRoleForResponse(role) {
 // Lista dei ruoli di sistema dall'enum RoleType
 const SYSTEM_ROLES = [
   'EMPLOYEE',
-  'MANAGER', 
+  'MANAGER',
   'HR_MANAGER',
   'DEPARTMENT_HEAD',
   'TRAINER',
@@ -174,16 +174,16 @@ router.get('/',
   logRoleOperation('LIST_ROLES'),
   async (req, res) => {
     try {
-      const { 
-        page = 1, 
-        limit = 50, 
-        search, 
-        type, 
+      const {
+        page = 1,
+        limit = 50,
+        search,
+        type,
         active,
         sortBy = 'roleType',
         sortOrder = 'asc'
       } = req.query;
-      
+
       const offset = calculateOffset(page, limit);
       const tenantId = req.tenant?.id || req.person?.tenantId;
 
@@ -260,7 +260,7 @@ router.get('/',
       // Applica filtri
       if (search) {
         const searchLower = search.toLowerCase();
-        allRoles = allRoles.filter(role => 
+        allRoles = allRoles.filter(role =>
           role.name.toLowerCase().includes(searchLower) ||
           role.description.toLowerCase().includes(searchLower) ||
           role.roleType.toLowerCase().includes(searchLower)
@@ -280,7 +280,7 @@ router.get('/',
       allRoles.sort((a, b) => {
         const aValue = a[sortBy] || '';
         const bValue = b[sortBy] || '';
-        
+
         if (sortOrder === 'desc') {
           return bValue.toString().localeCompare(aValue.toString());
         }
@@ -457,7 +457,7 @@ router.get('/:roleType',
       // Verifica se è un ruolo di sistema
       if (SYSTEM_ROLES.includes(roleType)) {
         isSystemRole = true;
-        
+
         // Ottieni statistiche per il ruolo di sistema
         const userCount = await prisma.personRole.count({
           where: {
@@ -493,15 +493,21 @@ router.get('/:roleType',
                 select: {
                   id: true,
                   email: true,
-                  name: true,
-                  isActive: true
+                  firstName: true,
+                  lastName: true,
+                  status: true
                 }
               }
             }
           });
 
           roleDetails.users = personRoles.map(pr => ({
-            ...filterUserData(pr.person),
+            id: pr.person?.id,
+            email: pr.person?.email,
+            firstName: pr.person?.firstName,
+            lastName: pr.person?.lastName,
+            name: `${pr.person?.firstName || ''} ${pr.person?.lastName || ''}`.trim(),
+            isActive: pr.person?.status === 'ACTIVE',
             assignedAt: pr.createdAt,
             assignedBy: pr.assignedBy
           }));
@@ -539,8 +545,9 @@ router.get('/:roleType',
                     select: {
                       id: true,
                       email: true,
-                      name: true,
-                      isActive: true
+                      firstName: true,
+                      lastName: true,
+                      status: true
                     }
                   }
                 }
@@ -563,7 +570,12 @@ router.get('/:roleType',
 
           if (includeUsers === 'true' && customRole.personRoles) {
             roleDetails.users = customRole.personRoles.map(pr => ({
-              ...filterUserData(pr.person),
+              id: pr.person?.id,
+              email: pr.person?.email,
+              firstName: pr.person?.firstName,
+              lastName: pr.person?.lastName,
+              name: `${pr.person?.firstName || ''} ${pr.person?.lastName || ''}`.trim(),
+              isActive: pr.person?.status === 'ACTIVE',
               assignedAt: pr.createdAt,
               assignedBy: pr.assignedBy
             }));

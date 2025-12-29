@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { 
+import {
   FileText,
   HelpCircle,
   Plus,
@@ -43,12 +43,12 @@ const PlaceholderManager: React.FC<PlaceholderManagerProps> = ({
   const [showPlaceholders, setShowPlaceholders] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  
+
   // Update content when initialContent prop changes
   useEffect(() => {
     setContent(initialContent);
   }, [initialContent]);
-  
+
   // Define standard placeholders by category
   const placeholderCategories: PlaceholderCategory[] = [
     {
@@ -64,7 +64,9 @@ const PlaceholderManager: React.FC<PlaceholderManagerProps> = ({
         { tag: '{{DATA_NASCITA}}', description: 'Data di nascita', example: '01/01/1980', category: 'Partecipante' },
         { tag: '{{LUOGO_NASCITA}}', description: 'Luogo di nascita', example: 'Roma', category: 'Partecipante' },
         { tag: '{{EMAIL}}', description: 'Indirizzo email', example: 'mario.rossi@example.com', category: 'Partecipante' },
-        { tag: '{{TELEFONO}}', description: 'Numero di telefono', example: '+39 123 456 7890', category: 'Partecipante' }
+        { tag: '{{TELEFONO}}', description: 'Numero di telefono', example: '+39 123 456 7890', category: 'Partecipante' },
+        { tag: '{{PROFILO_PROFESSIONALE}}', description: 'Titolo/Profilo professionale', example: 'Responsabile Sicurezza', category: 'Partecipante' },
+        { tag: '{{person.title}}', description: 'Titolo/Qualifica (alternativo)', example: 'Ing.', category: 'Partecipante' }
       ]
     },
     {
@@ -90,13 +92,22 @@ const PlaceholderManager: React.FC<PlaceholderManagerProps> = ({
       color: 'bg-purple-100',
       placeholders: [
         { tag: '{{CORSO}}', description: 'Titolo del corso', example: 'Sicurezza sul lavoro', category: 'Corso' },
+        { tag: '{{CORSO_TITOLO}}', description: 'Titolo del corso (alternativo)', example: 'Corso Primo Soccorso', category: 'Corso' },
         { tag: '{{DURATA}}', description: 'Durata del corso in ore', example: '8 ore', category: 'Corso' },
         { tag: '{{DATA_INIZIO}}', description: 'Data di inizio', example: '01/01/2023', category: 'Corso' },
         { tag: '{{DATA_FINE}}', description: 'Data di fine', example: '05/01/2023', category: 'Corso' },
         { tag: '{{SEDE}}', description: 'Sede del corso', example: 'Milano, Via Manzoni 123', category: 'Corso' },
         { tag: '{{FORMATORI}}', description: 'Nomi dei formatori', example: 'Dott. Mario Bianchi, Ing. Laura Verdi', category: 'Corso' },
         { tag: '{{ARGOMENTI}}', description: 'Argomenti trattati', example: 'Normativa, Procedure, Esercitazioni', category: 'Corso' },
-        { tag: '{{OBIETTIVI}}', description: 'Obiettivi del corso', example: 'Formare il personale sui rischi specifici', category: 'Corso' }
+        { tag: '{{OBIETTIVI}}', description: 'Obiettivi del corso', example: 'Formare il personale sui rischi specifici', category: 'Corso' },
+        { tag: '{{CORSO_DESCRIZIONE}}', description: 'Descrizione completa del corso', example: 'Corso di formazione per...', category: 'Corso' },
+        { tag: '{{course.description}}', description: 'Descrizione corso (alternativo)', example: 'Formazione specifica...', category: 'Corso' },
+        { tag: '{{CORSO_LIVELLO_RISCHIO}}', description: 'Livello di rischio (Alto/Medio/Basso/A/B/C)', example: 'Alto', category: 'Corso' },
+        { tag: '{{course.riskLevel}}', description: 'Livello rischio (alternativo)', example: 'Medio', category: 'Corso' },
+        { tag: '{{CORSO_TIPOLOGIA}}', description: 'Tipologia corso (Primo Corso/Aggiornamento)', example: 'Aggiornamento', category: 'Corso' },
+        { tag: '{{course.courseType}}', description: 'Tipo corso (alternativo)', example: 'Primo Corso', category: 'Corso' },
+        { tag: '{{MODALITA_EROGAZIONE}}', description: 'Modalità erogazione (In presenza/Online/Ibrida)', example: 'In presenza', category: 'Corso' },
+        { tag: '{{schedule.deliveryMode}}', description: 'Modalità (alternativo)', example: 'Online', category: 'Corso' }
       ]
     },
     {
@@ -124,13 +135,13 @@ const PlaceholderManager: React.FC<PlaceholderManagerProps> = ({
       ]
     }
   ];
-  
+
   // Filter placeholders based on document type
   const getPlaceholdersForDocumentType = () => {
     // Base placeholders for all document types
     const basePlaceholders = ['Partecipante', 'Azienda', 'Documento'];
-    
-    switch(documentType) {
+
+    switch (documentType) {
       case 'attestato':
         return [...basePlaceholders, 'Corso', 'Attestato'];
       case 'lettera_incarico':
@@ -144,37 +155,37 @@ const PlaceholderManager: React.FC<PlaceholderManagerProps> = ({
         return basePlaceholders;
     }
   };
-  
+
   // Filter categories based on document type
-  const filteredCategories = placeholderCategories.filter(category => 
+  const filteredCategories = placeholderCategories.filter(category =>
     getPlaceholdersForDocumentType().includes(category.name)
   );
-  
+
   // Filter placeholders based on search query
   const filterPlaceholders = (placeholders: Placeholder[]) => {
     if (!searchQuery) return placeholders;
-    
-    return placeholders.filter(placeholder => 
+
+    return placeholders.filter(placeholder =>
       placeholder.tag.toLowerCase().includes(searchQuery.toLowerCase()) ||
       placeholder.description.toLowerCase().includes(searchQuery.toLowerCase())
     );
   };
-  
+
   // Handle inserting a placeholder into the content
   const handleInsertPlaceholder = (placeholder: string) => {
     const textarea = document.getElementById('content-editor') as HTMLTextAreaElement;
-    
+
     if (textarea) {
       const start = textarea.selectionStart;
       const end = textarea.selectionEnd;
       const textBefore = content.substring(0, start);
       const textAfter = content.substring(end);
-      
+
       const newContent = `${textBefore}${placeholder}${textAfter}`;
-      
+
       setContent(newContent);
       onChange?.(newContent);
-      
+
       // Re-focus and set cursor position after placeholder
       setTimeout(() => {
         textarea.focus();
@@ -187,22 +198,22 @@ const PlaceholderManager: React.FC<PlaceholderManagerProps> = ({
       onChange?.(newContent);
     }
   };
-  
+
   // Handle content change
   const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setContent(e.target.value);
     onChange?.(e.target.value);
   };
-  
+
   // Handle preview with placeholder substitution
   const handlePreview = () => {
     if (onPreview) {
       onPreview(content, previewData);
     }
   };
-  
+
   // generatePreviewValues removed - not used
-  
+
   return (
     <div className="border border-gray-200 rounded-md shadow-sm">
       {/* Editor section */}
@@ -215,10 +226,10 @@ const PlaceholderManager: React.FC<PlaceholderManagerProps> = ({
           placeholder="Inserisci il testo del template qui. Puoi aggiungere placeholder come {{NOME}} dal pannello placeholders."
         />
       </div>
-      
+
       {/* Placeholder panel toggle */}
       <div className="border-t border-gray-200 p-3 flex justify-between items-center bg-gray-50">
-        <button 
+        <button
           onClick={() => setShowPlaceholders(!showPlaceholders)}
           className="flex items-center text-sm font-medium text-blue-600 hover:text-blue-800"
         >
@@ -232,9 +243,9 @@ const PlaceholderManager: React.FC<PlaceholderManagerProps> = ({
             </>
           )}
         </button>
-        
+
         {onPreview && (
-          <button 
+          <button
             onClick={handlePreview}
             className="px-3 py-1 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700"
           >
@@ -242,7 +253,7 @@ const PlaceholderManager: React.FC<PlaceholderManagerProps> = ({
           </button>
         )}
       </div>
-      
+
       {/* Placeholder panel */}
       {showPlaceholders && (
         <div className="border-t border-gray-200 p-4">
@@ -255,28 +266,26 @@ const PlaceholderManager: React.FC<PlaceholderManagerProps> = ({
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          
+
           {/* Categories */}
           <div className="flex flex-wrap gap-2 mb-3">
             <button
-              className={`text-xs px-3 py-1 rounded-full ${
-                selectedCategory === null 
-                  ? 'bg-blue-100 text-blue-700' 
+              className={`text-xs px-3 py-1 rounded-full ${selectedCategory === null
+                  ? 'bg-blue-100 text-blue-700'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
+                }`}
               onClick={() => setSelectedCategory(null)}
             >
               Tutti
             </button>
-            
+
             {filteredCategories.map(category => (
               <button
                 key={category.name}
-                className={`text-xs px-3 py-1 rounded-full ${
-                  selectedCategory === category.name 
-                    ? 'bg-blue-100 text-blue-700' 
+                className={`text-xs px-3 py-1 rounded-full ${selectedCategory === category.name
+                    ? 'bg-blue-100 text-blue-700'
                     : `${category.color || 'bg-gray-100'} text-gray-700 hover:bg-gray-200`
-                }`}
+                  }`}
                 onClick={() => setSelectedCategory(category.name)}
               >
                 {category.icon && <span className="mr-1">{category.icon}</span>}
@@ -284,7 +293,7 @@ const PlaceholderManager: React.FC<PlaceholderManagerProps> = ({
               </button>
             ))}
           </div>
-          
+
           {/* Placeholders list */}
           <div className="max-h-60 overflow-y-auto border border-gray-200 rounded-md">
             <table className="min-w-full divide-y divide-gray-200">

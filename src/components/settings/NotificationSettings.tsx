@@ -174,9 +174,9 @@ const NotificationSettings: React.FC<NotificationSettingsProps> = ({ className =
                 <Label>Frequenza notifiche</Label>
                 <Select
                   value={preferences.notifications.email.frequency}
-                  onValueChange={(value: NotificationFrequency) => 
-                    handleNotificationChange('email.frequency', value)
-                  }
+                  onValueChange={(value) => { 
+                    void handleNotificationChange('email.frequency', value as NotificationFrequency);
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue />

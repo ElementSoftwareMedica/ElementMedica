@@ -1,6 +1,15 @@
-import React, { useState, useEffect } from 'react';
+/**
+ * useViewMode Hook
+ * 
+ * Hook per gestire la modalità di visualizzazione (grid/list) con persistenza in localStorage.
+ * Ogni pagina può avere la propria preferenza salvata.
+ * 
+ * @module hooks/useViewMode
+ */
 
-type ViewMode = 'table' | 'grid';
+import { useState, useEffect, useCallback } from 'react';
+
+export type ViewMode = 'grid' | 'list';
 
 export interface UseViewModeOptions {
   storageKey: string;
@@ -13,22 +22,34 @@ export interface UseViewModeReturn {
   toggleViewMode: () => void;
 }
 
-export function useViewMode({ 
-  storageKey, 
-  defaultMode = 'table' 
+export function useViewMode({
+  storageKey,
+  defaultMode = 'grid'
 }: UseViewModeOptions): UseViewModeReturn {
-  const [viewMode, setViewMode] = useState<ViewMode>(() => {
-    const savedMode = localStorage.getItem(storageKey) as ViewMode;
-    return savedMode || defaultMode;
+  const [viewMode, setViewModeState] = useState<ViewMode>(() => {
+    try {
+      const savedMode = localStorage.getItem(storageKey);
+      if (savedMode === 'grid' || savedMode === 'list') {
+        return savedMode;
+      }
+    } catch {
+      // localStorage non disponibile
+    }
+    return defaultMode;
   });
 
-  useEffect(() => {
-    localStorage.setItem(storageKey, viewMode);
-  }, [viewMode, storageKey]);
+  const setViewMode = useCallback((mode: ViewMode) => {
+    setViewModeState(mode);
+    try {
+      localStorage.setItem(storageKey, mode);
+    } catch {
+      // localStorage non disponibile
+    }
+  }, [storageKey]);
 
-  const toggleViewMode = () => {
-    setViewMode(current => current === 'table' ? 'grid' : 'table');
-  };
+  const toggleViewMode = useCallback(() => {
+    setViewMode(viewMode === 'grid' ? 'list' : 'grid');
+  }, [viewMode, setViewMode]);
 
   return {
     viewMode,

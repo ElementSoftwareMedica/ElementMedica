@@ -5,7 +5,7 @@
  */
 
 import { Role } from '../../../../hooks/useRoles';
-import type { RoleFormData } from '../types';
+import type { RoleFormData, RoleEditData } from '../types';
 
 /**
  * Validate role form data
@@ -28,7 +28,7 @@ export const validateRoleForm = (formData: RoleFormData): string | null => {
 export const prepareRoleDataForSubmit = (
   formData: RoleFormData,
   mode: 'create' | 'edit',
-  role?: Role
+  role?: Role | RoleEditData | null
 ): Role => {
   // Backend expects an array of objects with { permissionId, granted, scope, ... }
   const permissions = Object.entries(formData.permissions)
@@ -42,10 +42,13 @@ export const prepareRoleDataForSubmit = (
 
   console.log('🔧 [prepareRoleDataForSubmit] Sending permissions:', permissions);
 
+  // Extract role type - handle both Role (type) and RoleEditData (roleType)
+  const roleType = role && 'type' in role ? role.type : role && 'roleType' in role ? role.roleType : 'CUSTOM';
+
   const roleData = {
     name: formData.name.trim(),
     description: formData.description.trim(),
-    type: role?.type || 'CUSTOM',
+    type: roleType,
     permissions: permissions,
     ...(mode === 'create' && {
       level: parseInt(formData.level),

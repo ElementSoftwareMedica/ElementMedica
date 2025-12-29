@@ -9,7 +9,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { 
+import {
   AlertCircle,
   CheckCircle,
   Download,
@@ -25,25 +25,25 @@ import { cn } from '../../../design-system/utils';
 export interface GDPRDataExportModalProps {
   /** Indica se il modal è aperto */
   isOpen: boolean;
-  
+
   /** Callback per chiudere il modal */
   onClose: () => void;
-  
+
   /** ID dell'entità per cui esportare i dati */
   entityId: string;
-  
+
   /** Tipo di entità */
   entityType: string;
-  
+
   /** Callback per avviare l'esportazione */
   onExport: (request: Omit<GDPRExportRequest, 'id' | 'createdAt' | 'status'>) => Promise<void>;
-  
+
   /** Lista delle richieste di esportazione esistenti */
   existingRequests?: GDPRExportRequest[];
-  
+
   /** Stato di caricamento */
   loading?: boolean;
-  
+
   /** Classi CSS personalizzate */
   className?: string;
 }
@@ -85,11 +85,11 @@ export const GDPRDataExportModal: React.FC<GDPRDataExportModalProps> = ({
   // Gestisce l'invio della richiesta di esportazione
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (isSubmitting) return;
-    
+
     setIsSubmitting(true);
-    
+
     try {
       await onExport({
         entityId,
@@ -99,7 +99,7 @@ export const GDPRDataExportModal: React.FC<GDPRDataExportModalProps> = ({
         includeAuditTrail,
         reason: reason.trim() || undefined
       });
-      
+
       onClose();
     } catch (error) {
       console.error('Errore durante l\'esportazione:', error);
@@ -165,11 +165,11 @@ export const GDPRDataExportModal: React.FC<GDPRDataExportModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       {/* Overlay */}
-      <div 
+      <div
         className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
         onClick={handleClose}
       />
-      
+
       {/* Modal */}
       <div className="flex min-h-full items-center justify-center p-4">
         <Card className={cn(
@@ -191,7 +191,7 @@ export const GDPRDataExportModal: React.FC<GDPRDataExportModalProps> = ({
                 </p>
               </div>
             </div>
-            
+
             <Button
               variant="ghost"
               size="sm"
@@ -214,7 +214,7 @@ export const GDPRDataExportModal: React.FC<GDPRDataExportModalProps> = ({
                   {existingRequests.slice(0, 3).map((request) => {
                     const statusConfig = getStatusConfig(request.status);
                     const StatusIcon = statusConfig.icon;
-                    
+
                     return (
                       <div
                         key={request.id}
@@ -235,7 +235,7 @@ export const GDPRDataExportModal: React.FC<GDPRDataExportModalProps> = ({
                             </div>
                           </div>
                         </div>
-                        
+
                         {request.status === 'COMPLETED' && request.downloadUrl && (
                           <Button
                             variant="outline"
@@ -254,7 +254,7 @@ export const GDPRDataExportModal: React.FC<GDPRDataExportModalProps> = ({
             )}
 
             {/* Form per nuova richiesta */}
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <form onSubmit={handleSubmit} className="space-y-6" noValidate>
               {/* Formato di esportazione */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-3">
@@ -314,7 +314,7 @@ export const GDPRDataExportModal: React.FC<GDPRDataExportModalProps> = ({
                       Includi metadati (date di creazione, modifica, ecc.)
                     </span>
                   </label>
-                  
+
                   <label className="flex items-center">
                     <input
                       type="checkbox"
@@ -375,7 +375,7 @@ export const GDPRDataExportModal: React.FC<GDPRDataExportModalProps> = ({
             >
               Annulla
             </Button>
-            
+
             <Button
               onClick={handleSubmit}
               disabled={isSubmitting || loading}

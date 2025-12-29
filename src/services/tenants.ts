@@ -55,7 +55,7 @@ const getErrorMessage = (error: unknown, fallback: string): string => {
 export const getCurrentTenant = async (): Promise<Company> => {
   try {
     // Rimosso utilizzo chiave legacy 'token' e log sensibili: gli header di auth sono gestiti dagli interceptor
-    const response = await apiClient.get<TenantCurrentResponse>('/api/tenants/current');
+    const response = await apiClient.get<TenantCurrentResponse>('/api/v1/tenants/current');
     // L'endpoint restituisce { success: true, data: { tenant: {...} } }
     // Estraiamo il tenant dalla struttura annidata
     console.log('✅ getCurrentTenant: Success', response.data.data.tenant?.name);
@@ -68,7 +68,7 @@ export const getCurrentTenant = async (): Promise<Company> => {
 
 export const getTenantById = async (tenantId: string): Promise<Company> => {
   try {
-    const response = await apiClient.get<Company>(`/tenants/${tenantId}`);
+    const response = await apiClient.get<Company>(`/api/v1/tenants/${tenantId}`);
     return response.data;
   } catch (error: unknown) {
     console.error('Error fetching tenant:', getErrorMessage(error, 'Errore nel caricamento del tenant'));
@@ -78,8 +78,17 @@ export const getTenantById = async (tenantId: string): Promise<Company> => {
 
 export const getAllTenants = async (): Promise<Company[]> => {
   try {
-    const response = await apiClient.get<Company[]>('/tenants');
-    return response.data;
+    const response = await apiClient.get<{ success: boolean; data: Company[]; pagination?: unknown } | Company[]>('/api/v1/tenants');
+    // Backend restituisce {success: true, data: [...], pagination: {...}}
+    // Gestisci entrambi i formati per retrocompatibilità
+    if ('success' in response.data && response.data.success && Array.isArray(response.data.data)) {
+      return response.data.data;
+    }
+    if (Array.isArray(response.data)) {
+      return response.data;
+    }
+    console.error('Unexpected tenants response format:', response.data);
+    return [];
   } catch (error: unknown) {
     console.error('Error fetching tenants:', getErrorMessage(error, 'Errore nel caricamento dei tenant'));
     throw new Error(getErrorMessage(error, 'Errore nel caricamento dei tenant'));

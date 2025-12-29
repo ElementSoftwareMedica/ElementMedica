@@ -5,14 +5,13 @@
 
 import express from 'express';
 import { body, validationResult } from 'express-validator';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../../config/prisma-optimization.js';
 import { authenticate } from '../../auth/middleware.js';
 import { authenticateAdvanced } from '../../middleware/auth-advanced.js';
 import { requireRoles } from '../../middleware/rbac.js';
 import { logger } from '../../utils/logger.js';
 
 const router = express.Router();
-const prisma = new PrismaClient();
 
 /**
  * Valid consent types for validation
@@ -59,9 +58,9 @@ router.post('/grant',
                     details: errors.array()
                 });
             }
-            
+
             const { personId, consentTypes, purpose, legalBasis = 'consent' } = req.body;
-            
+
             // Check if user can grant consent for other person
             if (personId !== req.person.id && !req.person.roles.includes('global_admin')) {
                 return res.status(403).json({
@@ -69,9 +68,9 @@ router.post('/grant',
                     code: 'GDPR_ACCESS_DENIED'
                 });
             }
-            
+
             const consents = [];
-            
+
             for (const consentType of consentTypes) {
                 const consent = await GDPRService.recordConsent(
                     personId,
@@ -79,7 +78,7 @@ router.post('/grant',
                     purpose,
                     legalBasis
                 );
-                
+
                 // Update consent record with request details
                 await prisma.consentRecord.update({
                     where: { id: consent.id },
@@ -88,10 +87,10 @@ router.post('/grant',
                         userAgent: req.get('User-Agent')
                     }
                 });
-                
+
                 consents.push(consent);
             }
-            
+
             logger.info('Person consents granted', {
                 component: 'gdpr-consent-management',
                 action: 'grantConsents',
@@ -101,7 +100,7 @@ router.post('/grant',
                 consentIds: consents.map(c => c.id),
                 ip: req.ip
             });
-            
+
             res.status(201).json({
                 message: 'Consents granted successfully',
                 consents: consents.map(consent => ({
@@ -112,7 +111,7 @@ router.post('/grant',
                     legalBasis: consent.legalBasis
                 }))
             });
-            
+
         } catch (error) {
             logger.error('Failed to grant consents', {
                 component: 'gdpr-consent-management',
@@ -121,7 +120,7 @@ router.post('/grant',
                 personId: req.person?.id,
                 body: req.body
             });
-            
+
             res.status(500).json({
                 error: 'Failed to grant consents',
                 code: 'GDPR_CONSENT_GRANT_FAILED'
@@ -150,9 +149,9 @@ router.post('/revoke',
                     details: errors.array()
                 });
             }
-            
+
             const { personId, consentTypes, reason } = req.body;
-            
+
             // Check if user can revoke consent for other person
             if (personId !== req.person.id && !req.person.roles.includes('global_admin')) {
                 return res.status(403).json({
@@ -160,9 +159,9 @@ router.post('/revoke',
                     code: 'GDPR_ACCESS_DENIED'
                 });
             }
-            
+
             const revokedConsents = [];
-            
+
             for (const consentType of consentTypes) {
                 const consent = await GDPRService.withdrawConsent(
                     personId,
@@ -171,7 +170,7 @@ router.post('/revoke',
                 );
                 revokedConsents.push(consent);
             }
-            
+
             logger.info('Person consents revoked', {
                 component: 'gdpr-consent-management',
                 action: 'revokeConsents',
@@ -181,7 +180,7 @@ router.post('/revoke',
                 consentIds: revokedConsents.map(c => c.id),
                 ip: req.ip
             });
-            
+
             res.json({
                 message: 'Consents revoked successfully',
                 consents: revokedConsents.map(consent => ({
@@ -191,7 +190,7 @@ router.post('/revoke',
                     withdrawalReason: consent.withdrawalReason
                 }))
             });
-            
+
         } catch (error) {
             logger.error('Failed to revoke consents', {
                 component: 'gdpr-consent-management',
@@ -200,7 +199,7 @@ router.post('/revoke',
                 personId: req.person?.id,
                 body: req.body
             });
-            
+
             res.status(500).json({
                 error: 'Failed to revoke consents',
                 code: 'GDPR_CONSENT_REVOKE_FAILED'
@@ -228,17 +227,17 @@ router.post('/',
                     details: errors.array()
                 });
             }
-            
+
             const { consentType, purpose, legalBasis = 'consent' } = req.body;
             const personId = req.person.id;
-            
+
             const consent = await GDPRService.recordConsent(
                 personId,
                 consentType,
                 purpose,
                 legalBasis
             );
-            
+
             // Update consent record with request details
             await prisma.consentRecord.update({
                 where: { id: consent.id },
@@ -247,7 +246,7 @@ router.post('/',
                     userAgent: req.get('User-Agent')
                 }
             });
-            
+
             logger.info('Person consent recorded', {
                 component: 'gdpr-consent-management',
                 action: 'recordConsent',
@@ -257,7 +256,7 @@ router.post('/',
                 consentId: consent.id,
                 ip: req.ip
             });
-            
+
             res.status(201).json({
                 message: 'Consent recorded successfully',
                 consent: {
@@ -268,7 +267,7 @@ router.post('/',
                     legalBasis: consent.legalBasis
                 }
             });
-            
+
         } catch (error) {
             logger.error('Failed to record consent', {
                 component: 'gdpr-consent-management',
@@ -277,7 +276,7 @@ router.post('/',
                 personId: req.person?.id,
                 body: req.body
             });
-            
+
             res.status(500).json({
                 error: 'Failed to record consent',
                 code: 'GDPR_CONSENT_RECORD_FAILED'
@@ -304,16 +303,16 @@ router.post('/withdraw',
                     details: errors.array()
                 });
             }
-            
+
             const { consentType, reason } = req.body;
             const personId = req.person.id;
-            
+
             const consent = await GDPRService.withdrawConsent(
                 personId,
                 consentType,
                 reason
             );
-            
+
             logger.info('Person consent withdrawn', {
                 component: 'gdpr-consent-management',
                 action: 'withdrawConsent',
@@ -323,7 +322,7 @@ router.post('/withdraw',
                 consentId: consent.id,
                 ip: req.ip
             });
-            
+
             res.json({
                 message: 'Consent withdrawn successfully',
                 consent: {
@@ -333,7 +332,7 @@ router.post('/withdraw',
                     withdrawalReason: consent.withdrawalReason
                 }
             });
-            
+
         } catch (error) {
             logger.error('Failed to withdraw consent', {
                 component: 'gdpr-consent-management',
@@ -342,7 +341,7 @@ router.post('/withdraw',
                 personId: req.person?.id,
                 body: req.body
             });
-            
+
             res.status(500).json({
                 error: 'Failed to withdraw consent',
                 code: 'GDPR_CONSENT_WITHDRAW_FAILED'
@@ -359,46 +358,58 @@ router.get('/current-user',
     async (req, res) => {
         try {
             const personId = req.person.id;
-            
+            const tenantId = req.person.tenantId;
+
             const consents = await prisma.consentRecord.findMany({
-                where: { personId },
+                where: {
+                    personId,
+                    tenantId,
+                    deletedAt: null
+                },
                 orderBy: {
-                    consentDate: 'desc'
+                    givenAt: 'desc'
                 },
                 select: {
                     id: true,
                     consentType: true,
-                    purpose: true,
                     consentGiven: true,
-                    consentDate: true,
+                    consentVersion: true,
+                    givenAt: true,
                     withdrawnAt: true,
-                    legalBasis: true,
-                    version: true
+                    ipAddress: true
                 }
             });
-            
+
             // Group by consent type to show current status
             const consentStatus = {};
             consents.forEach(consent => {
-                if (!consentStatus[consent.consentType] || 
-                    consent.consentDate > consentStatus[consent.consentType].consentDate) {
-                    consentStatus[consent.consentType] = consent;
+                if (!consentStatus[consent.consentType] ||
+                    consent.givenAt > consentStatus[consent.consentType].givenAt) {
+                    consentStatus[consent.consentType] = {
+                        ...consent,
+                        consentDate: consent.givenAt // Alias per compatibilità frontend
+                    };
                 }
             });
-            
+
             res.json({
+                success: true,
+                data: {
+                    consents: Object.values(consentStatus)
+                },
                 consents: Object.values(consentStatus),
-                history: consents
+                history: consents.map(c => ({ ...c, consentDate: c.givenAt }))
             });
-            
+
         } catch (error) {
             logger.error('Failed to get current user consent status', {
                 component: 'gdpr-consent-management',
                 action: 'getCurrentUserConsent',
                 error: error.message,
+                stack: error.stack,
                 personId: req.person?.id
             });
-            
+
             res.status(500).json({
                 error: 'Failed to get consent status',
                 code: 'GDPR_CONSENT_GET_FAILED'
@@ -416,38 +427,54 @@ router.get('/:personId',
     async (req, res) => {
         try {
             const { personId } = req.params;
-            
+            const tenantId = req.person.tenantId;
+
             const consents = await prisma.consentRecord.findMany({
-                where: { personId },
+                where: {
+                    personId,
+                    tenantId,
+                    deletedAt: null
+                },
                 orderBy: {
-                    consentDate: 'desc'
+                    givenAt: 'desc'  // Schema uses givenAt, not consentDate
                 },
                 select: {
                     id: true,
                     consentType: true,
-                    purpose: true,
                     consentGiven: true,
-                    consentDate: true,
+                    givenAt: true,
                     withdrawnAt: true,
-                    legalBasis: true,
-                    version: true
+                    consentVersion: true
                 }
             });
-            
-            // Group by consent type to show current status
+
+            // Map to frontend expected format and group by consent type
             const consentStatus = {};
             consents.forEach(consent => {
-                if (!consentStatus[consent.consentType] || 
-                    consent.consentDate > consentStatus[consent.consentType].consentDate) {
-                    consentStatus[consent.consentType] = consent;
+                const mappedConsent = {
+                    id: consent.id,
+                    consentType: consent.consentType,
+                    consentGiven: consent.consentGiven,
+                    consentDate: consent.givenAt,   // Alias
+                    withdrawnAt: consent.withdrawnAt,
+                    version: consent.consentVersion
+                };
+                if (!consentStatus[consent.consentType] ||
+                    consent.givenAt > consentStatus[consent.consentType].givenAt) {
+                    consentStatus[consent.consentType] = mappedConsent;
                 }
             });
-            
+
             res.json({
+                success: true,
                 consents: Object.values(consentStatus),
-                history: consents
+                history: consents.map(c => ({
+                    ...c,
+                    consentDate: c.givenAt,
+                    version: c.consentVersion
+                }))
             });
-            
+
         } catch (error) {
             logger.error('Failed to get person consent status', {
                 component: 'gdpr-consent-management',
@@ -456,7 +483,7 @@ router.get('/:personId',
                 personId: req.params?.personId,
                 adminPersonId: req.person?.id
             });
-            
+
             res.status(500).json({
                 error: 'Failed to get consent status',
                 code: 'GDPR_CONSENT_GET_FAILED'
@@ -473,46 +500,58 @@ router.get('/',
     async (req, res) => {
         try {
             const personId = req.person.id;
-            
+            const tenantId = req.person.tenantId;
+
             const consents = await prisma.consentRecord.findMany({
-                where: { personId },
+                where: {
+                    personId,
+                    tenantId,
+                    deletedAt: null
+                },
                 orderBy: {
-                    consentDate: 'desc'
+                    givenAt: 'desc'
                 },
                 select: {
                     id: true,
                     consentType: true,
-                    purpose: true,
                     consentGiven: true,
-                    consentDate: true,
+                    consentVersion: true,
+                    givenAt: true,
                     withdrawnAt: true,
-                    legalBasis: true,
-                    version: true
+                    ipAddress: true
                 }
             });
-            
+
             // Group by consent type to show current status
             const consentStatus = {};
             consents.forEach(consent => {
-                if (!consentStatus[consent.consentType] || 
-                    consent.consentDate > consentStatus[consent.consentType].consentDate) {
-                    consentStatus[consent.consentType] = consent;
+                if (!consentStatus[consent.consentType] ||
+                    consent.givenAt > consentStatus[consent.consentType].givenAt) {
+                    consentStatus[consent.consentType] = {
+                        ...consent,
+                        consentDate: consent.givenAt
+                    };
                 }
             });
-            
+
             res.json({
+                success: true,
+                data: {
+                    consents: Object.values(consentStatus)
+                },
                 consents: Object.values(consentStatus),
-                history: consents
+                history: consents.map(c => ({ ...c, consentDate: c.givenAt }))
             });
-            
+
         } catch (error) {
             logger.error('Failed to get consent status', {
                 component: 'gdpr-consent-management',
                 action: 'getConsent',
                 error: error.message,
+                stack: error.stack,
                 personId: req.person?.id
             });
-            
+
             res.status(500).json({
                 error: 'Failed to get consent status',
                 code: 'GDPR_CONSENT_GET_FAILED'

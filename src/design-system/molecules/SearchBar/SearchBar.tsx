@@ -59,7 +59,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
       if (!isControlled) {
         setInternalValue(newValue);
       }
-      
+
       onChange?.(newValue);
 
       if (searchOnType && onSearch) {
@@ -104,7 +104,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
   };
 
   return (
-    <div 
+    <div
       className={cn('relative flex items-center', sizeClasses[size], className)}
       data-testid="search-bar-container"
     >
@@ -117,16 +117,16 @@ export const SearchBar: React.FC<SearchBarProps> = ({
           onKeyDown={handleKeyDown}
           disabled={disabled}
           className={cn(
-            'pr-8',
+            'pl-10 pr-8',
             showButton && 'rounded-r-none border-r-0',
             size === 'sm' && 'text-sm',
             size === 'lg' && 'text-lg'
           )}
         />
-        
+
         {/* Search Icon */}
         <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-          <Icon name="search" size={size === 'sm' ? 'sm' : 'md'} />
+          <Icon name="search" size={size === 'sm' ? 'sm' : 'base'} />
         </div>
 
         {/* Clear Button */}
@@ -153,7 +153,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
           className="rounded-l-none border-l-0"
           data-testid="search-bar-search-button"
         >
-          <Icon name="search" size={size === 'sm' ? 'sm' : 'md'} />
+          <Icon name="search" size={size === 'sm' ? 'sm' : 'base'} />
         </Button>
       )}
     </div>

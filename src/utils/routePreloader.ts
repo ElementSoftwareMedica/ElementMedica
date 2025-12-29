@@ -272,7 +272,7 @@ routePreloader.registerRoute({
 
 routePreloader.registerRoute({
   route: '/documents-corsi',
-  loader: () => import('../pages/DocumentsCorsi.lazy'),
+  loader: () => import('../pages/DocumentsCorsiNew.lazy'),
   priority: 'low',
   preloadOn: 'hover'
 });

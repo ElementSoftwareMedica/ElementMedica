@@ -3,35 +3,23 @@
  * Main dashboard for GDPR compliance management
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
-  Box,
-  Container,
-  Typography,
-  Grid,
-  Card,
-  CardContent,
-  Button,
-  Chip,
-  LinearProgress,
-  Alert,
-  Tabs,
-  Tab,
-  IconButton,
-  Tooltip,
-  Divider,
-  Stack
-} from '@mui/material';
-import {
-  Security as SecurityIcon,
-  Download as DownloadIcon,
-  Delete as DeleteIcon,
-  Settings as SettingsIcon,
-  History as HistoryIcon,
-  Assessment as AssessmentIcon,
-  Refresh as RefreshIcon,
-  Info as InfoIcon
-} from '@mui/icons-material';
+  Shield,
+  Download,
+  Trash2,
+  Settings,
+  History,
+  BarChart3,
+  RefreshCw,
+  Info
+} from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Button } from '../components/ui/button';
+import { Badge } from '../components/ui/badge';
+import { Progress } from '../components/ui/progress';
+import { Alert } from '../components/ui/alert';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { useGDPRConsent } from '../hooks/useGDPRConsent';
 import { useAuditTrail } from '../hooks/useAuditTrail';
 import { useDataExport } from '../hooks/useDataExport';
@@ -45,41 +33,8 @@ import { PrivacySettingsTab } from '../components/gdpr/PrivacySettingsTab';
 import { GDPROverviewCard } from '../components/gdpr/GDPROverviewCard';
 import { ComplianceScoreCard } from '../components/gdpr/ComplianceScoreCard';
 
-interface TabPanelProps {
-  children?: React.ReactNode;
-  index: number;
-  value: number;
-}
-
-function TabPanel(props: TabPanelProps) {
-  const { children, value, index, ...other } = props;
-
-  return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`gdpr-tabpanel-${index}`}
-      aria-labelledby={`gdpr-tab-${index}`}
-      {...other}
-    >
-      {value === index && (
-        <Box sx={{ py: 3 }}>
-          {children}
-        </Box>
-      )}
-    </div>
-  );
-}
-
-function a11yProps(index: number) {
-  return {
-    id: `gdpr-tab-${index}`,
-    'aria-controls': `gdpr-tabpanel-${index}`,
-  };
-}
-
 export const GDPRDashboard: React.FC = () => {
-  const [activeTab, setActiveTab] = useState(0);
+  const [activeTab, setActiveTab] = useState('consent');
   const [refreshing, setRefreshing] = useState(false);
 
   // GDPR Hooks
@@ -88,10 +43,6 @@ export const GDPRDashboard: React.FC = () => {
   const exportHook = useDataExport();
   const deletionHook = useDeletionRequest();
   const privacyHook = usePrivacySettings();
-
-  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
-    setActiveTab(newValue);
-  };
 
   const handleRefreshAll = async () => {
     setRefreshing(true);
@@ -114,197 +65,185 @@ export const GDPRDashboard: React.FC = () => {
   const getOverallComplianceScore = () => {
     const privacyScore = privacyHook.getComplianceScore();
     const consentStats = consentHook.getConsentStats();
-    const consentScore = consentStats.total > 0 
-      ? (consentStats.granted / consentStats.total) * 100 
+    const consentScore = consentStats.total > 0
+      ? (consentStats.granted / consentStats.total) * 100
       : 100;
-    
+
     return Math.round((privacyScore + consentScore) / 2);
   };
 
   // Get compliance status color
-  const getComplianceColor = (score: number) => {
+  const getComplianceColor = (score: number): 'default' | 'success' | 'warning' | 'destructive' => {
     if (score >= 90) return 'success';
     if (score >= 70) return 'warning';
-    return 'error';
+    return 'destructive';
   };
 
   const overallScore = getOverallComplianceScore();
   const complianceColor = getComplianceColor(overallScore);
 
   return (
-    <Container maxWidth="xl" sx={{ py: 3 }}>
-      {/* Header */}
-      <Box sx={{ mb: 4 }}>
-        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-          <Typography variant="h4" component="h1" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <SecurityIcon color="primary" />
-            GDPR Dashboard
-          </Typography>
-          
-          <Stack direction="row" spacing={1}>
-            <Tooltip title="Refresh all data">
-              <IconButton 
-                onClick={handleRefreshAll} 
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50/30">
+      <div className="container mx-auto py-8 px-4 sm:px-6 space-y-8 max-w-7xl">
+        {/* Header */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+          <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-6">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/25">
+                <Shield className="h-7 w-7 text-white" />
+              </div>
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">GDPR Dashboard</h1>
+                <p className="text-gray-500 mt-1 text-sm sm:text-base">
+                  Gestisci privacy, consensi e impostazioni GDPR
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                onClick={handleRefreshAll}
                 disabled={refreshing}
-                color="primary"
+                variant="outline"
+                size="sm"
+                className="gap-2 rounded-xl"
               >
-                <RefreshIcon />
-              </IconButton>
-            </Tooltip>
-            
-            <Chip
-              icon={<AssessmentIcon />}
-              label={`Compliance Score: ${overallScore}%`}
-              color={complianceColor}
-              variant="outlined"
-            />
-          </Stack>
-        </Stack>
-        
-        <Typography variant="body1" color="text.secondary">
-          Manage your data privacy, consent preferences, and GDPR compliance settings.
-        </Typography>
-      </Box>
+                <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+                Aggiorna
+              </Button>
 
-      {/* Loading indicator */}
-      {refreshing && (
-        <Box sx={{ mb: 2 }}>
-          <LinearProgress />
-        </Box>
-      )}
+              <div className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium text-sm ${overallScore >= 90 ? 'bg-emerald-100 text-emerald-700' :
+                  overallScore >= 70 ? 'bg-amber-100 text-amber-700' :
+                    'bg-red-100 text-red-700'
+                }`}>
+                <BarChart3 className="h-4 w-4" />
+                <span>Compliance: {overallScore}%</span>
+              </div>
+            </div>
+          </div>
+        </div>
 
-      {/* Overview Cards */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} md={6} lg={3}>
+        {/* Loading indicator */}
+        {refreshing && (
+          <div className="mb-4">
+            <Progress value={50} className="w-full h-1" />
+          </div>
+        )}
+
+        {/* Overview Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
           <GDPROverviewCard
-            title="Consent Status"
-            icon={<SecurityIcon />}
+            title="Stato Consensi"
+            icon={<Shield className="h-5 w-5" />}
             stats={consentHook.getConsentStats()}
             loading={consentHook.loading}
             error={consentHook.error}
           />
-        </Grid>
-        
-        <Grid item xs={12} md={6} lg={3}>
+
           <GDPROverviewCard
-            title="Data Exports"
-            icon={<DownloadIcon />}
+            title="Export Dati"
+            icon={<Download className="h-5 w-5" />}
             stats={exportHook.getExportStats()}
             loading={exportHook.loading}
             error={exportHook.error}
           />
-        </Grid>
-        
-        <Grid item xs={12} md={6} lg={3}>
+
           <GDPROverviewCard
-            title="Deletion Requests"
-            icon={<DeleteIcon />}
+            title="Richieste Cancellazione"
+            icon={<Trash2 className="h-5 w-5" />}
             stats={deletionHook.getDeletionStats()}
             loading={deletionHook.loading}
             error={deletionHook.error}
           />
-        </Grid>
-        
-        <Grid item xs={12} md={6} lg={3}>
+
           <ComplianceScoreCard
             score={overallScore}
             recommendations={privacyHook.getComplianceRecommendations()}
             loading={privacyHook.loading}
           />
-        </Grid>
-      </Grid>
+        </div>
 
-      {/* Error Alerts */}
-      {(consentHook.error || auditHook.error || exportHook.error || deletionHook.error || privacyHook.error) && (
-        <Alert severity="error" sx={{ mb: 3 }}>
-          <Typography variant="subtitle2" gutterBottom>
-            Some GDPR services are experiencing issues:
-          </Typography>
-          <ul style={{ margin: 0, paddingLeft: 20 }}>
-            {consentHook.error && <li>Consent Management: {consentHook.error}</li>}
-            {auditHook.error && <li>Audit Trail: {auditHook.error}</li>}
-            {exportHook.error && <li>Data Export: {exportHook.error}</li>}
-            {deletionHook.error && <li>Deletion Requests: {deletionHook.error}</li>}
-            {privacyHook.error && <li>Privacy Settings: {privacyHook.error}</li>}
-          </ul>
-        </Alert>
-      )}
+        {/* Error Alerts */}
+        {(consentHook.error || auditHook.error || exportHook.error || deletionHook.error || privacyHook.error) && (
+          <Alert variant="destructive" className="rounded-xl">
+            <div className="font-semibold mb-2">Alcuni servizi GDPR hanno problemi:</div>
+            <ul className="list-disc pl-5 space-y-1 text-sm">
+              {consentHook.error && <li>Gestione Consensi: {consentHook.error}</li>}
+              {auditHook.error && <li>Audit Trail: {auditHook.error}</li>}
+              {exportHook.error && <li>Export Dati: {exportHook.error}</li>}
+              {deletionHook.error && <li>Richieste Cancellazione: {deletionHook.error}</li>}
+              {privacyHook.error && <li>Impostazioni Privacy: {privacyHook.error}</li>}
+            </ul>
+          </Alert>
+        )}
 
-      {/* Main Content Tabs */}
-      <Card>
-        <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-          <Tabs 
-            value={activeTab} 
-            onChange={handleTabChange} 
-            aria-label="GDPR dashboard tabs"
-            variant="scrollable"
-            scrollButtons="auto"
-          >
-            <Tab 
-              label="Consent Management" 
-              icon={<SecurityIcon />} 
-              iconPosition="start"
-              {...a11yProps(0)} 
-            />
-            <Tab 
-              label="Privacy Settings" 
-              icon={<SettingsIcon />} 
-              iconPosition="start"
-              {...a11yProps(1)} 
-            />
-            <Tab 
-              label="Data Export" 
-              icon={<DownloadIcon />} 
-              iconPosition="start"
-              {...a11yProps(2)} 
-            />
-            <Tab 
-              label="Deletion Requests" 
-              icon={<DeleteIcon />} 
-              iconPosition="start"
-              {...a11yProps(3)} 
-            />
-            <Tab 
-              label="Audit Trail" 
-              icon={<HistoryIcon />} 
-              iconPosition="start"
-              {...a11yProps(4)} 
-            />
+        {/* Main Content Tabs */}
+        <Card className="rounded-2xl shadow-sm border-gray-100 overflow-hidden">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <div className="border-b border-gray-100 bg-gray-50/50 p-2">
+              <TabsList className="w-full grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1 bg-transparent h-auto p-0">
+                <TabsTrigger value="consent" className="gap-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-xl py-2.5 text-sm">
+                  <Shield className="h-4 w-4" />
+                  <span className="hidden sm:inline">Consensi</span>
+                </TabsTrigger>
+                <TabsTrigger value="settings" className="gap-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-xl py-2.5 text-sm">
+                  <Settings className="h-4 w-4" />
+                  <span className="hidden sm:inline">Privacy</span>
+                </TabsTrigger>
+                <TabsTrigger value="export" className="gap-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-xl py-2.5 text-sm">
+                  <Download className="h-4 w-4" />
+                  <span className="hidden sm:inline">Export</span>
+                </TabsTrigger>
+                <TabsTrigger value="deletion" className="gap-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-xl py-2.5 text-sm">
+                  <Trash2 className="h-4 w-4" />
+                  <span className="hidden sm:inline">Cancellazione</span>
+                </TabsTrigger>
+                <TabsTrigger value="audit" className="gap-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-xl py-2.5 text-sm">
+                  <History className="h-4 w-4" />
+                  <span className="hidden sm:inline">Audit</span>
+                </TabsTrigger>
+              </TabsList>
+            </div>
+
+            <TabsContent value="consent" className="p-4 sm:p-6 m-0">
+              <ConsentManagementTab hook={consentHook} />
+            </TabsContent>
+
+            <TabsContent value="settings" className="p-4 sm:p-6 m-0">
+              <PrivacySettingsTab hook={privacyHook} />
+            </TabsContent>
+
+            <TabsContent value="export" className="p-4 sm:p-6 m-0">
+              <DataExportTab hook={exportHook} />
+            </TabsContent>
+
+            <TabsContent value="deletion" className="p-4 sm:p-6 m-0">
+              <DeletionRequestTab hook={deletionHook} />
+            </TabsContent>
+
+            <TabsContent value="audit" className="p-4 sm:p-6 m-0">
+              <AuditTrailTab hook={auditHook} />
+            </TabsContent>
           </Tabs>
-        </Box>
+        </Card>
 
-        <TabPanel value={activeTab} index={0}>
-          <ConsentManagementTab hook={consentHook} />
-        </TabPanel>
-
-        <TabPanel value={activeTab} index={1}>
-          <PrivacySettingsTab hook={privacyHook} />
-        </TabPanel>
-
-        <TabPanel value={activeTab} index={2}>
-          <DataExportTab hook={exportHook} />
-        </TabPanel>
-
-        <TabPanel value={activeTab} index={3}>
-          <DeletionRequestTab hook={deletionHook} />
-        </TabPanel>
-
-        <TabPanel value={activeTab} index={4}>
-          <AuditTrailTab hook={auditHook} />
-        </TabPanel>
-      </Card>
-
-      {/* Footer Info */}
-      <Box sx={{ mt: 4, p: 2, bgcolor: 'background.paper', borderRadius: 1 }}>
-        <Stack direction="row" spacing={1} alignItems="center">
-          <InfoIcon color="info" fontSize="small" />
-          <Typography variant="body2" color="text.secondary">
-            This dashboard helps you manage your data privacy rights under GDPR. 
-            For questions about data processing, contact our Data Protection Officer.
-          </Typography>
-        </Stack>
-      </Box>
-    </Container>
+        {/* Footer Info */}
+        <Card className="p-5 bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-100 rounded-2xl">
+          <div className="flex items-start gap-4">
+            <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center flex-shrink-0">
+              <Info className="h-5 w-5 text-blue-600" />
+            </div>
+            <div>
+              <h4 className="font-semibold text-gray-900 mb-1">I tuoi diritti GDPR</h4>
+              <p className="text-sm text-gray-600">
+                Questa dashboard ti permette di gestire i tuoi diritti sulla privacy secondo il GDPR.
+                Per domande sul trattamento dei dati, contatta il nostro Data Protection Officer.
+              </p>
+            </div>
+          </div>
+        </Card>
+      </div>
+    </div>
   );
 };
 

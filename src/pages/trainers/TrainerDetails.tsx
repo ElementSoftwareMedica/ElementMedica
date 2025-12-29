@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { 
+import {
   Award,
   Building,
   Calendar,
@@ -14,6 +14,7 @@ import {
   GraduationCap
 } from 'lucide-react';
 import { getTrainerById, Trainer } from '../../services/trainers';
+import EntitySchedulesSection from '../../components/shared/EntitySchedulesSection';
 
 const TAX_CODE_REGEX = /^[a-zA-Z]{6}[0-9]{2}[abcdehlmprstABCDEHLMPRST]{1}[0-9]{2}([a-zA-Z]{1}[0-9]{3})[a-zA-Z]{1}$/;
 
@@ -75,8 +76,8 @@ const TrainerDetails: React.FC = () => {
     <div className="space-y-6">
       {/* Back link */}
       <div>
-        <Link 
-          to="/trainers" 
+        <Link
+          to="/trainers"
           className="inline-flex items-center text-sm text-blue-600 hover:text-blue-800"
         >
           <span className="transform rotate-180">
@@ -98,18 +99,16 @@ const TrainerDetails: React.FC = () => {
             <div className="ml-4">
               <h1 className="text-2xl font-bold text-gray-800">{trainer.firstName} {trainer.lastName}</h1>
               <div className="flex items-center mt-1 gap-2 flex-wrap">
-                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                  trainer.status === 'ACTIVE' 
-                    ? 'bg-green-100 text-green-800' 
+                <span className={`px-2 py-1 rounded-full text-xs font-medium ${trainer.status === 'ACTIVE'
+                    ? 'bg-green-100 text-green-800'
                     : 'bg-gray-100 text-gray-800'
-                }`}>
+                  }`}>
                   {trainer.status}
                 </span>
                 {/* Tax Code validation badge */}
                 {trainer.tax_code && (
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                    TAX_CODE_REGEX.test(trainer.tax_code) ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                  }`}>
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${TAX_CODE_REGEX.test(trainer.tax_code) ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                    }`}>
                     {TAX_CODE_REGEX.test(trainer.tax_code) ? 'Valid Tax Code' : 'Invalid Tax Code'}
                   </span>
                 )}
@@ -164,8 +163,8 @@ const TrainerDetails: React.FC = () => {
                 <div className="ml-3">
                   <span className="block text-sm font-medium text-gray-800">Dati Fiscali</span>
                   <span className="block text-sm text-gray-600">
-                    Codice Fiscale: {trainer.tax_code || 'N/A'}<br/>
-                    P.IVA: {trainer.vat_number || 'N/A'}<br/>
+                    Codice Fiscale: {trainer.tax_code || 'N/A'}<br />
+                    P.IVA: {trainer.vat_number || 'N/A'}<br />
                     Tariffa Oraria: {trainer.tariffa_oraria ? `€ ${trainer.tariffa_oraria}` : 'N/A'}
                   </span>
                 </div>
@@ -175,7 +174,7 @@ const TrainerDetails: React.FC = () => {
                 <div className="ml-3">
                   <span className="block text-sm font-medium text-gray-800">Dati Professionali</span>
                   <span className="block text-sm text-gray-600">
-                    Codice Albo: {trainer.register_code || 'N/A'}<br/>
+                    Codice Albo: {trainer.register_code || 'N/A'}<br />
                     IBAN: {trainer.iban || 'N/A'}
                   </span>
                 </div>
@@ -248,6 +247,19 @@ const TrainerDetails: React.FC = () => {
 
       {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+        {/* Corsi Come Formatore */}
+        <div className="col-span-full">
+          <EntitySchedulesSection
+            entityType="trainer"
+            entityId={id!}
+            title="Corsi Come Formatore"
+            showDocuments={true}
+            maxItems={5}
+            showQuickDownloads={true}
+          />
+        </div>
+
         <Link to="#" className="bg-white p-4 rounded-full shadow flex items-center transition-all duration-200 hover:shadow-md hover:translate-y-[-2px]">
           <div className="p-3 bg-blue-100 rounded-lg">
             <Calendar className="h-6 w-6 text-blue-600" />

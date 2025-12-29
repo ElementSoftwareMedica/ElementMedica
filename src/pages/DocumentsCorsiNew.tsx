@@ -15,12 +15,15 @@ import {
   AlertCircle,
   Clock,
   CheckCircle2,
-  XCircle
+  XCircle,
+  LayoutGrid,
+  Table
 } from 'lucide-react';
 import { useConfirmDialog } from '../contexts/ConfirmDialogContext';
 import { apiGet, apiDelete } from '../services/api';
 import { format, addYears, differenceInDays, isPast, isFuture } from 'date-fns';
 import { it } from 'date-fns/locale';
+import DocumentListPage from './documents/DocumentListPage';
 
 // Types
 interface Document {
@@ -89,6 +92,7 @@ const DocumentsCorsiNew: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'attestato' | 'registro' | 'lettera'>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'valid' | 'expiring' | 'expired'>('all');
+  const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
   const [stats, setStats] = useState<Stats>({
     total: 0,
     attestati: 0,
@@ -337,355 +341,388 @@ const DocumentsCorsiNew: React.FC = () => {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">
-          Documenti Corsi
-        </h1>
-        <p className="text-gray-500">
-          Gestisci documenti corsi
-        </p>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4 mb-6">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Totale</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
-            </div>
-            <FileText className="h-8 w-8 text-gray-400" />
-          </div>
+      {/* Header with Toggle */}
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800">
+            Documenti Corsi
+          </h1>
+          <p className="text-gray-500">
+            Gestisci documenti corsi
+          </p>
         </div>
 
-        <div
-          className="bg-blue-50 rounded-xl shadow-sm border border-blue-200 p-4 cursor-pointer hover:shadow-md transition-shadow"
-          onClick={() => setFilterType(filterType === 'attestato' ? 'all' : 'attestato')}
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-blue-600 mb-1">Attestati</p>
-              <p className="text-2xl font-bold text-blue-900">{stats.attestati}</p>
-            </div>
-            <Award className="h-8 w-8 text-blue-500" />
-          </div>
-        </div>
-
-        <div
-          className="bg-green-50 rounded-xl shadow-sm border border-green-200 p-4 cursor-pointer hover:shadow-md transition-shadow"
-          onClick={() => setFilterType(filterType === 'registro' ? 'all' : 'registro')}
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-green-600 mb-1">Registri</p>
-              <p className="text-2xl font-bold text-green-900">{stats.registri}</p>
-            </div>
-            <ClipboardList className="h-8 w-8 text-green-500" />
-          </div>
-        </div>
-
-        <div
-          className="bg-purple-50 rounded-xl shadow-sm border border-purple-200 p-4 cursor-pointer hover:shadow-md transition-shadow"
-          onClick={() => setFilterType(filterType === 'lettera' ? 'all' : 'lettera')}
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-purple-600 mb-1">Lettere</p>
-              <p className="text-2xl font-bold text-purple-900">{stats.lettere}</p>
-            </div>
-            <FileText className="h-8 w-8 text-purple-500" />
-          </div>
-        </div>
-
-        <div
-          className="bg-orange-50 rounded-xl shadow-sm border border-orange-200 p-4 cursor-pointer hover:shadow-md transition-shadow"
-          onClick={() => setFilterStatus(filterStatus === 'expiring' ? 'all' : 'expiring')}
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-orange-600 mb-1">In Scadenza</p>
-              <p className="text-2xl font-bold text-orange-900">{stats.expiringSoon}</p>
-            </div>
-            <Clock className="h-8 w-8 text-orange-500" />
-          </div>
-        </div>
-
-        <div
-          className="bg-red-50 rounded-xl shadow-sm border border-red-200 p-4 cursor-pointer hover:shadow-md transition-shadow"
-          onClick={() => setFilterStatus(filterStatus === 'expired' ? 'all' : 'expired')}
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-red-600 mb-1">Scaduti</p>
-              <p className="text-2xl font-bold text-red-900">{stats.expired}</p>
-            </div>
-            <AlertCircle className="h-8 w-8 text-red-500" />
-          </div>
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
-        <div className="flex flex-col md:flex-row gap-4">
-          {/* Search */}
-          <div className="flex-1">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Cerca per nome file, corso, persona, formatore..."
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-              />
-            </div>
-          </div>
-
-          {/* Type Filter */}
-          <select
-            value={filterType}
-            onChange={(e) => setFilterType(e.target.value as any)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+        {/* View Toggle Switch */}
+        <div className="flex items-center bg-gray-100 rounded-lg p-1">
+          <button
+            onClick={() => setViewMode('cards')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${viewMode === 'cards'
+                ? 'bg-white shadow-sm text-orange-600'
+                : 'text-gray-600 hover:text-gray-800'
+              }`}
           >
-            <option value="all">Tutti i tipi</option>
-            <option value="attestato">Attestati</option>
-            <option value="registro">Registri</option>
-            <option value="lettera">Lettere</option>
-          </select>
-
-          {/* Status Filter (only for attestati) */}
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value as any)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-            disabled={filterType !== 'all' && filterType !== 'attestato'}
+            <LayoutGrid className="h-4 w-4" />
+            Corsi
+          </button>
+          <button
+            onClick={() => setViewMode('table')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${viewMode === 'table'
+                ? 'bg-white shadow-sm text-orange-600'
+                : 'text-gray-600 hover:text-gray-800'
+              }`}
           >
-            <option value="all">Tutti gli stati</option>
-            <option value="valid">Validi</option>
-            <option value="expiring">In scadenza (90gg)</option>
-            <option value="expired">Scaduti</option>
-          </select>
+            <Table className="h-4 w-4" />
+            Tutti i Documenti
+          </button>
         </div>
-
-        {/* Active filters */}
-        {(filterType !== 'all' || filterStatus !== 'all' || searchQuery) && (
-          <div className="flex flex-wrap gap-2 mt-4">
-            {filterType !== 'all' && (
-              <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
-                Tipo: {filterType}
-                <button onClick={() => setFilterType('all')} className="hover:bg-blue-200 rounded-full p-0.5">
-                  <XCircle className="h-3 w-3" />
-                </button>
-              </span>
-            )}
-            {filterStatus !== 'all' && (
-              <span className="inline-flex items-center gap-1 px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-sm">
-                Stato: {filterStatus}
-                <button onClick={() => setFilterStatus('all')} className="hover:bg-orange-200 rounded-full p-0.5">
-                  <XCircle className="h-3 w-3" />
-                </button>
-              </span>
-            )}
-            {searchQuery && (
-              <span className="inline-flex items-center gap-1 px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm">
-                Cerca: "{searchQuery}"
-                <button onClick={() => setSearchQuery('')} className="hover:bg-gray-200 rounded-full p-0.5">
-                  <XCircle className="h-3 w-3" />
-                </button>
-              </span>
-            )}
-            <button
-              onClick={() => {
-                setFilterType('all');
-                setFilterStatus('all');
-                setSearchQuery('');
-              }}
-              className="text-sm text-gray-600 hover:text-gray-900 underline"
-            >
-              Cancella tutto
-            </button>
-          </div>
-        )}
       </div>
 
-      {/* Results count */}
-      <div className="mb-4 text-sm text-gray-600">
-        {filteredDocuments.length === documents.length
-          ? `${documents.length} documenti totali`
-          : `${filteredDocuments.length} di ${documents.length} documenti`}
-      </div>
-
-      {/* Documents Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-        {filteredDocuments.map((doc) => {
-          const typeInfo = getTypeInfo(doc.type);
-          const TypeIcon = typeInfo.icon;
-          const expiryStatus = getExpiryStatus(doc);
-          const ExpiryIcon = expiryStatus?.icon;
-
-          return (
-            <div
-              key={doc.id}
-              className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow"
-            >
-              {/* Card Header */}
-              <div className="p-4 border-b border-gray-100">
-                <div className="flex items-start justify-between mb-3">
-                  <div className={`p-2 rounded-lg ${typeInfo.color}`}>
-                    <TypeIcon className="h-5 w-5" />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {doc.url && (
-                      <a
-                        href={doc.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                        title="Visualizza"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </a>
-                    )}
-                    {doc.fileUrl && (
-                      <a
-                        href={doc.fileUrl}
-                        download
-                        className="p-2 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                        title="Scarica"
-                      >
-                        <Download className="h-4 w-4" />
-                      </a>
-                    )}
-                    <button
-                      onClick={() => handleDelete(doc)}
-                      className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      title="Elimina"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
+      {/* Conditional Content Based on View Mode */}
+      {viewMode === 'table' ? (
+        <DocumentListPage />
+      ) : (
+        <>
+          {/* Stats Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4 mb-6">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600 mb-1">Totale</p>
+                  <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
                 </div>
+                <FileText className="h-8 w-8 text-gray-400" />
+              </div>
+            </div>
 
-                <h3 className="font-semibold text-gray-900 mb-1 line-clamp-2">
-                  {doc.nomeFile}
-                </h3>
+            <div
+              className="bg-blue-50 rounded-xl shadow-sm border border-blue-200 p-4 cursor-pointer hover:shadow-md transition-shadow"
+              onClick={() => setFilterType(filterType === 'attestato' ? 'all' : 'attestato')}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-blue-600 mb-1">Attestati</p>
+                  <p className="text-2xl font-bold text-blue-900">{stats.attestati}</p>
+                </div>
+                <Award className="h-8 w-8 text-blue-500" />
+              </div>
+            </div>
 
-                {doc.type === 'attestato' && doc.numeroProgressivo && (
-                  <p className="text-xs text-gray-500">
-                    N° {doc.numeroProgressivo}/{doc.annoProgressivo}
-                  </p>
-                )}
+            <div
+              className="bg-green-50 rounded-xl shadow-sm border border-green-200 p-4 cursor-pointer hover:shadow-md transition-shadow"
+              onClick={() => setFilterType(filterType === 'registro' ? 'all' : 'registro')}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-green-600 mb-1">Registri</p>
+                  <p className="text-2xl font-bold text-green-900">{stats.registri}</p>
+                </div>
+                <ClipboardList className="h-8 w-8 text-green-500" />
+              </div>
+            </div>
+
+            <div
+              className="bg-purple-50 rounded-xl shadow-sm border border-purple-200 p-4 cursor-pointer hover:shadow-md transition-shadow"
+              onClick={() => setFilterType(filterType === 'lettera' ? 'all' : 'lettera')}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-purple-600 mb-1">Lettere</p>
+                  <p className="text-2xl font-bold text-purple-900">{stats.lettere}</p>
+                </div>
+                <FileText className="h-8 w-8 text-purple-500" />
+              </div>
+            </div>
+
+            <div
+              className="bg-orange-50 rounded-xl shadow-sm border border-orange-200 p-4 cursor-pointer hover:shadow-md transition-shadow"
+              onClick={() => setFilterStatus(filterStatus === 'expiring' ? 'all' : 'expiring')}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-orange-600 mb-1">In Scadenza</p>
+                  <p className="text-2xl font-bold text-orange-900">{stats.expiringSoon}</p>
+                </div>
+                <Clock className="h-8 w-8 text-orange-500" />
+              </div>
+            </div>
+
+            <div
+              className="bg-red-50 rounded-xl shadow-sm border border-red-200 p-4 cursor-pointer hover:shadow-md transition-shadow"
+              onClick={() => setFilterStatus(filterStatus === 'expired' ? 'all' : 'expired')}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-red-600 mb-1">Scaduti</p>
+                  <p className="text-2xl font-bold text-red-900">{stats.expired}</p>
+                </div>
+                <AlertCircle className="h-8 w-8 text-red-500" />
+              </div>
+            </div>
+          </div>
+
+          {/* Filters */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
+            <div className="flex flex-col md:flex-row gap-4">
+              {/* Search */}
+              <div className="flex-1">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Cerca per nome file, corso, persona, formatore..."
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  />
+                </div>
               </div>
 
-              {/* Card Body */}
-              <div className="p-4 space-y-3">
-                {/* Course Info */}
-                {doc.scheduledCourse && (
-                  <div className="flex items-start gap-2">
-                    <Building2 className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-gray-900 truncate">
-                        {doc.scheduledCourse.course.title}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {doc.scheduledCourse.course.code} • {doc.scheduledCourse.course.category}
-                      </p>
-                      {/* Course dates */}
-                      <div className="flex items-center gap-1 mt-1 text-xs text-gray-500">
-                        <Calendar className="h-3 w-3" />
-                        <span>
-                          {format(new Date(doc.scheduledCourse.startDate), 'dd/MM/yyyy', { locale: it })}
-                          {doc.scheduledCourse.endDate && doc.scheduledCourse.endDate !== doc.scheduledCourse.startDate && (
-                            <> - {format(new Date(doc.scheduledCourse.endDate), 'dd/MM/yyyy', { locale: it })}</>
-                          )}
-                        </span>
+              {/* Type Filter */}
+              <select
+                value={filterType}
+                onChange={(e) => setFilterType(e.target.value as any)}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+              >
+                <option value="all">Tutti i tipi</option>
+                <option value="attestato">Attestati</option>
+                <option value="registro">Registri</option>
+                <option value="lettera">Lettere</option>
+              </select>
+
+              {/* Status Filter (only for attestati) */}
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value as any)}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                disabled={filterType !== 'all' && filterType !== 'attestato'}
+              >
+                <option value="all">Tutti gli stati</option>
+                <option value="valid">Validi</option>
+                <option value="expiring">In scadenza (90gg)</option>
+                <option value="expired">Scaduti</option>
+              </select>
+            </div>
+
+            {/* Active filters */}
+            {(filterType !== 'all' || filterStatus !== 'all' || searchQuery) && (
+              <div className="flex flex-wrap gap-2 mt-4">
+                {filterType !== 'all' && (
+                  <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
+                    Tipo: {filterType}
+                    <button onClick={() => setFilterType('all')} className="hover:bg-blue-200 rounded-full p-0.5">
+                      <XCircle className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
+                {filterStatus !== 'all' && (
+                  <span className="inline-flex items-center gap-1 px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-sm">
+                    Stato: {filterStatus}
+                    <button onClick={() => setFilterStatus('all')} className="hover:bg-orange-200 rounded-full p-0.5">
+                      <XCircle className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
+                {searchQuery && (
+                  <span className="inline-flex items-center gap-1 px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm">
+                    Cerca: "{searchQuery}"
+                    <button onClick={() => setSearchQuery('')} className="hover:bg-gray-200 rounded-full p-0.5">
+                      <XCircle className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
+                <button
+                  onClick={() => {
+                    setFilterType('all');
+                    setFilterStatus('all');
+                    setSearchQuery('');
+                  }}
+                  className="text-sm text-gray-600 hover:text-gray-900 underline"
+                >
+                  Cancella tutto
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Results count */}
+          <div className="mb-4 text-sm text-gray-600">
+            {filteredDocuments.length === documents.length
+              ? `${documents.length} documenti totali`
+              : `${filteredDocuments.length} di ${documents.length} documenti`}
+          </div>
+
+          {/* Documents Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+            {filteredDocuments.map((doc) => {
+              const typeInfo = getTypeInfo(doc.type);
+              const TypeIcon = typeInfo.icon;
+              const expiryStatus = getExpiryStatus(doc);
+              const ExpiryIcon = expiryStatus?.icon;
+
+              return (
+                <div
+                  key={doc.id}
+                  className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow"
+                >
+                  {/* Card Header */}
+                  <div className="p-4 border-b border-gray-100">
+                    <div className="flex items-start justify-between mb-3">
+                      <div className={`p-2 rounded-lg ${typeInfo.color}`}>
+                        <TypeIcon className="h-5 w-5" />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {doc.url && (
+                          <a
+                            href={doc.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            title="Visualizza"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </a>
+                        )}
+                        {doc.fileUrl && (
+                          <a
+                            href={doc.fileUrl}
+                            download
+                            className="p-2 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                            title="Scarica"
+                          >
+                            <Download className="h-4 w-4" />
+                          </a>
+                        )}
+                        <button
+                          onClick={() => handleDelete(doc)}
+                          className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Elimina"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       </div>
                     </div>
-                  </div>
-                )}
 
-                {/* Person Info (for attestati) */}
-                {doc.person && (
-                  <div className="flex items-start gap-2">
-                    <User className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm text-gray-900 truncate">
-                        {doc.person.firstName} {doc.person.lastName}
+                    <h3 className="font-semibold text-gray-900 mb-1 line-clamp-2">
+                      {doc.nomeFile}
+                    </h3>
+
+                    {doc.type === 'attestato' && doc.numeroProgressivo && (
+                      <p className="text-xs text-gray-500">
+                        N° {doc.numeroProgressivo}/{doc.annoProgressivo}
                       </p>
-                      <p className="text-xs text-gray-500">{doc.person.taxCode}</p>
-                    </div>
+                    )}
                   </div>
-                )}
 
-                {/* Trainer Info (for lettere) */}
-                {doc.trainer && doc.type === 'lettera' && (
-                  <div className="flex items-start gap-2">
-                    <User className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm text-gray-900 truncate">
-                        {doc.trainer.firstName} {doc.trainer.lastName}
-                      </p>
-                      <p className="text-xs text-gray-500">Formatore</p>
-                    </div>
-                  </div>
-                )}
+                  {/* Card Body */}
+                  <div className="p-4 space-y-3">
+                    {/* Course Info */}
+                    {doc.scheduledCourse && (
+                      <div className="flex items-start gap-2">
+                        <Building2 className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-gray-900 truncate">
+                            {doc.scheduledCourse.course.title}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {doc.scheduledCourse.course.code} • {doc.scheduledCourse.course.category}
+                          </p>
+                          {/* Course dates */}
+                          <div className="flex items-center gap-1 mt-1 text-xs text-gray-500">
+                            <Calendar className="h-3 w-3" />
+                            <span>
+                              {format(new Date(doc.scheduledCourse.startDate), 'dd/MM/yyyy', { locale: it })}
+                              {doc.scheduledCourse.endDate && doc.scheduledCourse.endDate !== doc.scheduledCourse.startDate && (
+                                <> - {format(new Date(doc.scheduledCourse.endDate), 'dd/MM/yyyy', { locale: it })}</>
+                              )}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
-                {/* Generation Date */}
-                {doc.dataGenerazione && (
-                  <div className="flex items-center gap-2">
-                    <Calendar className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                    <p className="text-sm text-gray-600">
-                      Generato il {format(new Date(doc.dataGenerazione), 'dd MMM yyyy', { locale: it })}
-                    </p>
-                  </div>
-                )}
+                    {/* Person Info (for attestati) */}
+                    {doc.person && (
+                      <div className="flex items-start gap-2">
+                        <User className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm text-gray-900 truncate">
+                            {doc.person.firstName} {doc.person.lastName}
+                          </p>
+                          <p className="text-xs text-gray-500">{doc.person.taxCode}</p>
+                        </div>
+                      </div>
+                    )}
 
-                {/* Expiry Status (for attestati) */}
-                {expiryStatus && ExpiryIcon && (
-                  <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${expiryStatus.color}`}>
-                    <ExpiryIcon className="h-4 w-4 flex-shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium">{expiryStatus.label}</p>
-                      {doc.expiryDate && (
-                        <p className="text-xs opacity-75">
-                          Scadenza: {format(new Date(doc.expiryDate), 'dd MMM yyyy', { locale: it })}
+                    {/* Trainer Info (for lettere) */}
+                    {doc.trainer && doc.type === 'lettera' && (
+                      <div className="flex items-start gap-2">
+                        <User className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm text-gray-900 truncate">
+                            {doc.trainer.firstName} {doc.trainer.lastName}
+                          </p>
+                          <p className="text-xs text-gray-500">Formatore</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Generation Date */}
+                    {doc.dataGenerazione && (
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                        <p className="text-sm text-gray-600">
+                          Generato il {format(new Date(doc.dataGenerazione), 'dd MMM yyyy', { locale: it })}
                         </p>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+                      </div>
+                    )}
 
-      {/* Empty State */}
-      {filteredDocuments.length === 0 && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
-          <FileText className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">
-            Nessun documento trovato
-          </h3>
-          <p className="text-gray-600 mb-4">
-            {searchQuery || filterType !== 'all' || filterStatus !== 'all'
-              ? 'Prova a modificare i filtri di ricerca'
-              : 'Non ci sono ancora documenti generati'}
-          </p>
-          {(searchQuery || filterType !== 'all' || filterStatus !== 'all') && (
-            <button
-              onClick={() => {
-                setSearchQuery('');
-                setFilterType('all');
-                setFilterStatus('all');
-              }}
-              className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
-            >
-              Cancella filtri
-            </button>
+                    {/* Expiry Status (for attestati) */}
+                    {expiryStatus && ExpiryIcon && (
+                      <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${expiryStatus.color}`}>
+                        <ExpiryIcon className="h-4 w-4 flex-shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium">{expiryStatus.label}</p>
+                          {doc.expiryDate && (
+                            <p className="text-xs opacity-75">
+                              Scadenza: {format(new Date(doc.expiryDate), 'dd MMM yyyy', { locale: it })}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Empty State */}
+          {filteredDocuments.length === 0 && (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+              <FileText className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                Nessun documento trovato
+              </h3>
+              <p className="text-gray-600 mb-4">
+                {searchQuery || filterType !== 'all' || filterStatus !== 'all'
+                  ? 'Prova a modificare i filtri di ricerca'
+                  : 'Non ci sono ancora documenti generati'}
+              </p>
+              {(searchQuery || filterType !== 'all' || filterStatus !== 'all') && (
+                <button
+                  onClick={() => {
+                    setSearchQuery('');
+                    setFilterType('all');
+                    setFilterStatus('all');
+                  }}
+                  className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
+                >
+                  Cancella filtri
+                </button>
+              )}
+            </div>
           )}
-        </div>
+        </>
       )}
     </div>
   );

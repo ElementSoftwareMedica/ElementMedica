@@ -1,15 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { 
-  AlertTriangle,
-  BookOpen,
+import {
   Building2,
-  Calendar,
   ChevronRight,
   ClipboardCheck,
   Clock,
   Edit,
-  Globe,
   GraduationCap,
   Mail,
   MapPin,
@@ -22,6 +18,8 @@ import { getLoadingErrorMessage } from '../../utils/errorUtils';
 import { apiGet } from '../../services/api';
 import CompanySites from '../../components/companies/CompanySites';
 import EmployeesSection from '../../components/companies/EmployeesSection';
+import TariffariAziendaSection from '../../components/companies/TariffariAziendaSection';
+import EntitySchedulesSection from '../../components/shared/EntitySchedulesSection';
 
 interface CompanySite {
   id: string;
@@ -122,8 +120,8 @@ const CompanyDetails: React.FC = () => {
     <div className="space-y-6">
       {/* Back link */}
       <div>
-        <Link 
-          to="/companies" 
+        <Link
+          to="/companies"
           className="inline-flex items-center text-sm text-blue-600 hover:text-blue-800"
         >
           <span className="transform rotate-180">
@@ -160,28 +158,28 @@ const CompanyDetails: React.FC = () => {
                 <User className="h-4 w-4 text-gray-400 mt-0.5" />
                 <div className="ml-2">
                   <span className="block text-xs font-medium text-gray-800">Persona di Riferimento</span>
-                  <span className="block text-sm text-gray-600">{company.persona_riferimento}</span>
+                  <span className="block text-sm text-gray-600">{company.personaRiferimento || '-'}</span>
                 </div>
               </li>
               <li className="flex items-start">
                 <Phone className="h-4 w-4 text-gray-400 mt-0.5" />
                 <div className="ml-2">
                   <span className="block text-xs font-medium text-gray-800">Telefono</span>
-                  <span className="block text-sm text-gray-600">{company.telefono}</span>
+                  <span className="block text-sm text-gray-600">{company.telefono || '-'}</span>
                 </div>
               </li>
               <li className="flex items-start">
                 <Mail className="h-4 w-4 text-gray-400 mt-0.5" />
                 <div className="ml-2">
                   <span className="block text-xs font-medium text-gray-800">Mail</span>
-                  <span className="block text-sm text-gray-600">{company.mail}</span>
+                  <span className="block text-sm text-gray-600">{company.mail || '-'}</span>
                 </div>
               </li>
               <li className="flex items-start">
                 <MapPin className="h-4 w-4 text-gray-400 mt-0.5" />
                 <div className="ml-2">
                   <span className="block text-xs font-medium text-gray-800">Sede Azienda</span>
-                  <span className="block text-sm text-gray-600">{company.sede_azienda}</span>
+                  <span className="block text-sm text-gray-600">{company.sedeAzienda || '-'}</span>
                 </div>
               </li>
             </ul>
@@ -192,25 +190,25 @@ const CompanyDetails: React.FC = () => {
               <li className="flex items-start">
                 <div className="ml-0">
                   <span className="block text-xs font-medium text-gray-800">P.IVA</span>
-                  <span className="block text-sm text-gray-600">{company.piva}</span>
+                  <span className="block text-sm text-gray-600">{company.piva || '-'}</span>
                 </div>
               </li>
               <li className="flex items-start">
                 <div className="ml-0">
                   <span className="block text-xs font-medium text-gray-800">Codice Fiscale</span>
-                  <span className="block text-sm text-gray-600">{company.codice_fiscale}</span>
+                  <span className="block text-sm text-gray-600">{company.codiceFiscale || '-'}</span>
                 </div>
               </li>
               <li className="flex items-start">
                 <div className="ml-0">
                   <span className="block text-xs font-medium text-gray-800">Codice ATECO</span>
-                  <span className="block text-sm text-gray-600">{company.codice_ateco}</span>
+                  <span className="block text-sm text-gray-600">{company.codiceAteco || '-'}</span>
                 </div>
               </li>
               <li className="flex items-start">
                 <div className="ml-0">
                   <span className="block text-xs font-medium text-gray-800">SDI</span>
-                  <span className="block text-sm text-gray-600">{company.sdi}</span>
+                  <span className="block text-sm text-gray-600">{company.sdi || '-'}</span>
                 </div>
               </li>
             </ul>
@@ -251,175 +249,44 @@ const CompanyDetails: React.FC = () => {
       </div>
 
       {/* Company Sites Section */}
-      <CompanySites 
-        companyId={id!} 
-        selectedSiteId={selectedSiteId} 
+      <CompanySites
+        companyId={id!}
+        selectedSiteId={selectedSiteId}
         onSiteFilterChange={setSelectedSiteId}
       />
 
       {/* Dipendenti Section */}
       <EmployeesSection companyId={id!} />
 
-      {/* Prossime Scadenze e Corsi/Visite - Layout affiancato con altezza doppia */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Prossime Scadenze Section */}
-        <div className="bg-white rounded-lg shadow p-6 h-96">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-gray-900 flex items-center">
-              <Clock className="h-5 w-5 mr-2 text-orange-600" />
-              Prossime Scadenze
-            </h2>
-            <button className="text-orange-600 hover:text-orange-800 flex items-center">
-              Vedi Tutte
-              <ChevronRight className="h-4 w-4 ml-1" />
-            </button>
-          </div>
-          
-          <div className="space-y-3 overflow-y-auto h-80">
-            {/* Scadenza Esempio 1 */}
-            <div className="flex items-center justify-between p-3 bg-orange-50 rounded-lg border-l-4 border-orange-400">
-              <div className="flex items-center">
-                <AlertTriangle className="h-5 w-5 text-orange-600 mr-3" />
-                <div>
-                  <p className="font-medium text-gray-900">Rinnovo Certificazione Sicurezza</p>
-                  <p className="text-sm text-gray-600">Sede Principale</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="text-sm font-medium text-orange-600">15 giorni</p>
-                <p className="text-xs text-gray-500">31/12/2024</p>
-              </div>
-            </div>
+      {/* Tariffari Medicina Lavoro Section */}
+      <TariffariAziendaSection
+        companyId={id!}
+        companyName={company.ragioneSociale}
+      />
 
-            {/* Scadenza Esempio 2 */}
-            <div className="flex items-center justify-between p-3 bg-yellow-50 rounded-lg border-l-4 border-yellow-400">
-              <div className="flex items-center">
-                <AlertTriangle className="h-5 w-5 text-yellow-600 mr-3" />
-                <div>
-                  <p className="font-medium text-gray-900">Aggiornamento Formazione Antincendio</p>
-                  <p className="text-sm text-gray-600">Sede Secondaria</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="text-sm font-medium text-yellow-600">30 giorni</p>
-                <p className="text-xs text-gray-500">15/01/2025</p>
-              </div>
-            </div>
+      {/* Corsi Programmati Section */}
+      <EntitySchedulesSection
+        entityType="company"
+        entityId={id!}
+        title="Corsi Programmati"
+        showDocuments={true}
+        maxItems={5}
+        showQuickDownloads={true}
+      />
 
-            {/* Scadenza Esempio 3 */}
-            <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg border-l-4 border-green-400">
-              <div className="flex items-center">
-                <AlertTriangle className="h-5 w-5 text-green-600 mr-3" />
-                <div>
-                  <p className="font-medium text-gray-900">Controllo Periodico Attrezzature</p>
-                  <p className="text-sm text-gray-600">Tutte le sedi</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="text-sm font-medium text-green-600">45 giorni</p>
-                <p className="text-xs text-gray-500">30/01/2025</p>
-              </div>
-            </div>
-
-            {/* Scadenza Esempio 4 */}
-            <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border-l-4 border-blue-400">
-              <div className="flex items-center">
-                <AlertTriangle className="h-5 w-5 text-blue-600 mr-3" />
-                <div>
-                  <p className="font-medium text-gray-900">Revisione DVR</p>
-                  <p className="text-sm text-gray-600">Sede Principale</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="text-sm font-medium text-blue-600">60 giorni</p>
-                <p className="text-xs text-gray-500">15/02/2025</p>
-              </div>
-            </div>
-          </div>
+      {/* Prossime Scadenze Section - Full Width */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-semibold text-gray-900 flex items-center">
+            <Clock className="h-5 w-5 mr-2 text-orange-600" />
+            Prossime Scadenze
+          </h2>
         </div>
 
-        {/* Corsi e Visite Programmate Section */}
-        <div className="bg-white rounded-lg shadow p-6 h-96">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-gray-900 flex items-center">
-              <Calendar className="h-5 w-5 mr-2 text-purple-600" />
-              Corsi e Visite Programmate
-            </h2>
-            <button className="text-purple-600 hover:text-purple-800 flex items-center">
-              Pianifica Nuovo
-              <ChevronRight className="h-4 w-4 ml-1" />
-            </button>
-          </div>
-          
-          <div className="space-y-3 overflow-y-auto h-80">
-            {/* Corso Esempio 1 */}
-            <div className="border rounded-lg p-4 hover:shadow-md transition-shadow">
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center">
-                  <BookOpen className="h-5 w-5 text-blue-600 mr-2" />
-                  <span className="text-xs font-medium text-blue-600 bg-blue-100 px-2 py-1 rounded">CORSO</span>
-                </div>
-                <span className="text-xs text-gray-500">15 Gen 2025</span>
-              </div>
-              <h3 className="font-medium text-gray-900 mb-2">Formazione Sicurezza sul Lavoro</h3>
-              <p className="text-sm text-gray-600 mb-2">Sede Principale - Aula A</p>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-500">20 partecipanti</span>
-                <span className="text-green-600 font-medium">Confermato</span>
-              </div>
-            </div>
-
-            {/* Visita Esempio 1 */}
-            <div className="border rounded-lg p-4 hover:shadow-md transition-shadow">
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center">
-                  <Stethoscope className="h-5 w-5 text-green-600 mr-2" />
-                  <span className="text-xs font-medium text-green-600 bg-green-100 px-2 py-1 rounded">VISITA</span>
-                </div>
-                <span className="text-xs text-gray-500">22 Gen 2025</span>
-              </div>
-              <h3 className="font-medium text-gray-900 mb-2">Sorveglianza Sanitaria</h3>
-              <p className="text-sm text-gray-600 mb-2">Sede Secondaria - Ambulatorio</p>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-500">15 dipendenti</span>
-                <span className="text-yellow-600 font-medium">In Programma</span>
-              </div>
-            </div>
-
-            {/* Corso Esempio 2 */}
-            <div className="border rounded-lg p-4 hover:shadow-md transition-shadow">
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center">
-                  <BookOpen className="h-5 w-5 text-blue-600 mr-2" />
-                  <span className="text-xs font-medium text-blue-600 bg-blue-100 px-2 py-1 rounded">CORSO</span>
-                </div>
-                <span className="text-xs text-gray-500">28 Gen 2025</span>
-              </div>
-              <h3 className="font-medium text-gray-900 mb-2">Aggiornamento Antincendio</h3>
-              <p className="text-sm text-gray-600 mb-2">Sede Principale - Piazzale</p>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-500">12 partecipanti</span>
-                <span className="text-blue-600 font-medium">Da Confermare</span>
-              </div>
-            </div>
-
-            {/* Visita Esempio 2 */}
-            <div className="border rounded-lg p-4 hover:shadow-md transition-shadow">
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center">
-                  <Stethoscope className="h-5 w-5 text-green-600 mr-2" />
-                  <span className="text-xs font-medium text-green-600 bg-green-100 px-2 py-1 rounded">VISITA</span>
-                </div>
-                <span className="text-xs text-gray-500">05 Feb 2025</span>
-              </div>
-              <h3 className="font-medium text-gray-900 mb-2">Controlli Periodici</h3>
-              <p className="text-sm text-gray-600 mb-2">Tutte le sedi</p>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-500">45 dipendenti</span>
-                <span className="text-green-600 font-medium">Confermato</span>
-              </div>
-            </div>
-          </div>
+        <div className="flex flex-col items-center justify-center py-8 text-center">
+          <Clock className="h-12 w-12 text-gray-300 mb-3" />
+          <p className="text-gray-500">Nessuna scadenza registrata per questa azienda.</p>
+          <p className="text-sm text-gray-400 mt-1">Le scadenze verranno mostrate qui quando disponibili.</p>
         </div>
       </div>
 
@@ -432,46 +299,12 @@ const CompanyDetails: React.FC = () => {
               <Shield className="h-5 w-5 mr-2 text-blue-600" />
               Sopralluogo RSPP
             </h2>
-            <button className="text-blue-600 hover:text-blue-800 flex items-center">
-              Pianifica
-              <ChevronRight className="h-4 w-4 ml-1" />
-            </button>
           </div>
-          
-          <div className="space-y-4">
-            {/* Ultimo Sopralluogo */}
-            <div className="border-l-4 border-blue-400 bg-blue-50 p-4 rounded-lg">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="font-medium text-gray-900">Ultimo Sopralluogo</h3>
-                <span className="text-sm text-blue-600 font-medium">Completato</span>
-              </div>
-              <p className="text-sm text-gray-600 mb-1">Data: 15 Novembre 2024</p>
-              <p className="text-sm text-gray-600 mb-1">Sede: Sede Principale</p>
-              <p className="text-sm text-gray-600">RSPP: Dott. Mario Rossi</p>
-            </div>
 
-            {/* Prossimo Sopralluogo */}
-            <div className="border-l-4 border-orange-400 bg-orange-50 p-4 rounded-lg">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="font-medium text-gray-900">Prossimo Sopralluogo</h3>
-                <span className="text-sm text-orange-600 font-medium">Programmato</span>
-              </div>
-              <p className="text-sm text-gray-600 mb-1">Data: 15 Febbraio 2025</p>
-              <p className="text-sm text-gray-600 mb-1">Sede: Sede Secondaria</p>
-              <p className="text-sm text-gray-600">RSPP: Dott. Mario Rossi</p>
-            </div>
-
-            {/* Statistiche */}
-            <div className="grid grid-cols-2 gap-4 pt-2">
-              <div className="text-center">
-                <p className="text-2xl font-bold text-blue-600">4</p>
-                <p className="text-sm text-gray-600">Sopralluoghi 2024</p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold text-green-600">2</p>
-                <p className="text-sm text-gray-600">Programmati 2025</p>
-              </div>
-            </div>
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <Shield className="h-12 w-12 text-gray-300 mb-3" />
+            <p className="text-gray-500">Nessun sopralluogo RSPP registrato.</p>
+            <p className="text-sm text-gray-400 mt-1">I sopralluoghi verranno mostrati qui quando programmati.</p>
           </div>
         </div>
 
@@ -482,46 +315,12 @@ const CompanyDetails: React.FC = () => {
               <Stethoscope className="h-5 w-5 mr-2 text-green-600" />
               Sopralluogo Medico Competente
             </h2>
-            <button className="text-green-600 hover:text-green-800 flex items-center">
-              Pianifica
-              <ChevronRight className="h-4 w-4 ml-1" />
-            </button>
           </div>
-          
-          <div className="space-y-4">
-            {/* Ultimo Sopralluogo */}
-            <div className="border-l-4 border-green-400 bg-green-50 p-4 rounded-lg">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="font-medium text-gray-900">Ultimo Sopralluogo</h3>
-                <span className="text-sm text-green-600 font-medium">Completato</span>
-              </div>
-              <p className="text-sm text-gray-600 mb-1">Data: 20 Ottobre 2024</p>
-              <p className="text-sm text-gray-600 mb-1">Sede: Sede Principale</p>
-              <p className="text-sm text-gray-600">Medico: Dott.ssa Anna Bianchi</p>
-            </div>
 
-            {/* Prossimo Sopralluogo */}
-            <div className="border-l-4 border-yellow-400 bg-yellow-50 p-4 rounded-lg">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="font-medium text-gray-900">Prossimo Sopralluogo</h3>
-                <span className="text-sm text-yellow-600 font-medium">Da Programmare</span>
-              </div>
-              <p className="text-sm text-gray-600 mb-1">Data: Da definire</p>
-              <p className="text-sm text-gray-600 mb-1">Sede: Tutte le sedi</p>
-              <p className="text-sm text-gray-600">Medico: Dott.ssa Anna Bianchi</p>
-            </div>
-
-            {/* Statistiche */}
-            <div className="grid grid-cols-2 gap-4 pt-2">
-              <div className="text-center">
-                <p className="text-2xl font-bold text-green-600">3</p>
-                <p className="text-sm text-gray-600">Sopralluoghi 2024</p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold text-orange-600">1</p>
-                <p className="text-sm text-gray-600">Da Programmare</p>
-              </div>
-            </div>
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <Stethoscope className="h-12 w-12 text-gray-300 mb-3" />
+            <p className="text-gray-500">Nessun sopralluogo medico registrato.</p>
+            <p className="text-sm text-gray-400 mt-1">I sopralluoghi verranno mostrati qui quando programmati.</p>
           </div>
         </div>
       </div>

@@ -4,23 +4,23 @@ import { Menu, X, Phone, Mail } from 'lucide-react';
 import { PublicButton } from './PublicButton';
 import { useAuthRedirect } from '../../hooks/useAuthRedirect';
 import { trackCtaEvent } from '../../services/logs';
+import { useBrandConfig } from '../../hooks/useBrandConfig';
 
 /**
- * Header pubblico per Element Formazione
+ * Header pubblico multi-brand
  * Menu sempre visibile con navigazione responsive
+ * Supporta Element Formazione e Element Medica
  */
 export const PublicHeader: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const location = useLocation();
   const { handleAreaRiservataClick, isAuthenticated } = useAuthRedirect();
+  const brandConfig = useBrandConfig();
 
-  const navigationItems = [
-    { label: 'Home', href: '/', exact: true },
-    { label: 'Corsi', href: '/corsi' },
-    { label: 'Servizi', href: '/servizi' },
-    { label: 'Lavora con noi', href: '/lavora-con-noi' },
-    { label: 'Contatti', href: '/contatti' }
-  ];
+  const navigationItems = brandConfig.navigation.map(item => ({
+    ...item,
+    exact: item.href === '/'
+  }));
 
   const isActiveRoute = (href: string, exact = false) => {
     if (exact) {
@@ -40,26 +40,37 @@ export const PublicHeader: React.FC = () => {
       details: { label, href: '/contatti', section: 'PublicHeader' }
     });
   };
+  
+  // Gestione Area Riservata con redirect per Element Medica
+  const handleAreaRiservata = () => {
+    if (brandConfig.adminUrl) {
+      // Element Medica → redirect a Element Formazione admin
+      window.location.href = brandConfig.adminUrl;
+    } else {
+      // Element Formazione → comportamento standard
+      handleAreaRiservataClick();
+    }
+  };
 
   return (
     <header className="bg-white shadow-md sticky top-0 z-50">
       {/* Top bar con contatti */}
-      <div className="bg-primary-600 text-white py-2">
+      <div className="bg-gradient-to-r from-teal-600 via-teal-700 to-blue-600 text-white py-2">
         <div className="container mx-auto px-4">
           <div className="flex justify-between items-center text-sm">
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-1">
                 <Phone className="w-4 h-4" />
-                <span>351 318 1574</span>
+                <span>{brandConfig.contacts.phone}</span>
               </div>
               <div className="flex items-center space-x-1">
                 <Mail className="w-4 h-4" />
-                <span>info@elementformazione.com</span> 
+                <span>{brandConfig.contacts.email}</span> 
               </div>
             </div>
             <div className="hidden md:block">
               <button 
-                onClick={handleAreaRiservataClick}
+                onClick={handleAreaRiservata}
                 className="hover:text-primary-200 transition-colors"
               >
                 {isAuthenticated ? 'Dashboard' : 'Area Riservata'}
@@ -74,26 +85,30 @@ export const PublicHeader: React.FC = () => {
         <div className="flex justify-between items-center py-4">
           {/* Logo */}
           <Link to="/" className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-primary-600 rounded-full flex items-center justify-center">
-              <span className="text-white font-bold text-lg">E</span>
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+              brandConfig.theme === 'medical' ? 'bg-cyan-600' : 'bg-primary-600'
+            }`}>
+              <span className="text-white font-bold text-lg">
+                {brandConfig.displayName.charAt(0)}
+              </span>
             </div>
             <div>
               <h1 className="text-xl font-bold text-gray-900">
-                Element Formazione
+                {brandConfig.displayName}
               </h1>
               <p className="text-sm text-gray-600">
-                Sicurezza e Formazione Professionale
+                {brandConfig.tagline}
               </p>
             </div>
           </Link>
 
           {/* Desktop Navigation */}
-          <nav className="hidden lg:flex items-center space-x-8">
+          <nav className="hidden lg:flex items-center space-x-4 xl:space-x-6">
             {navigationItems.map((item) => (
               <Link
                 key={item.href}
                 to={item.href}
-                className={`font-medium transition-colors hover:text-primary-600 ${
+                className={`font-medium transition-colors hover:text-primary-600 whitespace-nowrap text-sm xl:text-base ${
                   isActiveRoute(item.href, item.exact)
                     ? 'text-primary-600 border-b-2 border-primary-600 pb-1'
                     : 'text-gray-700'
@@ -105,14 +120,14 @@ export const PublicHeader: React.FC = () => {
           </nav>
 
           {/* CTA Button Desktop */}
-          <div className="hidden lg:block">
+          <div className="hidden lg:block ml-4 xl:ml-6 flex-shrink-0">
             <PublicButton 
-              variant="primary" 
+              variant={brandConfig.cta.primary.variant} 
               size="md"
-              to="/contatti"
-              onClick={() => trackContatti('Richiedi Preventivo (header desktop)')}
+              to={brandConfig.cta.primary.href}
+              onClick={() => trackContatti(`${brandConfig.cta.primary.text} (header desktop)`)}
             >
-              Richiedi Preventivo
+              {brandConfig.cta.primary.text}
             </PublicButton>
           </div>
 
@@ -152,22 +167,22 @@ export const PublicHeader: React.FC = () => {
               ))}
               <div className="pt-4 border-t border-gray-200">
                 <PublicButton 
-                  variant="primary" 
+                  variant={brandConfig.cta.primary.variant} 
                   size="md" 
                   className="w-full"
-                  to="/contatti"
+                  to={brandConfig.cta.primary.href}
                   onClick={() => {
                     setIsMenuOpen(false);
-                    trackContatti('Richiedi Preventivo (header mobile)');
+                    trackContatti(`${brandConfig.cta.primary.text} (header mobile)`);
                   }}
                 >
-                  Richiedi Preventivo
+                  {brandConfig.cta.primary.text}
                 </PublicButton>
               </div>
               <button
                 onClick={() => {
                   setIsMenuOpen(false);
-                  handleAreaRiservataClick();
+                  handleAreaRiservata();
                 }}
                 className="text-sm text-gray-600 hover:text-primary-600 transition-colors text-left"
               >

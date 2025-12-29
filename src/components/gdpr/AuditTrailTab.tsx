@@ -82,6 +82,11 @@ export const AuditTrailTab: React.FC<AuditTrailTabProps> = ({ hook }) => {
 
   const stats = getAuditStats();
 
+  // Derive specific stats from actionCounts for backwards compatibility
+  const consentActions = (stats.actionCounts['CONSENT_GRANTED'] || 0) + (stats.actionCounts['CONSENT_WITHDRAWN'] || 0);
+  const dataExports = stats.actionCounts['DATA_EXPORT'] || 0;
+  const deletionRequests = (stats.actionCounts['DELETION_REQUESTED'] || 0) + (stats.actionCounts['DELETION_PROCESSED'] || 0);
+
   // Update temp filters when filters change
   useEffect(() => {
     setTempFilters(filters);
@@ -198,7 +203,7 @@ export const AuditTrailTab: React.FC<AuditTrailTabProps> = ({ hook }) => {
         </Typography>
         
         <Stack direction="row" spacing={1} alignItems="center">
-          {hasFilters() && (
+          {hasFilters && (
             <Chip
               label="Filtered"
               color="primary"
@@ -249,59 +254,51 @@ export const AuditTrailTab: React.FC<AuditTrailTabProps> = ({ hook }) => {
       )}
 
       {/* Stats Cards */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" color="primary" gutterBottom>
-                {stats.totalEntries}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Total Entries
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' }, gap: 3, mb: 4 }}>
+        <Card>
+          <CardContent>
+            <Typography variant="h6" color="primary" gutterBottom>
+              {stats.totalEntries}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Total Entries
+            </Typography>
+          </CardContent>
+        </Card>
         
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" color="success.main" gutterBottom>
-                {stats.consentActions}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Consent Actions
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
+        <Card>
+          <CardContent>
+            <Typography variant="h6" color="success.main" gutterBottom>
+              {consentActions}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Consent Actions
+            </Typography>
+          </CardContent>
+        </Card>
         
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" color="info.main" gutterBottom>
-                {stats.dataExports}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Data Exports
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
+        <Card>
+          <CardContent>
+            <Typography variant="h6" color="info.main" gutterBottom>
+              {dataExports}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Data Exports
+            </Typography>
+          </CardContent>
+        </Card>
         
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" color="warning.main" gutterBottom>
-                {stats.deletionRequests}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Deletion Requests
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
+        <Card>
+          <CardContent>
+            <Typography variant="h6" color="warning.main" gutterBottom>
+              {deletionRequests}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Deletion Requests
+            </Typography>
+          </CardContent>
+        </Card>
+      </Box>
 
       {/* Audit Trail Table */}
       <Card>
@@ -323,7 +320,7 @@ export const AuditTrailTab: React.FC<AuditTrailTabProps> = ({ hook }) => {
                 No audit entries found
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                {hasFilters() 
+                {hasFilters 
                   ? 'Try adjusting your filters to see more results.'
                   : 'No GDPR-related activities have been logged yet.'
                 }
@@ -468,26 +465,24 @@ export const AuditTrailTab: React.FC<AuditTrailTabProps> = ({ hook }) => {
         </DialogTitle>
         
         <DialogContent>
-          <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid item xs={12}>
-              <FormControl fullWidth>
-                <InputLabel>Action Type</InputLabel>
-                <Select
-                  value={tempFilters.action || ''}
-                  onChange={(e) => handleFilterChange('action', e.target.value)}
-                  label="Action Type"
-                >
-                  <MenuItem value="">All Actions</MenuItem>
-                  <MenuItem value="consent_granted">Consent Granted</MenuItem>
-                  <MenuItem value="consent_withdrawn">Consent Withdrawn</MenuItem>
-                  <MenuItem value="data_export">Data Export</MenuItem>
-                  <MenuItem value="deletion_request">Deletion Request</MenuItem>
-                  <MenuItem value="privacy_settings_updated">Privacy Settings Updated</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <FormControl fullWidth>
+              <InputLabel>Action Type</InputLabel>
+              <Select
+                value={tempFilters.action || ''}
+                onChange={(e) => handleFilterChange('action', e.target.value)}
+                label="Action Type"
+              >
+                <MenuItem value="">All Actions</MenuItem>
+                <MenuItem value="consent_granted">Consent Granted</MenuItem>
+                <MenuItem value="consent_withdrawn">Consent Withdrawn</MenuItem>
+                <MenuItem value="data_export">Data Export</MenuItem>
+                <MenuItem value="deletion_request">Deletion Request</MenuItem>
+                <MenuItem value="privacy_settings_updated">Privacy Settings Updated</MenuItem>
+              </Select>
+            </FormControl>
             
-            <Grid item xs={6}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 2 }}>
               <TextField
                 fullWidth
                 type="date"
@@ -496,9 +491,7 @@ export const AuditTrailTab: React.FC<AuditTrailTabProps> = ({ hook }) => {
                 onChange={(e) => handleFilterChange('startDate', e.target.value)}
                 InputLabelProps={{ shrink: true }}
               />
-            </Grid>
-            
-            <Grid item xs={6}>
+              
               <TextField
                 fullWidth
                 type="date"
@@ -507,28 +500,24 @@ export const AuditTrailTab: React.FC<AuditTrailTabProps> = ({ hook }) => {
                 onChange={(e) => handleFilterChange('endDate', e.target.value)}
                 InputLabelProps={{ shrink: true }}
               />
-            </Grid>
+            </Box>
             
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="IP Address"
-                value={tempFilters.ipAddress || ''}
-                onChange={(e) => handleFilterChange('ipAddress', e.target.value)}
-                placeholder="e.g., 192.168.1.1"
-              />
-            </Grid>
+            <TextField
+              fullWidth
+              label="IP Address"
+              value={tempFilters.ipAddress || ''}
+              onChange={(e) => handleFilterChange('ipAddress', e.target.value)}
+              placeholder="e.g., 192.168.1.1"
+            />
             
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="User Agent"
-                value={tempFilters.userAgent || ''}
-                onChange={(e) => handleFilterChange('userAgent', e.target.value)}
-                placeholder="e.g., Chrome, Firefox, Safari"
-              />
-            </Grid>
-          </Grid>
+            <TextField
+              fullWidth
+              label="User Agent"
+              value={tempFilters.userAgent || ''}
+              onChange={(e) => handleFilterChange('userAgent', e.target.value)}
+              placeholder="e.g., Chrome, Firefox, Safari"
+            />
+          </Stack>
         </DialogContent>
         
         <DialogActions>
@@ -558,8 +547,8 @@ export const AuditTrailTab: React.FC<AuditTrailTabProps> = ({ hook }) => {
         <DialogContent>
           {selectedEntry && (
             <Box>
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
+              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' }, gap: 3 }}>
+                <Box>
                   <Typography variant="subtitle2" gutterBottom>
                     Action
                   </Typography>
@@ -568,51 +557,51 @@ export const AuditTrailTab: React.FC<AuditTrailTabProps> = ({ hook }) => {
                     color={getActionColor(selectedEntry.action)}
                     variant="outlined"
                   />
-                </Grid>
+                </Box>
                 
-                <Grid item xs={12} sm={6}>
+                <Box>
                   <Typography variant="subtitle2" gutterBottom>
                     Timestamp
                   </Typography>
                   <Typography variant="body2">
                     {format(new Date(selectedEntry.timestamp), 'MMMM dd, yyyy HH:mm:ss')}
                   </Typography>
-                </Grid>
+                </Box>
                 
-                <Grid item xs={12} sm={6}>
+                <Box>
                   <Typography variant="subtitle2" gutterBottom>
                     IP Address
                   </Typography>
                   <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
                     {selectedEntry.ipAddress || 'Not recorded'}
                   </Typography>
-                </Grid>
+                </Box>
                 
-                <Grid item xs={12} sm={6}>
+                <Box>
                   <Typography variant="subtitle2" gutterBottom>
                     Entry ID
                   </Typography>
                   <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
                     {selectedEntry.id}
                   </Typography>
-                </Grid>
+                </Box>
                 
-                <Grid item xs={12}>
+                <Box sx={{ gridColumn: '1 / -1' }}>
                   <Typography variant="subtitle2" gutterBottom>
                     User Agent
                   </Typography>
                   <Typography variant="body2" sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
                     {selectedEntry.userAgent || 'Not recorded'}
                   </Typography>
-                </Grid>
-              </Grid>
+                </Box>
+              </Box>
               
               <Divider sx={{ my: 3 }} />
               
               <Typography variant="subtitle2" gutterBottom>
                 Additional Data
               </Typography>
-              {renderMetadata(selectedEntry.metadata)}
+              {renderMetadata(selectedEntry.details || {})}
             </Box>
           )}
         </DialogContent>

@@ -28,7 +28,7 @@ export class AppuntamentoService {
                 }
             });
 
-            const numero = `${startOfDay.toISOString().split('T')[0]}-${String(countToday + 1).padStart(4, '0')}`;
+            const numeroPrenotazione = `${startOfDay.toISOString().split('T')[0]}-${String(countToday + 1).padStart(4, '0')}`;
 
             // Verify all references exist
             const [paziente, medico, ambulatorio] = await Promise.all([
@@ -52,41 +52,36 @@ export class AppuntamentoService {
                 data.medicoId,
                 data.ambulatorioId,
                 dataOra,
-                data.durataPrevista || 30,
+                data.durataMinuti || 30,
                 tenantId
             );
 
             if (conflicts.length > 0) {
-                throw new Error(`Appointment conflicts with existing appointments: ${conflicts.map(c => c.numero).join(', ')}`);
+                throw new Error(`Appointment conflicts with existing appointments: ${conflicts.map(c => c.numeroPrenotazione).join(', ')}`);
             }
 
+            // Prepara i dati per la creazione
+            const createData = {
+                numeroPrenotazione,
+                ambulatorioId: data.ambulatorioId,
+                prestazioneId: data.prestazioneId,
+                pazienteId: data.pazienteId,
+                medicoId: data.medicoId,
+                dataOra: data.dataOra,
+                durataMinuti: data.durataMinuti || 30,
+                stato: data.stato || 'PRENOTATO',
+                note: data.note,
+                noteInterne: data.noteInterne,
+                convenzioneId: data.convenzioneId,
+                promemoriaSms: data.promemoriaSms || false,
+                promemoriaEmail: data.promemoriaEmail || true,
+                tenantId,
+                createdBy
+            };
+
             const appuntamento = await prisma.appuntamento.create({
-                data: {
-                    ...data,
-                    numero,
-                    tenantId,
-                    createdBy
-                },
+                data: createData,
                 include: {
-                    paziente: {
-                        select: {
-                            id: true,
-                            firstName: true,
-                            lastName: true,
-                            email: true,
-                            phone: true,
-                            taxCode: true
-                        }
-                    },
-                    medico: {
-                        select: {
-                            id: true,
-                            firstName: true,
-                            lastName: true,
-                            specialties: true,
-                            registerCode: true
-                        }
-                    },
                     ambulatorio: {
                         select: {
                             id: true,
@@ -94,15 +89,40 @@ export class AppuntamentoService {
                             codice: true,
                             specializzazione: true
                         }
+                    },
+                    prestazione: {
+                        select: {
+                            id: true,
+                            nome: true,
+                            codice: true,
+                            durataPrevista: true
+                        }
                     }
                 }
             });
+
+            // Aggiungi dati paziente e medico manualmente
+            appuntamento.paziente = {
+                id: paziente.id,
+                firstName: paziente.firstName,
+                lastName: paziente.lastName,
+                email: paziente.email,
+                phone: paziente.phone,
+                taxCode: paziente.taxCode
+            };
+            appuntamento.medico = {
+                id: medico.id,
+                firstName: medico.firstName,
+                lastName: medico.lastName,
+                specialties: medico.specialties,
+                registerCode: medico.registerCode
+            };
 
             logger.info('Appuntamento created', {
                 component: 'appuntamento-service',
                 action: 'create',
                 appuntamentoId: appuntamento.id,
-                numero: appuntamento.numero,
+                numeroPrenotazione: appuntamento.numeroPrenotazione,
                 pazienteId: data.pazienteId,
                 medicoId: data.medicoId,
                 tenantId
@@ -132,26 +152,6 @@ export class AppuntamentoService {
                     deletedAt: null
                 },
                 include: {
-                    paziente: {
-                        select: {
-                            id: true,
-                            firstName: true,
-                            lastName: true,
-                            email: true,
-                            phone: true,
-                            taxCode: true,
-                            birthDate: true
-                        }
-                    },
-                    medico: {
-                        select: {
-                            id: true,
-                            firstName: true,
-                            lastName: true,
-                            specialties: true,
-                            registerCode: true
-                        }
-                    },
                     ambulatorio: {
                         include: {
                             poliambulatorio: {
@@ -159,11 +159,51 @@ export class AppuntamentoService {
                             }
                         }
                     },
-                    visite: {
+                    prestazione: {
+                        select: {
+                            id: true,
+                            nome: true,
+                            codice: true,
+                            tipo: true,
+                            durataPrevista: true
+                        }
+                    },
+                    visita: {
                         where: { deletedAt: null }
                     }
                 }
             });
+
+            if (!appuntamento) return null;
+
+            // Carica paziente e medico manualmente
+            const [paziente, medico] = await Promise.all([
+                prisma.person.findFirst({
+                    where: { id: appuntamento.pazienteId, tenantId, deletedAt: null },
+                    select: {
+                        id: true,
+                        firstName: true,
+                        lastName: true,
+                        email: true,
+                        phone: true,
+                        taxCode: true,
+                        birthDate: true
+                    }
+                }),
+                prisma.person.findFirst({
+                    where: { id: appuntamento.medicoId, tenantId, deletedAt: null },
+                    select: {
+                        id: true,
+                        firstName: true,
+                        lastName: true,
+                        specialties: true,
+                        registerCode: true
+                    }
+                })
+            ]);
+
+            appuntamento.paziente = paziente;
+            appuntamento.medico = medico;
 
             return appuntamento;
         } catch (error) {
@@ -199,45 +239,40 @@ export class AppuntamentoService {
 
             const skip = (page - 1) * limit;
 
+            // Costruisci where senza relazioni inesistenti
             const where = {
                 tenantId,
-                deletedAt: null,
-                ...(dateFrom && { dataOra: { gte: new Date(dateFrom) } }),
-                ...(dateTo && { dataOra: { ...where?.dataOra, lte: new Date(dateTo) } }),
-                ...(medicoId && { medicoId }),
-                ...(pazienteId && { pazienteId }),
-                ...(ambulatorioId && { ambulatorioId }),
-                ...(stato && { stato }),
-                ...(search && {
-                    OR: [
-                        { numero: { contains: search, mode: 'insensitive' } },
-                        { paziente: { firstName: { contains: search, mode: 'insensitive' } } },
-                        { paziente: { lastName: { contains: search, mode: 'insensitive' } } },
-                        { paziente: { taxCode: { contains: search, mode: 'insensitive' } } }
-                    ]
-                })
+                deletedAt: null
             };
+
+            if (dateFrom) {
+                where.dataOra = { gte: new Date(dateFrom) };
+            }
+            if (dateTo) {
+                where.dataOra = { ...where.dataOra, lte: new Date(dateTo) };
+            }
+            if (medicoId) where.medicoId = medicoId;
+            if (pazienteId) where.pazienteId = pazienteId;
+            if (ambulatorioId) where.ambulatorioId = ambulatorioId;
+            if (stato) where.stato = stato;
+            if (search) {
+                where.OR = [
+                    { numeroPrenotazione: { contains: search, mode: 'insensitive' } }
+                ];
+            }
 
             const [appuntamenti, total] = await Promise.all([
                 prisma.appuntamento.findMany({
                     where,
                     include: {
-                        paziente: {
-                            select: {
-                                id: true,
-                                firstName: true,
-                                lastName: true,
-                                phone: true
-                            }
-                        },
-                        medico: {
-                            select: {
-                                id: true,
-                                firstName: true,
-                                lastName: true
-                            }
-                        },
                         ambulatorio: {
+                            select: {
+                                id: true,
+                                nome: true,
+                                codice: true
+                            }
+                        },
+                        prestazione: {
                             select: {
                                 id: true,
                                 nome: true,
@@ -251,6 +286,30 @@ export class AppuntamentoService {
                 }),
                 prisma.appuntamento.count({ where })
             ]);
+
+            // Carica paziente e medico per ogni appuntamento
+            const pazienteIds = [...new Set(appuntamenti.map(a => a.pazienteId).filter(Boolean))];
+            const medicoIds = [...new Set(appuntamenti.map(a => a.medicoId).filter(Boolean))];
+
+            const [pazienti, medici] = await Promise.all([
+                pazienteIds.length > 0 ? prisma.person.findMany({
+                    where: { id: { in: pazienteIds }, tenantId },
+                    select: { id: true, firstName: true, lastName: true, phone: true }
+                }) : [],
+                medicoIds.length > 0 ? prisma.person.findMany({
+                    where: { id: { in: medicoIds }, tenantId },
+                    select: { id: true, firstName: true, lastName: true }
+                }) : []
+            ]);
+
+            const pazientiMap = new Map((pazienti || []).map(p => [p.id, p]));
+            const mediciMap = new Map((medici || []).map(m => [m.id, m]));
+
+            // Aggiungi dati a ciascun appuntamento
+            for (const app of appuntamenti) {
+                app.paziente = pazientiMap.get(app.pazienteId) || null;
+                app.medico = mediciMap.get(app.medicoId) || null;
+            }
 
             return {
                 data: appuntamenti,
@@ -295,32 +354,46 @@ export class AppuntamentoService {
             const appuntamenti = await prisma.appuntamento.findMany({
                 where,
                 include: {
-                    paziente: {
-                        select: {
-                            id: true,
-                            firstName: true,
-                            lastName: true,
-                            phone: true,
-                            email: true
-                        }
-                    },
-                    medico: {
-                        select: {
-                            id: true,
-                            firstName: true,
-                            lastName: true
-                        }
-                    },
                     ambulatorio: {
                         select: {
                             id: true,
                             nome: true,
-                            stanza: true
+                            piano: true
+                        }
+                    },
+                    prestazione: {
+                        select: {
+                            id: true,
+                            nome: true,
+                            durataPrevista: true
                         }
                     }
                 },
                 orderBy: { dataOra: 'asc' }
             });
+
+            // Carica paziente e medico
+            const pazienteIds = [...new Set(appuntamenti.map(a => a.pazienteId))];
+            const medicoIds = [...new Set(appuntamenti.map(a => a.medicoId))];
+
+            const [pazienti, medici] = await Promise.all([
+                prisma.person.findMany({
+                    where: { id: { in: pazienteIds }, tenantId },
+                    select: { id: true, firstName: true, lastName: true, phone: true, email: true }
+                }),
+                prisma.person.findMany({
+                    where: { id: { in: medicoIds }, tenantId },
+                    select: { id: true, firstName: true, lastName: true }
+                })
+            ]);
+
+            const pazientiMap = new Map(pazienti.map(p => [p.id, p]));
+            const mediciMap = new Map(medici.map(m => [m.id, m]));
+
+            for (const app of appuntamenti) {
+                app.paziente = pazientiMap.get(app.pazienteId) || null;
+                app.medico = mediciMap.get(app.medicoId) || null;
+            }
 
             // Group by hour for agenda view
             const agendaByHour = {};
@@ -367,29 +440,14 @@ export class AppuntamentoService {
                 updatedAt: new Date()
             };
 
-            // Handle specific state transitions
+            // Handle specific state transitions (solo campi esistenti nello schema)
             switch (stato) {
-                case 'CONFERMATO':
-                    updateData.dataConferma = new Date();
-                    break;
-                case 'ANNULLATO':
-                    updateData.dataAnnullamento = new Date();
-                    updateData.motivoAnnullamento = additionalData.motivoAnnullamento;
-                    break;
+                case 'ARRIVATO':
                 case 'IN_ATTESA':
                     updateData.oraArrivo = new Date();
-                    // Assign queue number
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0);
-                    const queueCount = await prisma.appuntamento.count({
-                        where: {
-                            tenantId,
-                            dataOra: { gte: today },
-                            stato: { in: ['IN_ATTESA', 'IN_CORSO'] },
-                            numeroCoda: { not: null }
-                        }
-                    });
-                    updateData.numeroCoda = queueCount + 1;
+                    break;
+                case 'CHIAMATO':
+                    updateData.oraChiamata = new Date();
                     break;
                 case 'IN_CORSO':
                     updateData.oraInizio = new Date();
@@ -397,23 +455,41 @@ export class AppuntamentoService {
                 case 'COMPLETATO':
                     updateData.oraFine = new Date();
                     break;
+                case 'ANNULLATO':
+                    // Note interne per il motivo annullamento
+                    if (additionalData.motivoAnnullamento) {
+                        updateData.noteInterne = additionalData.motivoAnnullamento;
+                    }
+                    break;
             }
 
             const updated = await prisma.appuntamento.update({
                 where: { id },
                 data: updateData,
                 include: {
-                    paziente: {
-                        select: { id: true, firstName: true, lastName: true }
-                    },
-                    medico: {
-                        select: { id: true, firstName: true, lastName: true }
-                    },
                     ambulatorio: {
+                        select: { id: true, nome: true }
+                    },
+                    prestazione: {
                         select: { id: true, nome: true }
                     }
                 }
             });
+
+            // Carica paziente e medico
+            const [paziente, medico] = await Promise.all([
+                prisma.person.findFirst({
+                    where: { id: updated.pazienteId, tenantId },
+                    select: { id: true, firstName: true, lastName: true }
+                }),
+                prisma.person.findFirst({
+                    where: { id: updated.medicoId, tenantId },
+                    select: { id: true, firstName: true, lastName: true }
+                })
+            ]);
+
+            updated.paziente = paziente;
+            updated.medico = medico;
 
             logger.info('Appuntamento stato updated', {
                 component: 'appuntamento-service',
@@ -457,7 +533,7 @@ export class AppuntamentoService {
                     data.medicoId || existing.medicoId,
                     data.ambulatorioId || existing.ambulatorioId,
                     new Date(data.dataOra),
-                    data.durataPrevista || existing.durataPrevista,
+                    data.durataMinuti || existing.durataMinuti,
                     tenantId,
                     id // Exclude self
                 );
@@ -474,17 +550,29 @@ export class AppuntamentoService {
                     updatedAt: new Date()
                 },
                 include: {
-                    paziente: {
-                        select: { id: true, firstName: true, lastName: true }
-                    },
-                    medico: {
-                        select: { id: true, firstName: true, lastName: true }
-                    },
                     ambulatorio: {
+                        select: { id: true, nome: true }
+                    },
+                    prestazione: {
                         select: { id: true, nome: true }
                     }
                 }
             });
+
+            // Carica paziente e medico
+            const [paziente, medico] = await Promise.all([
+                prisma.person.findFirst({
+                    where: { id: updated.pazienteId, tenantId },
+                    select: { id: true, firstName: true, lastName: true }
+                }),
+                prisma.person.findFirst({
+                    where: { id: updated.medicoId, tenantId },
+                    select: { id: true, firstName: true, lastName: true }
+                })
+            ]);
+
+            updated.paziente = paziente;
+            updated.medico = medico;
 
             logger.info('Appuntamento updated', {
                 component: 'appuntamento-service',
@@ -553,29 +641,28 @@ export class AppuntamentoService {
             const endTime = new Date(startTime.getTime() + durata * 60000);
 
             // Find overlapping appointments for same doctor or same ambulatorio
+            const whereClause = {
+                tenantId,
+                deletedAt: null,
+                stato: { notIn: ['ANNULLATO', 'COMPLETATO'] },
+                OR: [
+                    { medicoId },
+                    { ambulatorioId }
+                ],
+                dataOra: { lt: endTime }
+            };
+
+            if (excludeId) {
+                whereClause.id = { not: excludeId };
+            }
+
             const conflicts = await prisma.appuntamento.findMany({
-                where: {
-                    tenantId,
-                    deletedAt: null,
-                    stato: { notIn: ['ANNULLATO', 'COMPLETATO'] },
-                    ...(excludeId && { id: { not: excludeId } }),
-                    OR: [
-                        { medicoId },
-                        { ambulatorioId }
-                    ],
-                    AND: [
-                        { dataOra: { lt: endTime } },
-                        {
-                            // endTime of existing appointment > startTime of new
-                            // We need to calculate end time based on dataOra + durataPrevista
-                        }
-                    ]
-                },
+                where: whereClause,
                 select: {
                     id: true,
-                    numero: true,
+                    numeroPrenotazione: true,
                     dataOra: true,
-                    durataPrevista: true,
+                    durataMinuti: true,
                     medicoId: true,
                     ambulatorioId: true
                 }
@@ -584,7 +671,7 @@ export class AppuntamentoService {
             // Filter actual conflicts (overlapping time ranges)
             return conflicts.filter(app => {
                 const appStart = new Date(app.dataOra);
-                const appEnd = new Date(appStart.getTime() + app.durataPrevista * 60000);
+                const appEnd = new Date(appStart.getTime() + app.durataMinuti * 60000);
                 return (startTime < appEnd && endTime > appStart);
             });
         } catch (error) {
@@ -608,42 +695,61 @@ export class AppuntamentoService {
             const today = new Date();
             today.setHours(0, 0, 0, 0);
 
+            // Lo schema non ha numeroCoda, usiamo stato e oraArrivo per ordinare
             const where = {
                 tenantId,
                 deletedAt: null,
                 dataOra: { gte: today },
-                stato: 'IN_ATTESA',
-                numeroCoda: { not: null },
-                ...(ambulatorioId && { ambulatorioId })
+                stato: { in: ['ARRIVATO', 'IN_ATTESA'] },
+                oraArrivo: { not: null }
             };
+
+            if (ambulatorioId) {
+                where.ambulatorioId = ambulatorioId;
+            }
 
             const queue = await prisma.appuntamento.findMany({
                 where,
                 include: {
-                    paziente: {
-                        select: {
-                            id: true,
-                            firstName: true,
-                            lastName: true
-                        }
-                    },
-                    medico: {
-                        select: {
-                            id: true,
-                            firstName: true,
-                            lastName: true
-                        }
-                    },
                     ambulatorio: {
                         select: {
                             id: true,
                             nome: true,
-                            stanza: true
+                            piano: true
+                        }
+                    },
+                    prestazione: {
+                        select: {
+                            id: true,
+                            nome: true
                         }
                     }
                 },
-                orderBy: { numeroCoda: 'asc' }
+                orderBy: { oraArrivo: 'asc' }
             });
+
+            // Carica paziente e medico
+            const pazienteIds = [...new Set(queue.map(a => a.pazienteId))];
+            const medicoIds = [...new Set(queue.map(a => a.medicoId))];
+
+            const [pazienti, medici] = await Promise.all([
+                prisma.person.findMany({
+                    where: { id: { in: pazienteIds }, tenantId },
+                    select: { id: true, firstName: true, lastName: true }
+                }),
+                prisma.person.findMany({
+                    where: { id: { in: medicoIds }, tenantId },
+                    select: { id: true, firstName: true, lastName: true }
+                })
+            ]);
+
+            const pazientiMap = new Map(pazienti.map(p => [p.id, p]));
+            const mediciMap = new Map(medici.map(m => [m.id, m]));
+
+            for (const app of queue) {
+                app.paziente = pazientiMap.get(app.pazienteId) || null;
+                app.medico = mediciMap.get(app.medicoId) || null;
+            }
 
             return {
                 totalInQueue: queue.length,
@@ -672,14 +778,17 @@ export class AppuntamentoService {
                 tenantId,
                 deletedAt: null,
                 dataOra: { gte: today },
-                stato: 'IN_ATTESA',
-                numeroCoda: { not: null },
-                ...(ambulatorioId && { ambulatorioId })
+                stato: { in: ['ARRIVATO', 'IN_ATTESA'] },
+                oraArrivo: { not: null }
             };
+
+            if (ambulatorioId) {
+                where.ambulatorioId = ambulatorioId;
+            }
 
             const nextInQueue = await prisma.appuntamento.findFirst({
                 where,
-                orderBy: { numeroCoda: 'asc' }
+                orderBy: { oraArrivo: 'asc' }
             });
 
             if (!nextInQueue) {

@@ -6,6 +6,7 @@ import { Label } from '../../design-system/atoms/Label';
 import { Badge } from '../../design-system/atoms/Badge';
 import { apiGet, apiDelete, apiPost, apiPut } from '../../services/api';
 import { toast } from 'react-hot-toast';
+import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
 
 interface Sopralluogo {
   id: string;
@@ -50,6 +51,7 @@ const SopralluogoManager: React.FC<SopralluogoManagerProps> = ({ siteId, siteNam
     dataEsecuzione: '',
     note: ''
   });
+  const { confirmDelete } = useConfirmDialog();
 
   useEffect(() => {
     loadSopralluoghi();
@@ -70,7 +72,7 @@ const SopralluogoManager: React.FC<SopralluogoManagerProps> = ({ siteId, siteNam
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
       if (editingSopralluogo) {
         // Update existing sopralluogo
@@ -81,7 +83,7 @@ const SopralluogoManager: React.FC<SopralluogoManagerProps> = ({ siteId, siteNam
         await apiPost(`/api/v1/sopralluogo/site/${siteId}`, formData);
         toast.success('Sopralluogo creato con successo');
       }
-      
+
       resetForm();
       loadSopralluoghi();
     } catch (error) {
@@ -101,7 +103,8 @@ const SopralluogoManager: React.FC<SopralluogoManagerProps> = ({ siteId, siteNam
   };
 
   const handleDelete = async (sopralluogoId: string) => {
-    if (!confirm('Sei sicuro di voler eliminare questo sopralluogo?')) {
+    const confirmed = await confirmDelete('Sei sicuro di voler eliminare questo sopralluogo?');
+    if (!confirmed) {
       return;
     }
 
@@ -154,7 +157,7 @@ const SopralluogoManager: React.FC<SopralluogoManagerProps> = ({ siteId, siteNam
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Sopralluoghi - {siteName}</CardTitle>
-          <Button 
+          <Button
             onClick={() => setShowForm(!showForm)}
             variant={showForm ? "outline" : "primary"}
           >
@@ -163,7 +166,7 @@ const SopralluogoManager: React.FC<SopralluogoManagerProps> = ({ siteId, siteNam
         </CardHeader>
         <CardContent>
           {showForm && (
-            <form onSubmit={handleSubmit} className="space-y-4 mb-6 p-4 border rounded-lg bg-gray-50">
+            <form onSubmit={handleSubmit} className="space-y-4 mb-6 p-4 border rounded-lg bg-gray-50" noValidate>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="esecutoreId">ID Esecutore *</Label>

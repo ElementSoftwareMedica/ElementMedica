@@ -214,9 +214,27 @@ class AttestatiService {
       const response = await api.get<Blob>(`/api/v1/attestati/${id}/download`, { responseType: 'blob' });
       const blob = new Blob([response.data as BlobPart], { type: 'application/pdf' });
       const url = window.URL.createObjectURL(blob);
+
+      // Extract filename from Content-Disposition header if present
+      let filename = `attestato_${id}.pdf`;
+      const contentDisposition = response.headers['content-disposition'];
+      if (contentDisposition) {
+        // Parse filename from "attachment; filename="..." or filename*=UTF-8''..."
+        const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+        if (filenameMatch && filenameMatch[1]) {
+          filename = filenameMatch[1].replace(/['"]/g, '');
+          // Decode URI-encoded filename
+          try {
+            filename = decodeURIComponent(filename);
+          } catch {
+            // Keep original if decoding fails
+          }
+        }
+      }
+
       const link = document.createElement('a');
       link.href = url;
-      link.download = `attestato_${id}.pdf`;
+      link.download = filename;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);

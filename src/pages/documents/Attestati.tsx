@@ -310,12 +310,16 @@ const Attestati: React.FC<AttestatiProps> = ({
           }}
           filterOptions={attestatiFilterOptions}
           sortOptions={attestatiSortOptions}
-          onFilterChange={(filters) => {
-            setActiveFilters(filters);
+          onFilterChange={(filters: Record<string, unknown>) => {
+            setActiveFilters(filters as Record<string, string>); // Filters are always strings in this context
           }}
           activeFilters={activeFilters}
           activeSort={activeSort}
-          onSortChange={setActiveSort}
+          onSortChange={(sort) => {
+            if (sort && sort.field && sort.direction) {
+              setActiveSort({ field: sort.field, direction: sort.direction });
+            }
+          }}
         />
       </div>
     </div>

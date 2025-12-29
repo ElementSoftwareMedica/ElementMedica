@@ -6,9 +6,9 @@ export interface UseRequiredCertsParams {
   selectedCourse: Training | undefined;
   selectedCourseVariants: Training[];
   trainings: Training[];
-  risk_level: string;
-  course_type: string;
-  normalizeText: (s: string) => string;
+  risk_level?: string;
+  course_type?: string;
+  normalizeText: (s?: unknown) => string; // Changed from (s: string) to match deriveRequiredCerts
 }
 
 export function useRequiredCerts(params: UseRequiredCertsParams) {

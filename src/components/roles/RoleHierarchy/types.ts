@@ -4,6 +4,11 @@
  * Defines all TypeScript interfaces used across the RoleHierarchy module.
  */
 
+import type { UserRoleHierarchy } from '../../../services/roles';
+
+// Re-export for convenience
+export type { UserRoleHierarchy };
+
 /**
  * Individual role level data within the hierarchy
  */
@@ -21,20 +26,6 @@ export interface RoleHierarchyLevel {
  */
 export interface RoleHierarchyType {
   [roleType: string]: RoleHierarchyLevel;
-}
-
-/**
- * Current user's role context and permissions
- */
-export interface UserRoleHierarchy {
-  userId: string;
-  userLevel: number;
-  highestRole: string;
-  userRoles: string[];
-  assignableRoles: string[];
-  canCreateRoles: boolean;
-  canDeleteRoles: boolean;
-  canMoveRoles: boolean;
 }
 
 /**
@@ -99,11 +90,14 @@ export interface RoleEditData {
 /**
  * Role form submission data
  */
+/**
+ * Role form submission data
+ */
 export interface RoleFormData {
   name: string;
   description: string;
   permissions?: string[] | Record<string, boolean>;
-  level?: number;
+  level?: number | string;
   parentRoleType?: string;
 }
 

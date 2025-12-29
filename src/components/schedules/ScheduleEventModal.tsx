@@ -44,13 +44,14 @@ import { useNavigationHandlers } from './hooks/useNavigationHandlers';
 import { useDateTimeHandlers } from './hooks/useDateTimeHandlers';
 // import { useAdvancedMemoization } from './hooks/useAdvancedMemoization'; // non usato qui
 import { DELIVERY_MODES, RISK_LEVEL_OPTIONS, COURSE_TYPE_OPTIONS } from '../../constants/scheduleModal';
+import { isRLSCourse, getRiskLevelOptions } from '../../utils/courseLabels';
 import { useTrainerFilters } from './hooks/useTrainerFilters';
 import { getTrainers } from '../../services/trainers';
 import type { Training, Trainer, Option } from './types';
 
 // Costanti importate da constants/scheduleModal.ts
 
-const normalizeText = normalizeTextUtil;
+const normalizeText: (s?: unknown) => string = normalizeTextUtil;
 const expandTerms = expandTermsUtil;
 
 // Componente interno che utilizza il context
@@ -71,7 +72,7 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
     hoursLeft,
     selectedCourse
   } = useScheduleModalContext();
-  
+
   const {
     loading,
     error,
@@ -120,12 +121,94 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
     trainings,
   });
 
+  // Load course details from API if price is not available in context
+  useEffect(() => {
+    const loadCourseDetails = async () => {
+      if (!selectedCourse?.id) return;
+      if (selectedCourseDetails) return; // Already loaded via variants
+
+      const courseAny = selectedCourse as any;
+      const hasPrice = courseAny.pricePerPerson || courseAny.price || courseAny.prezzo || courseAny.prezzoBase;
+
+      if (hasPrice) {
+        console.log('[ScheduleEventModal] 💰 Price already available in context:', hasPrice);
+        return;
+      }
+
+      try {
+        console.log('[ScheduleEventModal] 🔄 Loading course details from API for price...');
+        const { getCourses } = await import('../../services/courses');
+        const courses = await getCourses();
+        const fullCourse = courses.find((c: any) => String(c.id) === String(selectedCourse.id));
+
+        if (fullCourse) {
+          console.log('[ScheduleEventModal] ✅ Course details loaded:', {
+            id: fullCourse.id,
+            pricePerPerson: (fullCourse as any).pricePerPerson,
+            price: (fullCourse as any).price
+          });
+          setSelectedCourseDetails(fullCourse as Training);
+        } else {
+          console.warn('[ScheduleEventModal] ⚠️ Course not found in API response');
+        }
+      } catch (error) {
+        console.error('[ScheduleEventModal] ❌ Failed to load course details:', error);
+      }
+    };
+
+    loadCourseDetails();
+  }, [selectedCourse?.id, selectedCourseDetails, setSelectedCourseDetails]);
+
   // Unifica: corso effettivo normalizzato per la logica
   const effectiveSelectedCourse = useMemo<Training | undefined>(() => {
     const base = selectedCourseDetails || selectedCourse;
-    return base
-      ? { ...base, name: base.title ?? base.name ?? '' }
-      : undefined;
+    if (!base) {
+      console.log('[ScheduleEventModal] ⚠️ No course selected');
+      return undefined;
+    }
+
+    // Debug: log both selectedCourseDetails and selectedCourse
+    console.log('[ScheduleEventModal] 🔍 Course data sources:', {
+      hasDetails: !!selectedCourseDetails,
+      hasBase: !!selectedCourse,
+      detailsPrice: (selectedCourseDetails as any)?.pricePerPerson,
+      basePrice: (selectedCourse as any)?.pricePerPerson
+    });
+
+    // Extract price from various possible field names
+    // Priority: selectedCourseDetails (from API) > selectedCourse (from context)
+    const baseAny = base as any;
+    const detailsAny = selectedCourseDetails as any;
+    const courseAny = selectedCourse as any;
+
+    const extractedPrice = detailsAny?.pricePerPerson ||
+      courseAny?.pricePerPerson ||
+      baseAny.pricePerPerson ||
+      baseAny.price ||
+      baseAny.prezzo ||
+      baseAny.prezzoBase ||
+      0;
+
+    console.log('[ScheduleEventModal] 📊 effectiveSelectedCourse:', {
+      id: base.id,
+      name: base.title ?? base.name,
+      source: selectedCourseDetails ? 'API (selectedCourseDetails)' : 'Context (selectedCourse)',
+      pricePerPerson: baseAny.pricePerPerson,
+      price: baseAny.price,
+      prezzo: baseAny.prezzo,
+      prezzoBase: baseAny.prezzoBase,
+      extractedPrice,
+      willPrecompile: extractedPrice > 0
+    });
+
+    // Normalize course fields for consistent access
+    return {
+      ...base,
+      name: base.title ?? base.name ?? '',
+      // Ensure price field exists for preventivi pre-compilation
+      price: extractedPrice,
+      pricePerPerson: extractedPrice // Also set pricePerPerson for useFormState compatibility
+    };
   }, [selectedCourseDetails, selectedCourse]);
 
   // Handler locale per aggiornare singoli campi del form, allineato al context
@@ -212,7 +295,7 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
       setLoadedPersons(persons);
       return;
     }
-    
+
     // Altrimenti carica lazy
     console.log('[ScheduleEventModal] 🔄 Loading persons lazy...');
     let cancelled = false;
@@ -238,7 +321,7 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
   // Trainers effettivi SENZA fallback - ora usiamo quelli del context
   const effectiveTrainers: Trainer[] = useMemo(() => {
     const result = Array.isArray(trainers) && trainers.length > 0 ? trainers : [];
-    
+
     // 🔍 DEBUG: Verifica trainers ricevuti dal context
     if (result.length > 0) {
       console.debug('[ScheduleEventModal] 🔍 Trainers from context:', {
@@ -251,11 +334,16 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
         }
       });
     }
-    
+
     return result;
   }, [trainers]);
 
-  // Correzione Rules of Hooks: chiamiamo direttamente l’hook, non dentro useMemo
+  // Correzione Rules of Hooks: chiamiamo direttamente l'hook, non dentro useMemo
+  // Per corsi RLS, usa etichette specifiche (>50/<50 Dipendenti)
+  const courseTitle = effectiveSelectedCourse?.title || effectiveSelectedCourse?.name;
+  const isRLS = isRLSCourse(courseTitle);
+  const baseRiskOptions = isRLS ? getRiskLevelOptions(courseTitle) : RISK_LEVEL_OPTIONS;
+
   const dynamicOptionsResult = useDynamicRiskAndTypeOptions({
     selectedCourse: effectiveSelectedCourse,
     selectedCourseVariants,
@@ -263,7 +351,7 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
     risk_level: formData.risk_level,
     course_type: formData.course_type,
     normalizeText,
-    baseRiskOptions: RISK_LEVEL_OPTIONS,
+    baseRiskOptions: baseRiskOptions,
     baseTypeOptions: COURSE_TYPE_OPTIONS,
   });
   const { riskOpts, typeOpts, riskValid, typeValid, titleEmpty } = dynamicOptionsResult;
@@ -304,11 +392,11 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
     riskOptions: dynamicRiskOptions,
     typeOptions: dynamicCourseTypeOptions,
     onResolve: (id: string | number, details?: Training) => {
-        if (String(formData.training_id ?? '') !== String(id)) {
-          setFormData({ training_id: id });
-        }
-        if (details) setSelectedCourseDetails(details);
+      if (String(formData.training_id ?? '') !== String(id)) {
+        setFormData({ training_id: id });
       }
+      if (details) setSelectedCourseDetails(details);
+    }
   });
 
   useRequiredCerts({
@@ -351,14 +439,14 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
   // Use ref to track previous values to avoid infinite loop
   const prevRiskRef = useRef<string | undefined>(formData.risk_level);
   const prevTypeRef = useRef<string | undefined>(formData.course_type);
-  
+
   useEffect(() => {
     const updates: Partial<typeof formData> = {};
     const currentRisk = formData.risk_level;
     const currentType = formData.course_type;
     const riskOptionsLength = dynamicRiskOptions?.length || 0;
     const typeOptionsLength = dynamicCourseTypeOptions?.length || 0;
-    
+
     // === RISK LEVEL LOGIC ===
     if (riskOptionsLength > 0) {
       // 1. Se non c'è valore e c'è una sola opzione, auto-seleziona
@@ -377,7 +465,7 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
         }
       }
     }
-    
+
     // === COURSE TYPE LOGIC ===
     if (typeOptionsLength > 0) {
       // 1. Se non c'è valore e c'è una sola opzione, auto-seleziona
@@ -396,19 +484,19 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
         }
       }
     }
-    
+
     // Applica aggiornamenti solo se necessario e valori sono cambiati
     if (Object.keys(updates).length > 0) {
-      const hasChanges = 
+      const hasChanges =
         (updates.risk_level !== undefined && updates.risk_level !== prevRiskRef.current) ||
         (updates.course_type !== undefined && updates.course_type !== prevTypeRef.current);
-        
+
       if (hasChanges) {
         if (process.env.NODE_ENV === 'development') {
           console.debug('[ScheduleModal] Auto-updating risk/type:', updates);
         }
         setFormData(updates);
-        
+
         // Update refs
         if (updates.risk_level !== undefined) prevRiskRef.current = updates.risk_level;
         if (updates.course_type !== undefined) prevTypeRef.current = updates.course_type;
@@ -422,16 +510,14 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
   ]); // Removed formData.risk_level and formData.course_type to prevent loop
 
   // Steps state and helpers
-  const { 
-    isStep0Valid, 
-    isStep1Valid, 
+  const {
+    isStep0Valid,
+    isStep1Valid,
     isCompletelyValid,
     getValidationIssues,
-    stepItems, 
-    handleNext: _handleNextHook, 
-    handleBack: _handleBackHook,
-    canNavigateToStep,
-    handleStepClick
+    stepItems,
+    handleNext: _handleNextHook,
+    handleBack: _handleBackHook
   } = useScheduleSteps({
     formData: {
       ...formData,
@@ -452,15 +538,15 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
   const currentStep = state.currentStep;
 
   // Form validation hook
-  const { 
-    isValid: formIsValid, 
-    errors: formErrors, 
-    fieldErrors, 
-    isStep0Valid: validationStep0Valid, 
-    isStep1Valid: validationStep1Valid, 
-    isStep2Valid: validationStep2Valid, 
-    validateCurrentStep, 
-    validateField 
+  const {
+    isValid: formIsValid,
+    errors: formErrors,
+    fieldErrors,
+    isStep0Valid: validationStep0Valid,
+    isStep1Valid: validationStep1Valid,
+    isStep2Valid: validationStep2Valid,
+    validateCurrentStep,
+    validateField
   } = useFormValidation({
     formData,
     dynamicRiskOptions,
@@ -481,7 +567,8 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
   }>) => void = (updates) => {
     actions.setFormData(updates);
   };
-  const { handleDateChange, handleRemoveDate } = useDateTimeHandlers({ formData, setFormData: setFormDataForDateHandlers });
+  const formDataWithDates = { ...formData, dates: formData.dates || [] };
+  const { handleDateChange, handleRemoveDate } = useDateTimeHandlers({ formData: formDataWithDates, setFormData: setFormDataForDateHandlers });
 
   // Unified Date/Time/Trainer updater to avoid duplication across steps
   const handleUpdateDateTime = useCallback((index: number, field: 'date' | 'start' | 'end' | 'trainerId' | 'coTrainerId', value: string) => {
@@ -500,6 +587,7 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
   const { handleNext, handleBack } = useNavigationHandlers({
     currentStep,
     setCurrentStep: actions.setCurrentStep,
+    addVisitedStep: actions.addVisitedStep, // Track visited steps
     validateCurrentStep,
     setError: actions.setError,
   });
@@ -583,7 +671,7 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
       case 2:
         return (
           <StepAttendance
-            dates={formData.dates}
+            dates={formData.dates || []}
             selectedPersons={Array.from(selectedPersons)}
             persons={loadedPersons}
             attendance={attendance}
@@ -612,12 +700,22 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
             showStatusMenu={showStatusMenu}
             onShowStatusMenuChange={setShowStatusMenu}
             scheduleId={scheduleId}
-            trainers={effectiveTrainers.map(t => ({
-              id: t.id,
-              firstName: t.firstName,
-              lastName: t.lastName
+            trainers={
+              // Filtra solo i trainers che hanno almeno una sessione assegnata (esclude coTrainers)
+              effectiveTrainers
+                .filter(t => (formData.dates || []).some(d => String(d.trainerId) === String(t.id)))
+                .map(t => ({
+                  id: t.id,
+                  firstName: t.firstName,
+                  lastName: t.lastName,
+                  email: (t as any).email,
+                  hourlyRate: (t as any).hourlyRate
+                }))
+            }
+            persons={persons.map(p => ({
+              ...p,
+              aziendaId: p.aziendaId || p.companyId
             }))}
-            persons={persons}
             selectedCourse={effectiveSelectedCourse}
             companies={companies}
             pendingPreventiviIds={pendingPreventiviIds}
@@ -644,22 +742,30 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
             variant="secondary"
             onClick={onClose}
             disabled={loading}
+            className="rounded-full"
           >
             Annulla
           </Button>
 
-          <div className="flex space-x-3">
+          {error && (
+            <div className="flex-1 px-6 text-center">
+              <p className="text-sm text-red-600 whitespace-pre-line">{error}</p>
+            </div>
+          )}
+
+          <div className="flex space-x-3">{/* Pulsanti */}
             {currentStep > 0 && (
               <Button
                 variant="secondary"
                 onClick={handleBack}
                 disabled={loading}
+                className="rounded-full"
               >
                 Indietro
               </Button>
             )}
 
-            {/* Pulsante Programma Corso solo nello Step 3 (indice 2) */}
+            {/* Pulsante Programma Corso/Salva Modifiche solo nello Step 3 (indice 2) */}
             {currentStep === 2 && (
               <Button
                 variant="primary"
@@ -669,13 +775,14 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
                     // Il modal rimane aperto, l'utente può navigare allo Step 4
                   } else {
                     const issues = getValidationIssues;
-                    setError(`Completa i seguenti campi prima di programmare il corso:\n• ${issues.join('\n• ')}`);
+                    const action = isEditing ? 'salvare le modifiche' : 'programmare il corso';
+                    setError(`Completa i seguenti campi prima di ${action}:\n• ${issues.join('\n• ')}`);
                   }
                 }}
                 disabled={loading}
-                className="!bg-green-600 hover:!bg-green-700 !text-white"
+                className="!bg-green-600 hover:!bg-green-700 !text-white rounded-full"
               >
-                {loading ? 'Programmazione...' : '📅 Programma Corso'}
+                {loading ? (isEditing ? 'Salvataggio...' : 'Programmazione...') : (isEditing ? '💾 Salva Modifiche' : '📅 Programma Corso')}
               </Button>
             )}
 
@@ -684,6 +791,7 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
                 variant="primary"
                 onClick={handleNext}
                 disabled={loading}
+                className="rounded-full"
               >
                 Avanti
               </Button>
@@ -700,6 +808,7 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
                   }
                 }}
                 disabled={loading}
+                className="rounded-full"
               >
                 {loading ? 'Salvataggio...' : (isEditing ? 'Aggiorna' : 'Salva')}
               </Button>
@@ -713,15 +822,15 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
         <div className="flex justify-center">
           <div className="inline-flex bg-gray-100 rounded-full p-1 shadow-sm">
             {stepItems.map((step, index) => {
-              const isClickable = canNavigateToStep(index);
+              const isClickable = actions.canNavigateToStep(index);
               return (
                 <button
                   key={`step-${index}`}
                   type="button"
                   onClick={() => {
                     if (isClickable) {
-                      handleStepClick(index);
                       actions.setCurrentStep(index);
+                      actions.addVisitedStep(index); // Mark as visited
                     }
                   }}
                   className={`
@@ -729,8 +838,8 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
                     ${index === currentStep
                       ? 'bg-blue-600 text-white shadow-md scale-105'
                       : index < currentStep
-                      ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                      : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200'
+                        ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200'
                     }
                     ${isClickable ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}
                   `}
@@ -742,8 +851,8 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
                       ${index === currentStep
                         ? 'bg-white text-blue-600'
                         : index < currentStep
-                        ? 'bg-green-600 text-white'
-                        : 'bg-gray-300 text-gray-600'
+                          ? 'bg-green-600 text-white'
+                          : 'bg-gray-300 text-gray-600'
                       }
                     `}>
                       {index < currentStep ? '✓' : index + 1}
@@ -790,6 +899,9 @@ export default function ScheduleEventModal(props: ScheduleEventModalProps): JSX.
         existingEvent={props.existingEvent}
         initialDate={props.initialDate}
         initialTime={props.initialTime}
+        preSelectedCourseId={props.preSelectedCourseId}
+        preSelectedPersonIds={props.preSelectedPersonIds}
+        preSelectedCompanyIds={props.preSelectedCompanyIds}
       >
         <ScheduleEventModalContent {...props} />
       </ScheduleModalProvider>

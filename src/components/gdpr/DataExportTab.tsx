@@ -206,59 +206,58 @@ export const DataExportTab: React.FC<DataExportTabProps> = ({ hook }) => {
       )}
 
       {/* Stats Cards */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" color="primary" gutterBottom>
-                {stats.total}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Total Requests
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
+      <Box
+        sx={{
+          mb: 4,
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' },
+          gap: 3
+        }}
+      >
+        <Card>
+          <CardContent>
+            <Typography variant="h6" color="primary" gutterBottom>
+              {stats.total}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Total Requests
+            </Typography>
+          </CardContent>
+        </Card>
         
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" color="success.main" gutterBottom>
-                {stats.completed}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Completed
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
+        <Card>
+          <CardContent>
+            <Typography variant="h6" color="success.main" gutterBottom>
+              {stats.completed}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Completed
+            </Typography>
+          </CardContent>
+        </Card>
         
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" color="info.main" gutterBottom>
-                {stats.processing + stats.pending}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                In Progress
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
+        <Card>
+          <CardContent>
+            <Typography variant="h6" color="info.main" gutterBottom>
+              {stats.processing + stats.pending}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              In Progress
+            </Typography>
+          </CardContent>
+        </Card>
         
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" color="warning.main" gutterBottom>
-                {stats.expired}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Expired
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
+        <Card>
+          <CardContent>
+            <Typography variant="h6" color="warning.main" gutterBottom>
+              {stats.expired}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Expired
+            </Typography>
+          </CardContent>
+        </Card>
+      </Box>
 
       {/* Latest Export Quick Access */}
       {latestExport && canDownload(latestExport) && (
@@ -444,36 +443,40 @@ export const DataExportTab: React.FC<DataExportTabProps> = ({ hook }) => {
               containing all your information stored in our system.
             </Typography>
             
-            <Grid container spacing={3} sx={{ mt: 2 }}>
-              <Grid item xs={12} md={6}>
-                <FormControl component="fieldset">
-                  <FormLabel component="legend">Export Format</FormLabel>
-                  <RadioGroup
-                    value={exportForm.format}
-                    onChange={(e) => setExportForm(prev => ({ ...prev, format: e.target.value as 'json' | 'csv' | 'pdf' }))}
-                  >
-                    <FormControlLabel value="json" control={<Radio />} label="JSON (Structured data)" />
-                    <FormControlLabel value="csv" control={<Radio />} label="CSV (Spreadsheet format)" />
-                    <FormControlLabel value="pdf" control={<Radio />} label="PDF (Human readable)" />
-                  </RadioGroup>
-                </FormControl>
-              </Grid>
+            <Box
+              sx={{
+                mt: 2,
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' },
+                gap: 3
+              }}
+            >
+              <FormControl component="fieldset">
+                <FormLabel component="legend">Export Format</FormLabel>
+                <RadioGroup
+                  value={exportForm.format}
+                  onChange={(e) => setExportForm(prev => ({ ...prev, format: e.target.value as 'json' | 'csv' | 'pdf' }))}
+                >
+                  <FormControlLabel value="json" control={<Radio />} label="JSON (Structured data)" />
+                  <FormControlLabel value="csv" control={<Radio />} label="CSV (Spreadsheet format)" />
+                  <FormControlLabel value="pdf" control={<Radio />} label="PDF (Human readable)" />
+                </RadioGroup>
+              </FormControl>
               
-              <Grid item xs={12} md={6}>
-                <FormControl component="fieldset">
-                  <FormLabel component="legend">Include Additional Data</FormLabel>
-                  <Box sx={{ mt: 1 }}>
-                    <FormControlLabel
-                      control={
-                        <Checkbox
-                          checked={exportForm.includeAuditTrail}
-                          onChange={(e) => setExportForm(prev => ({ 
-                            ...prev, 
-                            includeAuditTrail: e.target.checked 
-                          }))}
-                        />
-                      }
-                      label="Audit Trail (Activity logs)"
+              <FormControl component="fieldset">
+                <FormLabel component="legend">Include Additional Data</FormLabel>
+                <Box sx={{ mt: 1 }}>
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={exportForm.includeAuditTrail}
+                        onChange={(e) => setExportForm(prev => ({ 
+                          ...prev, 
+                          includeAuditTrail: e.target.checked 
+                        }))}
+                      />
+                    }
+                    label="Audit Trail (Activity logs)"
                     />
                     
                     <FormControlLabel
@@ -490,8 +493,7 @@ export const DataExportTab: React.FC<DataExportTabProps> = ({ hook }) => {
                     />
                   </Box>
                 </FormControl>
-              </Grid>
-            </Grid>
+              </Box>
             
             <Alert severity="info" sx={{ mt: 3 }}>
               <Typography variant="body2">

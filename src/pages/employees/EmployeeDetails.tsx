@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { 
+import {
   AlertTriangle,
   Building2,
   Calendar,
@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 
 import EntityProfileHeader from '../../components/shared/EntityProfileHeader';
+import EntitySchedulesSection from '../../components/shared/EntitySchedulesSection';
 import { apiGet } from '../../services/api';
 import { PersonData, Company } from '../../types';
 
@@ -66,61 +67,12 @@ const EmployeeDetails: React.FC = () => {
     );
   }
 
-  // Generate some mock data for the employee
-  const mockMedicalRecords = [
-    {
-      id: '1',
-      date: new Date(2023, 3, 15),
-      type: 'Annual Checkup',
-      status: 'Completed',
-      notes: 'All tests normal. Recommended exercise program.',
-    },
-    {
-      id: '2',
-      date: new Date(2022, 3, 12),
-      type: 'Annual Checkup',
-      status: 'Completed',
-      notes: 'Mild hypertension detected. Follow-up recommended.',
-    },
-    {
-      id: '3',
-      date: new Date(2021, 2, 28),
-      type: 'Annual Checkup',
-      status: 'Completed',
-      notes: 'All tests normal.',
-    },
-  ];
-
-  const mockTrainingRecords = [
-    {
-      id: '1',
-      courseName: 'First Aid Certification',
-      completionDate: new Date(2023, 1, 15),
-      expiryDate: new Date(2025, 1, 15),
-      status: 'Valid',
-    },
-    {
-      id: '2',
-      courseName: 'Workplace Safety',
-      completionDate: new Date(2023, 5, 10),
-      expiryDate: new Date(2024, 5, 10),
-      status: 'Valid',
-    },
-    {
-      id: '3',
-      courseName: 'Hazardous Materials Handling',
-      completionDate: new Date(2022, 8, 23),
-      expiryDate: new Date(2023, 8, 23),
-      status: 'Expired',
-    },
-  ];
-
   return (
     <div className="space-y-6">
       {/* Back link */}
       <div>
-        <Link 
-          to="/employees" 
+        <Link
+          to="/employees"
           className="inline-flex items-center text-sm text-blue-600 hover:text-blue-800"
         >
           <span className="transform rotate-180">
@@ -140,9 +92,9 @@ const EmployeeDetails: React.FC = () => {
               </span>
             </div>
             <div className="ml-4">
-              <h1 className="text-2xl font-bold text-gray-800">{employee.firstName} {employee.lastName}</h1>
+              <h1 className="text-2xl font-bold text-gray-800">{employee.lastName} {employee.firstName}</h1>
               <p className="text-gray-600">
-                {employee.title}
+                {employee.title || 'Dipendente'}
                 {company && <><span className="mx-2 text-gray-400">•</span><span>{company.ragioneSociale || company.name}</span></>}
               </p>
               <p className="text-sm text-gray-500">Codice Fiscale: {employee.taxCode || 'Non disponibile'}</p>
@@ -194,6 +146,13 @@ const EmployeeDetails: React.FC = () => {
             <h2 className="text-lg font-semibold text-gray-800 mb-3">Informazioni Lavorative</h2>
             <ul className="space-y-2">
               <li className="flex items-start">
+                <User className="h-4 w-4 text-gray-400 mt-0.5" />
+                <div className="ml-2">
+                  <span className="block text-xs font-medium text-gray-800">Profilo Professionale</span>
+                  <span className="block text-sm text-gray-600">{employee.title || 'Non specificato'}</span>
+                </div>
+              </li>
+              <li className="flex items-start">
                 <Building2 className="h-4 w-4 text-gray-400 mt-0.5" />
                 <div className="ml-2">
                   <span className="block text-xs font-medium text-gray-800">Azienda</span>
@@ -215,7 +174,7 @@ const EmployeeDetails: React.FC = () => {
               <li className="flex items-start">
                 <div className="ml-0">
                   <span className="block text-xs font-medium text-gray-800">ID Dipendente</span>
-                  <span className="block text-sm text-gray-600">{employee.employeeId || 'EMP-' + Math.floor(1000 + Math.random() * 9000)}</span>
+                  <span className="block text-sm text-gray-600">{employee.employeeId || 'Non assegnato'}</span>
                 </div>
               </li>
               <li className="flex items-start">
@@ -259,75 +218,46 @@ const EmployeeDetails: React.FC = () => {
         </div>
       </div>
 
+      {/* Corsi Frequentati */}
+      <EntitySchedulesSection
+        entityType="person"
+        entityId={id!}
+        title="Corsi Frequentati"
+        showDocuments={true}
+        maxItems={5}
+        showQuickDownloads={true}
+      />
+
       {/* Formazione e Certificazioni - Layout affiancato */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Formazione Section */}
-        <div className="bg-white rounded-lg shadow p-6 h-96">
+        <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold text-gray-900 flex items-center">
               <GraduationCap className="h-5 w-5 mr-2 text-blue-600" />
               Formazione Completata
             </h2>
-            <button className="text-blue-600 hover:text-blue-800 flex items-center">
-              Vedi Tutto
-              <ChevronRight className="h-4 w-4 ml-1" />
-            </button>
           </div>
-          
-          <div className="space-y-3 overflow-y-auto h-80">
-            {mockTrainingRecords.map((record) => (
-              <div key={record.id} className={`flex items-center justify-between p-3 rounded-lg border-l-4 ${
-                record.status === 'Valid' ? 'bg-green-50 border-green-400' : 'bg-red-50 border-red-400'
-              }`}>
-                <div className="flex items-center">
-                  <GraduationCap className={`h-5 w-5 mr-3 ${
-                    record.status === 'Valid' ? 'text-green-600' : 'text-red-600'
-                  }`} />
-                  <div>
-                    <p className="font-medium text-gray-900">{record.courseName}</p>
-                    <p className="text-sm text-gray-600">Completato: {record.completionDate.toLocaleDateString('it-IT')}</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className={`text-sm font-medium ${
-                    record.status === 'Valid' ? 'text-green-600' : 'text-red-600'
-                  }`}>{record.status === 'Valid' ? 'Valido' : 'Scaduto'}</p>
-                  <p className="text-xs text-gray-500">Scade: {record.expiryDate.toLocaleDateString('it-IT')}</p>
-                </div>
-              </div>
-            ))}
+
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <GraduationCap className="h-12 w-12 text-gray-300 mb-3" />
+            <p className="text-gray-500">I corsi completati vengono mostrati nella sezione "Corsi Frequentati" sopra.</p>
           </div>
         </div>
 
         {/* Visite Mediche Section */}
-        <div className="bg-white rounded-lg shadow p-6 h-96">
+        <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold text-gray-900 flex items-center">
               <FileText className="h-5 w-5 mr-2 text-purple-600" />
               Visite Mediche
             </h2>
-            <button className="text-purple-600 hover:text-purple-800 flex items-center">
-              Vedi Tutte
-              <ChevronRight className="h-4 w-4 ml-1" />
-            </button>
           </div>
-          
-          <div className="space-y-3 overflow-y-auto h-80">
-            {mockMedicalRecords.map((record) => (
-              <div key={record.id} className="flex items-center justify-between p-3 bg-purple-50 rounded-lg border-l-4 border-purple-400">
-                <div className="flex items-center">
-                  <FileText className="h-5 w-5 text-purple-600 mr-3" />
-                  <div>
-                    <p className="font-medium text-gray-900">{record.type}</p>
-                    <p className="text-sm text-gray-600">{record.notes}</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-medium text-purple-600">{record.status}</p>
-                  <p className="text-xs text-gray-500">{record.date.toLocaleDateString('it-IT')}</p>
-                </div>
-              </div>
-            ))}
+
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <FileText className="h-12 w-12 text-gray-300 mb-3" />
+            <p className="text-gray-500">Nessuna visita medica registrata per questo dipendente.</p>
+            <p className="text-sm text-gray-400 mt-1">Le visite mediche verranno mostrate qui quando disponibili.</p>
           </div>
         </div>
       </div>
@@ -340,13 +270,12 @@ const EmployeeDetails: React.FC = () => {
             <div className="space-y-3">
               <div>
                 <span className="block text-sm font-medium text-gray-800">Stato</span>
-                <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                  employee.status === 'Active'
-                    ? 'bg-green-100 text-green-800'
-                    : employee.status === 'On Leave'
-                      ? 'bg-yellow-100 text-yellow-800'
-                      : 'bg-gray-100 text-gray-800'
-                }`}>
+                <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${employee.status === 'ACTIVE'
+                  ? 'bg-green-100 text-green-800'
+                  : employee.status === 'SUSPENDED'
+                    ? 'bg-yellow-100 text-yellow-800'
+                    : 'bg-gray-100 text-gray-800'
+                  }`}>
                   {employee.status || 'Attivo'}
                 </span>
               </div>
@@ -355,25 +284,24 @@ const EmployeeDetails: React.FC = () => {
             <h2 className="text-lg font-semibold text-gray-800 mt-6 mb-4">Stato Sanitario</h2>
             <div className="bg-gray-50 rounded-lg p-4">
               <div className="flex items-start">
-                <div className="mr-4 p-2 bg-green-100 rounded-lg">
-                  <FileText className="h-6 w-6 text-green-600" />
+                <div className="mr-4 p-2 bg-gray-100 rounded-lg">
+                  <FileText className="h-6 w-6 text-gray-400" />
                 </div>
                 <div>
-                  <span className="block text-sm font-medium text-gray-800">Ultima Visita Medica</span>
-                  <span className="block text-sm text-gray-600">15 Aprile 2023</span>
-                  <span className="mt-1 block text-xs text-gray-500">Prossima programmata: Aprile 2024</span>
+                  <span className="block text-sm font-medium text-gray-800">Visite Mediche</span>
+                  <span className="block text-sm text-gray-500">Nessuna visita medica registrata</span>
                 </div>
               </div>
             </div>
 
-            <div className="mt-4 bg-amber-50 rounded-lg p-4">
+            <div className="mt-4 bg-gray-50 rounded-lg p-4">
               <div className="flex items-start">
-                <div className="mr-4 p-2 bg-amber-100 rounded-lg">
-                  <AlertTriangle className="h-6 w-6 text-amber-600" />
+                <div className="mr-4 p-2 bg-gray-100 rounded-lg">
+                  <AlertTriangle className="h-6 w-6 text-gray-400" />
                 </div>
                 <div>
                   <span className="block text-sm font-medium text-gray-800">Notifiche</span>
-                  <span className="block text-sm text-gray-600">Certificazione Primo Soccorso in scadenza tra 2 mesi</span>
+                  <span className="block text-sm text-gray-500">Nessuna notifica attiva</span>
                 </div>
               </div>
             </div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import EntityListLayout from '../components/layouts/EntityListLayout';
 import TabNavigation from '../components/shared/TabNavigation';
 import RegistriPresenze from './documents/RegistriPresenze';
@@ -7,6 +7,7 @@ import Attestati from './documents/Attestati';
 import { GenerateAttestatiModal } from '../components/shared';
 import { ViewModeToggle } from '../design-system/molecules/ViewModeToggle';
 import { HeaderPanel } from '../design-system/organisms/HeaderPanel';
+import { useAuth } from '../context/AuthContext';
 
 const tabConfig = {
   registri: {
@@ -30,7 +31,17 @@ const tabConfig = {
 };
 
 const DocumentsCorsi: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'registri' | 'lettere' | 'attestati'>('registri');
+  const { user } = useAuth();
+
+  // Verifica se l'utente è EMPLOYEE (non ha ruoli admin/trainer)
+  const isEmployee = useMemo(() => {
+    const roles = user?.roles || [];
+    const adminRoles = ['ADMIN', 'TRAINING_ADMIN', 'HR_MANAGER', 'COMPANY_MANAGER', 'SITE_MANAGER', 'TRAINER'];
+    return roles.includes('EMPLOYEE') && !roles.some(r => adminRoles.includes(r));
+  }, [user?.roles]);
+
+  // Per EMPLOYEE, mostra solo tab attestati; per altri utenti, tutti i tab
+  const [activeTab, setActiveTab] = useState<'registri' | 'lettere' | 'attestati'>(isEmployee ? 'attestati' : 'registri');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [activeFilters, setActiveFilters] = useState<Record<string, string>>({});
   const [activeSort, setActiveSort] = useState<{ field: string, direction: 'asc' | 'desc' } | null>(null);
@@ -38,27 +49,30 @@ const DocumentsCorsi: React.FC = () => {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [showGenerateModal, setShowGenerateModal] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
-  
+
   const handleAddNew = () => {
     if (activeTab === 'attestati') {
       setShowGenerateModal(true);
-      } else {
+    } else {
       alert(`Aggiunta di ${activeTab === 'registri' ? 'registro' : 'lettera di incarico'} non implementata`);
     }
   };
 
-  const tabItems = [
-    { id: 'registri', label: 'Registri Presenze' },
-    { id: 'lettere', label: 'Lettere di Incarico' },
-    { id: 'attestati', label: 'Attestati' }
-  ];
+  // Per EMPLOYEE mostra solo tab attestati
+  const tabItems = isEmployee
+    ? [{ id: 'attestati', label: 'I Miei Attestati' }]
+    : [
+      { id: 'registri', label: 'Registri Presenze' },
+      { id: 'lettere', label: 'Lettere di Incarico' },
+      { id: 'attestati', label: 'Attestati' }
+    ];
 
   return (
     <>
       <div className="mb-4">
-        <TabNavigation 
+        <TabNavigation
           tabs={tabItems}
-          activeTabId={activeTab} 
+          activeTabId={activeTab}
           onTabChange={(id: string) => {
             setActiveTab(id as 'registri' | 'lettere' | 'attestati');
             setSearchTerm('');
@@ -66,13 +80,13 @@ const DocumentsCorsi: React.FC = () => {
             setActiveSort(null);
             setSelectionMode(false);
             setSelectedIds([]);
-          }} 
+          }}
         />
       </div>
-      
+
       <EntityListLayout
-        title={tabConfig[activeTab].title}
-        subtitle={tabConfig[activeTab].subtitle}
+        title={isEmployee ? 'I Miei Attestati' : tabConfig[activeTab].title}
+        subtitle={isEmployee ? 'Visualizza i tuoi attestati di formazione' : tabConfig[activeTab].subtitle}
         extraControls={
           <div className="flex items-center gap-2">
             <ViewModeToggle
@@ -81,11 +95,14 @@ const DocumentsCorsi: React.FC = () => {
               gridLabel="Griglia"
               tableLabel="Tabella"
             />
-            <HeaderPanel 
-              entityType={activeTab === 'registri' ? 'registro' : activeTab === 'lettere' ? 'lettera' : 'attestato'}
-              entityGender={activeTab === 'lettere' ? 'f' : 'm'}
-              onAdd={handleAddNew}
-            />
+            {/* Nasconde HeaderPanel per EMPLOYEE - non possono creare documenti */}
+            {!isEmployee && (
+              <HeaderPanel
+                entityType={activeTab === 'registri' ? 'registro' : activeTab === 'lettere' ? 'lettera' : 'attestato'}
+                entityGender={activeTab === 'lettere' ? 'f' : 'm'}
+                onAdd={handleAddNew}
+              />
+            )}
           </div>
         }
       >
@@ -103,7 +120,7 @@ const DocumentsCorsi: React.FC = () => {
             setSelectedIds={setSelectedIds}
           />
         )}
-        
+
         {activeTab === 'lettere' && (
           <LettereIncarico
             searchTerm={searchTerm}
@@ -120,7 +137,7 @@ const DocumentsCorsi: React.FC = () => {
             setShowGenerateModal={setShowGenerateModal}
           />
         )}
-        
+
         {activeTab === 'attestati' && (
           <Attestati
             searchTerm={searchTerm}
@@ -138,11 +155,11 @@ const DocumentsCorsi: React.FC = () => {
           />
         )}
       </EntityListLayout>
-      
+
       {showGenerateModal && (
-      <GenerateAttestatiModal
-        isOpen={showGenerateModal}
-        onClose={() => setShowGenerateModal(false)}
+        <GenerateAttestatiModal
+          isOpen={showGenerateModal}
+          onClose={() => setShowGenerateModal(false)}
           onGenerate={() => {
             // Implementazione della generazione
           }}

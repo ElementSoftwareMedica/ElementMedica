@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { apiGet, apiPost, apiPut, apiDelete } from '../../services/api';
 import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
 import { ActionButton } from '../../components/ui';
@@ -18,7 +19,16 @@ import {
   Clock,
   Copy,
   TrendingUp,
-  X
+  X,
+  User,
+  Calendar,
+  Heart,
+  Package,
+  Stethoscope,
+  Target,
+  Filter,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 
 interface CodiceSconto {
@@ -40,6 +50,14 @@ interface CodiceSconto {
   applicabileA: 'TUTTI' | 'AZIENDE' | 'PERSONE' | 'SPECIFICI';
   applicabileServizi: string[];
   categorieCorso: string[];
+  // Criteri avanzati
+  etaMinima?: number;
+  etaMassima?: number;
+  genereApplicabile?: 'MALE' | 'FEMALE' | null;
+  soloNuoviPazienti?: boolean;
+  convenzioniIds?: string[];
+  bundleIds?: string[];
+  prestazioniIds?: string[];
   createdAt?: string;
   updatedAt?: string;
   _count?: {
@@ -60,13 +78,22 @@ const APPLICABILITA_OPTIONS = [
 ];
 
 const SERVIZI_OPTIONS = [
-  { value: 'CORSO', label: 'Corsi di Formazione' },
-  { value: 'MEDICO_COMPETENTE', label: 'Medico Competente' },
-  { value: 'DVR', label: 'DVR' },
-  { value: 'RSPP', label: 'RSPP' }
+  { value: 'CORSO', label: 'Corsi di Formazione', icon: '📚' },
+  { value: 'MEDICO_COMPETENTE', label: 'Medico Competente', icon: '👨‍⚕️' },
+  { value: 'DVR', label: 'DVR', icon: '📋' },
+  { value: 'RSPP', label: 'RSPP', icon: '🦺' },
+  { value: 'VISITA', label: 'Visite Mediche (ElementMedica)', icon: '🏥' },
+  { value: 'BUNDLE', label: 'Bundle/Pacchetti', icon: '📦' }
+];
+
+const GENERE_OPTIONS: { value: 'MALE' | 'FEMALE' | null, label: string, icon: string }[] = [
+  { value: null, label: 'Tutti', icon: '👥' },
+  { value: 'MALE', label: 'Maschi', icon: '👨' },
+  { value: 'FEMALE', label: 'Femmine', icon: '👩' }
 ];
 
 const DiscountCodesPage: React.FC = () => {
+  const navigate = useNavigate();
   const { confirmDelete } = useConfirmDialog();
   const [codes, setCodes] = useState<CodiceSconto[]>([]);
   const [loading, setLoading] = useState(false);
@@ -98,8 +125,19 @@ const DiscountCodesPage: React.FC = () => {
     maxImporto: '',
     applicabileA: 'TUTTI' as 'TUTTI' | 'AZIENDE' | 'PERSONE' | 'SPECIFICI',
     applicabileServizi: ['CORSO'] as string[],
-    categorieCorso: [] as string[]
+    categorieCorso: [] as string[],
+    // Criteri avanzati di targeting
+    etaMinima: '',
+    etaMassima: '',
+    genereApplicabile: null as 'MALE' | 'FEMALE' | null,
+    soloNuoviPazienti: false,
+    convenzioniIds: [] as string[],
+    bundleIds: [] as string[],
+    prestazioniIds: [] as string[]
   });
+
+  // Advanced targeting section visibility
+  const [showAdvancedTargeting, setShowAdvancedTargeting] = useState(false);
 
   useEffect(() => {
     fetchCodes();
@@ -140,9 +178,17 @@ const DiscountCodesPage: React.FC = () => {
       maxImporto: '',
       applicabileA: 'TUTTI',
       applicabileServizi: ['CORSO'],
-      categorieCorso: []
+      categorieCorso: [],
+      etaMinima: '',
+      etaMassima: '',
+      genereApplicabile: null,
+      soloNuoviPazienti: false,
+      convenzioniIds: [],
+      bundleIds: [],
+      prestazioniIds: []
     });
     setEditingCode(null);
+    setShowAdvancedTargeting(false);
   };
 
   const handleCreate = async () => {
@@ -159,7 +205,14 @@ const DiscountCodesPage: React.FC = () => {
         utilizzoMassimo: formData.utilizzoMassimo ? parseInt(formData.utilizzoMassimo) : null,
         utilizzoPerUtente: formData.utilizzoPerUtente ? parseInt(formData.utilizzoPerUtente) : null,
         minImporto: formData.minImporto ? parseFloat(formData.minImporto) : null,
-        maxImporto: formData.maxImporto ? parseFloat(formData.maxImporto) : null
+        maxImporto: formData.maxImporto ? parseFloat(formData.maxImporto) : null,
+        etaMinima: formData.etaMinima ? parseInt(formData.etaMinima) : null,
+        etaMassima: formData.etaMassima ? parseInt(formData.etaMassima) : null,
+        genereApplicabile: formData.genereApplicabile || null,
+        soloNuoviPazienti: formData.soloNuoviPazienti,
+        convenzioniIds: formData.convenzioniIds,
+        bundleIds: formData.bundleIds,
+        prestazioniIds: formData.prestazioniIds
       };
 
       await apiPost('/api/v1/codici-sconto', payload);
@@ -204,7 +257,14 @@ const DiscountCodesPage: React.FC = () => {
         maxImporto: formData.maxImporto ? parseFloat(formData.maxImporto) : null,
         applicabileA: formData.applicabileA,
         applicabileServizi: formData.applicabileServizi,
-        categorieCorso: formData.categorieCorso
+        categorieCorso: formData.categorieCorso,
+        etaMinima: formData.etaMinima ? parseInt(formData.etaMinima) : null,
+        etaMassima: formData.etaMassima ? parseInt(formData.etaMassima) : null,
+        genereApplicabile: formData.genereApplicabile || null,
+        soloNuoviPazienti: formData.soloNuoviPazienti,
+        convenzioniIds: formData.convenzioniIds,
+        bundleIds: formData.bundleIds,
+        prestazioniIds: formData.prestazioniIds
       };
 
       await apiPut(`/api/v1/codici-sconto/${editingCode.id}`, payload);
@@ -223,6 +283,8 @@ const DiscountCodesPage: React.FC = () => {
 
   const handleEdit = (code: CodiceSconto) => {
     setEditingCode(code);
+    const hasAdvancedTargeting = code.etaMinima || code.etaMassima || code.genereApplicabile || code.soloNuoviPazienti;
+    setShowAdvancedTargeting(hasAdvancedTargeting || false);
     setFormData({
       codice: code.codice,
       nome: code.nome,
@@ -239,7 +301,14 @@ const DiscountCodesPage: React.FC = () => {
       maxImporto: code.maxImporto?.toString() || '',
       applicabileA: code.applicabileA,
       applicabileServizi: code.applicabileServizi,
-      categorieCorso: code.categorieCorso
+      categorieCorso: code.categorieCorso,
+      etaMinima: code.etaMinima?.toString() || '',
+      etaMassima: code.etaMassima?.toString() || '',
+      genereApplicabile: code.genereApplicabile || null,
+      soloNuoviPazienti: code.soloNuoviPazienti || false,
+      convenzioniIds: code.convenzioniIds || [],
+      bundleIds: code.bundleIds || [],
+      prestazioniIds: code.prestazioniIds || []
     });
     setShowCreateModal(true);
   };
@@ -272,6 +341,8 @@ const DiscountCodesPage: React.FC = () => {
   };
 
   const handleDuplicate = async (code: CodiceSconto) => {
+    const hasAdvancedTargeting = code.etaMinima || code.etaMassima || code.genereApplicabile || code.soloNuoviPazienti;
+    setShowAdvancedTargeting(hasAdvancedTargeting || false);
     setFormData({
       codice: `${code.codice}_COPIA`,
       nome: `${code.nome} (Copia)`,
@@ -288,7 +359,14 @@ const DiscountCodesPage: React.FC = () => {
       maxImporto: code.maxImporto?.toString() || '',
       applicabileA: code.applicabileA,
       applicabileServizi: code.applicabileServizi,
-      categorieCorso: code.categorieCorso
+      categorieCorso: code.categorieCorso,
+      etaMinima: code.etaMinima?.toString() || '',
+      etaMassima: code.etaMassima?.toString() || '',
+      genereApplicabile: code.genereApplicabile || null,
+      soloNuoviPazienti: code.soloNuoviPazienti || false,
+      convenzioniIds: code.convenzioniIds || [],
+      bundleIds: code.bundleIds || [],
+      prestazioniIds: code.prestazioniIds || []
     });
     setShowCreateModal(true);
   };
@@ -366,10 +444,7 @@ const DiscountCodesPage: React.FC = () => {
           </p>
         </div>
         <button
-          onClick={() => {
-            resetForm();
-            setShowCreateModal(true);
-          }}
+          onClick={() => navigate('/management/codici-sconto/nuovo')}
           className="inline-flex items-center px-6 py-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors shadow-sm"
         >
           <Plus className="w-5 h-5 mr-2" />
@@ -508,6 +583,7 @@ const DiscountCodesPage: React.FC = () => {
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Codice</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Nome</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Sconto</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Targeting</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Validità</th>
                     <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Utilizzi</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Stato</th>
@@ -525,9 +601,14 @@ const DiscountCodesPage: React.FC = () => {
                           <ActionButton
                             actions={[
                               {
+                                label: 'Visualizza',
+                                icon: <TrendingUp className="w-4 h-4" />,
+                                onClick: () => navigate(`/management/codici-sconto/${code.id}`)
+                              },
+                              {
                                 label: 'Modifica',
                                 icon: <Edit2 className="w-4 h-4" />,
-                                onClick: () => handleEdit(code)
+                                onClick: () => navigate(`/management/codici-sconto/${code.id}/modifica`)
                               },
                               {
                                 label: code.attivo ? 'Disattiva' : 'Attiva',
@@ -549,9 +630,14 @@ const DiscountCodesPage: React.FC = () => {
                           />
                         </td>
                         <td className="px-4 py-3">
-                          <code className="text-sm font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
-                            {code.codice}
-                          </code>
+                          <button
+                            onClick={() => navigate(`/management/codici-sconto/${code.id}`)}
+                            className="hover:underline"
+                          >
+                            <code className="text-sm font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded hover:bg-blue-100 transition-colors">
+                              {code.codice}
+                            </code>
+                          </button>
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex flex-col">
@@ -579,6 +665,31 @@ const DiscountCodesPage: React.FC = () => {
                               <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-700">
                                 Min €{code.minImporto}
                               </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-wrap gap-1">
+                            {code.soloNuoviPazienti && (
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-pink-100 text-pink-700" title="Solo nuovi pazienti">
+                                <Heart className="w-2.5 h-2.5" />
+                                Nuovo
+                              </span>
+                            )}
+                            {(code.etaMinima !== null || code.etaMassima !== null) && (
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-100 text-purple-700" title={`Età: ${code.etaMinima || 0}-${code.etaMassima || '∞'}`}>
+                                <Calendar className="w-2.5 h-2.5" />
+                                {code.etaMinima || 0}-{code.etaMassima || '∞'}
+                              </span>
+                            )}
+                            {code.genereApplicabile && (
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-100 text-indigo-700" title={`Genere: ${code.genereApplicabile}`}>
+                                <User className="w-2.5 h-2.5" />
+                                {code.genereApplicabile === 'MALE' ? 'M' : 'F'}
+                              </span>
+                            )}
+                            {!code.soloNuoviPazienti && code.etaMinima === null && code.etaMassima === null && !code.genereApplicabile && (
+                              <span className="text-xs text-gray-400">—</span>
                             )}
                           </div>
                         </td>
@@ -917,6 +1028,119 @@ const DiscountCodesPage: React.FC = () => {
                     ))}
                   </div>
                 </div>
+              </div>
+
+              {/* Targeting Avanzato */}
+              <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, showAdvancedTargeting: !formData.showAdvancedTargeting })}
+                  className="w-full p-4 bg-gradient-to-r from-purple-50 to-indigo-50 flex items-center justify-between hover:from-purple-100 hover:to-indigo-100 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <Target className="w-5 h-5 text-purple-600" />
+                    <span className="font-semibold text-gray-900">Targeting Avanzato</span>
+                    <span className="text-xs text-purple-600 bg-purple-100 px-2 py-0.5 rounded-full">
+                      {(formData.etaMinima || formData.etaMassima || formData.genereApplicabile || formData.soloNuoviPazienti) ? 'Attivo' : 'Opzionale'}
+                    </span>
+                  </div>
+                  {formData.showAdvancedTargeting ? (
+                    <ChevronUp className="w-5 h-5 text-gray-500" />
+                  ) : (
+                    <ChevronDown className="w-5 h-5 text-gray-500" />
+                  )}
+                </button>
+
+                {formData.showAdvancedTargeting && (
+                  <div className="p-4 space-y-4 bg-white">
+                    {/* Range Età */}
+                    <div>
+                      <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+                        <Calendar className="w-4 h-4 text-purple-500" />
+                        Range Età Paziente
+                      </label>
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1">
+                          <input
+                            type="number"
+                            value={formData.etaMinima || ''}
+                            onChange={(e) => setFormData({ ...formData, etaMinima: e.target.value ? parseInt(e.target.value) : null })}
+                            placeholder="Min"
+                            min="0"
+                            max="120"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                          />
+                        </div>
+                        <span className="text-gray-400">—</span>
+                        <div className="flex-1">
+                          <input
+                            type="number"
+                            value={formData.etaMassima || ''}
+                            onChange={(e) => setFormData({ ...formData, etaMassima: e.target.value ? parseInt(e.target.value) : null })}
+                            placeholder="Max"
+                            min="0"
+                            max="120"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                          />
+                        </div>
+                        <span className="text-xs text-gray-500">anni</span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">Lascia vuoto per applicare a tutte le età</p>
+                    </div>
+
+                    {/* Genere */}
+                    <div>
+                      <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+                        <User className="w-4 h-4 text-purple-500" />
+                        Genere Paziente
+                      </label>
+                      <div className="flex gap-2">
+                        {GENERE_OPTIONS.map((option) => (
+                          <button
+                            key={option.value || 'tutti'}
+                            type="button"
+                            onClick={() => setFormData({ ...formData, genereApplicabile: option.value })}
+                            className={`flex-1 px-4 py-2 rounded-lg border-2 transition-all flex flex-col items-center ${formData.genereApplicabile === option.value
+                                ? 'border-purple-500 bg-purple-50 text-purple-700'
+                                : 'border-gray-200 hover:border-purple-200 text-gray-600'
+                              }`}
+                          >
+                            <span className="text-xl mb-1">{option.icon}</span>
+                            <span className="text-sm font-medium">{option.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Solo Nuovi Pazienti */}
+                    <label className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-purple-300 cursor-pointer transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={formData.soloNuoviPazienti}
+                        onChange={(e) => setFormData({ ...formData, soloNuoviPazienti: e.target.checked })}
+                        className="w-5 h-5 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <Heart className="w-4 h-4 text-pink-500" />
+                          <span className="text-sm font-medium text-gray-900">Solo Nuovi Pazienti</span>
+                        </div>
+                        <p className="text-xs text-gray-500">Il codice può essere usato solo da pazienti alla loro prima visita</p>
+                      </div>
+                    </label>
+
+                    {/* Info Box */}
+                    <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
+                      <div className="flex items-start gap-2">
+                        <Filter className="w-4 h-4 text-purple-600 mt-0.5" />
+                        <div className="text-xs text-purple-700">
+                          <strong>Come funziona:</strong> I filtri di targeting vengono applicati in AND.
+                          Il paziente deve soddisfare tutti i criteri impostati per poter utilizzare il codice.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Opzioni Avanzate */}

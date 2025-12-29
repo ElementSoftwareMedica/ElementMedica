@@ -27,7 +27,12 @@ class AuthService {
             },
             include: {
               company: true,
-              tenant: true
+              tenant: true,
+              permissions: {
+                where: {
+                  isGranted: true
+                }
+              }
             }
           },
           company: true,
@@ -47,25 +52,41 @@ class AuthService {
    */
   async verifyCredentials(identifier, password) {
     try {
+      logger.info('[AUTH_SERVICE] verifyCredentials called', { identifier });
+
       const person = await this.findPersonForLogin(identifier);
-      
+
       if (!person) {
+        logger.warn('[AUTH_SERVICE] Person not found', { identifier });
         return { success: false, error: 'Person not found' };
       }
 
+      logger.info('[AUTH_SERVICE] Person found', {
+        id: person.id,
+        email: person.email,
+        status: person.status,
+        hasPassword: !!person.password,
+        passwordPrefix: person.password ? person.password.substring(0, 10) : null
+      });
+
       if (!person.password) {
+        logger.warn('[AUTH_SERVICE] No password set', { personId: person.id });
         return { success: false, error: 'No password set for this person' };
       }
 
+      logger.info('[AUTH_SERVICE] Comparing passwords...');
       const isValidPassword = await bcrypt.compare(password, person.password);
-      
+      logger.info('[AUTH_SERVICE] Password compare result', { isValidPassword });
+
       if (!isValidPassword) {
+        logger.warn('[AUTH_SERVICE] Invalid password', { personId: person.id });
         return { success: false, error: 'Invalid password' };
       }
 
+      logger.info('[AUTH_SERVICE] Credentials verified successfully', { personId: person.id });
       return { success: true, person };
     } catch (error) {
-      logger.error('Error verifying credentials:', { error: error.message });
+      logger.error('Error verifying credentials:', { error: error.message, stack: error.stack });
       throw error;
     }
   }

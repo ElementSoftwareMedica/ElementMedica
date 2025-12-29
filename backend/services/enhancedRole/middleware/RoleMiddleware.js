@@ -1,6 +1,6 @@
 import { logger } from '../../../utils/logger.js';
 import { hasPermission } from '../permissions/PermissionChecker.js';
-// import { convertPermissionsToBackend } from '../../../utils/permissionMapping.js';
+import { convertPermissionsToBackend } from '../../../utils/permissionMapping.js';
 
 /**
  * Middleware per la verifica dei permessi
@@ -34,7 +34,7 @@ export function requirePermission(requiredPermissions, options = {}) {
       const userRoles = req.person?.roles || req.user?.roles || [];
       const globalRole = req.person?.globalRole || req.user?.globalRole;
       const isAdmin = userRoles.includes('ADMIN') || userRoles.includes('SUPER_ADMIN') || globalRole === 'ADMIN' || globalRole === 'SUPER_ADMIN';
-      
+
       if (isAdmin) {
         logger.info('[ROLE_MIDDLEWARE] Admin user bypassing permission check', {
           userId,
@@ -42,14 +42,13 @@ export function requirePermission(requiredPermissions, options = {}) {
           globalRole,
           requiredPermissions
         });
-        
+
         // Converte i permessi per coerenza anche per gli admin
-        const frontendPermissions = Array.isArray(requiredPermissions) 
-          ? requiredPermissions 
+        const frontendPermissions = Array.isArray(requiredPermissions)
+          ? requiredPermissions
           : [requiredPermissions];
-        // const backendPermissions = convertPermissionsToBackend(frontendPermissions);
-        const backendPermissions = frontendPermissions; // Temporaneo
-        
+        const backendPermissions = convertPermissionsToBackend(frontendPermissions);
+
         // Aggiungi informazioni sui permessi alla request
         req.userPermissions = {
           verified: frontendPermissions,
@@ -58,10 +57,10 @@ export function requirePermission(requiredPermissions, options = {}) {
           hasAny: true,
           bypassedAsAdmin: true
         };
-        
+
         return next();
       }
-      
+
       if (!tenantId) {
         logger.warn('[ROLE_MIDDLEWARE] Missing tenant ID in request');
         return res.status(400).json({
@@ -69,19 +68,18 @@ export function requirePermission(requiredPermissions, options = {}) {
           code: 'TENANT_REQUIRED'
         });
       }
-      
+
       // Normalizza i permessi richiesti in array
-      const frontendPermissions = Array.isArray(requiredPermissions) 
-        ? requiredPermissions 
+      const frontendPermissions = Array.isArray(requiredPermissions)
+        ? requiredPermissions
         : [requiredPermissions];
 
       // Converte i permessi dal formato frontend a quello backend
-      // const backendPermissions = convertPermissionsToBackend(frontendPermissions);
-      const backendPermissions = frontendPermissions; // Temporaneo
+      const backendPermissions = convertPermissionsToBackend(frontendPermissions);
 
       // Verifica i permessi solo per utenti non-admin
       const permissionChecks = await Promise.all(
-        backendPermissions.map(permission => 
+        backendPermissions.map(permission =>
           hasPermission(userId, permission, tenantId, {
             resource: options.resource,
             action: options.action,
@@ -91,7 +89,7 @@ export function requirePermission(requiredPermissions, options = {}) {
       );
 
       // Determina se l'utente ha i permessi necessari
-      const hasRequiredPermissions = options.requireAll 
+      const hasRequiredPermissions = options.requireAll
         ? permissionChecks.every(Boolean)
         : permissionChecks.some(Boolean);
 
@@ -154,7 +152,7 @@ export function requireRole(requiredRoles, options = {}) {
 
       // Importa getUserRoles dinamicamente per evitare dipendenze circolari
       const { getUserRoles } = await import('../core/RoleCore.js');
-      
+
       const userRoles = await getUserRoles(userId, tenantId);
       const userRoleTypes = userRoles.map(role => role.roleType);
 
@@ -239,11 +237,11 @@ export function requireCompanyAccess(getCompanyId) {
 
       // Importa getUserRoles dinamicamente
       const { getUserRoles } = await import('../core/RoleCore.js');
-      
+
       const userRoles = await getUserRoles(userId, tenantId);
 
       // Verifica se l'utente ha accesso globale o specifico alla company
-      const hasAccess = userRoles.some(role => 
+      const hasAccess = userRoles.some(role =>
         // Ruoli globali che possono accedere a tutte le company
         ['SUPER_ADMIN', 'ADMIN', 'TENANT_ADMIN'].includes(role.roleType) ||
         // Ruolo specifico per questa company
@@ -266,7 +264,7 @@ export function requireCompanyAccess(getCompanyId) {
 
       // Aggiungi informazioni alla request
       req.companyId = companyId;
-      req.hasGlobalAccess = userRoles.some(role => 
+      req.hasGlobalAccess = userRoles.some(role =>
         ['SUPER_ADMIN', 'ADMIN', 'TENANT_ADMIN'].includes(role.roleType)
       );
 

@@ -13,8 +13,19 @@ const apiClient = axios.create({
   baseURL: API_BASE_URL
 });
 
-// Add auth token to requests
+// Add auth token to requests with method validation
 apiClient.interceptors.request.use((config) => {
+  // CRITICAL FIX: Validate HTTP method FIRST for ALL requests
+  try {
+    if (!config.method || typeof config.method !== 'string' || config.method.trim() === '') {
+      config.method = 'GET';
+    } else {
+      config.method = config.method.toUpperCase();
+    }
+  } catch {
+    config.method = 'GET';
+  }
+
   const token = getToken(); // Use centralized auth service
   if (token && config.headers) {
     config.headers.Authorization = `Bearer ${token}`;
@@ -45,12 +56,12 @@ export interface ImportResult {
  * Get Google connection status
  */
 export async function getConnectionStatus(): Promise<ConnectionStatus> {
-  const response = await apiClient.get('/api/v1/google/status');
+  const response = await apiClient.get('/v1/google/status');
   const data = response.data as any;
   return {
     ...data.data,
-    expiresAt: data.data.expiresAt 
-      ? new Date(data.data.expiresAt) 
+    expiresAt: data.data.expiresAt
+      ? new Date(data.data.expiresAt)
       : null
   };
 }
@@ -59,7 +70,7 @@ export async function getConnectionStatus(): Promise<ConnectionStatus> {
  * Get Google OAuth2 authorization URL
  */
 export async function getAuthUrl(): Promise<string> {
-  const response = await apiClient.get('/api/v1/google/auth/url');
+  const response = await apiClient.get('/v1/google/auth/url');
   const data = response.data as any;
   return data.data.authUrl;
 }
@@ -68,7 +79,7 @@ export async function getAuthUrl(): Promise<string> {
  * Exchange authorization code for tokens
  */
 export async function exchangeCode(code: string, state?: string): Promise<void> {
-  await apiClient.post('/api/v1/google/auth/callback', {
+  await apiClient.post('/v1/google/auth/callback', {
     code,
     state
   });
@@ -78,18 +89,18 @@ export async function exchangeCode(code: string, state?: string): Promise<void> 
  * Disconnect Google account
  */
 export async function disconnect(): Promise<void> {
-  await apiClient.delete('/api/v1/google/disconnect');
+  await apiClient.delete('/v1/google/disconnect');
 }
 
 /**
  * Import Google Docs document
  */
 export async function importDocs(documentId: string, convertToHtml: boolean = true): Promise<ImportResult> {
-  const response = await apiClient.post('/api/v1/google/import-docs', {
+  const response = await apiClient.post('/v1/google/import-docs', {
     documentId,
     convertToHtml
   });
-  
+
   const data = (response.data as any).data;
   return {
     ...data,
@@ -101,11 +112,11 @@ export async function importDocs(documentId: string, convertToHtml: boolean = tr
  * Import Google Slides presentation
  */
 export async function importSlides(presentationId: string, convertToHtml: boolean = true): Promise<ImportResult> {
-  const response = await apiClient.post('/api/v1/google/import-slides', {
+  const response = await apiClient.post('/v1/google/import-slides', {
     presentationId,
     convertToHtml
   });
-  
+
   const data = (response.data as any).data;
   return {
     ...data,

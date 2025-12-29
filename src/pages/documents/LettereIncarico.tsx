@@ -301,11 +301,15 @@ const LettereIncarico: React.FC<LettereIncaricoProps> = ({
           filterOptions={lettereFilterOptions}
           sortOptions={lettereSortOptions}
           onFilterChange={(filters) => {
-            setActiveFilters(filters);
+            setActiveFilters(filters as Record<string, string>);
           }}
           activeFilters={activeFilters}
           activeSort={activeSort}
-          onSortChange={setActiveSort}
+          onSortChange={(sort) => {
+            if (sort && sort.field && sort.direction) {
+              setActiveSort({ field: sort.field, direction: sort.direction });
+            }
+          }}
         />
       </div>
     </div>

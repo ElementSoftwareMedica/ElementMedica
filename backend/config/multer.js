@@ -88,6 +88,19 @@ const uploadTypes = {
     ],
     maxFileSize: 10 * 1024 * 1024, // 10MB
     destination: 'uploads/templates'
+  },
+  clinical: {
+    allowedMimeTypes: [
+      'application/pdf',
+      'image/jpeg',
+      'image/png',
+      'image/gif',
+      'image/webp',
+      'application/dicom',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ],
+    maxFileSize: 50 * 1024 * 1024, // 50MB per file clinici (DICOM, radiografie)
+    destination: 'uploads/clinical'
   }
 };
 
@@ -112,11 +125,11 @@ const generateFilename = (file, addTimestamp = true, preserveExtension = true) =
   const timestamp = addTimestamp ? Date.now() : '';
   const randomSuffix = crypto.randomBytes(6).toString('hex');
   const extension = preserveExtension ? path.extname(file.originalname) : '';
-  
+
   const baseName = path.basename(file.originalname, extension)
     .replace(/[^a-zA-Z0-9]/g, '_')
     .substring(0, 50); // Limit base name length
-  
+
   return `${file.fieldname}-${baseName}-${timestamp}-${randomSuffix}${extension}`;
 };
 
@@ -127,7 +140,7 @@ const generateFilename = (file, addTimestamp = true, preserveExtension = true) =
  */
 const createStorage = (options = {}) => {
   const config = { ...defaultConfig, ...options };
-  
+
   return multer.diskStorage({
     destination: (req, file, cb) => {
       const uploadPath = path.resolve(process.cwd(), config.destination);
@@ -171,7 +184,7 @@ const createFileFilter = (allowedMimeTypes = defaultConfig.allowedMimeTypes) => 
 export const createMulterConfig = (options = {}, environment = process.env.NODE_ENV || 'development') => {
   const envConfig = environmentConfig[environment] || environmentConfig.development;
   const config = { ...defaultConfig, ...envConfig, ...options };
-  
+
   return multer({
     storage: createStorage(config),
     fileFilter: createFileFilter(config.allowedMimeTypes),
@@ -193,7 +206,7 @@ export const createUploadConfig = (type, customOptions = {}) => {
   if (!typeConfig) {
     throw new Error(`Unknown upload type: ${type}`);
   }
-  
+
   const config = { ...typeConfig, ...customOptions };
   return createMulterConfig(config);
 };
@@ -264,14 +277,14 @@ export const multerErrorHandler = (err, req, res, next) => {
         });
     }
   }
-  
+
   if (err.code === 'INVALID_FILE_TYPE') {
     return res.status(400).json({
       error: 'Invalid file type',
       message: err.message
     });
   }
-  
+
   next(err);
 };
 
@@ -282,11 +295,11 @@ export const multerErrorHandler = (err, req, res, next) => {
  */
 export const validateUploadConfig = (config) => {
   const requiredFields = ['destination', 'maxFileSize', 'allowedMimeTypes'];
-  
+
   return requiredFields.every(field => config.hasOwnProperty(field)) &&
-         Array.isArray(config.allowedMimeTypes) &&
-         typeof config.maxFileSize === 'number' &&
-         config.maxFileSize > 0;
+    Array.isArray(config.allowedMimeTypes) &&
+    typeof config.maxFileSize === 'number' &&
+    config.maxFileSize > 0;
 };
 
 /**
@@ -296,7 +309,7 @@ export const validateUploadConfig = (config) => {
  */
 export const getFileInfo = (file) => {
   if (!file) return null;
-  
+
   return {
     originalName: file.originalname,
     filename: file.filename,

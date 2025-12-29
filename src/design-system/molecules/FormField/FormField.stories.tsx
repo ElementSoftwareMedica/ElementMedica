@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/rules-of-hooks */
 /**
  * Design System - FormField Component Stories
  * Week 8 Implementation - Component Library
@@ -53,7 +54,7 @@ type Story = StoryObj<typeof FormField>;
 // Interactive wrapper for controlled components
 const FormFieldWrapper = (args: any) => {
   const [value, setValue] = useState(args.value || '');
-  
+
   return (
     <FormField
       {...args}
@@ -243,7 +244,7 @@ export const Sizes: Story = {
         size="sm"
         placeholder="Small input"
         value=""
-        onChange={() => {}}
+        onChange={() => { }}
       />
       <FormField
         name="medium"
@@ -252,7 +253,7 @@ export const Sizes: Story = {
         size="md"
         placeholder="Medium input"
         value=""
-        onChange={() => {}}
+        onChange={() => { }}
       />
       <FormField
         name="large"
@@ -261,7 +262,7 @@ export const Sizes: Story = {
         size="lg"
         placeholder="Large input"
         value=""
-        onChange={() => {}}
+        onChange={() => { }}
       />
     </div>
   )
@@ -278,7 +279,7 @@ export const Variants: Story = {
         variant="default"
         placeholder="Default styling"
         value=""
-        onChange={() => {}}
+        onChange={() => { }}
       />
       <FormField
         name="filled"
@@ -287,7 +288,7 @@ export const Variants: Story = {
         variant="filled"
         placeholder="Filled styling"
         value=""
-        onChange={() => {}}
+        onChange={() => { }}
       />
       <FormField
         name="outlined"
@@ -296,7 +297,7 @@ export const Variants: Story = {
         variant="outlined"
         placeholder="Outlined styling"
         value=""
-        onChange={() => {}}
+        onChange={() => { }}
       />
     </div>
   )
@@ -324,7 +325,7 @@ export const ComplexForm: Story = {
     return (
       <div className="max-w-md space-y-4">
         <h3 className="text-lg font-semibold mb-4">User Registration Form</h3>
-        
+
         <div className="grid grid-cols-2 gap-4">
           <FormField
             name="firstName"
@@ -343,7 +344,7 @@ export const ComplexForm: Story = {
             onChange={handleChange('lastName')}
           />
         </div>
-        
+
         <FormField
           name="email"
           label="Email Address"
@@ -353,7 +354,7 @@ export const ComplexForm: Story = {
           onChange={handleChange('email')}
           helpText="We'll never share your email with anyone else"
         />
-        
+
         <FormField
           name="phone"
           label="Phone Number"
@@ -362,7 +363,7 @@ export const ComplexForm: Story = {
           onChange={handleChange('phone')}
           placeholder="+1 (555) 123-4567"
         />
-        
+
         <FormField
           name="country"
           label="Country"
@@ -377,7 +378,7 @@ export const ComplexForm: Story = {
             { value: 'uk', label: 'United Kingdom' }
           ]}
         />
-        
+
         <FormField
           name="bio"
           label="Bio"
@@ -387,7 +388,7 @@ export const ComplexForm: Story = {
           placeholder="Tell us about yourself..."
           rows={3}
         />
-        
+
         <FormField
           name="plan"
           label="Choose your plan"
@@ -400,7 +401,7 @@ export const ComplexForm: Story = {
             { value: 'enterprise', label: 'Enterprise - $29/month' }
           ]}
         />
-        
+
         <FormField
           name="newsletter"
           label="Subscribe to our newsletter"

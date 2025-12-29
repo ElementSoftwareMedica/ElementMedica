@@ -10,6 +10,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { FileText, Download, Trash2, RefreshCw, Plus } from 'lucide-react';
 import lettereIncaricoService, { type LetteraIncarico } from '@/services/lettereIncaricoService';
+import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
 import GenerateLetterDialog from './GenerateLetterDialog';
 
 interface Trainer {
@@ -17,20 +18,30 @@ interface Trainer {
   firstName: string;
   lastName: string;
   email?: string;
+  hourlyRate?: number;
+}
+
+interface Session {
+  id: string;
+  trainerId: string;
+  duration: number;
 }
 
 interface ScheduleLettersCardProps {
   scheduleId: string;
   trainers: Trainer[];
+  sessions?: Session[];
 }
 
 export default function ScheduleLettersCard({
   scheduleId,
-  trainers
+  trainers,
+  sessions = []
 }: ScheduleLettersCardProps) {
   const [letters, setLetters] = useState<LetteraIncarico[]>([]);
   const [loading, setLoading] = useState(true);
   const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
+  const { confirmDelete } = useConfirmDialog();
 
   useEffect(() => {
     loadLetters();
@@ -49,9 +60,8 @@ export default function ScheduleLettersCard({
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Sei sicuro di voler eliminare questa lettera?')) {
-      return;
-    }
+    const confirmed = await confirmDelete('Sei sicuro di voler eliminare questa lettera?');
+    if (!confirmed) return;
 
     try {
       await lettereIncaricoService.delete(id);
@@ -182,6 +192,7 @@ export default function ScheduleLettersCard({
         onOpenChange={setGenerateDialogOpen}
         scheduleId={scheduleId}
         trainers={trainers}
+        sessions={sessions}
         onSuccess={loadLetters}
       />
     </>

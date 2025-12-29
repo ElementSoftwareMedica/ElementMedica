@@ -1,176 +1,111 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Eye, 
-  Edit, 
-  Trash2, 
-  Download, 
-  Filter, 
+import { useNavigate } from 'react-router-dom';
+import {
+  Eye,
+  FileText,
   AlertCircle,
-  Loader2
+  Loader2,
+  Calendar
 } from 'lucide-react';
 import { Button } from '../../design-system/atoms/Button';
 import { Card } from '../../design-system/molecules/Card';
 import { Badge } from '../../design-system/atoms/Badge';
-import { Modal } from '../../design-system/molecules/Modal';
-import { Input } from '../../design-system/atoms/Input';
-import { Select } from '../../design-system/atoms/Select';
 import { useAuth } from '../../context/AuthContext';
-import { 
-  getFormSubmissions, 
-  getFormSubmission, 
-  updateSubmissionStatus, 
-  deleteSubmission, 
-  exportSubmissions,
-  FormSubmission,
-  FormSubmissionFilters 
-} from '../../services/formTemplates';
+import { formTemplatesService } from '../../services/formTemplates';
+import { getContactSubmissions } from '../../services/contactSubmissionsManagement';
 
-const FormSubmissionsPage: React.FC = () => {
-  const [submissions, setSubmissions] = useState<FormSubmission[]>([]);
+interface FormSubmissionsPageProps {
+  hideHeader?: boolean;
+}
+
+interface TemplateWithSubmissionCount {
+  id: string;
+  name: string;
+  description: string;
+  type: string;
+  isActive: boolean;
+  submissionCount: number;
+  lastSubmissionAt?: string;
+}
+
+const FormSubmissionsPage: React.FC<FormSubmissionsPageProps> = ({ hideHeader = false }) => {
+  const navigate = useNavigate();
+  const [templates, setTemplates] = useState<TemplateWithSubmissionCount[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedSubmission, setSelectedSubmission] = useState<FormSubmission | null>(null);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
-  const [viewDialogOpen, setViewDialogOpen] = useState(false);
-  const [statusDialogOpen, setStatusDialogOpen] = useState(false);
-  const [newStatus, setNewStatus] = useState<'pending' | 'processed' | 'archived'>('pending');
-  const [filters, setFilters] = useState<{
-    status: 'pending' | 'processed' | 'archived' | '';
-    formTemplateId: string;
-    dateFrom: string;
-    dateTo: string;
-  }>({
-    status: '',
-    formTemplateId: '',
-    dateFrom: '',
-    dateTo: ''
-  });
 
-  const { hasPermission, isLoading: authLoading } = useAuth();
+  const { hasPermission, loading: authLoading } = useAuth();
   const canView = hasPermission('form_submissions', 'read');
-  const canEdit = hasPermission('form_submissions', 'update');
-  const canDelete = hasPermission('form_submissions', 'delete');
-  const canExport = hasPermission('form_submissions', 'export');
 
   useEffect(() => {
-    loadSubmissions();
-  }, [filters]);
+    loadTemplatesWithCounts();
+  }, []);
 
-  const loadSubmissions = async () => {
+  const loadTemplatesWithCounts = async () => {
     try {
       setLoading(true);
-      // Prepara i filtri per l'API, rimuovendo i valori vuoti
-      const apiFilters: any = {
-        // Filtri fissi per mostrare solo le submissions pubbliche di tipo CONTACT
-        type: 'CONTACT',
-        source: 'public_website'
-      };
-      
-      if (filters.status) {
-        apiFilters.status = filters.status;
-      }
-      if (filters.formTemplateId) apiFilters.formTemplateId = filters.formTemplateId;
-      if (filters.dateFrom) apiFilters.dateFrom = filters.dateFrom;
-      if (filters.dateTo) apiFilters.dateTo = filters.dateTo;
-      
-      const data = await getFormSubmissions(apiFilters);
-      setSubmissions(data.submissions || data);
+      setError(null);
+
+      console.log('📊 Loading templates with submission counts...');
+
+      // Carica tutti i template
+      const allTemplates = await formTemplatesService.getFormTemplates();
+      console.log(`📋 Found ${allTemplates.length} templates`);
+
+      // Per ogni template, conta le submissions
+      const templatesWithCounts = await Promise.all(
+        allTemplates.map(async (template) => {
+          try {
+            console.log(`🔍 Checking submissions for template: ${template.name} (${template.id})`);
+            // CRITICAL: Use templateName instead of templateId - backend stores templateName not templateId
+            const submissions = await getContactSubmissions({
+              templateName: template.name,
+              page: 1,
+              limit: 1
+            });
+
+            console.log(`✅ Template ${template.name}: ${submissions.pagination?.total || 0} submissions`);
+
+            return {
+              id: template.id,
+              name: template.name,
+              description: template.description || '',
+              type: template.type,
+              isActive: template.isActive,
+              submissionCount: submissions.pagination?.total || 0,
+              lastSubmissionAt: submissions.submissions?.[0]?.createdAt
+            };
+          } catch (err) {
+            console.error(`❌ Error counting submissions for template ${template.id}:`, err);
+            return {
+              id: template.id,
+              name: template.name,
+              description: template.description || '',
+              type: template.type,
+              isActive: template.isActive,
+              submissionCount: 0
+            };
+          }
+        })
+      );
+
+      // Ordina per numero di submissions (decrescente)
+      templatesWithCounts.sort((a, b) => b.submissionCount - a.submissionCount);
+
+      // Filtra solo template con submissions > 0
+      const templatesWithSubmissions = templatesWithCounts.filter(t => t.submissionCount > 0);
+      console.log(`📊 Templates with submissions: ${templatesWithSubmissions.length}`);
+
+      setTemplates(templatesWithSubmissions);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Errore nel caricamento delle submission');
-      console.error('Error loading submissions:', err);
+      setError(err instanceof Error ? err.message : 'Errore nel caricamento dei form');
+      console.error('❌ Error loading templates:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleViewSubmission = async (id: string) => {
-    try {
-      const submission = await getFormSubmission(id);
-      setSelectedSubmission(submission);
-      setViewDialogOpen(true);
-    } catch (err) {
-      setError('Errore nel caricamento della submission');
-      console.error('Error loading submission:', err);
-    }
-  };
 
-  const handleStatusChange = (submission: FormSubmission) => {
-    setSelectedSubmission(submission);
-    setNewStatus(submission.status);
-    setStatusDialogOpen(true);
-  };
-
-  const handleUpdateStatus = async () => {
-    if (!selectedSubmission) return;
-
-    try {
-      await updateSubmissionStatus(selectedSubmission.id, newStatus);
-      setStatusDialogOpen(false);
-      setSelectedSubmission(null);
-      loadSubmissions();
-    } catch (err) {
-      setError('Errore nell\'aggiornamento dello status');
-      console.error('Error updating status:', err);
-    }
-  };
-
-  const handleDeleteSubmission = async (id: string) => {
-    if (!window.confirm('Sei sicuro di voler eliminare questa submission?')) return;
-
-    try {
-      await deleteSubmission(id);
-      loadSubmissions();
-    } catch (err) {
-      setError('Errore nell\'eliminazione della submission');
-      console.error('Error deleting submission:', err);
-    }
-  };
-
-  const handleExport = async () => {
-    try {
-      const blob = await exportSubmissions(filters.formTemplateId, 'excel');
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `submissions_${new Date().toISOString().split('T')[0]}.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    } catch (err) {
-      setError('Errore nell\'esportazione');
-      console.error('Error exporting:', err);
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'pending': return 'warning';
-      case 'processed': return 'success';
-      case 'archived': return 'error';
-      default: return 'default';
-    }
-  };
-
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case 'pending': return 'In Attesa';
-      case 'processed': return 'Elaborata';
-      case 'archived': return 'Archiviata';
-      default: return status;
-    }
-  };
-
-  const groupSubmissionsByTemplate = (submissions: FormSubmission[]): Record<string, FormSubmission[]> => {
-    return submissions.reduce((groups, submission) => {
-      const templateId = submission.formTemplateId || 'unknown';
-      if (!groups[templateId]) {
-        groups[templateId] = [];
-      }
-      groups[templateId].push(submission);
-      return groups;
-    }, {} as Record<string, FormSubmission[]>);
-  };
 
   // Mostra loading se l'AuthContext sta ancora caricando
   if (authLoading) {
@@ -203,18 +138,17 @@ const FormSubmissionsPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end items-center">
-        {canExport && (
-          <Button
-            variant="outline"
-            onClick={handleExport}
-            className="flex items-center gap-2"
-          >
-            <Download className="h-4 w-4" />
-            Esporta
-          </Button>
-        )}
-      </div>
+      {/* Header */}
+      {!hideHeader && (
+        <div className="flex justify-between items-start">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">Form Submissions</h2>
+            <p className="mt-1 text-sm text-gray-600">
+              Visualizza tutte le risposte ricevute dai form
+            </p>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4 flex items-center justify-between">
@@ -222,7 +156,7 @@ const FormSubmissionsPage: React.FC = () => {
             <AlertCircle className="h-5 w-5 text-red-500 mr-2" />
             <span className="text-red-700">{error}</span>
           </div>
-          <button 
+          <button
             onClick={() => setError(null)}
             className="text-red-500 hover:text-red-700"
           >
@@ -231,353 +165,85 @@ const FormSubmissionsPage: React.FC = () => {
         </div>
       )}
 
-      {/* Filtri */}
-      <Card className="p-4">
-        <div className="flex items-center gap-2 mb-4">
-          <Filter className="h-5 w-5 text-gray-600" />
-          <h2 className="text-lg font-semibold text-gray-900">Filtri</h2>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Status
-            </label>
-            <Select
-               value={filters.status}
-               onChange={(e) => setFilters({ ...filters, status: e.target.value as 'pending' | 'processed' | 'archived' | '' })}
-               placeholder="Tutti"
-             >
-               <option value="">Tutti</option>
-               <option value="pending">In Attesa</option>
-               <option value="processed">Elaborata</option>
-               <option value="archived">Archiviata</option>
-             </Select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Data Da
-            </label>
-            <Input
-              type="date"
-              value={filters.dateFrom}
-              onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Data A
-            </label>
-            <Input
-              type="date"
-              value={filters.dateTo}
-              onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
-            />
-          </div>
-        </div>
-      </Card>
-
-      {/* Cards Submissions raggruppate per Form Template */}
-      <div className="space-y-6">
-        {Object.entries(groupSubmissionsByTemplate(submissions)).map(([templateId, templateSubmissions]) => {
-          const template = templateSubmissions[0]?.formTemplate;
-          const pendingCount = templateSubmissions.filter(s => s.status === 'pending').length;
-          const processedCount = templateSubmissions.filter(s => s.status === 'processed').length;
-          const archivedCount = templateSubmissions.filter(s => s.status === 'archived').length;
-
-          return (
-            <Card key={templateId} className="overflow-hidden">
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900">
-                      {template?.name || 'Form Template Sconosciuto'}
-                    </h3>
-                    <p className="text-sm text-gray-600">
-                      {template?.description || 'Nessuna descrizione disponibile'}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline">
-                      {templateSubmissions.length} submission{templateSubmissions.length !== 1 ? 's' : ''}
-                    </Badge>
-                    {pendingCount > 0 && (
-                      <Badge variant="secondary">
-                        {pendingCount} in attesa
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
-                  <div className="bg-blue-50 p-3 rounded-lg">
-                    <div className="text-sm text-blue-600 font-medium">In Attesa</div>
-                    <div className="text-2xl font-bold text-blue-900">{pendingCount}</div>
-                  </div>
-                  <div className="bg-green-50 p-3 rounded-lg">
-                    <div className="text-sm text-green-600 font-medium">Elaborate</div>
-                    <div className="text-2xl font-bold text-green-900">{processedCount}</div>
-                  </div>
-                  <div className="bg-gray-50 p-3 rounded-lg">
-                    <div className="text-sm text-gray-600 font-medium">Archiviate</div>
-                    <div className="text-2xl font-bold text-gray-900">{archivedCount}</div>
-                  </div>
-                </div>
-
-                <div className="border-t pt-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="text-md font-medium text-gray-900">
-                      Submissions Recenti
-                    </h4>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setSelectedTemplateId(templateId)}
-                    >
-                      <Eye className="h-4 w-4 mr-2" />
-                      Vedi Tutte ({templateSubmissions.length})
-                    </Button>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    {templateSubmissions.slice(0, 3).map((submission) => (
-                      <div
-                        key={submission.id}
-                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer transition-colors"
-                        onClick={() => handleViewSubmission(submission.id)}
-                      >
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-gray-900">
-                              {submission.data?.email || submission.data?.name || 'Anonimo'}
-                            </span>
-                            <Badge
-                              variant={
-                                submission.status === 'pending' ? 'secondary' :
-                                submission.status === 'processed' ? 'default' :
-                                submission.status === 'archived' ? 'destructive' : 'outline'
-                              }
-                              className="text-xs"
-                            >
-                              {getStatusLabel(submission.status)}
-                            </Badge>
-                          </div>
-                          <div className="text-xs text-gray-600 mt-1">
-                            {new Date(submission.submittedAt).toLocaleString('it-IT')}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          {canEdit && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleStatusChange(submission);
-                              }}
-                              className="p-1 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
-                              title="Modifica Status"
-                            >
-                              <Edit className="h-3 w-3" />
-                            </button>
-                          )}
-                          {canDelete && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteSubmission(submission.id);
-                              }}
-                              className="p-1 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                              title="Elimina"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </Card>
-          );
-        })}
-      </div>
-
-      {/* Modal Visualizzazione Submission */}
-      <Modal
-        isOpen={viewDialogOpen}
-        onClose={() => setViewDialogOpen(false)}
-        title="Dettagli Submission"
-        size="lg"
-      >
-        {selectedSubmission && (
-          <div className="space-y-4">
+      {/* Empty State */}
+      {templates.length === 0 && (
+        <Card className="p-12 text-center">
+          <div className="flex flex-col items-center justify-center space-y-4">
+            <div className="rounded-full bg-gray-100 p-4">
+              <FileText className="h-12 w-12 text-gray-400" />
+            </div>
             <div>
-              <h3 className="text-lg font-semibold text-gray-900">
-                Form: {selectedSubmission.formTemplate?.name}
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                Nessun form trovato
               </h3>
               <p className="text-sm text-gray-600">
-                Inviato il: {new Date(selectedSubmission.submittedAt).toLocaleString('it-IT')}
+                Non ci sono ancora form con submissions ricevute.
               </p>
-              <div className="flex items-center gap-2 mt-2">
-                <span className="text-sm text-gray-600">Status:</span>
-                <Badge
-                   variant={
-                     selectedSubmission.status === 'pending' ? 'secondary' :
-                     selectedSubmission.status === 'processed' ? 'default' :
-                     selectedSubmission.status === 'archived' ? 'destructive' : 'outline'
-                   }
-                 >
-                  {getStatusLabel(selectedSubmission.status)}
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Grid dei Form Templates */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {templates.map((template) => (
+          <Card
+            key={template.id}
+            className="overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
+            onClick={() => navigate(`/forms/templates/${template.id}/submissions`)}
+          >
+            <div className="p-6">
+              {/* Header del Template */}
+              <div className="mb-4">
+                <div className="flex items-start justify-between mb-2">
+                  <h3 className="text-lg font-semibold text-gray-900 line-clamp-2">
+                    {template.name}
+                  </h3>
+                  <FileText className="h-5 w-5 text-gray-400 flex-shrink-0 ml-2" />
+                </div>
+                {template.description && (
+                  <p className="text-sm text-gray-600 line-clamp-2">
+                    {template.description}
+                  </p>
+                )}
+              </div>
+
+              {/* Stats Badge */}
+              <div className="flex items-center gap-2 mb-4">
+                <Badge variant="outline" className="text-sm">
+                  <Eye className="h-3 w-3 mr-1" />
+                  {template.submissionCount} {template.submissionCount === 1 ? 'risposta' : 'risposte'}
                 </Badge>
               </div>
-            </div>
-            
-            <div>
-              <h4 className="text-md font-medium text-gray-900 mb-2">
-                Dati Inviati:
-              </h4>
-              <Card className="p-4">
-                <pre className="whitespace-pre-wrap text-sm text-gray-700 overflow-auto max-h-96">
-                  {JSON.stringify(selectedSubmission.data, null, 2)}
-                </pre>
-              </Card>
-            </div>
 
-            <div className="flex justify-end">
-              <Button variant="outline" onClick={() => setViewDialogOpen(false)}>
-                Chiudi
-              </Button>
-            </div>
-          </div>
-        )}
-      </Modal>
-
-      {/* Modal Visualizza Tutte le Submissions di un Template */}
-      <Modal
-        isOpen={!!selectedTemplateId}
-        onClose={() => setSelectedTemplateId(null)}
-        title="Tutte le Submissions"
-        size="xl"
-      >
-        {selectedTemplateId && (
-          <div className="space-y-4">
-            {(() => {
-              const templateSubmissions = groupSubmissionsByTemplate(submissions)[selectedTemplateId] || [];
-              const template = templateSubmissions[0]?.formTemplate;
-              
-              return (
-                <div>
-                  <div className="mb-4">
-                    <h3 className="text-lg font-semibold text-gray-900">
-                      {template?.name || 'Form Template Sconosciuto'}
-                    </h3>
-                    <p className="text-sm text-gray-600">
-                      {templateSubmissions.length} submission{templateSubmissions.length !== 1 ? 's' : ''} totali
-                    </p>
-                  </div>
-                  
-                  <div className="space-y-2 max-h-96 overflow-y-auto">
-                    {templateSubmissions.map((submission) => (
-                      <div
-                        key={submission.id}
-                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer transition-colors"
-                        onClick={() => {
-                          setSelectedTemplateId(null);
-                          handleViewSubmission(submission.id);
-                        }}
-                      >
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-gray-900">
-                              {submission.data?.email || submission.data?.name || 'Anonimo'}
-                            </span>
-                            <Badge
-                              variant={
-                                submission.status === 'pending' ? 'secondary' :
-                                submission.status === 'processed' ? 'default' :
-                                submission.status === 'archived' ? 'destructive' : 'outline'
-                              }
-                              className="text-xs"
-                            >
-                              {getStatusLabel(submission.status)}
-                            </Badge>
-                          </div>
-                          <div className="text-xs text-gray-600 mt-1">
-                            {new Date(submission.submittedAt).toLocaleString('it-IT')}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          {canEdit && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedTemplateId(null);
-                                handleStatusChange(submission);
-                              }}
-                              className="p-1 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
-                              title="Modifica Status"
-                            >
-                              <Edit className="h-3 w-3" />
-                            </button>
-                          )}
-                          {canDelete && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteSubmission(submission.id);
-                              }}
-                              className="p-1 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                              title="Elimina"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  
-                  <div className="flex justify-end mt-4">
-                    <Button variant="outline" onClick={() => setSelectedTemplateId(null)}>
-                      Chiudi
-                    </Button>
-                  </div>
+              {/* Ultima Submission */}
+              {template.lastSubmissionAt && (
+                <div className="text-xs text-gray-500 flex items-center gap-1 mb-4">
+                  <Calendar className="h-3 w-3" />
+                  Ultima risposta: {new Date(template.lastSubmissionAt).toLocaleDateString('it-IT')}
                 </div>
-              );
-            })()}
-          </div>
-        )}
-      </Modal>
+              )}
 
-      {/* Modal Modifica Status */}
-      <Modal
-        isOpen={statusDialogOpen}
-        onClose={() => setStatusDialogOpen(false)}
-        title="Modifica Status"
-      >
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Nuovo Status
-            </label>
-            <Select
-              value={newStatus}
-              onChange={(e) => setNewStatus(e.target.value as 'pending' | 'processed' | 'archived')}
-            >
-              <option value="pending">In Attesa</option>
-              <option value="processed">Elaborata</option>
-              <option value="archived">Archiviata</option>
-            </Select>
-          </div>
-          <div className="flex justify-end gap-3">
-            <Button variant="outline" onClick={() => setStatusDialogOpen(false)}>
-              Annulla
-            </Button>
-            <Button variant="primary" onClick={handleUpdateStatus}>
-              Salva
-            </Button>
-          </div>
-        </div>
-      </Modal>
+              {/* Footer con Azioni */}
+              <div className="border-t pt-4 mt-4">
+                <Button
+                  variant="outline"
+                  className="w-full justify-center"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate(`/forms/templates/${template.id}/submissions`);
+                  }}
+                >
+                  <Eye className="h-4 w-4 mr-2" />
+                  Visualizza Risposte
+                </Button>
+              </div>
+            </div>
+          </Card>
+        ))}
+      </div>
+
+
     </div>
   );
 };

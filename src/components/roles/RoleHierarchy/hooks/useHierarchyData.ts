@@ -6,9 +6,9 @@
  */
 
 import { useState, useEffect } from 'react';
-import { getRoleHierarchy, getCurrentUserRoleHierarchy } from '../../../../services/roles';
+import { getRoleHierarchy, getCurrentUserRoleHierarchy, UserRoleHierarchy } from '../../../../services/roles';
 import { isAuthenticated } from '../../../../services/auth';
-import type { RoleHierarchyType, UserRoleHierarchy, HierarchyState } from '../types';
+import type { RoleHierarchyType, HierarchyState } from '../types';
 
 export const useHierarchyData = () => {
   const [hierarchy, setHierarchy] = useState<RoleHierarchyType>({});

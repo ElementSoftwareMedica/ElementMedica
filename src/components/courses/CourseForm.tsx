@@ -1,9 +1,24 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import type { Course } from '../../types/courses';
 import { useToast } from '../../hooks/useToast';
 import { createCourse, updateCourse } from '../../services/courses';
-import { Save, X } from 'lucide-react';
-import { Button } from '../../design-system/atoms/Button';
+import { isRLSCourse, getRiskLevelOptions } from '../../utils/courseLabels';
+import {
+  Award,
+  BookOpen,
+  Calendar,
+  Clock,
+  Euro,
+  FileText,
+  Globe,
+  Hash,
+  Image,
+  Search,
+  Users
+} from 'lucide-react';
+import EntityFormLayout from '../shared/form/EntityFormLayout';
+import EntityFormField from '../shared/form/EntityFormField';
+import EntityFormGrid, { EntityFormSection, EntityFormFullWidthField } from '../shared/form/EntityFormGrid';
 
 type CourseFormData = Omit<Course, 'id' | 'createdAt' | 'updatedAt'> & {
   riskLevel?: string;
@@ -18,9 +33,9 @@ interface CourseFormProps {
   cancelLabel?: string;
 }
 
-export const CourseForm: React.FC<CourseFormProps> = ({ 
-  course, 
-  onSubmit, 
+export const CourseForm: React.FC<CourseFormProps> = ({
+  course,
+  onSubmit,
   onCancel,
   submitLabel = 'Salva',
   cancelLabel = 'Annulla'
@@ -59,7 +74,7 @@ export const CourseForm: React.FC<CourseFormProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-    
+
     try {
       const payload = {
         ...formData,
@@ -74,7 +89,7 @@ export const CourseForm: React.FC<CourseFormProps> = ({
         code: formData.code && formData.code.trim() !== '' ? formData.code.trim() : undefined,
         slug: formData.slug && formData.slug.trim() !== '' ? formData.slug.trim() : undefined,
       };
-      
+
       if (course) {
         // Update existing course
         await updateCourse(course.id, payload);
@@ -110,429 +125,314 @@ export const CourseForm: React.FC<CourseFormProps> = ({
     }));
   };
 
-  return (
-    <div className="bg-white shadow-md rounded-lg overflow-hidden">
-      {/* Header con titolo */}
-      <div className="bg-gradient-to-r from-gray-700 to-gray-800 px-6 py-4">
-        <h2 className="text-xl font-semibold text-white">{course ? 'Modifica Corso' : 'Nuovo Corso'}</h2>
-      </div>
-      
-      <form onSubmit={handleSubmit} className="p-6">
-        {/* Sezione Informazioni Base */}
-        <div className="mb-8">
-          <h3 className="text-lg font-medium text-gray-800 mb-4 pb-2 border-b">Informazioni Base</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Corso <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                name="title"
-                value={formData.title}
-                onChange={handleChange}
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 transition-colors"
-                placeholder="Inserisci il titolo del corso"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Codice <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                name="code"
-                value={formData.code}
-                onChange={handleChange}
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-                placeholder="Inserisci il codice del corso"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Categoria
-              </label>
-              <input
-                type="text"
-                name="category"
-                value={formData.category}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-                placeholder="Categoria del corso"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Stato
-              </label>
-              <select
-                name="status"
-                value={formData.status}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-              >
-                <option value="Active">Attivo</option>
-                <option value="Inactive">Inattivo</option>
-                <option value="Draft">Bozza</option>
-              </select>
-            </div>
-          </div>
-        </div>
-        
-        {/* Sezione Durata e Validità */}
-        <div className="mb-8">
-          <h3 className="text-lg font-medium text-gray-800 mb-4 pb-2 border-b">Durata e Validità</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Durata corso (ore) <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="number"
-                name="duration"
-                value={formData.duration}
-                onChange={handleChange}
-                required
-                min="0"
-                step="0.5"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Anni validità
-              </label>
-              <input
-                type="number"
-                name="validityYears"
-                value={formData.validityYears}
-                onChange={handleChange}
-                min="0"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Ore formazione pratica
-              </label>
-              <input
-                type="number"
-                name="practicalHours"
-                value={formData.practicalHours}
-                onChange={handleChange}
-                min="0"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-                placeholder="Es: 4"
-              />
-            </div>
-          </div>
-        </div>
-        
-        {/* Sezione Limiti e Costi */}
-        <div className="mb-8">
-          <h3 className="text-lg font-medium text-gray-800 mb-4 pb-2 border-b">Limiti e Costi</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                €/persona
-              </label>
-              <div className="relative">
-                <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500">€</span>
-                <input
-                  type="number"
-                  name="pricePerPerson"
-                  value={formData.pricePerPerson}
-                  onChange={handleChange}
-                  min="0"
-                  step="0.01"
-                  className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 transition-colors"
-                  placeholder="0.00"
-                />
-              </div>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Max persone
-              </label>
-              <input
-                type="number"
-                name="maxPeople"
-                value={formData.maxPeople}
-                onChange={handleChange}
-                min="1"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-                placeholder="Numero massimo di partecipanti"
-              />
-            </div>
-          </div>
-        </div>
-        
-        {/* Sezione Frontend Pubblico */}
-        <div className="mb-8">
-          <h3 className="text-lg font-medium text-gray-800 mb-4 pb-2 border-b">Frontend Pubblico</h3>
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Sottocategoria
-                </label>
-                <input
-                  type="text"
-                  name="subcategory"
-                  value={formData.subcategory}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-                  placeholder="Es: Sicurezza generale"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Livello di Rischio
-                </label>
-                <select
-                  name="riskLevel"
-                  value={formData.riskLevel}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-                >
-                  <option value="">Seleziona livello</option>
-                  <option value="ALTO">Alto</option>
-                  <option value="MEDIO">Medio</option>
-                  <option value="BASSO">Basso</option>
-                  <option value="A">A</option>
-                  <option value="B">B</option>
-                  <option value="C">C</option>
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Tipo Corso
-                </label>
-                <select
-                  name="courseType"
-                  value={formData.courseType}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-                >
-                  <option value="">Seleziona tipo</option>
-                  <option value="PRIMO_CORSO">Primo Corso</option>
-                  <option value="AGGIORNAMENTO">Aggiornamento</option>
-                </select>
-              </div>
-              
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  name="isPublic"
-                  checked={formData.isPublic}
-                  onChange={(e) => setFormData(prev => ({ ...prev, isPublic: e.target.checked }))}
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                />
-                <label className="ml-2 block text-sm font-medium text-gray-700">
-                  Visibile nel frontend pubblico
-                </label>
-              </div>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Descrizione Breve
-              </label>
-              <textarea
-                name="shortDescription"
-                value={formData.shortDescription}
-                onChange={handleChange}
-                rows={2}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-                placeholder="Breve descrizione per le card dei corsi"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Descrizione Completa
-              </label>
-              <textarea
-                name="fullDescription"
-                value={formData.fullDescription}
-                onChange={handleChange}
-                rows={4}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-                placeholder="Descrizione dettagliata per la pagina del corso"
-              />
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  URL Immagine 1
-                </label>
-                <input
-                  type="url"
-                  name="image1Url"
-                  value={formData.image1Url}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-                  placeholder="https://esempio.com/immagine1.jpg"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  URL Immagine 2
-                </label>
-                <input
-                  type="url"
-                  name="image2Url"
-                  value={formData.image2Url}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-                  placeholder="https://esempio.com/immagine2.jpg"
-                />
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Titolo SEO
-                </label>
-                <input
-                  type="text"
-                  name="seoTitle"
-                  value={formData.seoTitle}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-                  placeholder="Titolo ottimizzato per SEO"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Slug URL
-                </label>
-                <input
-                  type="text"
-                  name="slug"
-                  value={formData.slug}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-                  placeholder="corso-sicurezza-rischio-medio"
-                />
-              </div>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Descrizione SEO
-              </label>
-              <textarea
-                name="seoDescription"
-                value={formData.seoDescription}
-                onChange={handleChange}
-                rows={2}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-                placeholder="Descrizione per i motori di ricerca (max 160 caratteri)"
-                maxLength={160}
-              />
-            </div>
-          </div>
-        </div>
+  // Gestisce submit dal EntityFormLayout
+  const handleFormSubmit = () => {
+    // Crea un evento fake per il form submit
+    const fakeEvent = { preventDefault: () => { } } as React.FormEvent;
+    handleSubmit(fakeEvent);
+  };
 
-        {/* Sezione Dettagli Aggiuntivi */}
-        <div className="mb-8">
-          <h3 className="text-lg font-medium text-gray-800 mb-4 pb-2 border-b">Dettagli Aggiuntivi</h3>
-          <div className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Certificazioni <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                name="certifications"
-                value={formData.certifications}
-                onChange={handleChange}
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-                placeholder="Certificazioni rilasciate"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Normativa
-              </label>
-              <input
-                type="text"
-                name="regulation"
-                value={formData.regulation}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-                placeholder="Riferimenti normativi"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Descrizione
-              </label>
-              <textarea
-                name="description"
-                value={formData.description}
-                onChange={handleChange}
-                rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-                placeholder="Inserisci una descrizione del corso"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Contenuti
-              </label>
-              <textarea
-                name="contents"
-                value={formData.contents}
-                onChange={handleChange}
-                rows={4}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-                placeholder="Dettaglio dei contenuti del corso"
-              />
-            </div>
-          </div>
-        </div>
-        
-        {/* Sezione pulsanti di azione */}
-        <div className="flex justify-end pt-4 space-x-4 border-t mt-8">
-          <Button
-            variant="outline"
-            onClick={onCancel}
-            disabled={isSubmitting}
-            leftIcon={<X className="h-4 w-4" />}
-          >
-            {cancelLabel}
-          </Button>
-          
-          <Button
-            variant="primary"
-            type="submit"
-            disabled={isSubmitting}
-            leftIcon={<Save className="h-4 w-4" />}
-          >
-            {isSubmitting ? 'Salvataggio...' : submitLabel}
-          </Button>
-        </div>
-      </form>
-    </div>
+  // Options per i select
+  const statusOptions = [
+    { value: 'Active', label: 'Attivo' },
+    { value: 'Inactive', label: 'Inattivo' },
+    { value: 'Draft', label: 'Bozza' }
+  ];
+
+  // Ottieni opzioni dinamiche per livello di rischio basate sul titolo del corso
+  const isRLS = isRLSCourse(formData.title);
+  const riskLevelOptions = useMemo(() => {
+    const options = getRiskLevelOptions(formData.title);
+    return [
+      { value: '', label: 'Seleziona livello' },
+      ...options
+    ];
+  }, [formData.title, isRLS]);
+
+  const courseTypeOptions = [
+    { value: '', label: 'Seleziona tipo' },
+    { value: 'PRIMO_CORSO', label: 'Primo Corso' },
+    { value: 'AGGIORNAMENTO', label: 'Aggiornamento' }
+  ];
+
+  return (
+    <EntityFormLayout
+      title={course ? 'Modifica Corso' : 'Nuovo Corso'}
+      subtitle={course ? `Modifica i dati del corso ${course.title}` : 'Inserisci i dati del nuovo corso'}
+      onSubmit={handleFormSubmit}
+      onClose={onCancel}
+      isSaving={isSubmitting}
+      submitLabel={submitLabel}
+      cancelLabel={cancelLabel}
+    >
+      {/* Sezione Informazioni Base */}
+      <EntityFormSection title="Informazioni Base" description="Dati principali del corso">
+        <EntityFormGrid>
+          <EntityFormField
+            label="Titolo Corso"
+            name="title"
+            value={formData.title}
+            onChange={handleChange}
+            required
+            placeholder="Inserisci il titolo del corso"
+            leftIcon={<BookOpen className="h-5 w-5 text-gray-400" />}
+          />
+
+          <EntityFormField
+            label="Codice"
+            name="code"
+            value={formData.code}
+            onChange={handleChange}
+            required
+            placeholder="Inserisci il codice del corso"
+            leftIcon={<Hash className="h-5 w-5 text-gray-400" />}
+          />
+
+          <EntityFormField
+            label="Categoria"
+            name="category"
+            value={formData.category}
+            onChange={handleChange}
+            placeholder="Categoria del corso"
+            leftIcon={<FileText className="h-5 w-5 text-gray-400" />}
+          />
+
+          <EntityFormField
+            label="Stato"
+            name="status"
+            type="select"
+            value={formData.status}
+            onChange={handleChange}
+            options={statusOptions}
+          />
+        </EntityFormGrid>
+      </EntityFormSection>
+
+      {/* Sezione Durata e Validità */}
+      <EntityFormSection title="Durata e Validità" description="Informazioni su durata e validità del corso">
+        <EntityFormGrid>
+          <EntityFormField
+            label="Durata corso (ore)"
+            name="duration"
+            type="number"
+            value={formData.duration}
+            onChange={handleChange}
+            required
+            placeholder="Es: 8"
+            leftIcon={<Clock className="h-5 w-5 text-gray-400" />}
+          />
+
+          <EntityFormField
+            label="Anni validità"
+            name="validityYears"
+            type="number"
+            value={formData.validityYears}
+            onChange={handleChange}
+            placeholder="Es: 5"
+            leftIcon={<Calendar className="h-5 w-5 text-gray-400" />}
+          />
+
+          <EntityFormField
+            label="Ore formazione pratica"
+            name="practicalHours"
+            type="number"
+            value={formData.practicalHours}
+            onChange={handleChange}
+            placeholder="Es: 4"
+            leftIcon={<Clock className="h-5 w-5 text-gray-400" />}
+          />
+        </EntityFormGrid>
+      </EntityFormSection>
+
+      {/* Sezione Limiti e Costi */}
+      <EntityFormSection title="Limiti e Costi" description="Informazioni su prezzi e limiti partecipanti">
+        <EntityFormGrid>
+          <EntityFormField
+            label="Prezzo per persona (€)"
+            name="pricePerPerson"
+            type="number"
+            value={formData.pricePerPerson}
+            onChange={handleChange}
+            placeholder="0.00"
+            leftIcon={<Euro className="h-5 w-5 text-gray-400" />}
+          />
+
+          <EntityFormField
+            label="Max partecipanti"
+            name="maxPeople"
+            type="number"
+            value={formData.maxPeople}
+            onChange={handleChange}
+            placeholder="Numero massimo"
+            leftIcon={<Users className="h-5 w-5 text-gray-400" />}
+          />
+        </EntityFormGrid>
+      </EntityFormSection>
+
+      {/* Sezione Frontend Pubblico */}
+      <EntityFormSection title="Frontend Pubblico" description="Configurazione per la visualizzazione pubblica">
+        <EntityFormGrid>
+          <EntityFormField
+            label="Sottocategoria"
+            name="subcategory"
+            value={formData.subcategory}
+            onChange={handleChange}
+            placeholder="Es: Sicurezza generale"
+          />
+
+          <EntityFormField
+            label="Livello di Rischio"
+            name="riskLevel"
+            type="select"
+            value={formData.riskLevel}
+            onChange={handleChange}
+            options={riskLevelOptions}
+          />
+
+          <EntityFormField
+            label="Tipo Corso"
+            name="courseType"
+            type="select"
+            value={formData.courseType}
+            onChange={handleChange}
+            options={courseTypeOptions}
+          />
+
+          <EntityFormField
+            label="Visibile pubblicamente"
+            name="isPublic"
+            type="checkbox"
+            value={formData.isPublic}
+            onChange={(e) => setFormData(prev => ({
+              ...prev,
+              isPublic: (e.target as HTMLInputElement).checked
+            }))}
+          />
+        </EntityFormGrid>
+
+        <EntityFormFullWidthField>
+          <EntityFormField
+            label="Descrizione Breve"
+            name="shortDescription"
+            value={formData.shortDescription}
+            onChange={handleChange}
+            multiline
+            rows={2}
+            placeholder="Breve descrizione per le card dei corsi"
+          />
+        </EntityFormFullWidthField>
+
+        <EntityFormFullWidthField>
+          <EntityFormField
+            label="Descrizione Completa"
+            name="fullDescription"
+            value={formData.fullDescription}
+            onChange={handleChange}
+            multiline
+            rows={4}
+            placeholder="Descrizione dettagliata per la pagina del corso"
+          />
+        </EntityFormFullWidthField>
+
+        <EntityFormGrid>
+          <EntityFormField
+            label="URL Immagine 1"
+            name="image1Url"
+            value={formData.image1Url}
+            onChange={handleChange}
+            placeholder="https://esempio.com/immagine1.jpg"
+            leftIcon={<Image className="h-5 w-5 text-gray-400" />}
+          />
+
+          <EntityFormField
+            label="URL Immagine 2"
+            name="image2Url"
+            value={formData.image2Url}
+            onChange={handleChange}
+            placeholder="https://esempio.com/immagine2.jpg"
+            leftIcon={<Image className="h-5 w-5 text-gray-400" />}
+          />
+
+          <EntityFormField
+            label="Titolo SEO"
+            name="seoTitle"
+            value={formData.seoTitle}
+            onChange={handleChange}
+            placeholder="Titolo ottimizzato per SEO"
+            leftIcon={<Search className="h-5 w-5 text-gray-400" />}
+          />
+
+          <EntityFormField
+            label="Slug URL"
+            name="slug"
+            value={formData.slug}
+            onChange={handleChange}
+            placeholder="corso-sicurezza-rischio-medio"
+            leftIcon={<Globe className="h-5 w-5 text-gray-400" />}
+          />
+        </EntityFormGrid>
+
+        <EntityFormFullWidthField>
+          <EntityFormField
+            label="Descrizione SEO"
+            name="seoDescription"
+            value={formData.seoDescription}
+            onChange={handleChange}
+            multiline
+            rows={2}
+            placeholder="Descrizione per i motori di ricerca (max 160 caratteri)"
+            helpText="Massimo 160 caratteri per una visualizzazione ottimale nei risultati di ricerca"
+          />
+        </EntityFormFullWidthField>
+      </EntityFormSection>
+
+      {/* Sezione Dettagli Aggiuntivi */}
+      <EntityFormSection title="Dettagli Aggiuntivi" description="Certificazioni, normativa e contenuti">
+        <EntityFormGrid>
+          <EntityFormField
+            label="Certificazioni"
+            name="certifications"
+            value={formData.certifications}
+            onChange={handleChange}
+            required
+            placeholder="Certificazioni rilasciate"
+            leftIcon={<Award className="h-5 w-5 text-gray-400" />}
+          />
+
+          <EntityFormField
+            label="Normativa"
+            name="regulation"
+            value={formData.regulation}
+            onChange={handleChange}
+            placeholder="Riferimenti normativi"
+            leftIcon={<FileText className="h-5 w-5 text-gray-400" />}
+          />
+        </EntityFormGrid>
+
+        <EntityFormFullWidthField>
+          <EntityFormField
+            label="Descrizione"
+            name="description"
+            value={formData.description}
+            onChange={handleChange}
+            multiline
+            rows={3}
+            placeholder="Inserisci una descrizione del corso"
+          />
+        </EntityFormFullWidthField>
+
+        <EntityFormFullWidthField>
+          <EntityFormField
+            label="Contenuti"
+            name="contents"
+            value={formData.contents}
+            onChange={handleChange}
+            multiline
+            rows={4}
+            placeholder="Dettaglio dei contenuti del corso"
+          />
+        </EntityFormFullWidthField>
+      </EntityFormSection>
+    </EntityFormLayout>
   );
 };

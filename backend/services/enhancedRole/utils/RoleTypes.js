@@ -5,6 +5,7 @@
 
 /**
  * Tipi di ruolo disponibili nel sistema
+ * Sincronizzati con l'enum RoleType in schema.prisma
  */
 export const ROLE_TYPES = {
   EMPLOYEE: 'EMPLOYEE',
@@ -19,6 +20,9 @@ export const ROLE_TYPES = {
   ADMIN: 'ADMIN',
   COMPANY_ADMIN: 'COMPANY_ADMIN',
   TENANT_ADMIN: 'TENANT_ADMIN',
+  TRAINING_ADMIN: 'TRAINING_ADMIN',
+  CLINIC_ADMIN: 'CLINIC_ADMIN',
+  COMPANY_MANAGER: 'COMPANY_MANAGER',
   VIEWER: 'VIEWER',
   OPERATOR: 'OPERATOR',
   COORDINATOR: 'COORDINATOR',
@@ -48,52 +52,52 @@ export const PERMISSIONS = {
   'users.update': 'Modificare utenti',
   'users.delete': 'Eliminare utenti',
   'users.manage_roles': 'Gestire ruoli utenti',
-  
+
   // Role Management
   'roles.create': 'Creare ruoli',
   'roles.read': 'Visualizzare ruoli',
   'roles.update': 'Modificare ruoli',
   'roles.delete': 'Eliminare ruoli',
-  
+
   // Company Management
   'companies.create': 'Creare aziende',
   'companies.read': 'Visualizzare aziende',
   'companies.update': 'Modificare aziende',
   'companies.delete': 'Eliminare aziende',
   'companies.manage_settings': 'Gestire impostazioni azienda',
-  
+
   // Course Management
   'courses.create': 'Creare corsi',
   'courses.read': 'Visualizzare corsi',
   'courses.update': 'Modificare corsi',
   'courses.delete': 'Eliminare corsi',
   'courses.assign': 'Assegnare corsi',
-  
+
   // Training Management
   'training.create': 'Creare sessioni formative',
   'training.read': 'Visualizzare formazioni',
   'training.update': 'Modificare formazioni',
   'training.delete': 'Eliminare formazioni',
   'training.conduct': 'Condurre formazioni',
-  
+
   // Reports and Analytics
   'reports.view': 'Visualizzare report',
   'reports.export': 'Esportare report',
   'analytics.view': 'Visualizzare analytics',
-  
+
   // System Administration
   'system.settings': 'Gestire impostazioni sistema',
   'system.billing': 'Gestire fatturazione',
   'system.audit': 'Visualizzare audit logs',
   'system.backup': 'Gestire backup',
-  
+
   // Form Templates Management
   'VIEW_FORM_TEMPLATES': 'Visualizzare template form',
   'CREATE_FORM_TEMPLATES': 'Creare template form',
   'EDIT_FORM_TEMPLATES': 'Modificare template form',
   'DELETE_FORM_TEMPLATES': 'Eliminare template form',
   'MANAGE_FORM_TEMPLATES': 'Gestire template form',
-  
+
   // CMS Management
   'VIEW_CMS': 'Visualizzare CMS',
   'CREATE_CMS': 'Creare contenuti CMS',
@@ -101,7 +105,7 @@ export const PERMISSIONS = {
   'DELETE_CMS': 'Eliminare contenuti CMS',
   'MANAGE_PUBLIC_CONTENT': 'Gestire contenuti pubblici',
   'READ_PUBLIC_CONTENT': 'Leggere contenuti pubblici',
-  
+
   // Submissions Management
   'VIEW_SUBMISSIONS': 'Visualizzare invii form',
   'MANAGE_SUBMISSIONS': 'Gestire invii form',
@@ -190,9 +194,11 @@ export function getDefaultPermissions(roleType) {
       'VIEW_TEMPLATES', 'CREATE_TEMPLATES', 'EDIT_TEMPLATES', 'DELETE_TEMPLATES', 'MANAGE_TEMPLATES',
       // Permessi generici per compatibilità
       'VIEW_CMS', 'CREATE_CMS', 'EDIT_CMS', 'DELETE_CMS', 'MANAGE_PUBLIC_CONTENT', 'READ_PUBLIC_CONTENT',
-      'VIEW_SUBMISSIONS', 'CREATE_SUBMISSIONS', 'EDIT_SUBMISSIONS', 'DELETE_SUBMISSIONS', 'MANAGE_SUBMISSIONS', 'EXPORT_SUBMISSIONS'
+      'VIEW_SUBMISSIONS', 'CREATE_SUBMISSIONS', 'EDIT_SUBMISSIONS', 'DELETE_SUBMISSIONS', 'MANAGE_SUBMISSIONS', 'EXPORT_SUBMISSIONS',
+      // Permessi CMS Media
+      'VIEW_CMS_MEDIA', 'CREATE_CMS_MEDIA', 'EDIT_CMS_MEDIA', 'DELETE_CMS_MEDIA'
     ],
-    
+
     [ROLE_TYPES.ADMIN]: [
       // Permessi amministrativi completi
       'VIEW_COMPANIES', 'CREATE_COMPANIES', 'EDIT_COMPANIES', 'DELETE_COMPANIES',
@@ -218,9 +224,11 @@ export function getDefaultPermissions(roleType) {
       'VIEW_TEMPLATES', 'CREATE_TEMPLATES', 'EDIT_TEMPLATES', 'DELETE_TEMPLATES', 'MANAGE_TEMPLATES',
       // Permessi generici per compatibilità
       'VIEW_CMS', 'CREATE_CMS', 'EDIT_CMS', 'DELETE_CMS', 'MANAGE_PUBLIC_CONTENT', 'READ_PUBLIC_CONTENT',
-      'VIEW_SUBMISSIONS', 'CREATE_SUBMISSIONS', 'EDIT_SUBMISSIONS', 'DELETE_SUBMISSIONS', 'MANAGE_SUBMISSIONS', 'EXPORT_SUBMISSIONS'
+      'VIEW_SUBMISSIONS', 'CREATE_SUBMISSIONS', 'EDIT_SUBMISSIONS', 'DELETE_SUBMISSIONS', 'MANAGE_SUBMISSIONS', 'EXPORT_SUBMISSIONS',
+      // Permessi CMS Media
+      'VIEW_CMS_MEDIA', 'CREATE_CMS_MEDIA', 'EDIT_CMS_MEDIA', 'DELETE_CMS_MEDIA'
     ],
-    
+
     [ROLE_TYPES.COMPANY_ADMIN]: [
       'CREATE_USERS', 'VIEW_USERS', 'EDIT_USERS', 'DELETE_USERS', 'ROLE_MANAGEMENT',
       'VIEW_COMPANIES', 'EDIT_COMPANIES',
@@ -239,9 +247,11 @@ export function getDefaultPermissions(roleType) {
       'VIEW_TEMPLATES', 'CREATE_TEMPLATES', 'EDIT_TEMPLATES',
       // Permessi generici per compatibilità
       'VIEW_CMS', 'EDIT_CMS', 'MANAGE_PUBLIC_CONTENT',
-      'VIEW_SUBMISSIONS', 'CREATE_SUBMISSIONS', 'EDIT_SUBMISSIONS', 'MANAGE_SUBMISSIONS', 'EXPORT_SUBMISSIONS'
+      'VIEW_SUBMISSIONS', 'CREATE_SUBMISSIONS', 'EDIT_SUBMISSIONS', 'MANAGE_SUBMISSIONS', 'EXPORT_SUBMISSIONS',
+      // Permessi CMS Media
+      'VIEW_CMS_MEDIA', 'CREATE_CMS_MEDIA', 'EDIT_CMS_MEDIA'
     ],
-    
+
     [ROLE_TYPES.TENANT_ADMIN]: [
       'CREATE_USERS', 'VIEW_USERS', 'EDIT_USERS', 'DELETE_USERS', 'ROLE_MANAGEMENT',
       'VIEW_COMPANIES', 'EDIT_COMPANIES',
@@ -260,9 +270,11 @@ export function getDefaultPermissions(roleType) {
       'VIEW_TEMPLATES', 'CREATE_TEMPLATES', 'EDIT_TEMPLATES',
       // Permessi generici per compatibilità
       'VIEW_CMS', 'EDIT_CMS', 'MANAGE_PUBLIC_CONTENT',
-      'VIEW_SUBMISSIONS', 'CREATE_SUBMISSIONS', 'EDIT_SUBMISSIONS', 'MANAGE_SUBMISSIONS', 'EXPORT_SUBMISSIONS'
+      'VIEW_SUBMISSIONS', 'CREATE_SUBMISSIONS', 'EDIT_SUBMISSIONS', 'MANAGE_SUBMISSIONS', 'EXPORT_SUBMISSIONS',
+      // Permessi CMS Media
+      'VIEW_CMS_MEDIA', 'CREATE_CMS_MEDIA', 'EDIT_CMS_MEDIA'
     ],
-    
+
     [ROLE_TYPES.MANAGER]: [
       'VIEW_USERS', 'EDIT_USERS',
       'VIEW_COMPANIES',
@@ -272,7 +284,7 @@ export function getDefaultPermissions(roleType) {
       'VIEW_SCHEDULES', 'CREATE_SCHEDULES', 'EDIT_SCHEDULES',
       'VIEW_REPORTS', 'VIEW_ANALYTICS'
     ],
-    
+
     [ROLE_TYPES.HR_MANAGER]: [
       'CREATE_USERS', 'VIEW_USERS', 'EDIT_USERS', 'ROLE_MANAGEMENT',
       'VIEW_COMPANIES',
@@ -282,7 +294,7 @@ export function getDefaultPermissions(roleType) {
       'VIEW_SCHEDULES', 'CREATE_SCHEDULES', 'EDIT_SCHEDULES',
       'VIEW_REPORTS', 'VIEW_ANALYTICS'
     ],
-    
+
     [ROLE_TYPES.TRAINER]: [
       'VIEW_USERS',
       'VIEW_COURSES',
@@ -290,7 +302,7 @@ export function getDefaultPermissions(roleType) {
       'VIEW_SCHEDULES',
       'VIEW_REPORTS'
     ],
-    
+
     [ROLE_TYPES.SENIOR_TRAINER]: [
       'VIEW_USERS',
       'VIEW_COURSES', 'EDIT_COURSES',
@@ -299,16 +311,130 @@ export function getDefaultPermissions(roleType) {
       'CREATE_SCHEDULES', 'VIEW_SCHEDULES', 'EDIT_SCHEDULES',
       'VIEW_REPORTS'
     ],
-    
+
     [ROLE_TYPES.EMPLOYEE]: [
       'VIEW_COURSES',
-      'VIEW_SCHEDULES'
+      'VIEW_SCHEDULES',
+      'VIEW_PERSONS',      // Per vedere formatori/colleghi
+      'VIEW_DOCUMENTS',    // Per vedere documenti assegnati
+      'DOWNLOAD_DOCUMENTS', // Per scaricare documenti
+      'VIEW_NOTIFICATIONS' // Per vedere notifiche personali
     ],
-    
+
     [ROLE_TYPES.VIEWER]: [
       'VIEW_COURSES',
       'VIEW_SCHEDULES',
       'VIEW_REPORTS'
+    ],
+
+    [ROLE_TYPES.TRAINING_ADMIN]: [
+      'VIEW_USERS', 'CREATE_USERS', 'EDIT_USERS',
+      'VIEW_COMPANIES',
+      'VIEW_COURSES', 'CREATE_COURSES', 'EDIT_COURSES', 'DELETE_COURSES',
+      'VIEW_EMPLOYEES', 'CREATE_EMPLOYEES', 'EDIT_EMPLOYEES',
+      'VIEW_TRAINERS', 'CREATE_TRAINERS', 'EDIT_TRAINERS', 'DELETE_TRAINERS',
+      'VIEW_SCHEDULES', 'CREATE_SCHEDULES', 'EDIT_SCHEDULES', 'DELETE_SCHEDULES',
+      'VIEW_REPORTS', 'EXPORT_REPORTS',
+      'VIEW_FORM_TEMPLATES', 'CREATE_FORM_TEMPLATES', 'EDIT_FORM_TEMPLATES',
+      'VIEW_FORM_SUBMISSIONS', 'MANAGE_FORM_SUBMISSIONS', 'EXPORT_FORM_SUBMISSIONS',
+      'VIEW_TEMPLATES', 'CREATE_TEMPLATES', 'EDIT_TEMPLATES'
+    ],
+
+    [ROLE_TYPES.CLINIC_ADMIN]: [
+      'VIEW_USERS', 'CREATE_USERS', 'EDIT_USERS',
+      'VIEW_COMPANIES',
+      'VIEW_COURSES', 'CREATE_COURSES', 'EDIT_COURSES',
+      'VIEW_EMPLOYEES', 'CREATE_EMPLOYEES', 'EDIT_EMPLOYEES',
+      'VIEW_SCHEDULES', 'CREATE_SCHEDULES', 'EDIT_SCHEDULES',
+      'VIEW_REPORTS', 'EXPORT_REPORTS',
+      'VIEW_FORM_TEMPLATES', 'CREATE_FORM_TEMPLATES', 'EDIT_FORM_TEMPLATES',
+      'VIEW_FORM_SUBMISSIONS', 'MANAGE_FORM_SUBMISSIONS'
+    ],
+
+    [ROLE_TYPES.COMPANY_MANAGER]: [
+      'VIEW_USERS', 'EDIT_USERS',
+      'VIEW_COMPANIES', 'EDIT_COMPANIES',
+      'VIEW_COURSES',
+      'VIEW_EMPLOYEES', 'CREATE_EMPLOYEES', 'EDIT_EMPLOYEES',
+      'VIEW_SCHEDULES', 'CREATE_SCHEDULES', 'EDIT_SCHEDULES',
+      'VIEW_REPORTS'
+    ],
+
+    [ROLE_TYPES.DEPARTMENT_HEAD]: [
+      'VIEW_USERS',
+      'VIEW_COMPANIES',
+      'VIEW_COURSES',
+      'VIEW_EMPLOYEES', 'EDIT_EMPLOYEES',
+      'VIEW_SCHEDULES', 'CREATE_SCHEDULES', 'EDIT_SCHEDULES',
+      'VIEW_REPORTS'
+    ],
+
+    [ROLE_TYPES.TRAINER_COORDINATOR]: [
+      'VIEW_USERS',
+      'VIEW_COURSES', 'CREATE_COURSES', 'EDIT_COURSES',
+      'VIEW_EMPLOYEES',
+      'VIEW_TRAINERS', 'CREATE_TRAINERS', 'EDIT_TRAINERS',
+      'VIEW_SCHEDULES', 'CREATE_SCHEDULES', 'EDIT_SCHEDULES',
+      'VIEW_REPORTS'
+    ],
+
+    [ROLE_TYPES.EXTERNAL_TRAINER]: [
+      'VIEW_COURSES',
+      'VIEW_EMPLOYEES',
+      'VIEW_SCHEDULES',
+      'VIEW_REPORTS'
+    ],
+
+    [ROLE_TYPES.OPERATOR]: [
+      'VIEW_USERS',
+      'VIEW_COMPANIES',
+      'VIEW_COURSES',
+      'VIEW_EMPLOYEES',
+      'VIEW_SCHEDULES', 'CREATE_SCHEDULES', 'EDIT_SCHEDULES',
+      'VIEW_REPORTS'
+    ],
+
+    [ROLE_TYPES.COORDINATOR]: [
+      'VIEW_USERS',
+      'VIEW_COMPANIES',
+      'VIEW_COURSES', 'CREATE_COURSES', 'EDIT_COURSES',
+      'VIEW_EMPLOYEES', 'CREATE_EMPLOYEES', 'EDIT_EMPLOYEES',
+      'VIEW_TRAINERS',
+      'VIEW_SCHEDULES', 'CREATE_SCHEDULES', 'EDIT_SCHEDULES',
+      'VIEW_REPORTS', 'EXPORT_REPORTS'
+    ],
+
+    [ROLE_TYPES.SUPERVISOR]: [
+      'VIEW_USERS',
+      'VIEW_COMPANIES',
+      'VIEW_COURSES',
+      'VIEW_EMPLOYEES',
+      'VIEW_TRAINERS',
+      'VIEW_SCHEDULES',
+      'VIEW_REPORTS', 'EXPORT_REPORTS'
+    ],
+
+    [ROLE_TYPES.GUEST]: [
+      'VIEW_COURSES',
+      'VIEW_SCHEDULES'
+    ],
+
+    [ROLE_TYPES.CONSULTANT]: [
+      'VIEW_COMPANIES',
+      'VIEW_COURSES',
+      'VIEW_EMPLOYEES',
+      'VIEW_SCHEDULES',
+      'VIEW_REPORTS', 'EXPORT_REPORTS'
+    ],
+
+    [ROLE_TYPES.AUDITOR]: [
+      'VIEW_COMPANIES',
+      'VIEW_COURSES',
+      'VIEW_EMPLOYEES',
+      'VIEW_TRAINERS',
+      'VIEW_SCHEDULES',
+      'VIEW_REPORTS', 'EXPORT_REPORTS',
+      'VIEW_GDPR', 'VIEW_GDPR_DATA', 'EXPORT_GDPR_DATA'
     ]
   };
 
@@ -328,13 +454,13 @@ export function roleHasPermission(roleType, permission) {
  */
 export function getRolesWithPermission(permission) {
   const rolesWithPermission = [];
-  
+
   Object.values(ROLE_TYPES).forEach(roleType => {
     if (roleHasPermission(roleType, permission)) {
       rolesWithPermission.push(roleType);
     }
   });
-  
+
   return rolesWithPermission;
 }
 

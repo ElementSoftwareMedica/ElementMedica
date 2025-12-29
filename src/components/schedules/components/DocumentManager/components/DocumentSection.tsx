@@ -101,7 +101,7 @@ export const DocumentSection: React.FC<DocumentSectionProps> = ({
         <button
           onClick={onGenerate}
           disabled={!canGenerate || loading}
-          className={`px-4 py-2 ${colors.button} text-white rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed transition-all flex items-center gap-2 min-w-[140px] justify-center`}
+          className={`px-4 py-2 ${colors.button} text-white rounded-full disabled:bg-gray-300 disabled:cursor-not-allowed transition-all flex items-center gap-2 min-w-[140px] justify-center`}
         >
           {loading ? (
             <>

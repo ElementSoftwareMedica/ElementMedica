@@ -91,7 +91,7 @@ const LanguageSelector: React.FC<LanguageSelectorProps> = ({
       <div className="space-y-3">
         <Select
           value={currentLanguage}
-          onValueChange={handleLanguageChange}
+          onValueChange={(value) => { void handleLanguageChange(value as LanguageCode); }}
           disabled={loading}
         >
           <SelectTrigger id="language-select">

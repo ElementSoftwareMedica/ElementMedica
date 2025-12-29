@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/rules-of-hooks */
 /**
  * Design System - SearchBox Stories
  * Week 8 Implementation - Component Library
@@ -118,7 +119,7 @@ export const Interactive: Story = {
       }
 
       setLoading(true);
-      
+
       // Simulate API call
       setTimeout(() => {
         const mockResults = [
@@ -146,7 +147,7 @@ export const Interactive: Story = {
           loading={loading}
           placeholder="Cerca e premi Invio..."
         />
-        
+
         {results.length > 0 && (
           <div className="mt-4 p-4 bg-gray-50 rounded-lg">
             <h4 className="font-medium text-gray-900 mb-2">Risultati:</h4>
@@ -168,8 +169,8 @@ export const Interactive: Story = {
 export const FullWidth: Story = {
   render: () => (
     <div className="w-full max-w-2xl">
-      <SearchBox 
-        placeholder="Search box a larghezza completa" 
+      <SearchBox
+        placeholder="Search box a larghezza completa"
         containerClassName="w-full"
       />
     </div>

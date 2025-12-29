@@ -29,6 +29,8 @@ export {
   type PermissionsSummary,
   type VirtualEntityName,
   type PermissionAction,
+  type RelationType,
+  type PermissionScope,
   ALL_ENTITY_DEFINITIONS,
   CRITICAL_ENTITIES,
   convertFromBackendFormat,

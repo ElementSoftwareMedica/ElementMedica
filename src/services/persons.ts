@@ -49,7 +49,7 @@ export interface UpdatePersonDTO {
 export interface PersonsFilters {
   roleType?: string;
   isActive?: boolean;
-  companyId?: number;
+  companyId?: string | number; // UUID (string) o legacy number
   search?: string;
   sortBy?: 'lastLogin' | 'firstName' | 'lastName' | 'createdAt';
   sortOrder?: 'asc' | 'desc';
@@ -70,21 +70,21 @@ export class PersonsService {
    */
   static async getPersons(filters: PersonsFilters = {}): Promise<PersonsResponse> {
     const params = new URLSearchParams();
-    
+
     // Imposta ordinamento di default per ultimo login (più recente prima)
     const sortBy = filters.sortBy || 'lastLogin';
     const sortOrder = filters.sortOrder || 'desc';
-    
+
     params.append('sortBy', sortBy);
     params.append('sortOrder', sortOrder);
-    
+
     if (filters.roleType) params.append('roleType', filters.roleType);
     if (filters.isActive !== undefined) params.append('isActive', filters.isActive.toString());
     if (filters.companyId) params.append('companyId', filters.companyId.toString());
     if (filters.search) params.append('search', filters.search);
     if (filters.page) params.append('page', filters.page.toString());
     if (filters.limit) params.append('limit', filters.limit.toString());
-    
+
     const raw = await apiGet(`/api/v1/persons?${params.toString()}`) as any;
 
     // Development logging for debugging
@@ -127,7 +127,7 @@ export class PersonsService {
       // ✅ FIX: Supporta sia UUID (string) che ID numerico, senza conversione forzata
       const companyId = p?.companyId ?? p?.company_id ?? p?.company?.id;
       const finalCompanyId = companyId ? (typeof companyId === 'number' ? companyId : String(companyId)) : undefined;
-      
+
       return {
         id: String(p.id),
         firstName: p.firstName ?? p.first_name ?? '',
@@ -152,15 +152,15 @@ export class PersonsService {
     // Metadati di paginazione con fallback
     const total: number = typeof raw?.total === 'number' ? raw.total
       : typeof raw?.data?.total === 'number' ? raw.data.total
-      : typeof raw?.count === 'number' ? raw.count
-      : persons.length;
+        : typeof raw?.count === 'number' ? raw.count
+          : persons.length;
     const page: number = typeof raw?.page === 'number' ? raw.page
       : typeof raw?.data?.page === 'number' ? raw.data.page
-      : 1;
+        : 1;
     const limit: number | undefined = typeof filters.limit === 'number' ? filters.limit : undefined;
     const totalPages: number = typeof raw?.totalPages === 'number' ? raw.totalPages
       : typeof raw?.data?.totalPages === 'number' ? raw.data.totalPages
-      : limit ? Math.max(1, Math.ceil(total / limit)) : 1;
+        : limit ? Math.max(1, Math.ceil(total / limit)) : 1;
 
     return { persons, total, page, totalPages } as PersonsResponse;
   }
@@ -258,12 +258,12 @@ export class PersonsService {
    */
   static async exportPersons(filters: PersonsFilters = {}): Promise<Blob> {
     const params = new URLSearchParams();
-    
+
     if (filters.roleType) params.append('roleType', filters.roleType);
     if (filters.isActive !== undefined) params.append('isActive', filters.isActive.toString());
     if (filters.companyId) params.append('companyId', filters.companyId.toString());
     if (filters.search) params.append('search', filters.search);
-    
+
     const response = await apiGet(`/api/v1/persons/export?${params.toString()}`, {
       responseType: 'blob'
     }) as Blob;
@@ -279,7 +279,7 @@ export class PersonsService {
   }> {
     const formData = new FormData();
     formData.append('file', file);
-    
+
     const response = await apiPost('/api/v1/persons/import', formData) as {
       imported: number;
       errors: Array<{ row: number; error: string }>;

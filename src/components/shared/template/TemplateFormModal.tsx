@@ -57,33 +57,33 @@ export const TemplateFormModal: React.FC<TemplateFormModalProps> = ({
           <h2 className="text-xl font-semibold">
             {modalData.isEditing ? 'Modifica Template' : 'Aggiungi Nuovo Template'}
           </h2>
-          <button 
+          <button
             onClick={onClose}
             className="text-gray-500 hover:text-gray-700"
           >
             <X className="w-6 h-6" />
           </button>
         </div>
-        
-        <form onSubmit={onSubmit} className="space-y-4">
+
+        <form onSubmit={onSubmit} className="space-y-4" noValidate>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Nome Template</label>
             <input
               type="text"
               value={modalData.name}
-              onChange={(e) => setModalData({...modalData, name: e.target.value})}
+              onChange={(e) => setModalData({ ...modalData, name: e.target.value })}
               placeholder="Nome descrittivo del template"
               className="w-full p-2 border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500"
               required
             />
           </div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Tipo Documento</label>
               <select
                 value={modalData.type}
-                onChange={(e) => setModalData({...modalData, type: e.target.value})}
+                onChange={(e) => setModalData({ ...modalData, type: e.target.value })}
                 className="w-full p-2 border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500"
               >
                 {templateTypes.map(type => (
@@ -91,12 +91,12 @@ export const TemplateFormModal: React.FC<TemplateFormModalProps> = ({
                 ))}
               </select>
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Formato</label>
               <select
                 value={modalData.fileFormat}
-                onChange={(e) => setModalData({...modalData, fileFormat: e.target.value})}
+                onChange={(e) => setModalData({ ...modalData, fileFormat: e.target.value })}
                 className="w-full p-2 border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500"
               >
                 {fileFormats.map(format => (
@@ -105,30 +105,30 @@ export const TemplateFormModal: React.FC<TemplateFormModalProps> = ({
               </select>
             </div>
           </div>
-          
+
           <div className="space-y-4 mt-4">
             <div className="border-t border-b border-gray-200 py-4">
               <h3 className="text-sm font-medium text-gray-700 mb-3">Origine Template</h3>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">URL Template</label>
                   <input
                     type="text"
                     value={modalData.url}
-                    onChange={(e) => setModalData({...modalData, url: e.target.value})}
+                    onChange={(e) => setModalData({ ...modalData, url: e.target.value })}
                     placeholder="https://example.com/template"
                     className="w-full p-2 border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500"
                   />
                   <p className="mt-1 text-xs text-gray-500">URL al template esistente</p>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Google Docs URL</label>
                   <input
                     type="text"
                     value={modalData.googleDocsUrl}
-                    onChange={(e) => setModalData({...modalData, googleDocsUrl: e.target.value})}
+                    onChange={(e) => setModalData({ ...modalData, googleDocsUrl: e.target.value })}
                     placeholder="https://docs.google.com/..."
                     className="w-full p-2 border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500"
                   />
@@ -137,7 +137,7 @@ export const TemplateFormModal: React.FC<TemplateFormModalProps> = ({
               </div>
             </div>
           </div>
-          
+
           <div className="flex justify-end space-x-3 mt-6">
             <button
               type="button"

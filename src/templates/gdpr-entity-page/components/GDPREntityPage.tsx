@@ -116,7 +116,7 @@ export function GDPREntityPage<T extends { id: string; [key: string]: any }>({
     enablePagination: true
   });
   
-  const [columnState, columnActions] = useTableColumns(columns);
+  const [columnState, columnActions] = useTableColumns(columns as import('../types').ColumnConfig[]);
   
   // Gestori di eventi
   const handleSearch = useCallback((query: string) => {

@@ -24,6 +24,7 @@ export interface CompanyData {
   nomeSede?: string;
   citta?: string;
   provincia?: string;
+  cap?: string;
   indirizzo?: string;
   sedeAzienda?: string;
   personaRiferimento?: string;

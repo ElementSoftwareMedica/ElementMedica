@@ -6,7 +6,7 @@ import { useTenants } from '../../hooks/useTenants';
 import OptimizedPermissionManager from '../../components/roles/OptimizedPermissionManager';
 
 const RolesTab: React.FC = () => {
-  const { hasPermission } = useAuth();
+  const { hasPermission, isLoading: authLoading } = useAuth();
   const rolesData = useRoles();
   const roles: Role[] = rolesData.roles;
   const selectedRole: Role | null = rolesData.selectedRole;
@@ -27,7 +27,7 @@ const RolesTab: React.FC = () => {
   // Ricarica i ruoli quando la tab diventa visibile (con debouncing)
   useEffect(() => {
     let timeoutId: NodeJS.Timeout;
-    
+
     const handleVisibilityChange = () => {
       if (!document.hidden && roles.length > 0) {
         // Debounce per evitare troppe richieste
@@ -61,14 +61,14 @@ const RolesTab: React.FC = () => {
       setShowUnsavedChangesModal(true);
       return;
     }
-    
+
     await performRoleChange(role);
   };
 
   // Esegue il cambio ruolo
   const performRoleChange = async (role: Role | null) => {
     if (!role) return;
-    
+
     setIsChangingRole(true);
     try {
       await selectRole(role);
@@ -124,7 +124,17 @@ const RolesTab: React.FC = () => {
     };
   };
 
-  // Verifica permessi di lettura ruoli
+  // Mostra loading mentre l'auth si sta caricando
+  if (authLoading || rolesLoading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <span className="ml-2 text-gray-600">Caricamento...</span>
+      </div>
+    );
+  }
+
+  // Controlla permessi SOLO dopo che l'auth è stato caricato
   if (!hasPermission('roles', 'read')) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -165,7 +175,7 @@ const RolesTab: React.FC = () => {
               <p className="text-sm text-gray-600">Configura ruoli, permessi CRUD, scope tenant e campi specifici</p>
             </div>
           </div>
-          
+
           {/* Statistiche rapide */}
           <div className="flex items-center space-x-6">
             <div className="text-center">
@@ -184,11 +194,10 @@ const RolesTab: React.FC = () => {
 
       {/* Messaggi di stato */}
       {message && (
-        <div className={`mx-6 mt-4 p-4 rounded-lg border shadow-sm ${
-          message.type === 'success' 
-            ? 'bg-green-50 border-green-200 text-green-800' 
+        <div className={`mx-6 mt-4 p-4 rounded-lg border shadow-sm ${message.type === 'success'
+            ? 'bg-green-50 border-green-200 text-green-800'
             : 'bg-red-50 border-red-200 text-red-800'
-        }`}>
+          }`}>
           <div className="flex items-center">
             {message.type === 'success' ? (
               <CheckCircle className="w-5 h-5 mr-2" />
@@ -212,32 +221,30 @@ const RolesTab: React.FC = () => {
               </p>
             </div>
           </div>
-          
+
           {/* Lista ruoli rapida */}
           <div className="mt-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
             {roles.map((role: Role, index: number) => {
               // @ts-ignore - TypeScript incorrectly infers role as never in this context
               const isSelected = selectedRole?.type === role.type;
               return (
-              <button
-                key={role?.type || `role-${index}`}
-                onClick={() => role && handleRoleChange(role)}
-                disabled={isChangingRole || !role}
-                className={`p-3 bg-white border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors text-left relative ${
-                  isChangingRole || !role ? 'opacity-50 cursor-not-allowed' : ''
-                } ${
-                  isSelected ? 'ring-2 ring-blue-500 bg-blue-50' : ''
-                }`}
-              >
-                <div className="font-medium text-blue-900 text-sm">{role?.name || 'Ruolo sconosciuto'}</div>
-                <div className="text-xs text-blue-600 mt-1">{role?.userCount || 0} utenti</div>
-                {isSelected && (
-                  <div className="absolute top-2 right-2">
-                    <CheckCircle className="w-4 h-4 text-blue-600" />
-                  </div>
-                )}
-              </button>
-            )
+                <button
+                  key={role?.type || `role-${index}`}
+                  onClick={() => role && handleRoleChange(role)}
+                  disabled={isChangingRole || !role}
+                  className={`p-3 bg-white border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors text-left relative ${isChangingRole || !role ? 'opacity-50 cursor-not-allowed' : ''
+                    } ${isSelected ? 'ring-2 ring-blue-500 bg-blue-50' : ''
+                    }`}
+                >
+                  <div className="font-medium text-blue-900 text-sm">{role?.name || 'Ruolo sconosciuto'}</div>
+                  <div className="text-xs text-blue-600 mt-1">{role?.userCount || 0} utenti</div>
+                  {isSelected && (
+                    <div className="absolute top-2 right-2">
+                      <CheckCircle className="w-4 h-4 text-blue-600" />
+                    </div>
+                  )}
+                </button>
+              )
             })}
           </div>
         </div>
@@ -298,11 +305,11 @@ const RolesTab: React.FC = () => {
                   </p>
                 </div>
               </div>
-              
+
               <p className="text-gray-700 mb-6">
                 Vuoi salvare le modifiche prima di cambiare ruolo o procedere senza salvare?
               </p>
-              
+
               <div className="flex space-x-3">
                 <button
                   onClick={saveAndChangeRole}

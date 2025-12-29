@@ -105,9 +105,9 @@ const CompanySiteForm: React.FC<CompanySiteFormProps> = ({ companyId, site, onSu
       };
 
       if (site) {
-        await apiPut(`/api/company-sites/${site.id}`, payload);
+        await apiPut(`/api/v1/company-sites/${site.id}`, payload);
       } else {
-        await apiPost('/api/company-sites', payload);
+        await apiPost('/api/v1/company-sites', payload);
       }
 
       onSuccess();
@@ -142,7 +142,7 @@ const CompanySiteForm: React.FC<CompanySiteFormProps> = ({ companyId, site, onSu
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-8 space-y-8">
+        <form onSubmit={handleSubmit} className="p-8 space-y-8" noValidate>
           {/* Informazioni di base */}
           <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-6 border border-blue-100">
             <h4 className="text-lg font-semibold text-blue-900 mb-6 flex items-center">
@@ -329,7 +329,7 @@ const CompanySiteForm: React.FC<CompanySiteFormProps> = ({ companyId, site, onSu
               <Calendar className="h-6 w-6 mr-3 text-purple-600" />
               Gestione Sopralluoghi
             </h4>
-            
+
             {/* Card affiancate per sopralluoghi */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Sopralluogo RSPP */}

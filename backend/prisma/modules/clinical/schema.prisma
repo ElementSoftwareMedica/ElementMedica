@@ -1,0 +1,849 @@
+// ===========================================
+// ELEMENT MEDICA - CLINICAL MODULE SCHEMA
+// ===========================================
+// ⚠️ NOTA: Questo file è di RIFERIMENTO/documentazione.
+// Lo schema attivo è: backend/prisma/schema.prisma
+// Questo modulo viene usato per documentare la struttura 
+// clinica del sistema, ma non è processato da Prisma.
+// ===========================================
+// Modelli Prisma per il modulo Poliambulatorio
+// Multi-tenancy obbligatoria, soft delete, GDPR compliant
+// Ultimo sync: 2024-12-13
+
+// ===========================================
+// ENUMS CLINICI
+// ===========================================
+
+enum StatoAmbulatorio {
+  ATTIVO
+  INATTIVO
+  MANUTENZIONE
+  CHIUSO
+}
+
+enum StatoPoliambulatorio {
+  ATTIVO
+  INATTIVO
+  SOSPESO
+}
+
+enum TipoPrestazione {
+  VISITA_SPECIALISTICA
+  VISITA_MEDICINA_LAVORO
+  ESAME_STRUMENTALE
+  ESAME_LABORATORIO
+  INTERVENTO_AMBULATORIALE
+  VACCINAZIONE
+  CERTIFICAZIONE
+  CONSULENZA
+}
+
+enum StatoStrumento {
+  ATTIVO
+  IN_MANUTENZIONE
+  FUORI_SERVIZIO
+  DISMESSO
+  IN_TARATURA
+}
+
+enum StatoAppuntamento {
+  PRENOTATO
+  CONFERMATO
+  IN_ATTESA
+  IN_CORSO
+  COMPLETATO
+  ANNULLATO
+  NO_SHOW
+  RINVIATO
+}
+
+enum StatoVisita {
+  PROGRAMMATA
+  IN_CORSO
+  COMPLETATA
+  ANNULLATA
+  SOSPESA
+}
+
+enum StatoReferto {
+  BOZZA
+  IN_ELABORAZIONE
+  DA_FIRMARE
+  FIRMATO
+  CONSEGNATO
+  ANNULLATO
+}
+
+enum TipoDocumentoClinico {
+  REFERTO
+  CERTIFICATO
+  FATTURA
+  RICEVUTA
+  CONSENSO
+  ANAMNESI
+  PRESCRIZIONE
+  ALTRO
+}
+
+enum StatoFatturaSanitaria {
+  BOZZA
+  EMESSA
+  PAGATA
+  ANNULLATA
+  STORNATA
+}
+
+enum TipoConvenzione {
+  AZIENDALE
+  ASSICURATIVA
+  PUBBLICA
+  PRIVATA
+}
+
+enum TipoSconto {
+  PERCENTUALE
+  FISSO
+  CONVENZIONE
+  ANZIANITA
+  FEDELTA
+}
+
+// ===========================================
+// POLIAMBULATORIO - Struttura principale
+// ===========================================
+
+model Poliambulatorio {
+  id                    String                @id @default(uuid())
+  codice                String                // Codice univoco poliambulatorio
+  nome                  String
+  descrizione           String?
+  indirizzo             String
+  citta                 String
+  cap                   String
+  provincia             String?
+  telefono              String?
+  email                 String?
+  pec                   String?
+  piva                  String?
+  codiceFiscale         String?
+  direttoreSanitarioId  String?               // FK a Person
+  stato                 StatoPoliambulatorio  @default(ATTIVO)
+  
+  // Orari apertura (JSON)
+  orariApertura         Json?                 @default("{}")
+  
+  // Metadata
+  tenantId              String
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  deletedAt             DateTime?
+  createdBy             String?
+  
+  // Relations
+  ambulatori            Ambulatorio[]
+  convenzioni           ConvenzionePoliambulatorio[]
+  listiniBase           ListinoPrezzo[]
+  
+  @@unique([tenantId, codice])
+  @@index([tenantId])
+  @@index([tenantId, stato])
+  @@index([deletedAt])
+  @@map("poliambulatori")
+}
+
+// ===========================================
+// AMBULATORIO - Stanze/reparti del poliambulatorio
+// ===========================================
+
+model Ambulatorio {
+  id                    String            @id @default(uuid())
+  poliambulatorioId     String
+  codice                String
+  nome                  String
+  specializzazione      String?           // Es: Cardiologia, Ortopedia
+  descrizione           String?
+  piano                 String?
+  capacita              Int               @default(1)
+  stato                 StatoAmbulatorio  @default(ATTIVO)
+  
+  // Colore per calendario
+  colore                String?           @default("#3B82F6")
+  
+  // Metadata
+  tenantId              String
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  deletedAt             DateTime?
+  
+  // Relations
+  poliambulatorio       Poliambulatorio   @relation(fields: [poliambulatorioId], references: [id], onDelete: Cascade)
+  orari                 OrarioAmbulatorio[]
+  strumenti             Strumento[]
+  prestazioniAmbulatorio AmbulatorioPrestazione[]
+  appuntamenti          Appuntamento[]
+  visite                Visita[]
+  
+  @@unique([poliambulatorioId, codice])
+  @@index([tenantId])
+  @@index([poliambulatorioId])
+  @@index([specializzazione])
+  @@index([stato])
+  @@map("ambulatori")
+}
+
+// ===========================================
+// ORARI AMBULATORIO
+// ===========================================
+
+model OrarioAmbulatorio {
+  id                    String        @id @default(uuid())
+  ambulatorioId         String
+  medicoId              String?       // FK a Person - medico assegnato
+  giornoSettimana       Int           // 0=Dom, 1=Lun, ..., 6=Sab
+  oraInizio             String        // HH:MM
+  oraFine               String        // HH:MM
+  durataSlot            Int           @default(30)  // Durata slot in minuti
+  attivo                Boolean       @default(true)
+  
+  // Periodo validità
+  validoDa              DateTime?
+  validoA               DateTime?
+  
+  // Metadata
+  tenantId              String
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  deletedAt             DateTime?
+  
+  // Relations
+  ambulatorio           Ambulatorio   @relation(fields: [ambulatorioId], references: [id], onDelete: Cascade)
+  
+  @@index([tenantId])
+  @@index([ambulatorioId])
+  @@index([medicoId])
+  @@index([giornoSettimana])
+  @@map("orari_ambulatorio")
+}
+
+// ===========================================
+// PRESTAZIONE - Catalogo servizi sanitari
+// ===========================================
+
+model Prestazione {
+  id                    String            @id @default(uuid())
+  codice                String            // Codice catalogo
+  nome                  String
+  descrizione           String?
+  tipo                  TipoPrestazione
+  durataPrevista        Int               @default(30)  // Minuti
+  prezzoBase            Decimal           @db.Decimal(10, 2)
+  ivaAliquota           Decimal           @default(0)   @db.Decimal(5, 2)
+  attivo                Boolean           @default(true)
+  
+  // Preparazione paziente
+  istruzioniPreparazione String?
+  
+  // Requisiti strumentazione
+  richiedeStrumento     Boolean           @default(false)
+  strumentiRichiesti    String[]          @default([])
+  
+  // Metadata
+  tenantId              String
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  deletedAt             DateTime?
+  createdBy             String?
+  
+  // Relations
+  ambulatori            AmbulatorioPrestazione[]
+  listiniPrezzo         ListinoPrezzo[]
+  mediciAbilitati       MedicoAbilitato[]
+  appuntamenti          Appuntamento[]
+  visite                Visita[]
+  
+  @@unique([tenantId, codice])
+  @@index([tenantId])
+  @@index([tipo])
+  @@index([attivo])
+  @@map("prestazioni")
+}
+
+// ===========================================
+// AMBULATORIO-PRESTAZIONE (Many-to-Many)
+// ===========================================
+
+model AmbulatorioPrestazione {
+  id                    String        @id @default(uuid())
+  ambulatorioId         String
+  prestazioneId         String
+  attivo                Boolean       @default(true)
+  
+  // Metadata
+  tenantId              String
+  createdAt             DateTime      @default(now())
+  deletedAt             DateTime?
+  
+  // Relations
+  ambulatorio           Ambulatorio   @relation(fields: [ambulatorioId], references: [id], onDelete: Cascade)
+  prestazione           Prestazione   @relation(fields: [prestazioneId], references: [id], onDelete: Cascade)
+  
+  @@unique([ambulatorioId, prestazioneId])
+  @@index([tenantId])
+  @@map("ambulatorio_prestazioni")
+}
+
+// ===========================================
+// MEDICO ABILITATO - Associazione medico-prestazione
+// ===========================================
+
+model MedicoAbilitato {
+  id                    String        @id @default(uuid())
+  medicoId              String        // FK a Person
+  prestazioneId         String
+  attivo                Boolean       @default(true)
+  dataAbilitazione      DateTime      @default(now())
+  
+  // Metadata
+  tenantId              String
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  deletedAt             DateTime?
+  
+  // Relations
+  prestazione           Prestazione   @relation(fields: [prestazioneId], references: [id], onDelete: Cascade)
+  
+  @@unique([medicoId, prestazioneId])
+  @@index([tenantId])
+  @@index([medicoId])
+  @@map("medici_abilitati")
+}
+
+// ===========================================
+// STRUMENTO - Apparecchiature mediche
+// ===========================================
+
+model Strumento {
+  id                    String          @id @default(uuid())
+  codice                String
+  nome                  String
+  descrizione           String?
+  marca                 String?
+  modello               String?
+  numeroSerie           String?
+  ambulatorioId         String?
+  stato                 StatoStrumento  @default(ATTIVO)
+  
+  // Acquisto e ammortamento
+  dataAcquisto          DateTime?
+  costoAcquisto         Decimal?        @db.Decimal(10, 2)
+  dataFineAmmortamento  DateTime?
+  
+  // Manutenzione
+  ultimaManutenzione    DateTime?
+  prossimaManutenzione  DateTime?
+  intervallManutenzione Int?            // Giorni
+  
+  // Taratura (per strumenti di misura)
+  ultimaTaratura        DateTime?
+  prossimaTaratura      DateTime?
+  
+  // Metadata
+  tenantId              String
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  deletedAt             DateTime?
+  createdBy             String?
+  
+  // Relations
+  ambulatorio           Ambulatorio?    @relation(fields: [ambulatorioId], references: [id])
+  
+  @@unique([tenantId, codice])
+  @@index([tenantId])
+  @@index([ambulatorioId])
+  @@index([stato])
+  @@map("strumenti")
+}
+
+// ===========================================
+// LISTINO PREZZO - Prezzi per prestazioni
+// ===========================================
+
+model ListinoPrezzo {
+  id                    String        @id @default(uuid())
+  prestazioneId         String
+  poliambulatorioId     String?       // Se null, è listino globale tenant
+  convenzioneId         String?       // Se associato a convenzione
+  nome                  String?       // Nome listino (es: "Listino Standard", "Convenzione ASL")
+  prezzo                Decimal       @db.Decimal(10, 2)
+  ivaAliquota           Decimal       @default(0) @db.Decimal(5, 2)
+  attivo                Boolean       @default(true)
+  
+  // Validità temporale
+  validoDa              DateTime      @default(now())
+  validoA               DateTime?
+  
+  // Metadata
+  tenantId              String
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  deletedAt             DateTime?
+  
+  // Relations
+  prestazione           Prestazione     @relation(fields: [prestazioneId], references: [id], onDelete: Cascade)
+  poliambulatorio       Poliambulatorio? @relation(fields: [poliambulatorioId], references: [id])
+  convenzione           Convenzione?    @relation(fields: [convenzioneId], references: [id])
+  
+  @@index([tenantId])
+  @@index([prestazioneId])
+  @@index([poliambulatorioId])
+  @@index([convenzioneId])
+  @@index([attivo])
+  @@map("listini_prezzo")
+}
+
+// ===========================================
+// CONVENZIONE - Accordi con enti/assicurazioni
+// ===========================================
+
+model Convenzione {
+  id                    String              @id @default(uuid())
+  codice                String
+  nome                  String
+  descrizione           String?
+  tipo                  TipoConvenzione
+  enteTerzo             String?             // Nome ente/assicurazione
+  partitaIva            String?
+  codiceFiscale         String?
+  
+  // Contatti
+  telefono              String?
+  email                 String?
+  referente             String?
+  
+  // Validità
+  dataInizio            DateTime
+  dataFine              DateTime?
+  attiva                Boolean             @default(true)
+  
+  // Condizioni economiche (JSON)
+  condizioni            Json?               @default("{}")
+  
+  // Metadata
+  tenantId              String
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  deletedAt             DateTime?
+  createdBy             String?
+  
+  // Relations
+  poliambulatori        ConvenzionePoliambulatorio[]
+  listiniPrezzo         ListinoPrezzo[]
+  
+  @@unique([tenantId, codice])
+  @@index([tenantId])
+  @@index([tipo])
+  @@index([attiva])
+  @@map("convenzioni")
+}
+
+// ===========================================
+// CONVENZIONE-POLIAMBULATORIO (Many-to-Many)
+// ===========================================
+
+model ConvenzionePoliambulatorio {
+  id                    String          @id @default(uuid())
+  convenzioneId         String
+  poliambulatorioId     String
+  attiva                Boolean         @default(true)
+  
+  // Metadata
+  tenantId              String
+  createdAt             DateTime        @default(now())
+  deletedAt             DateTime?
+  
+  // Relations
+  convenzione           Convenzione     @relation(fields: [convenzioneId], references: [id], onDelete: Cascade)
+  poliambulatorio       Poliambulatorio @relation(fields: [poliambulatorioId], references: [id], onDelete: Cascade)
+  
+  @@unique([convenzioneId, poliambulatorioId])
+  @@index([tenantId])
+  @@map("convenzione_poliambulatori")
+}
+
+// ===========================================
+// SLOT DISPONIBILITA - Gestione agenda
+// ===========================================
+
+model SlotDisponibilita {
+  id                    String        @id @default(uuid())
+  ambulatorioId         String
+  medicoId              String        // FK a Person
+  prestazioneId         String?       // Se specifico per prestazione
+  
+  data                  DateTime      @db.Date
+  oraInizio             String        // HH:MM
+  oraFine               String        // HH:MM
+  disponibile           Boolean       @default(true)
+  
+  // Motivo indisponibilità
+  motivoBlocco          String?
+  
+  // Metadata
+  tenantId              String
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  deletedAt             DateTime?
+  
+  @@index([tenantId])
+  @@index([ambulatorioId])
+  @@index([medicoId])
+  @@index([data])
+  @@index([data, medicoId])
+  @@map("slot_disponibilita")
+}
+
+// ===========================================
+// APPUNTAMENTO - Prenotazioni
+// ===========================================
+
+model Appuntamento {
+  id                    String              @id @default(uuid())
+  numeroPrenotazione    String              // Codice univoco prenotazione
+  
+  // Dove
+  ambulatorioId         String
+  
+  // Cosa
+  prestazioneId         String
+  
+  // Chi
+  pazienteId            String              // FK a Person
+  medicoId              String              // FK a Person
+  
+  // Quando
+  dataOra               DateTime
+  durataMinuti          Int                 @default(30)
+  
+  // Stato
+  stato                 StatoAppuntamento   @default(PRENOTATO)
+  
+  // Note
+  note                  String?
+  noteInterne           String?
+  
+  // Convenzione applicata
+  convenzioneId         String?
+  
+  // Promemoria
+  promemoriaSms         Boolean             @default(false)
+  promemoriaEmail       Boolean             @default(true)
+  promemoriaInviato     DateTime?
+  
+  // Dati check-in
+  oraArrivo             DateTime?
+  oraChiamata           DateTime?
+  oraInizio             DateTime?
+  oraFine               DateTime?
+  
+  // Metadata
+  tenantId              String
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  deletedAt             DateTime?
+  createdBy             String?
+  
+  // Relations
+  ambulatorio           Ambulatorio         @relation(fields: [ambulatorioId], references: [id])
+  prestazione           Prestazione         @relation(fields: [prestazioneId], references: [id])
+  visita                Visita?
+  
+  @@unique([tenantId, numeroPrenotazione])
+  @@index([tenantId])
+  @@index([ambulatorioId])
+  @@index([pazienteId])
+  @@index([medicoId])
+  @@index([dataOra])
+  @@index([stato])
+  @@index([tenantId, dataOra])
+  @@index([medicoId, dataOra])
+  @@map("appuntamenti")
+}
+
+// ===========================================
+// VISITA - Registro visite effettuate
+// ===========================================
+
+model Visita {
+  id                    String          @id @default(uuid())
+  appuntamentoId        String?         @unique
+  ambulatorioId         String
+  prestazioneId         String
+  
+  // Chi
+  pazienteId            String          // FK a Person
+  medicoId              String          // FK a Person
+  
+  // Quando
+  dataOra               DateTime
+  durataEffettiva       Int?            // Minuti
+  
+  // Stato
+  stato                 StatoVisita     @default(IN_CORSO)
+  
+  // Contenuto clinico
+  anamnesi              String?
+  esamiObiettivo        String?
+  diagnosiPrincipale    String?
+  diagnosiSecondarie    String[]        @default([])
+  terapia               String?
+  noteClinico           String?
+  
+  // Dati strutturati (campi dinamici da template)
+  datiStrutturati       Json?           @default("{}")
+  templateUsato         String?         // ID template campi visita
+  
+  // Prescrizioni
+  prescrizioni          String?
+  
+  // Follow-up
+  prossimoControllo     DateTime?
+  noteFollowup          String?
+  
+  // Metadata
+  tenantId              String
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  deletedAt             DateTime?
+  createdBy             String?
+  
+  // Relations
+  appuntamento          Appuntamento?   @relation(fields: [appuntamentoId], references: [id])
+  ambulatorio           Ambulatorio     @relation(fields: [ambulatorioId], references: [id])
+  prestazione           Prestazione     @relation(fields: [prestazioneId], references: [id])
+  referti               Referto[]
+  documenti             DocumentoClinico[]
+  fatture               FatturaSanitaria[]
+  
+  @@index([tenantId])
+  @@index([pazienteId])
+  @@index([medicoId])
+  @@index([dataOra])
+  @@index([stato])
+  @@index([ambulatorioId])
+  @@map("visite")
+}
+
+// ===========================================
+// REFERTO - Referti medici
+// ===========================================
+
+model Referto {
+  id                    String          @id @default(uuid())
+  visitaId              String
+  numeroReferto         String
+  
+  // Contenuto
+  titolo                String
+  contenuto             String          // Testo referto
+  conclusioni           String?
+  
+  // Allegati
+  allegati              Json?           @default("[]")  // Array di URL file
+  
+  // Stato e firma
+  stato                 StatoReferto    @default(BOZZA)
+  dataFirma             DateTime?
+  firmatoBy             String?         // FK a Person (medico)
+  hashFirma             String?         // Hash per integrità
+  
+  // Consegna
+  dataConsegna          DateTime?
+  modalitaConsegna      String?         // email, ritiro, etc.
+  
+  // Metadata
+  tenantId              String
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  deletedAt             DateTime?
+  createdBy             String?
+  
+  // Relations
+  visita                Visita          @relation(fields: [visitaId], references: [id], onDelete: Cascade)
+  
+  @@unique([tenantId, numeroReferto])
+  @@index([tenantId])
+  @@index([visitaId])
+  @@index([stato])
+  @@map("referti")
+}
+
+// ===========================================
+// TEMPLATE CAMPO VISITA - Campi dinamici
+// ===========================================
+
+model TemplateCampoVisita {
+  id                    String        @id @default(uuid())
+  codice                String
+  nome                  String
+  descrizione           String?
+  
+  // Tipo prestazione associato
+  tipoPrestazione       TipoPrestazione?
+  specializzazione      String?       // Es: Cardiologia
+  
+  // Definizione campi (JSON schema)
+  schema                Json          // Array di definizioni campi
+  
+  // Attivo/versioning
+  attivo                Boolean       @default(true)
+  versione              Int           @default(1)
+  
+  // Metadata
+  tenantId              String
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  deletedAt             DateTime?
+  createdBy             String?
+  
+  @@unique([tenantId, codice, versione])
+  @@index([tenantId])
+  @@index([tipoPrestazione])
+  @@index([specializzazione])
+  @@map("template_campi_visita")
+}
+
+// ===========================================
+// DOCUMENTO CLINICO - Documenti generici
+// ===========================================
+
+model DocumentoClinico {
+  id                    String                @id @default(uuid())
+  visitaId              String?
+  pazienteId            String                // FK a Person
+  
+  tipo                  TipoDocumentoClinico
+  titolo                String
+  descrizione           String?
+  
+  // File
+  fileName              String
+  fileUrl               String
+  fileSize              Int?
+  mimeType              String                @default("application/pdf")
+  
+  // Metadata documento
+  dataDocumento         DateTime              @default(now())
+  valido                Boolean               @default(true)
+  
+  // Metadata
+  tenantId              String
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  deletedAt             DateTime?
+  createdBy             String?
+  
+  // Relations
+  visita                Visita?               @relation(fields: [visitaId], references: [id])
+  
+  @@index([tenantId])
+  @@index([pazienteId])
+  @@index([visitaId])
+  @@index([tipo])
+  @@map("documenti_clinici")
+}
+
+// ===========================================
+// FATTURA SANITARIA - Fatturazione
+// ===========================================
+
+model FatturaSanitaria {
+  id                    String                  @id @default(uuid())
+  visitaId              String?
+  pazienteId            String                  // FK a Person
+  
+  // Dati fattura
+  numeroFattura         String
+  dataEmissione         DateTime                @default(now())
+  dataScadenza          DateTime?
+  
+  // Importi
+  imponibile            Decimal                 @db.Decimal(10, 2)
+  aliquotaIva           Decimal                 @default(0) @db.Decimal(5, 2)
+  importoIva            Decimal                 @db.Decimal(10, 2)
+  totale                Decimal                 @db.Decimal(10, 2)
+  
+  // Sconti applicati
+  scontoApplicato       Decimal                 @default(0) @db.Decimal(10, 2)
+  scontoDescrizione     String?
+  
+  // Stato
+  stato                 StatoFatturaSanitaria   @default(BOZZA)
+  
+  // Pagamento
+  dataPagamento         DateTime?
+  metodoPagamento       String?
+  riferimentoPagamento  String?
+  
+  // File
+  fileUrl               String?
+  
+  // SDI (fatturazione elettronica)
+  inviataSDI            Boolean                 @default(false)
+  dataInvioSDI          DateTime?
+  esitoSDI              String?
+  
+  // Note
+  note                  String?
+  
+  // Metadata
+  tenantId              String
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  deletedAt             DateTime?
+  createdBy             String?
+  
+  // Relations
+  visita                Visita?                 @relation(fields: [visitaId], references: [id])
+  
+  @@unique([tenantId, numeroFattura])
+  @@index([tenantId])
+  @@index([pazienteId])
+  @@index([visitaId])
+  @@index([stato])
+  @@index([dataEmissione])
+  @@map("fatture_sanitarie")
+}
+
+// ===========================================
+// AUDIT CLINICO - Log operazioni sensibili
+// ===========================================
+
+model AuditClinico {
+  id                    String        @id @default(uuid())
+  
+  // Chi
+  personId              String?       // FK a Person
+  
+  // Cosa
+  azione                String        // CREATE, UPDATE, DELETE, VIEW, SIGN
+  risorsa               String        // visita, referto, documento, etc.
+  risorsaId             String?
+  
+  // Dettagli
+  dettagli              Json?         // Dati prima/dopo modifica
+  
+  // Contesto
+  ipAddress             String?
+  userAgent             String?
+  
+  // Metadata
+  tenantId              String
+  createdAt             DateTime      @default(now())
+  
+  @@index([tenantId])
+  @@index([personId])
+  @@index([risorsa, risorsaId])
+  @@index([azione])
+  @@index([createdAt])
+  @@map("audit_clinico")
+}

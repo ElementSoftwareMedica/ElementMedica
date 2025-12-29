@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { GDPREntityTemplate } from '../../templates/gdpr-entity-page/GDPREntityTemplate';
 import { DataTableColumn } from '../../components/shared/tables/DataTable';
 import { Badge } from '../../design-system';
-import { 
+import {
   Award,
   BookOpen,
   Building,
@@ -17,6 +17,7 @@ import type { Course } from '../../types/courses';
 import CourseImport from '../../components/courses/CourseImport';
 import { apiPost, apiGet } from '../../services/api';
 import { useToast } from '../../hooks/useToast';
+import { getRiskLevelLabel } from '../../utils/courseLabels';
 // Configurazione colonne per la tabella
 const getCoursesColumns = (): DataTableColumn<Course>[] => [
   {
@@ -60,7 +61,7 @@ const getCoursesColumns = (): DataTableColumn<Course>[] => [
     sortable: true,
     renderCell: (course) => (
       <div className="flex items-center gap-2">
-        <Badge variant="outline">{course.riskLevel || 'N/D'}</Badge>
+        <Badge variant="outline">{course.riskLevel ? getRiskLevelLabel(course.riskLevel, course.title) : 'N/D'}</Badge>
       </div>
     )
   },
@@ -298,7 +299,7 @@ export default function CoursesPage(): JSX.Element {
         courses: payloadCourses,
         overwriteIds: overwriteIds || []
       });
-      
+
       // Mostra riepilogo con eventuali duplicati
       const totalSubmitted = response?.totalSubmitted ?? payloadCourses.length;
       const validCourses = response?.validCourses ?? undefined;
@@ -332,7 +333,7 @@ export default function CoursesPage(): JSX.Element {
         message,
         type: hasDuplicates ? 'info' : 'success'
       });
-      
+
       // Chiudi il modal
       setShowImportModal(false);
     } catch (error) {
@@ -355,6 +356,7 @@ export default function CoursesPage(): JSX.Element {
         apiEndpoint="/courses"
         columns={getCoursesColumns()}
         searchFields={['title', 'code', 'category', 'description', 'certifications', 'regulation', 'contents']}
+        defaultSort={{ field: 'title', direction: 'asc' }}
         filterOptions={[
           {
             key: 'category',
@@ -423,12 +425,12 @@ export default function CoursesPage(): JSX.Element {
         cardConfig={getCourseCardConfig()}
         enableBatchOperations={true}
         enableImportExport={true}
-         enableColumnSelector={true}
-         enableAdvancedFilters={true}
-         defaultViewMode="table"
-         onImportEntities={handleImportEntities}
+        enableColumnSelector={true}
+        enableAdvancedFilters={true}
+        defaultViewMode="table"
+        onImportEntities={handleImportEntities}
       />
-      
+
       {showImportModal && (
         <CourseImport
           onImport={handleImportCourses}

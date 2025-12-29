@@ -1,5 +1,5 @@
 import { apiGet, apiPost, apiPut } from '../api';
-import { EntityPermission, EntityDefinition, PermissionsSummary } from './types';
+import { EntityPermission, EntityDefinition, PermissionsSummary, RelationDefinition, DataFilterTestResult } from './types';
 import { ALL_ENTITY_DEFINITIONS, CRITICAL_ENTITIES } from './entityDefinitions';
 import { convertFromBackendFormat, convertToBackendFormat } from './conversionUtils';
 import { getPermissionsSummary, validatePermission, groupPermissionsByEntity } from './permissionUtils';
@@ -21,22 +21,22 @@ export class AdvancedPermissionsService {
     try {
       console.log('[AdvancedPermissions] Caricamento entità dal backend...');
       const response = await apiGet<{ success: boolean; entities: EntityDefinition[] }>(`${this.baseUrl}/entities`);
-      
+
       if (response.success && response.entities) {
         console.log('[AdvancedPermissions] Entità caricate dal backend:', response.entities.length);
         console.log('[AdvancedPermissions] Entità dal backend:', response.entities.map(e => e.name));
-        
+
         // Verifica se le entità critiche sono presenti
-        const missingEntities = CRITICAL_ENTITIES.filter(entity => 
+        const missingEntities = CRITICAL_ENTITIES.filter(entity =>
           !response.entities.some(e => e.name === entity)
         );
-        
+
         if (missingEntities.length > 0) {
           console.warn('[AdvancedPermissions] Entità mancanti dal backend:', missingEntities);
           console.log('[AdvancedPermissions] Uso fallback statico per avere tutte le entità');
           return this.getStaticEntityDefinitionsWithVirtual();
         }
-        
+
         // Aggiungi le entità virtuali alla lista delle entità dal backend
         return this.mergeWithVirtualEntities(response.entities);
       } else {
@@ -46,7 +46,7 @@ export class AdvancedPermissionsService {
     } catch (error) {
       console.error('[AdvancedPermissions] Errore nel caricamento entità dal backend:', error);
       console.log('[AdvancedPermissions] Uso definizioni statiche come fallback');
-      
+
       const staticEntities = this.getStaticEntityDefinitionsWithVirtual();
       console.log('[AdvancedPermissions] Entità statiche caricate:', staticEntities.length);
       console.log('[AdvancedPermissions] Entità statiche:', staticEntities.map(e => e.name));
@@ -61,9 +61,9 @@ export class AdvancedPermissionsService {
     try {
       // Converte il nome visualizzato in roleType se necessario
       const roleType = getRoleTypeFromDisplayName(roleIdentifier);
-      
+
       console.log(`🔍 [AdvancedPermissions] Getting permissions for role: ${roleIdentifier} -> ${roleType}`);
-      
+
       // Usa l'endpoint corretto per ottenere i permessi del ruolo
       const response = await apiGet<{
         success: boolean;
@@ -73,11 +73,11 @@ export class AdvancedPermissionsService {
           isCustomRole: boolean;
           tenantId: string;
         };
-      }>(`/api/roles/${roleType}/permissions`);
-      
+      }>(`/api/v1/roles/${roleType}/permissions`);
+
       // Usa la struttura corretta della risposta
       const allPermissions = response.data?.permissions || [];
-      
+
       // Converte i permessi dal formato backend al formato frontend
       return convertFromBackendFormat(allPermissions);
     } catch (error) {
@@ -93,19 +93,19 @@ export class AdvancedPermissionsService {
     try {
       // Converte il nome visualizzato in roleType se necessario
       const roleType = getRoleTypeFromDisplayName(roleIdentifier);
-      
+
       console.log(`🔄 [AdvancedPermissions] Updating permissions for role: ${roleIdentifier} -> ${roleType}`);
-      
+
       // Converte i permessi dal formato frontend al formato backend
       const backendPermissions = convertToBackendFormat(permissions);
-      
+
       const response = await apiPut<{
         success: boolean;
         message: string;
-      }>(`/api/roles/${roleType}/permissions`, {
+      }>(`/api/v1/roles/${roleType}/permissions`, {
         permissions: backendPermissions
       });
-      
+
       return response.success;
     } catch (error) {
       console.error('Error updating role permissions:', error);
@@ -117,10 +117,10 @@ export class AdvancedPermissionsService {
    * Verifica se un ruolo ha un permesso specifico
    */
   async checkPermission(
-    roleType: string, 
-    entity: string, 
-    action: string, 
-    scope?: string, 
+    roleType: string,
+    entity: string,
+    action: string,
+    scope?: string,
     field?: string
   ): Promise<boolean> {
     try {
@@ -163,15 +163,15 @@ export class AdvancedPermissionsService {
    */
   private getStaticEntityDefinitionsWithVirtual(): EntityDefinition[] {
     const allEntities = [...ALL_ENTITY_DEFINITIONS];
-    
+
     // Assicurati che le entità virtuali siano incluse
     const hasEmployees = allEntities.some(e => e.name === 'employees');
     const hasTrainers = allEntities.some(e => e.name === 'trainers');
-    
+
     if (!hasEmployees || !hasTrainers) {
       console.log('[AdvancedPermissions] Aggiunta entità virtuali mancanti');
     }
-    
+
     return allEntities;
   }
 
@@ -180,12 +180,12 @@ export class AdvancedPermissionsService {
    */
   private mergeWithVirtualEntities(backendEntities: EntityDefinition[]): EntityDefinition[] {
     const allEntities = [...backendEntities];
-    
+
     // Trova le entità virtuali dalle definizioni statiche
-    const virtualEntities = ALL_ENTITY_DEFINITIONS.filter(entity => 
+    const virtualEntities = ALL_ENTITY_DEFINITIONS.filter(entity =>
       ['employees', 'trainers'].includes(entity.name)
     );
-    
+
     // Aggiungi le entità virtuali se non sono già presenti
     virtualEntities.forEach(virtualEntity => {
       const exists = allEntities.some(e => e.name === virtualEntity.name);
@@ -194,15 +194,15 @@ export class AdvancedPermissionsService {
         allEntities.push(virtualEntity);
       }
     });
-    
+
     console.log('[AdvancedPermissions] Entità totali (con virtuali):', allEntities.length);
     console.log('[AdvancedPermissions] Entità finali:', allEntities.map((e: EntityDefinition) => e.name));
-    
+
     return allEntities;
   }
 
   // Metodi di utility delegati ai moduli specifici
-  
+
   /**
    * Valida un permesso
    */
@@ -244,8 +244,8 @@ export class AdvancedPermissionsService {
    * Assegna permessi entità virtuali a un ruolo
    */
   async assignVirtualEntityPermissions(
-    roleId: string, 
-    virtualEntityName: 'EMPLOYEES' | 'TRAINERS', 
+    roleId: string,
+    virtualEntityName: 'EMPLOYEES' | 'TRAINERS',
     permissions: string[]
   ): Promise<void> {
     return virtualEntityService.assignVirtualEntityPermissions(roleId, virtualEntityName, permissions);
@@ -255,8 +255,8 @@ export class AdvancedPermissionsService {
    * Rimuove permessi entità virtuali da un ruolo
    */
   async revokeVirtualEntityPermissions(
-    roleId: string, 
-    virtualEntityName: 'EMPLOYEES' | 'TRAINERS', 
+    roleId: string,
+    virtualEntityName: 'EMPLOYEES' | 'TRAINERS',
     permissions: string[]
   ): Promise<void> {
     return virtualEntityService.revokeVirtualEntityPermissions(roleId, virtualEntityName, permissions);
@@ -273,7 +273,7 @@ export class AdvancedPermissionsService {
    * Verifica se l'utente corrente ha un permesso specifico su un'entità virtuale
    */
   async checkVirtualEntityPermission(
-    virtualEntityName: 'EMPLOYEES' | 'TRAINERS', 
+    virtualEntityName: 'EMPLOYEES' | 'TRAINERS',
     action: 'VIEW' | 'CREATE' | 'EDIT' | 'DELETE'
   ): Promise<boolean> {
     return virtualEntityService.checkVirtualEntityPermission(virtualEntityName, action);
@@ -298,5 +298,54 @@ export class AdvancedPermissionsService {
    */
   getVirtualEntityBackendName(entityName: string): 'EMPLOYEES' | 'TRAINERS' | null {
     return virtualEntityService.getVirtualEntityBackendName(entityName);
+  }
+
+  /**
+   * Ottiene le definizioni delle relazioni per lo scope "relational"
+   * Usato per configurare permessi con visibilità dati basata su relazioni
+   */
+  async getRelationDefinitions(): Promise<RelationDefinition[]> {
+    try {
+      console.log('[AdvancedPermissions] Caricamento relation definitions...');
+      const response = await apiGet<{
+        success: boolean;
+        data: {
+          definitions: RelationDefinition[];
+          count: number;
+        };
+      }>('/api/v1/roles/relation-definitions');
+
+      if (response.success && response.data?.definitions) {
+        console.log(`[AdvancedPermissions] ${response.data.count} relation definitions caricate`);
+        return response.data.definitions;
+      }
+
+      console.warn('[AdvancedPermissions] Nessuna relation definition trovata');
+      return [];
+    } catch (error) {
+      console.error('[AdvancedPermissions] Errore nel caricamento relation definitions:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Testa il filtro dati per una risorsa specifica (solo development)
+   */
+  async testDataFilter(resource: string, action: string = 'read'): Promise<DataFilterTestResult> {
+    try {
+      const response = await apiPost<{
+        success: boolean;
+        data: DataFilterTestResult;
+      }>('/api/v1/roles/test-data-filter', { resource, action });
+
+      if (response.success && response.data) {
+        return response.data;
+      }
+
+      throw new Error('Invalid response from test-data-filter endpoint');
+    } catch (error) {
+      console.error('[AdvancedPermissions] Errore test data filter:', error);
+      throw error;
+    }
   }
 }

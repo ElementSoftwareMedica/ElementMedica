@@ -12,13 +12,18 @@ interface ProtectedRouteProps {
  * Se resource e action sono specificati, verifica anche i permessi specifici
  */
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ resource, action }) => {
-  const { isAuthenticated, isLoading, hasPermission } = useAuth();
+  const { isAuthenticated, isLoading, hasPermission, permissions } = useAuth();
 
-  // Mostra loader durante la verifica dell'autenticazione
-  if (isLoading) {
+  // Calcola se i permessi sono ancora in fase di caricamento
+  const permissionsCount = Object.keys(permissions).length;
+  const permissionsLoading = isLoading || (isAuthenticated && permissionsCount === 0);
+
+  // Mostra loader durante la verifica dell'autenticazione o caricamento permessi
+  if (permissionsLoading) {
     return (
       <div className="h-screen flex justify-center items-center">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        <span className="ml-3 text-gray-600">Caricamento...</span>
       </div>
     );
   }
@@ -29,6 +34,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ resource, action }) => 
   }
 
   // Se sono richiesti permessi specifici, verifica
+  // NOTA: NO bypass per admin - GDPR richiede permessi espliciti per TUTTI gli utenti
   if (resource && action && !hasPermission(resource, action)) {
     return (
       <div className="h-screen flex flex-col justify-center items-center text-center px-4">
@@ -36,8 +42,8 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ resource, action }) => 
         <p className="text-gray-600 mb-6">
           Non hai i permessi necessari per accedere a questa sezione.
         </p>
-        <button 
-          onClick={() => window.history.back()} 
+        <button
+          onClick={() => window.history.back()}
           className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
         >
           Torna indietro

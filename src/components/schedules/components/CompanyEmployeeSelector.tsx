@@ -49,7 +49,7 @@ export const CompanyEmployeeSelector: React.FC<CompanyEmployeeSelectorProps> = (
   // 🔄 Logica di auto-selezione: wrapper per onCompanyToggle
   const handleCompanyToggleWithLogic = useCallback((companyId: string | number) => {
     const isCurrentlySelected = selectedCompanies.includes(companyId);
-    
+
     if (isCurrentlySelected) {
       // Deseleziono azienda → deseleziono tutti i suoi dipendenti
       const companyPersonIds = getPersonIdsForCompanyUniversal(persons, companyId);
@@ -58,17 +58,20 @@ export const CompanyEmployeeSelector: React.FC<CompanyEmployeeSelectorProps> = (
           onPersonToggle(personId);
         }
       });
+    } else {
+      // ✅ Seleziono azienda → auto-seleziono tab dipendenti per quell'azienda
+      onPersonTabChange(companyId);
     }
-    
+
     // Eseguo il toggle dell'azienda
     onCompanyToggle(companyId);
-  }, [selectedCompanies, selectedPersons, persons, onCompanyToggle, onPersonToggle]);
+  }, [selectedCompanies, selectedPersons, persons, onCompanyToggle, onPersonToggle, onPersonTabChange]);
 
   // 🔄 Logica di auto-selezione: wrapper per onPersonToggle
   const handlePersonToggleWithLogic = useCallback((personId: string | number) => {
     const person = persons.find(p => String(p.id) === String(personId));
     const isCurrentlySelected = selectedPersons.includes(personId);
-    
+
     if (!isCurrentlySelected && person) {
       // Seleziono dipendente → auto-seleziono l'azienda se non è già selezionata
       const companyId = person.companyId || person.company?.id;
@@ -76,7 +79,7 @@ export const CompanyEmployeeSelector: React.FC<CompanyEmployeeSelectorProps> = (
         onCompanyToggle(companyId);
       }
     }
-    
+
     // Eseguo il toggle del dipendente
     onPersonToggle(personId);
   }, [selectedPersons, selectedCompanies, persons, onPersonToggle, onCompanyToggle]);
@@ -88,17 +91,17 @@ export const CompanyEmployeeSelector: React.FC<CompanyEmployeeSelectorProps> = (
       isArray: Array.isArray(initialPersons),
       length: initialPersons?.length
     });
-    
+
     if (!initialPersons || initialPersons.length === 0) {
       console.log('[CompanyEmployeeSelector] 🔄 No persons provided, loading from server...');
-      
+
       const loadPersons = async () => {
         setIsLoadingPersons(true);
         try {
           const { getPersons } = await import('../../../services/persons');
           const result = await getPersons({ limit: 1000, page: 1 });
           const loadedPersons = result?.persons || [];
-          
+
           console.log('[CompanyEmployeeSelector] ✅ Loaded persons:', loadedPersons.length);
           setPersons(loadedPersons);
         } catch (error) {
@@ -108,7 +111,7 @@ export const CompanyEmployeeSelector: React.FC<CompanyEmployeeSelectorProps> = (
           setIsLoadingPersons(false);
         }
       };
-      
+
       loadPersons();
     } else {
       console.log('[CompanyEmployeeSelector] ✅ Using persons from props:', initialPersons.length);
@@ -125,15 +128,23 @@ export const CompanyEmployeeSelector: React.FC<CompanyEmployeeSelectorProps> = (
     }
   }, [personTab, companies, onPersonTabChange]);
 
-  const filteredCompanies = useMemo(() => 
-    companies.filter(company =>
-      (company.ragioneSociale || company.name)?.toLowerCase().includes(companySearch.toLowerCase()) ?? false
-    ), [companies, companySearch]);
+  const filteredCompanies = useMemo(() =>
+    companies
+      .filter(company =>
+        (company.ragioneSociale || company.name)?.toLowerCase().includes(companySearch.toLowerCase()) ?? false
+      )
+      // ✅ FIX: Ordina alfabeticamente per ragione sociale
+      .sort((a, b) => {
+        const nameA = (a.ragioneSociale || a.name || '').toLowerCase();
+        const nameB = (b.ragioneSociale || b.name || '').toLowerCase();
+        return nameA.localeCompare(nameB, 'it-IT');
+      })
+    , [companies, companySearch]);
 
   // Aggrega i dipendenti per tutte le sedi dell'azienda attiva
   const getFilteredPersonsForCompany = useCallback((companyId: string | number) => {
     const normalizedCompanyId = String(companyId);
-    
+
     // DEBUG: Verifica struttura dei dati in ingresso
     if (process.env.NODE_ENV === 'development' && persons.length > 0) {
       const sample = persons[0];
@@ -153,20 +164,20 @@ export const CompanyEmployeeSelector: React.FC<CompanyEmployeeSelectorProps> = (
         personsWithCompanyObject: persons.filter(p => p.company?.id).length
       });
     }
-    
+
     const explicit = (getPersonIdsForCompany(String(companyId)) || []);
     const universal = getPersonIdsForCompanyUniversal(persons, companyId);
     const ids = new Set([...explicit, ...universal].map((id) => String(id)));
-    
+
     // FIX: Prima filtra per azienda direttamente dal companyId/company.id
     const filteredPersons = persons.filter((person: Person) => {
       const personCompanyId = String(person.companyId ?? person.company?.id ?? '');
-      
+
       // Match diretto con l'ID azienda o presente negli ID espliciti/universali
       const inCompanyScope = personCompanyId === normalizedCompanyId || ids.has(String(person.id));
       const matchesSearch =
         personSearch === '' ||
-        `${person.firstName} ${person.lastName}`
+        `${person.lastName} ${person.firstName}`
           .toLowerCase()
           .includes(personSearch.toLowerCase());
       return inCompanyScope && matchesSearch;
@@ -184,7 +195,7 @@ export const CompanyEmployeeSelector: React.FC<CompanyEmployeeSelectorProps> = (
         matchingByCompanyId: persons.filter(p => String(p.companyId ?? p.company?.id ?? '') === normalizedCompanyId).length,
         sampleFiltered: filteredPersons.slice(0, 3).map(p => ({
           id: p.id,
-          name: `${p.firstName} ${p.lastName}`,
+          name: `${p.lastName} ${p.firstName}`,
           companyId: p.companyId,
           companyFromObject: p.company?.id,
           matches: String(p.companyId ?? p.company?.id ?? '') === normalizedCompanyId
@@ -192,13 +203,14 @@ export const CompanyEmployeeSelector: React.FC<CompanyEmployeeSelectorProps> = (
       });
     }
 
-    return filteredPersons;
+    // ✅ Ordina alfabeticamente per cognome
+    return filteredPersons.sort((a, b) => a.lastName.localeCompare(b.lastName));
   }, [persons, personSearch, getPersonIdsForCompany, getCompanyName]);
 
   // Calcola statistiche per ogni azienda
   const getCompanyStats = useCallback((companyId: string | number) => {
     const allPersons = getFilteredPersonsForCompany(companyId);
-    const selectedPersonsForCompany = allPersons.filter(p => 
+    const selectedPersonsForCompany = allPersons.filter(p =>
       selectedPersons.map(String).includes(String(p.id))
     );
     return {
@@ -246,11 +258,10 @@ export const CompanyEmployeeSelector: React.FC<CompanyEmployeeSelectorProps> = (
               const isActive = String(personTab) === String(company.id);
 
               return (
-                <div 
-                  key={company.id} 
-                  className={`flex items-center p-3 border-b hover:bg-gray-50 ${
-                    isActive ? 'bg-blue-50 border-blue-200' : ''
-                  }`}
+                <div
+                  key={company.id}
+                  className={`flex items-center p-3 border-b hover:bg-gray-50 ${isActive ? 'bg-blue-50 border-blue-200' : ''
+                    }`}
                 >
                   <input
                     type="checkbox"
@@ -332,7 +343,7 @@ export const CompanyEmployeeSelector: React.FC<CompanyEmployeeSelectorProps> = (
                 </div>
               )}
             </div>
-            
+
             {personTab && (
               <div className="mt-2">
                 <Label>Cerca Dipendenti</Label>
@@ -349,17 +360,21 @@ export const CompanyEmployeeSelector: React.FC<CompanyEmployeeSelectorProps> = (
           <div className="overflow-y-auto max-h-96">
             {personTab ? (
               getFilteredPersonsForCompany(personTab).map((person: Person) => (
-                <div key={person.id} className="flex items-center p-3 border-b hover:bg-gray-50">
+                <div
+                  key={person.id}
+                  className="flex items-center p-3 border-b hover:bg-gray-50 cursor-pointer transition-colors"
+                  onClick={() => handlePersonToggleWithLogic(person.id)}
+                >
                   <input
                     type="checkbox"
-                    aria-label={`Seleziona partecipante ${person.firstName} ${person.lastName}`}
+                    aria-label={`Seleziona partecipante ${person.lastName} ${person.firstName}`}
                     checked={selectedPersons.map(String).includes(String(person.id))}
-                    onChange={() => handlePersonToggleWithLogic(person.id)}
-                    className="mr-3 w-4 h-4 accent-blue-600"
+                    onChange={() => { }} // Empty handler, il click viene gestito dal div
+                    className="mr-3 w-4 h-4 accent-blue-600 pointer-events-none"
                   />
-                  <div className="flex-1">
+                  <div className="flex-1 pointer-events-none">
                     <div className="font-medium text-sm">
-                      {person.firstName} {person.lastName}
+                      {person.lastName} {person.firstName}
                     </div>
                     {person.email && (
                       <div className="text-xs text-gray-500">{person.email}</div>

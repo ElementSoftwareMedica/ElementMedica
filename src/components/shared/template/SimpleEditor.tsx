@@ -260,7 +260,7 @@ const SimpleEditor: React.FC<SimpleEditorProps> = ({
         {/* Text formatting */}
         <div className="button-group">
           <Button
-            variant={document.queryCommandState('bold') ? "default" : "ghost"}
+            variant={document.queryCommandState('bold') ? "primary" : "ghost"}
             onClick={() => formatText('bold')}
             size="sm"
             title="Grassetto"
@@ -269,7 +269,7 @@ const SimpleEditor: React.FC<SimpleEditorProps> = ({
             B
           </Button>
           <Button
-            variant={document.queryCommandState('italic') ? "default" : "ghost"}
+            variant={document.queryCommandState('italic') ? "primary" : "ghost"}
             onClick={() => formatText('italic')}
             size="sm"
             title="Corsivo"
@@ -278,7 +278,7 @@ const SimpleEditor: React.FC<SimpleEditorProps> = ({
             I
           </Button>
           <Button
-            variant={document.queryCommandState('underline') ? "default" : "ghost"}
+            variant={document.queryCommandState('underline') ? "primary" : "ghost"}
             onClick={() => formatText('underline')}
             size="sm"
             title="Sottolineato"
@@ -322,7 +322,7 @@ const SimpleEditor: React.FC<SimpleEditorProps> = ({
         {/* Lists */}
         <div className="button-group">
           <Button
-            variant={document.queryCommandState('insertUnorderedList') ? "default" : "ghost"}
+            variant={document.queryCommandState('insertUnorderedList') ? "primary" : "ghost"}
             onClick={() => formatText('insertUnorderedList')}
             size="sm"
             title="Elenco puntato"
@@ -331,7 +331,7 @@ const SimpleEditor: React.FC<SimpleEditorProps> = ({
             • Lista
           </Button>
           <Button
-            variant={document.queryCommandState('insertOrderedList') ? "default" : "ghost"}
+            variant={document.queryCommandState('insertOrderedList') ? "primary" : "ghost"}
             onClick={() => formatText('insertOrderedList')}
             size="sm"
             title="Elenco numerato"
@@ -344,7 +344,7 @@ const SimpleEditor: React.FC<SimpleEditorProps> = ({
         {/* Alignment */}
         <div className="button-group">
           <Button
-            variant={document.queryCommandState('justifyLeft') ? "default" : "ghost"}
+            variant={document.queryCommandState('justifyLeft') ? "primary" : "ghost"}
             onClick={() => formatText('justifyLeft')}
             size="sm"
             title="Allinea a sinistra"
@@ -353,7 +353,7 @@ const SimpleEditor: React.FC<SimpleEditorProps> = ({
             ←
           </Button>
           <Button
-            variant={document.queryCommandState('justifyCenter') ? "default" : "ghost"}
+            variant={document.queryCommandState('justifyCenter') ? "primary" : "ghost"}
             onClick={() => formatText('justifyCenter')}
             size="sm"
             title="Centra"
@@ -362,7 +362,7 @@ const SimpleEditor: React.FC<SimpleEditorProps> = ({
             ↔
           </Button>
           <Button
-            variant={document.queryCommandState('justifyRight') ? "default" : "ghost"}
+            variant={document.queryCommandState('justifyRight') ? "primary" : "ghost"}
             onClick={() => formatText('justifyRight')}
             size="sm" 
             title="Allinea a destra"
@@ -562,7 +562,7 @@ const SimpleEditor: React.FC<SimpleEditorProps> = ({
                 backgroundColor: '#f9fafb' 
               }}>
                 <Button
-                  variant="default"
+                  variant="primary"
                   onClick={() => {
                     const placeholder = prompt('Inserisci nome del placeholder:', 'NOME_PLACEHOLDER');
                     if (placeholder) {

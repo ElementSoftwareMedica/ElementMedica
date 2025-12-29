@@ -10,6 +10,7 @@ import express from 'express';
 import { PrismaClient } from '@prisma/client';
 import middleware from '../auth/middleware.js';
 import { parseGoogleUrl, getGoogleFieldForUrl } from '../utils/google-url-parser.js';
+import logger from '../utils/logger.js';
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -287,10 +288,10 @@ router.post('/', authenticateToken(), requirePermission('CREATE_TEMPLATES'), asy
     // Extract Google Docs/Slides ID from URL if provided
     let googleDocsId = null;
     let googleSlidesId = null;
-    
+
     if (googleDocsUrl) {
       const parsed = parseGoogleUrl(googleDocsUrl);
-      
+
       if (parsed) {
         // Auto-assign to correct field based on URL type
         if (parsed.type === 'docs') {
@@ -298,7 +299,7 @@ router.post('/', authenticateToken(), requirePermission('CREATE_TEMPLATES'), asy
         } else if (parsed.type === 'slides') {
           googleSlidesId = parsed.id;
         }
-        
+
         // Log successful parsing
         logger.info('Parsed Google URL', {
           component: 'template-routes',
@@ -328,7 +329,7 @@ router.post('/', authenticateToken(), requirePermission('CREATE_TEMPLATES'), asy
           isDefault: false
         }
       });
-      
+
       logger.info('Unset previous default templates', {
         component: 'template-routes',
         action: 'create',
@@ -423,6 +424,7 @@ router.put('/:id', authenticateToken(), requirePermission('EDIT_TEMPLATES'), asy
     const { id } = req.params;
     const {
       name,
+      type,
       content,
       header,
       footer,
@@ -468,15 +470,15 @@ router.put('/:id', authenticateToken(), requirePermission('EDIT_TEMPLATES'), asy
     // Extract Google Docs/Slides ID from URL if provided
     let googleDocsId = existing.googleDocsId;
     let googleSlidesId = existing.googleSlidesId;
-    
+
     if (googleDocsUrl !== undefined) {
       // Reset IDs
       googleDocsId = null;
       googleSlidesId = null;
-      
+
       if (googleDocsUrl) {
         const parsed = parseGoogleUrl(googleDocsUrl);
-        
+
         if (parsed) {
           // Auto-assign to correct field based on URL type
           if (parsed.type === 'docs') {
@@ -484,7 +486,7 @@ router.put('/:id', authenticateToken(), requirePermission('EDIT_TEMPLATES'), asy
           } else if (parsed.type === 'slides') {
             googleSlidesId = parsed.id;
           }
-          
+
           logger.info('Parsed Google URL during update', {
             component: 'template-routes',
             action: 'update',
@@ -502,11 +504,27 @@ router.put('/:id', authenticateToken(), requirePermission('EDIT_TEMPLATES'), asy
       }
     }
 
+    // Determine the effective type for default logic
+    const effectiveType = type !== undefined ? type : existing.type;
+
+    // If changing type on a default template, reset isDefault (can't be default for old type anymore)
+    let effectiveIsDefault = isDefault;
+    if (type !== undefined && type !== existing.type && existing.isDefault && isDefault !== true) {
+      effectiveIsDefault = false;
+      logger.info('Resetting isDefault because type changed', {
+        component: 'template-routes',
+        action: 'update',
+        templateId: id,
+        oldType: existing.type,
+        newType: type
+      });
+    }
+
     // If setting as default, unset other defaults for the same type
-    if (isDefault === true && !existing.isDefault) {
+    if (effectiveIsDefault === true && !existing.isDefault) {
       await prisma.templateLink.updateMany({
         where: {
-          type: existing.type,
+          type: effectiveType,
           tenantId,
           isDefault: true,
           deletedAt: null,
@@ -516,33 +534,45 @@ router.put('/:id', authenticateToken(), requirePermission('EDIT_TEMPLATES'), asy
           isDefault: false
         }
       });
-      
+
       logger.info('Unset previous default templates', {
         component: 'template-routes',
         action: 'update',
-        type: existing.type,
+        type: effectiveType,
         tenantId,
         templateId: id
       });
     }
 
-    // Detect what changed
+    // Detect what changed (only if field is explicitly provided)
     const changes = [];
-    if (content !== existing.content) changes.push('content');
-    if (header !== existing.header) changes.push('header');
-    if (footer !== existing.footer) changes.push('footer');
-    if (JSON.stringify(styles) !== JSON.stringify(existing.styles)) changes.push('styles');
-    if (JSON.stringify(layout) !== JSON.stringify(existing.layout)) changes.push('layout');
-    if (JSON.stringify(markers) !== JSON.stringify(existing.markers)) changes.push('markers');
+    if (content !== undefined && content !== existing.content) changes.push('content');
+    if (header !== undefined && header !== existing.header) changes.push('header');
+    if (footer !== undefined && footer !== existing.footer) changes.push('footer');
+    if (styles !== undefined && JSON.stringify(styles) !== JSON.stringify(existing.styles)) changes.push('styles');
+    if (layout !== undefined && JSON.stringify(layout) !== JSON.stringify(existing.layout)) changes.push('layout');
+    if (markers !== undefined && JSON.stringify(markers) !== JSON.stringify(existing.markers)) changes.push('markers');
 
     const shouldCreateVersion = changes.length > 0;
     const newVersion = shouldCreateVersion ? existing.version + 1 : existing.version;
+
+    logger.info('Template update prepared', {
+      action: 'updateTemplate',
+      templateId: id,
+      templateName: existing.name,
+      changesSummary: changes.join(', '),
+      shouldCreateVersion,
+      newVersion,
+      userId,
+      tenantId
+    });
 
     // Update template
     const template = await prisma.templateLink.update({
       where: { id },
       data: {
         ...(name !== undefined && { name }),
+        ...(type !== undefined && { type }),
         ...(content !== undefined && { content }),
         ...(header !== undefined && { header }),
         ...(footer !== undefined && { footer }),
@@ -557,7 +587,7 @@ router.put('/:id', authenticateToken(), requirePermission('EDIT_TEMPLATES'), asy
         ...(category !== undefined && { category }),
         ...(tags !== undefined && { tags }),
         ...(isActive !== undefined && { isActive }),
-        ...(isDefault !== undefined && { isDefault }),
+        ...(effectiveIsDefault !== undefined && { isDefault: effectiveIsDefault }),
         ...(syncEnabled !== undefined && { syncEnabled }),
         ...(autoSync !== undefined && { autoSync }),
         ...(googleDocsUrl !== undefined && { googleDocsUrl: googleDocsUrl || null }),
@@ -610,6 +640,16 @@ router.put('/:id', authenticateToken(), requirePermission('EDIT_TEMPLATES'), asy
         : 'Template metadata updated'
     });
   } catch (error) {
+    logger.error('Template update failed', {
+      action: 'updateTemplate',
+      templateId: id,
+      error: error.message,
+      errorCode: error.code,
+      errorMeta: error.meta,
+      stack: error.stack,
+      userId,
+      tenantId
+    });
     console.error('Error updating template:', error);
     res.status(500).json({
       success: false,

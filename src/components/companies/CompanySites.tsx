@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { 
+import {
   Building2,
   Calendar,
   Edit,
@@ -16,6 +16,7 @@ import {
   Users
 } from 'lucide-react';
 import { apiGet, apiDelete } from '../../services/api';
+import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
 import { useToast } from '../../hooks/useToast';
 import { DVRManager } from '../managers/DVRManager';
 import SopralluogoManager from '../managers/SopralluogoManager';
@@ -74,13 +75,14 @@ const CompanySites: React.FC<CompanySitesProps> = ({ companyId, selectedSiteId, 
     siteName: string;
   }>({ type: null, siteId: '', siteName: '' });
   const { showToast } = useToast();
+  const { confirmDelete } = useConfirmDialog();
   const showToastRef = useRef(showToast);
   useEffect(() => {
     showToastRef.current = showToast;
   }, [showToast]);
 
   // Filtra le sedi in base alla selezione
-  const filteredSites = selectedSiteId 
+  const filteredSites = selectedSiteId
     ? sites.filter(site => site.id === selectedSiteId)
     : sites;
 
@@ -107,7 +109,8 @@ const CompanySites: React.FC<CompanySitesProps> = ({ companyId, selectedSiteId, 
   };
 
   const handleDelete = async (siteId: string) => {
-    if (!confirm('Sei sicuro di voler eliminare questa sede?')) return;
+    const confirmed = await confirmDelete('Sei sicuro di voler eliminare questa sede?');
+    if (!confirmed) return;
 
     try {
       await apiDelete(`/api/v1/company-sites/${siteId}`);
@@ -131,9 +134,9 @@ const CompanySites: React.FC<CompanySitesProps> = ({ companyId, selectedSiteId, 
   const handleFormSuccess = () => {
     fetchSites();
     handleFormClose();
-    showToast({ 
-      message: editingSite ? 'Sede aggiornata con successo' : 'Sede creata con successo', 
-      type: 'success' 
+    showToast({
+      message: editingSite ? 'Sede aggiornata con successo' : 'Sede creata con successo',
+      type: 'success'
     });
   };
 
@@ -159,7 +162,7 @@ const CompanySites: React.FC<CompanySitesProps> = ({ companyId, selectedSiteId, 
             <Building2 className="h-5 w-5 mr-2" />
             Sedi Aziendali
           </h2>
-          
+
           <button
             onClick={() => setShowForm(true)}
             className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-full transition-colors flex items-center shadow-md hover:shadow-lg flex-shrink-0"
@@ -168,7 +171,7 @@ const CompanySites: React.FC<CompanySitesProps> = ({ companyId, selectedSiteId, 
             Aggiungi Sede
           </button>
         </div>
-        
+
         {/* Filtro sedi centrato - Solo se ci sono più sedi */}
         {sites.length > 1 && onSiteFilterChange && (
           <div className="flex justify-center">
@@ -176,11 +179,10 @@ const CompanySites: React.FC<CompanySitesProps> = ({ companyId, selectedSiteId, 
               <button
                 type="button"
                 onClick={() => onSiteFilterChange(null)}
-                className={`px-2.5 py-1 text-xs font-medium rounded-full transition-colors duration-200 focus:outline-none focus:ring-1 focus:ring-blue-300 whitespace-nowrap ${
-                  selectedSiteId === null
+                className={`px-2.5 py-1 text-xs font-medium rounded-full transition-colors duration-200 focus:outline-none focus:ring-1 focus:ring-blue-300 whitespace-nowrap ${selectedSiteId === null
                     ? 'bg-blue-600 text-white shadow-sm'
                     : 'bg-transparent text-gray-700 hover:bg-blue-100'
-                }`}
+                  }`}
               >
                 Tutte ({sites.length})
               </button>
@@ -189,11 +191,10 @@ const CompanySites: React.FC<CompanySitesProps> = ({ companyId, selectedSiteId, 
                   key={site.id}
                   type="button"
                   onClick={() => onSiteFilterChange(site.id)}
-                  className={`px-2.5 py-1 text-xs font-medium rounded-full transition-colors duration-200 focus:outline-none focus:ring-1 focus:ring-blue-300 whitespace-nowrap ${
-                    selectedSiteId === site.id
+                  className={`px-2.5 py-1 text-xs font-medium rounded-full transition-colors duration-200 focus:outline-none focus:ring-1 focus:ring-blue-300 whitespace-nowrap ${selectedSiteId === site.id
                       ? 'bg-blue-600 text-white shadow-sm'
                       : 'bg-transparent text-gray-700 hover:bg-blue-100'
-                  }`}
+                    }`}
                 >
                   {site.siteName}
                 </button>
@@ -374,156 +375,156 @@ const CompanySites: React.FC<CompanySitesProps> = ({ companyId, selectedSiteId, 
             // Visualizzazione a card per sedi multiple
             <div className="space-y-4">
               {filteredSites.map((site) => (
-                 <div key={site.id} className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow">
-                   <div className="p-6 flex justify-between items-start">
-                     <div className="flex-1">
-                       <div className="flex items-center mb-4">
-                         <Building2 className="h-5 w-5 text-blue-600 mr-2" />
-                         <h3 className="text-lg font-semibold text-gray-900">{site.siteName}</h3>
-                       </div>
+                <div key={site.id} className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow">
+                  <div className="p-6 flex justify-between items-start">
+                    <div className="flex-1">
+                      <div className="flex items-center mb-4">
+                        <Building2 className="h-5 w-5 text-blue-600 mr-2" />
+                        <h3 className="text-lg font-semibold text-gray-900">{site.siteName}</h3>
+                      </div>
 
-                       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                         {/* Indirizzo */}
-                         <div className="space-y-2">
-                           <h4 className="text-sm font-medium text-gray-700">Indirizzo</h4>
-                           <div className="space-y-1">
-                             <div className="flex items-center text-sm text-gray-600">
-                               <MapPin className="h-4 w-4 mr-2" />
-                               {site.indirizzo}
-                             </div>
-                             <div className="text-sm text-gray-600">
-                               {site.citta}, {site.cap} ({site.provincia})
-                             </div>
-                           </div>
-                         </div>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        {/* Indirizzo */}
+                        <div className="space-y-2">
+                          <h4 className="text-sm font-medium text-gray-700">Indirizzo</h4>
+                          <div className="space-y-1">
+                            <div className="flex items-center text-sm text-gray-600">
+                              <MapPin className="h-4 w-4 mr-2" />
+                              {site.indirizzo}
+                            </div>
+                            <div className="text-sm text-gray-600">
+                              {site.citta}, {site.cap} ({site.provincia})
+                            </div>
+                          </div>
+                        </div>
 
-                         {/* Contatti */}
-                         <div className="space-y-2">
-                           <h4 className="text-sm font-medium text-gray-700">Contatti</h4>
-                           <div className="space-y-1">
-                             {site.personaRiferimento && (
-                               <div className="flex items-start text-sm text-gray-600">
-                                 <User className="h-4 w-4 mr-2 mt-0.5 flex-shrink-0" />
-                                 <span className="break-words">{site.personaRiferimento}</span>
-                               </div>
-                             )}
-                             {site.telefono && (
-                               <div className="flex items-start text-sm text-gray-600">
-                                 <Phone className="h-4 w-4 mr-2 mt-0.5 flex-shrink-0" />
-                                 <span className="break-all">{site.telefono}</span>
-                               </div>
-                             )}
-                             {site.mail && (
-                               <div className="flex items-start text-sm text-gray-600">
-                                 <Mail className="h-4 w-4 mr-2 mt-0.5 flex-shrink-0" />
-                                 <span className="break-all">{site.mail}</span>
-                               </div>
-                             )}
-                           </div>
-                         </div>
+                        {/* Contatti */}
+                        <div className="space-y-2">
+                          <h4 className="text-sm font-medium text-gray-700">Contatti</h4>
+                          <div className="space-y-1">
+                            {site.personaRiferimento && (
+                              <div className="flex items-start text-sm text-gray-600">
+                                <User className="h-4 w-4 mr-2 mt-0.5 flex-shrink-0" />
+                                <span className="break-words">{site.personaRiferimento}</span>
+                              </div>
+                            )}
+                            {site.telefono && (
+                              <div className="flex items-start text-sm text-gray-600">
+                                <Phone className="h-4 w-4 mr-2 mt-0.5 flex-shrink-0" />
+                                <span className="break-all">{site.telefono}</span>
+                              </div>
+                            )}
+                            {site.mail && (
+                              <div className="flex items-start text-sm text-gray-600">
+                                <Mail className="h-4 w-4 mr-2 mt-0.5 flex-shrink-0" />
+                                <span className="break-all">{site.mail}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
 
-                         {/* Sicurezza */}
-                         <div className="space-y-2">
-                           <h4 className="text-sm font-medium text-gray-700">Sicurezza</h4>
-                           <div className="space-y-1">
-                             {site.rspp && (
-                               <div className="flex items-center text-sm text-gray-600">
-                                 <Shield className="h-4 w-4 mr-2" />
-                                 RSPP: {site.rspp.firstName} {site.rspp.lastName}
-                               </div>
-                             )}
-                             {site.medicoCompetente && (
-                               <div className="flex items-center text-sm text-gray-600">
-                                 <Stethoscope className="h-4 w-4 mr-2" />
-                                 MC: {site.medicoCompetente.firstName} {site.medicoCompetente.lastName}
-                               </div>
-                             )}
-                             {site.dvr && (
-                               <div className="flex items-center text-sm text-gray-600">
-                                 <FileText className="h-4 w-4 mr-2" />
-                                 DVR: {site.dvr}
-                               </div>
-                             )}
-                           </div>
-                         </div>
-                       </div>
+                        {/* Sicurezza */}
+                        <div className="space-y-2">
+                          <h4 className="text-sm font-medium text-gray-700">Sicurezza</h4>
+                          <div className="space-y-1">
+                            {site.rspp && (
+                              <div className="flex items-center text-sm text-gray-600">
+                                <Shield className="h-4 w-4 mr-2" />
+                                RSPP: {site.rspp.firstName} {site.rspp.lastName}
+                              </div>
+                            )}
+                            {site.medicoCompetente && (
+                              <div className="flex items-center text-sm text-gray-600">
+                                <Stethoscope className="h-4 w-4 mr-2" />
+                                MC: {site.medicoCompetente.firstName} {site.medicoCompetente.lastName}
+                              </div>
+                            )}
+                            {site.dvr && (
+                              <div className="flex items-center text-sm text-gray-600">
+                                <FileText className="h-4 w-4 mr-2" />
+                                DVR: {site.dvr}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
 
-                       {/* Sopralluogo */}
-                       {(site.ultimoSopralluogo || site.prossimoSopralluogo || site.valutazioneSopralluogo) && (
-                         <div className="mt-4 p-3 bg-gray-50 rounded-lg">
-                           <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
-                             <Calendar className="h-4 w-4 mr-2" />
-                             Sopralluogo
-                           </h4>
-                           <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm text-gray-600">
-                             {site.ultimoSopralluogo && (
-                               <div>
-                                 <span className="font-medium">Ultimo:</span> {new Date(site.ultimoSopralluogo).toLocaleDateString()}
-                               </div>
-                             )}
-                             {site.prossimoSopralluogo && (
-                               <div>
-                                 <span className="font-medium">Prossimo:</span> {new Date(site.prossimoSopralluogo).toLocaleDateString()}
-                               </div>
-                             )}
-                             {site.valutazioneSopralluogo && (
-                               <div>
-                                 <span className="font-medium">Valutazione:</span> {site.valutazioneSopralluogo}
-                               </div>
-                             )}
-                           </div>
-                         </div>
-                       )}
-                     </div>
+                      {/* Sopralluogo */}
+                      {(site.ultimoSopralluogo || site.prossimoSopralluogo || site.valutazioneSopralluogo) && (
+                        <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+                          <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
+                            <Calendar className="h-4 w-4 mr-2" />
+                            Sopralluogo
+                          </h4>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm text-gray-600">
+                            {site.ultimoSopralluogo && (
+                              <div>
+                                <span className="font-medium">Ultimo:</span> {new Date(site.ultimoSopralluogo).toLocaleDateString()}
+                              </div>
+                            )}
+                            {site.prossimoSopralluogo && (
+                              <div>
+                                <span className="font-medium">Prossimo:</span> {new Date(site.prossimoSopralluogo).toLocaleDateString()}
+                              </div>
+                            )}
+                            {site.valutazioneSopralluogo && (
+                              <div>
+                                <span className="font-medium">Valutazione:</span> {site.valutazioneSopralluogo}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
 
-                     <div className="flex flex-wrap gap-2 ml-4">
-                       {/* Pulsanti a forma di pillola per gestire DVR, Sopralluoghi e Reparti */}
-                       <button
-                         onClick={() => setActiveManager({ type: 'dvr', siteId: site.id, siteName: site.siteName })}
-                         className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-100 hover:bg-blue-200 rounded-full transition-colors flex items-center"
-                         title="Gestisci DVR"
-                       >
-                         <FileText className="h-3 w-3 mr-1" />
-                         DVR
-                       </button>
-                       <button
-                         onClick={() => setActiveManager({ type: 'sopralluogo', siteId: site.id, siteName: site.siteName })}
-                         className="px-3 py-1.5 text-xs font-medium text-green-700 bg-green-100 hover:bg-green-200 rounded-full transition-colors flex items-center"
-                         title="Gestisci Sopralluoghi"
-                       >
-                         <Eye className="h-3 w-3 mr-1" />
-                         Sopralluoghi
-                       </button>
-                       <button
-                         onClick={() => setActiveManager({ type: 'reparto', siteId: site.id, siteName: site.siteName })}
-                         className="px-3 py-1.5 text-xs font-medium text-purple-700 bg-purple-100 hover:bg-purple-200 rounded-full transition-colors flex items-center"
-                         title="Gestisci Reparti"
-                       >
-                         <Users className="h-3 w-3 mr-1" />
-                         Reparti
-                       </button>
-                       <button
-                         onClick={() => handleEdit(site)}
-                         className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-100 hover:bg-blue-200 rounded-full transition-colors flex items-center"
-                         title="Modifica sede"
-                       >
-                         <Edit className="h-3 w-3 mr-1" />
-                         Modifica
-                       </button>
-                       <button
-                         onClick={() => handleDelete(site.id)}
-                         className="px-3 py-1.5 text-xs font-medium text-red-700 bg-red-100 hover:bg-red-200 rounded-full transition-colors flex items-center"
-                         title="Elimina sede"
-                       >
-                         <Trash2 className="h-3 w-3 mr-1" />
-                         Elimina
-                       </button>
-                     </div>
-                   </div>
-                 </div>
-               ))}
-             </div>
-           )}
+                    <div className="flex flex-wrap gap-2 ml-4">
+                      {/* Pulsanti a forma di pillola per gestire DVR, Sopralluoghi e Reparti */}
+                      <button
+                        onClick={() => setActiveManager({ type: 'dvr', siteId: site.id, siteName: site.siteName })}
+                        className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-100 hover:bg-blue-200 rounded-full transition-colors flex items-center"
+                        title="Gestisci DVR"
+                      >
+                        <FileText className="h-3 w-3 mr-1" />
+                        DVR
+                      </button>
+                      <button
+                        onClick={() => setActiveManager({ type: 'sopralluogo', siteId: site.id, siteName: site.siteName })}
+                        className="px-3 py-1.5 text-xs font-medium text-green-700 bg-green-100 hover:bg-green-200 rounded-full transition-colors flex items-center"
+                        title="Gestisci Sopralluoghi"
+                      >
+                        <Eye className="h-3 w-3 mr-1" />
+                        Sopralluoghi
+                      </button>
+                      <button
+                        onClick={() => setActiveManager({ type: 'reparto', siteId: site.id, siteName: site.siteName })}
+                        className="px-3 py-1.5 text-xs font-medium text-purple-700 bg-purple-100 hover:bg-purple-200 rounded-full transition-colors flex items-center"
+                        title="Gestisci Reparti"
+                      >
+                        <Users className="h-3 w-3 mr-1" />
+                        Reparti
+                      </button>
+                      <button
+                        onClick={() => handleEdit(site)}
+                        className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-100 hover:bg-blue-200 rounded-full transition-colors flex items-center"
+                        title="Modifica sede"
+                      >
+                        <Edit className="h-3 w-3 mr-1" />
+                        Modifica
+                      </button>
+                      <button
+                        onClick={() => handleDelete(site.id)}
+                        className="px-3 py-1.5 text-xs font-medium text-red-700 bg-red-100 hover:bg-red-200 rounded-full transition-colors flex items-center"
+                        title="Elimina sede"
+                      >
+                        <Trash2 className="h-3 w-3 mr-1" />
+                        Elimina
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

@@ -45,24 +45,24 @@ export const useTenants = () => {
         loadingRef.current = true;
         setLoading(true);
         setError(null);
-        
+
         console.log('🔄 useTenants: Loading tenants...');
-         const response = await apiGet<{ tenants: Tenant[] }>('/api/tenants');
-         const tenantsData = response.tenants || [];
-        
+        const response = await apiGet<{ tenants: Tenant[] }>('/api/v1/tenants');
+        const tenantsData = response.tenants || [];
+
         // Aggiorna cache
         tenantsCache = {
           data: tenantsData,
           timestamp: Date.now()
         };
-        
+
         setTenants(tenantsData);
         console.log('✅ useTenants: Tenants loaded successfully', { count: tenantsData.length });
       } catch (err: unknown) {
         console.error('❌ useTenants: Error loading tenants:', err);
-        
+
         const error = err as { code?: string; message?: string; response?: { status?: number } };
-        
+
         // Gestione errori specifica
         if (error.code === 'ERR_INSUFFICIENT_RESOURCES' || error.message?.includes('ERR_INSUFFICIENT_RESOURCES')) {
           setError('Troppe richieste simultanee. Riprova tra qualche secondo.');
@@ -71,12 +71,12 @@ export const useTenants = () => {
         } else {
           setError('Errore nel caricamento dei tenant');
         }
-        
+
         // In caso di errori specifici o se c'è cache, usa dati di fallback
-        if (error.response?.status === 403 || error.response?.status === 404 || 
-            error.response?.status === 500 || error.response?.status === 429 ||
-            error.code === 'ERR_INSUFFICIENT_RESOURCES' || error.code === 'ERR_NETWORK') {
-          
+        if (error.response?.status === 403 || error.response?.status === 404 ||
+          error.response?.status === 500 || error.response?.status === 429 ||
+          error.code === 'ERR_INSUFFICIENT_RESOURCES' || error.code === 'ERR_NETWORK') {
+
           // Usa cache se disponibile
           if (tenantsCache && Date.now() - tenantsCache.timestamp < CACHE_DURATION * 2) {
             console.log('📦 useTenants: Using cached data due to error');

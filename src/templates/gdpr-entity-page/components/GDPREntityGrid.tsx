@@ -103,7 +103,7 @@ export function GDPREntityGrid<T extends BaseEntity = BaseEntity>({
   };
   
   // Renderizza valore campo
-  const renderFieldValue = (field: EntityField, entity: T) => {
+  const renderFieldValue = (field: EntityField, entity: T): React.ReactNode => {
     const value = (entity as Record<string, unknown>)[field.key];
     
     if (field.formatter) {
@@ -244,13 +244,15 @@ export function GDPREntityGrid<T extends BaseEntity = BaseEntity>({
                   const value = (entity as Record<string, unknown>)[field.key];
                   if (value === null || value === undefined || value === '') return null;
                   
+                  const renderedValue: React.ReactNode = renderFieldValue(field, entity);
+                  
                   return (
                     <div key={field.key} className="space-y-1">
                       <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                         {field.label}
                       </div>
                       <div className="font-medium">
-                        {renderFieldValue(field, entity)}
+                        {renderedValue}
                       </div>
                     </div>
                   );
@@ -263,13 +265,15 @@ export function GDPREntityGrid<T extends BaseEntity = BaseEntity>({
                       const value = (entity as Record<string, unknown>)[field.key];
                       if (value === null || value === undefined || value === '') return null;
                       
+                      const renderedValue: React.ReactNode = renderFieldValue(field, entity);
+                      
                       return (
                         <div key={field.key} className="flex justify-between items-center">
                           <span className="text-xs text-muted-foreground">
                             {field.label}:
                           </span>
                           <div className="text-xs">
-                            {renderFieldValue(field, entity)}
+                            {renderedValue}
                           </div>
                         </div>
                       );

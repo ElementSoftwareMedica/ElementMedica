@@ -7,7 +7,9 @@ import {
   Mail,
   MapPin,
   Phone,
-  User
+  User,
+  AlertTriangle,
+  RefreshCw
 } from 'lucide-react';
 import { useToast } from '../../hooks/useToast';
 import EntityFormLayout from '../shared/form/EntityFormLayout';
@@ -16,6 +18,21 @@ import EntityFormGrid, { EntityFormSection } from '../shared/form/EntityFormGrid
 import { apiUpload, apiPost, apiPut } from '../../services/api';
 import { Company } from '../../types';
 import { isValidCodiceFiscale } from '../../lib/utils';
+import { useAsyncValidation } from '../../hooks/useAsyncValidation';
+import { checkEmailAvailability, checkTaxCodeAvailability } from '../../services/validation';
+
+interface ExistingPersonInfo {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  taxCode: string;
+  status: 'active' | 'deleted';
+  currentRoles: string[];
+  message: string;
+  action: string;
+  newRoleType: string;
+}
 
 interface PersonFormNewProps {
   /** Dati della persona in caso di modifica */
@@ -113,11 +130,35 @@ const EmployeeFormNew: React.FC<PersonFormNewProps> = ({
   // Stato per errori generali
   const [generalError, setGeneralError] = useState('');
   
+  // Stato per dialog conferma persona esistente
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [existingPersonInfo, setExistingPersonInfo] = useState<ExistingPersonInfo | null>(null);
+  const [isReactivating, setIsReactivating] = useState(false);
+  const [pendingPayload, setPendingPayload] = useState<any>(null);
+  
   // Hook per le notifiche toast
   const { showToast } = useToast();
   
   // Using a ref to track if we've already initialized the form
   const initializedRef = useRef(false);
+
+  // Validazione async per email (skip se in edit mode)
+  const emailValidation = useAsyncValidation({
+    value: formData.email || '',
+    validator: checkEmailAvailability,
+    errorMessage: 'Questa email è già utilizzata',
+    skip: !!person?.id, // Skip in edit mode
+    debounceMs: 800
+  });
+
+  // Validazione async per codice fiscale (skip se in edit mode)
+  const taxCodeValidation = useAsyncValidation({
+    value: formData.codiceFiscale || '',
+    validator: checkTaxCodeAvailability,
+    errorMessage: 'Questo codice fiscale è già utilizzato',
+    skip: !!person?.id, // Skip in edit mode
+    debounceMs: 800
+  });
   
   // Inizializza i dati del form se stiamo modificando una persona esistente
   useEffect(() => {
@@ -221,6 +262,8 @@ const EmployeeFormNew: React.FC<PersonFormNewProps> = ({
       newErrors.codiceFiscale = 'Il Codice Fiscale è obbligatorio';
     } else if (!isValidCodiceFiscale(formData.codiceFiscale)) {
       newErrors.codiceFiscale = 'Formato Codice Fiscale non valido';
+    } else if (taxCodeValidation.error) {
+      newErrors.codiceFiscale = taxCodeValidation.error;
     }
     
     // L'azienda è obbligatoria solo per EMPLOYEE
@@ -231,6 +274,13 @@ const EmployeeFormNew: React.FC<PersonFormNewProps> = ({
     // Validazione email
     if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       newErrors.email = 'Formato email non valido';
+    } else if (emailValidation.error) {
+      newErrors.email = emailValidation.error;
+    }
+
+    // Blocca submit se validazione async in corso
+    if (emailValidation.isValidating || taxCodeValidation.isValidating) {
+      newErrors._async = 'Validazione in corso...';
     }
     
     setErrors(newErrors);
@@ -274,17 +324,83 @@ const EmployeeFormNew: React.FC<PersonFormNewProps> = ({
       
       // Chiama il callback di successo
       onSuccess();
-    } catch (error) {
+    } catch (error: any) {
+      const responseData = error?.response?.data;
+      
+      // Check se è una richiesta di conferma per persona esistente
+      if (error?.response?.status === 409 && responseData?.code === 'PERSON_EXISTS') {
+        setExistingPersonInfo({
+          id: responseData.existingPerson.id,
+          firstName: responseData.existingPerson.firstName,
+          lastName: responseData.existingPerson.lastName,
+          email: responseData.existingPerson.email,
+          taxCode: responseData.existingPerson.taxCode,
+          status: responseData.existingPerson.status,
+          currentRoles: responseData.existingPerson.currentRoles || [],
+          message: responseData.message,
+          action: responseData.action,
+          newRoleType: responseData.newRoleType
+        });
+        setPendingPayload({
+          ...formData,
+          roleType,
+          birthDate: formatDateForPrisma(formData.birthDate),
+          hiredDate: formatDateForPrisma(formData.hiredDate),
+        });
+        setShowConfirmDialog(true);
+        setIsSaving(false);
+        return;
+      }
+      
       setGeneralError(error instanceof Error ? error.message : 'Errore durante il salvataggio');
       
       // Mostra notifica di errore
-        showToast({ 
+      showToast({ 
         message: `Errore: ${error instanceof Error ? error.message : 'Errore durante il salvataggio'}`, 
-          type: 'error' 
-        });
+        type: 'error' 
+      });
     } finally {
       setIsSaving(false);
     }
+  };
+  
+  // Gestisce la conferma riattivazione
+  const handleConfirmReactivation = async () => {
+    if (!pendingPayload) return;
+    
+    setIsReactivating(true);
+    try {
+      const dataWithForce = { ...pendingPayload, forceReactivate: true };
+      await apiPost('/api/v1/persons', dataWithForce);
+      
+      setShowConfirmDialog(false);
+      setExistingPersonInfo(null);
+      setPendingPayload(null);
+      
+      showToast({ 
+        message: existingPersonInfo?.status === 'deleted' 
+          ? 'Persona riattivata con successo' 
+          : 'Dati persona aggiornati con successo', 
+        type: 'success' 
+      });
+      
+      onSuccess();
+    } catch (error: any) {
+      setGeneralError(error instanceof Error ? error.message : 'Errore durante la riattivazione');
+      showToast({ 
+        message: `Errore: ${error instanceof Error ? error.message : 'Errore durante la riattivazione'}`, 
+        type: 'error' 
+      });
+    } finally {
+      setIsReactivating(false);
+    }
+  };
+  
+  // Annulla riattivazione
+  const handleCancelReactivation = () => {
+    setShowConfirmDialog(false);
+    setExistingPersonInfo(null);
+    setPendingPayload(null);
   };
   
   // Gestisce la rimozione della foto
@@ -293,11 +409,79 @@ const EmployeeFormNew: React.FC<PersonFormNewProps> = ({
   };
   
   return (
-    <EntityFormLayout
-      title={person ? 'Modifica Persona' : 'Nuova Persona'}
-      subtitle={person ? `Modifica i dati di ${formData.firstName} ${formData.lastName}` : 'Inserisci i dati della nuova persona'}
-      onSubmit={handleSubmit}
-      onClose={onClose}
+    <>
+      {/* Dialog conferma persona esistente */}
+      {showConfirmDialog && existingPersonInfo && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full mx-4 overflow-hidden">
+            <div className={`p-4 ${existingPersonInfo.status === 'deleted' ? 'bg-amber-50 border-b border-amber-100' : 'bg-blue-50 border-b border-blue-100'}`}>
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-full ${existingPersonInfo.status === 'deleted' ? 'bg-amber-100' : 'bg-blue-100'}`}>
+                  {existingPersonInfo.status === 'deleted' ? (
+                    <RefreshCw className="w-5 h-5 text-amber-600" />
+                  ) : (
+                    <AlertTriangle className="w-5 h-5 text-blue-600" />
+                  )}
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  {existingPersonInfo.status === 'deleted' 
+                    ? 'Riattivare persona eliminata?' 
+                    : 'Persona già esistente'}
+                </h3>
+              </div>
+            </div>
+            
+            <div className="p-6">
+              <p className="text-gray-600 mb-4">{existingPersonInfo.message}</p>
+              
+              <div className="bg-gray-50 rounded-lg p-4 mb-4">
+                <p className="text-sm font-medium text-gray-700">Dati esistenti:</p>
+                <div className="mt-2 text-sm text-gray-600 space-y-1">
+                  <p><span className="font-medium">Nome:</span> {existingPersonInfo.firstName} {existingPersonInfo.lastName}</p>
+                  {existingPersonInfo.email && <p><span className="font-medium">Email:</span> {existingPersonInfo.email}</p>}
+                  {existingPersonInfo.taxCode && <p><span className="font-medium">Codice Fiscale:</span> {existingPersonInfo.taxCode}</p>}
+                  <p><span className="font-medium">Ruoli attuali:</span> {existingPersonInfo.currentRoles.join(', ') || 'Nessuno'}</p>
+                  <p><span className="font-medium">Stato:</span> 
+                    <span className={`ml-1 px-2 py-0.5 rounded text-xs ${existingPersonInfo.status === 'deleted' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                      {existingPersonInfo.status === 'deleted' ? 'Eliminato' : 'Attivo'}
+                    </span>
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex justify-end gap-3 p-4 bg-gray-50 border-t">
+              <button
+                onClick={handleCancelReactivation}
+                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                disabled={isReactivating}
+              >
+                Annulla
+              </button>
+              <button
+                onClick={handleConfirmReactivation}
+                disabled={isReactivating}
+                className={`px-4 py-2 text-white rounded-lg transition-colors flex items-center gap-2 ${
+                  existingPersonInfo.status === 'deleted' 
+                    ? 'bg-amber-600 hover:bg-amber-700' 
+                    : 'bg-blue-600 hover:bg-blue-700'
+                } disabled:opacity-50`}
+              >
+                {isReactivating && <RefreshCw className="w-4 h-4 animate-spin" />}
+                {existingPersonInfo.status === 'deleted' 
+                  ? 'Riattiva e Aggiorna' 
+                  : 'Conferma Aggiornamento'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      <EntityFormLayout
+        title={person ? 'Modifica Persona' : 'Nuova Persona'}
+        subtitle={person ? `Modifica i dati di ${formData.firstName} ${formData.lastName}` : 'Inserisci i dati della nuova persona'}
+        onSubmit={handleSubmit}
+        onClose={onClose}
       isSaving={isSaving}
       error={generalError}
       submitLabel={person ? 'Aggiorna' : 'Crea'}
@@ -332,8 +516,9 @@ const EmployeeFormNew: React.FC<PersonFormNewProps> = ({
             value={formData.codiceFiscale}
             onChange={handleChange}
             required
-                leftIcon={<FileText size={18} />}
-            error={errors.codiceFiscale}
+            leftIcon={<FileText size={18} />}
+            error={errors.codiceFiscale || taxCodeValidation.error}
+            helpText={taxCodeValidation.isValidating ? 'Verifica disponibilità...' : undefined}
           />
           
           <EntityFormField
@@ -454,7 +639,8 @@ const EmployeeFormNew: React.FC<PersonFormNewProps> = ({
             value={formData.email}
             onChange={handleChange}
             leftIcon={<Mail size={18} />}
-            error={errors.email}
+            error={errors.email || emailValidation.error}
+            helpText={emailValidation.isValidating ? 'Verifica disponibilità...' : undefined}
           />
           
           <EntityFormField
@@ -525,6 +711,7 @@ const EmployeeFormNew: React.FC<PersonFormNewProps> = ({
           </div>
           </div>
     </EntityFormLayout>
+    </>
   );
 };
 

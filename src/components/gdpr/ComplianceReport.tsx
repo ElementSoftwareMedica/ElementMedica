@@ -92,18 +92,20 @@ export const ComplianceReport: React.FC<ComplianceReportProps> = ({
     );
   }
 
-  const complianceStatus = getComplianceStatus(report.overallScore);
+  const complianceStatus = getComplianceStatus(report.overallScore ?? 0);
   
   // Prepare chart data
-  const consentData = Object.entries(report.consentStats).map(([type, stats]) => ({
-    name: type.replace('_', ' ').toUpperCase(),
-    active: stats.active,
-    withdrawn: stats.withdrawn,
-    total: stats.total
-  }));
+  const consentData = report.consentStats 
+    ? Object.entries(report.consentStats).map(([type, stats]) => ({
+        name: type.replace('_', ' ').toUpperCase(),
+        active: stats.active,
+        withdrawn: stats.withdrawn,
+        total: stats.total
+      }))
+    : [];
 
   const trendsData = report.trends?.map(trend => ({
-    date: new Date(trend.date).toLocaleDateString(),
+    date: new Date(trend.date).toLocaleString(),
     score: trend.complianceScore,
     consents: trend.totalConsents
   })) || [];
@@ -147,11 +149,11 @@ export const ComplianceReport: React.FC<ComplianceReportProps> = ({
             <div className="flex-1">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium">Compliance Level</span>
-                <span className={`text-2xl font-bold ${getComplianceColor(report.overallScore)}`}>
-                  {report.overallScore}%
+                <span className={`text-2xl font-bold ${getComplianceColor(report.overallScore ?? 0)}`}>
+                  {report.overallScore ?? 0}%
                 </span>
               </div>
-              <Progress value={report.overallScore} className="h-3" />
+              <Progress value={report.overallScore ?? 0} className="h-3" />
             </div>
           </div>
         </CardContent>
@@ -165,7 +167,7 @@ export const ComplianceReport: React.FC<ComplianceReportProps> = ({
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{report.totalUsers.toLocaleString()}</div>
+            <div className="text-2xl font-bold">{(report.totalUsers ?? 0).toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">
               Active user accounts
             </p>
@@ -178,7 +180,7 @@ export const ComplianceReport: React.FC<ComplianceReportProps> = ({
             <CheckCircle className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{report.totalConsents.toLocaleString()}</div>
+            <div className="text-2xl font-bold">{(report.totalConsents ?? 0).toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">
               Valid consent records
             </p>

@@ -179,12 +179,26 @@ export interface ComplianceReport {
   }[];
   generatedBy: string;
   createdAt: Date;
+  generatedAt: Date; // Alias for createdAt (component compatibility)
   // Flattened properties for easier access in components
   overallScore?: number;
   totalUsers?: number;
   totalConsents?: number;
   pendingDeletions?: number;
   dataExports?: number;
+  // Component-specific properties
+  consentStats?: Record<string, {
+    total: number;
+    granted: number;
+    withdrawn: number;
+    active: number;
+  }>;
+  trends?: Array<{
+    date: Date;
+    complianceScore: number;
+    totalConsents: number;
+    activeConsents: number;
+  }>;
 }
 
 // API Response Types
@@ -289,7 +303,9 @@ export interface UseGDPRConsentReturn {
     withdrawalReason?: string;
   };
   hasActiveConsent: (consentType: string) => boolean;
+  hasConsent: (consentType: string) => boolean; // Alias for hasActiveConsent
   getActiveConsents: () => GDPRConsent[];
+  getConsentByType: (consentType: string) => GDPRConsent | undefined; // Find specific consent
   getConsentStats: () => {
     total: number;
     active: number;
@@ -301,7 +317,7 @@ export interface UseGDPRConsentReturn {
 
 export interface UseAuditTrailReturn {
   auditTrail: AuditLogEntry[];
-  auditLogs?: AuditLogEntry[]; // Alias for auditTrail for component compatibility
+  auditLogs: AuditLogEntry[]; // Alias for auditTrail for component compatibility
   loading: boolean;
   error: string | null;
   total: number;
@@ -313,13 +329,13 @@ export interface UseAuditTrailReturn {
   startIndex: number;
   endIndex: number;
   filters: AuditTrailFilters;
-  pagination?: { // Additional pagination object for component compatibility
+  pagination: { // Additional pagination object for component compatibility
     page: number;
-    currentPage?: number; // Alias for page (UI-friendly naming)
+    currentPage: number; // Alias for page (UI-friendly naming)
     limit: number;
-    pageSize?: number; // Alias for limit (UI-friendly naming)
+    pageSize: number; // Alias for limit (UI-friendly naming)
     total: number;
-    totalItems?: number; // Alias for total (UI-friendly naming)
+    totalItems: number; // Alias for total (UI-friendly naming)
     totalPages: number;
   };
   fetchAuditTrail: (filters?: AuditTrailFilters) => Promise<void>;
@@ -329,8 +345,8 @@ export interface UseAuditTrailReturn {
   applyFilters: (newFilters: AuditTrailFilters) => void;
   clearFilters: () => void;
   refresh: () => void;
-  refreshAuditTrail?: () => void; // Alias for refresh
-  hasFilters?: boolean; // Computed property for component compatibility
+  refreshAuditTrail: () => void; // Alias for refresh
+  hasFilters: boolean; // Computed property for component compatibility
   getStats: () => {
     totalEntries: number;
     currentPageEntries: number;
@@ -338,7 +354,7 @@ export interface UseAuditTrailReturn {
     dataTypeCounts: Record<string, number>;
     recentActivity: number;
   };
-  getAuditStats?: () => { // Alias for getStats
+  getAuditStats: () => { // Alias for getStats
     totalEntries: number;
     currentPageEntries: number;
     actionCounts: Record<string, number>;
@@ -346,8 +362,8 @@ export interface UseAuditTrailReturn {
     recentActivity: number;
   };
   exportData: (format?: 'csv' | 'json') => Promise<void>;
-  exportToCSV?: () => Promise<void>; // Alias for exportData('csv')
-  exportToJSON?: () => Promise<void>; // Alias for exportData('json')
+  exportToCSV: () => Promise<void>; // Alias for exportData('csv')
+  exportToJSON: () => Promise<void>; // Alias for exportData('json')
 }
 
 export interface UseDataExportReturn {
@@ -375,20 +391,23 @@ export interface UsePrivacySettingsReturn {
   settings: PrivacySettings | null;
   loading: boolean;
   error: string | null;
-  hasUnsavedChanges?: boolean; // Track unsaved changes
-  updateSettings: (data: PrivacySettingsFormData) => Promise<void>;
-  updatePrivacySettings?: (data: PrivacySettingsFormData) => Promise<void>; // Alias
-  updateSingleSetting?: (key: keyof PrivacySettings, value: unknown) => void; // Update single setting
+  hasUnsavedChanges: boolean; // Track unsaved changes
+  updatePrivacySettings: (data: PrivacySettingsFormData) => Promise<void>;
+  updateSingleSetting: (key: keyof PrivacySettings, value: unknown) => void; // Update single setting
   resetToDefaults: () => Promise<void>;
   refreshSettings: () => Promise<void>;
-  getPrivacyScore: () => number;
-  isPrivacyCompliant: () => boolean;
-  getComplianceScore?: () => number; // Alias for getPrivacyScore
-  getComplianceRecommendations?: () => string[]; // Get recommendations
-  checkForChanges?: () => boolean; // Check if there are unsaved changes
-  getSettingDescription?: (key: keyof PrivacySettings) => string; // Get setting description
-  getSettingImpact?: (key: keyof PrivacySettings) => string; // Get setting impact level
-  exportSettings?: () => void; // Export settings to JSON
+  getComplianceScore: () => number; // Renamed from getPrivacyScore
+  getComplianceRecommendations: () => Array<{
+    id: string;
+    title: string;
+    description: string;
+    priority: 'high' | 'medium' | 'low';
+    category: string;
+  }>; // Get recommendations as structured objects
+  checkForChanges: (formData: PrivacySettingsFormData) => boolean; // Check if there are unsaved changes
+  getSettingDescription: (key: keyof PrivacySettings) => string; // Get setting description
+  getSettingImpact: (key: keyof PrivacySettings) => string; // Get setting impact level
+  exportSettings: () => void; // Export settings to JSON
 }
 
 export interface UseDeletionRequestReturn {
@@ -396,9 +415,9 @@ export interface UseDeletionRequestReturn {
   loading: boolean;
   error: string | null;
   submitRequest: (data: DeletionRequestFormData) => Promise<DeletionRequest>;
-  submitDeletionRequest?: (data: DeletionRequestFormData) => Promise<DeletionRequest>; // Alias for submitRequest
+  submitDeletionRequest: (data: DeletionRequestFormData) => Promise<DeletionRequest>; // Alias for submitRequest
   cancelRequest: (requestId: string) => Promise<void>;
-  cancelDeletionRequest?: (requestId: string) => Promise<void>; // Alias for cancelRequest
+  cancelDeletionRequest: (requestId: string) => Promise<void>; // Alias for cancelRequest
   checkStatus: (requestId: string) => Promise<DeletionRequest | null>;
   refreshRequests: () => Promise<void>;
   canSubmitNewRequest: () => boolean;
@@ -406,7 +425,7 @@ export interface UseDeletionRequestReturn {
   getRequestHistory: () => DeletionRequest[];
   estimateProcessingTime: () => { min: number; max: number };
   // Additional methods for component compatibility
-  getDeletionStats?: () => {
+  getDeletionStats: () => {
     total: number;
     pending: number;
     approved: number;
@@ -415,17 +434,17 @@ export interface UseDeletionRequestReturn {
     completed: number;
     active: number;
   };
-  getLatestRequest?: () => DeletionRequest | null;
-  getStatusColor?: (status: DeletionStatus) => string;
-  getStatusDescription?: (status: DeletionStatus) => string;
-  formatRequestForDisplay?: (request: DeletionRequest) => {
+  getLatestRequest: () => DeletionRequest | null;
+  getStatusColor: (status: DeletionStatus) => string;
+  getStatusDescription: (status: DeletionStatus) => string;
+  formatRequestForDisplay: (request: DeletionRequest) => {
     statusColor: string;
     statusDescription: string;
     formattedRequestDate: string;
     formattedProcessedDate: string | null;
     daysSinceRequest: number;
   } & DeletionRequest;
-  validateFormData?: (data: Partial<DeletionRequestFormData>) => {
+  validateFormData: (data: Partial<DeletionRequestFormData>) => {
     isValid: boolean;
     errors: Record<string, string>;
   };
@@ -447,6 +466,8 @@ export interface AuditTrailFilters {
   startDate?: Date;
   endDate?: Date;
   dataType?: string;
+  ipAddress?: string;
+  userAgent?: string;
   limit?: number;
   offset?: number;
 }

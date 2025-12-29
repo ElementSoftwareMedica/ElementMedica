@@ -13,12 +13,12 @@ class PersonController {
       const { companyId, tenantId, limit, offset } = req.query;
       const personId = req.person?.id;
 
-      logger.info('Getting employees with BYPASS', { 
-        companyId, 
-        tenantId, 
-        limit, 
-        offset, 
-        personId 
+      logger.info('Getting employees with BYPASS', {
+        companyId,
+        tenantId,
+        limit,
+        offset,
+        personId
       });
 
       // BYPASS TEMPORANEO: Query diretta semplificata
@@ -43,6 +43,10 @@ class PersonController {
           lastName: true,
           email: true,
           taxCode: true,
+          title: true, // Profilo professionale
+          phone: true,
+          birthDate: true,
+          hiredDate: true, // Data assunzione
           globalRole: true,
           companyId: true,
           tenantId: true,
@@ -74,8 +78,8 @@ class PersonController {
         req.tenantId || tenantId
       );
 
-      logger.info('Retrieved employees successfully with BYPASS', { 
-        count: (filteredEmployees || []).length 
+      logger.info('Retrieved employees successfully with BYPASS', {
+        count: (filteredEmployees || []).length
       });
 
       res.json({
@@ -93,25 +97,25 @@ class PersonController {
       });
     }
   }
-  
+
   // GET /api/persons/trainers
   async getTrainers(req, res) {
     try {
       const { companyId, search, ...filters } = req.query;
       const personId = req.person.id;
       const tenantId = req.tenantId; // Usa il tenant dal middleware
-      
+
       const queryFilters = {};
       if (companyId) queryFilters.companyId = companyId;
       if (tenantId) queryFilters.tenantId = tenantId;
-      
+
       let trainers;
       if (search) {
         trainers = await personService.searchPersons(search, 'TRAINER', queryFilters);
       } else {
         trainers = await personService.getTrainers(queryFilters);
       }
-      
+
       // Filtra i dati in base ai permessi avanzati della persona
       const enhancedRoleService = (await import('../services/enhancedRoleService.js')).default;
       const filteredTrainers = await enhancedRoleService.filterDataByPermissions(
@@ -121,7 +125,7 @@ class PersonController {
         trainers,
         tenantId
       );
-      
+
       // Trasforma i dati per backward compatibility
       const transformedTrainers = (filteredTrainers || []).map(person => ({
         id: person.id,
@@ -145,32 +149,32 @@ class PersonController {
         createdAt: person.createdAt,
         updatedAt: person.updatedAt
       }));
-      
+
       res.json(transformedTrainers);
     } catch (error) {
       logger.error('Error getting trainers:', { error: error.message });
       res.status(500).json({ error: error.message });
     }
   }
-  
+
   // GET /api/persons/users
   async getSystemUsers(req, res) {
     try {
       const { companyId, search, ...filters } = req.query;
       const personId = req.person.id;
       const tenantId = req.tenantId; // Usa il tenant dal middleware
-      
+
       const queryFilters = {};
       if (companyId) queryFilters.companyId = companyId;
       if (tenantId) queryFilters.tenantId = tenantId;
-      
+
       let users;
       if (search) {
         users = await personService.searchPersons(search, ['ADMIN', 'COMPANY_ADMIN', 'MANAGER'], queryFilters);
       } else {
         users = await personService.getSystemUsers(queryFilters);
       }
-      
+
       // Filtra i dati in base ai permessi avanzati della persona
       const enhancedRoleService = (await import('../services/enhancedRoleService.js')).default;
       const filteredUsers = await enhancedRoleService.filterDataByPermissions(
@@ -180,7 +184,7 @@ class PersonController {
         users,
         tenantId
       );
-      
+
       // Trasforma i dati per backward compatibility
       const transformedUsers = (filteredUsers || []).map(person => ({
         id: person.id,
@@ -198,21 +202,21 @@ class PersonController {
         createdAt: person.createdAt,
         updatedAt: person.updatedAt
       }));
-      
+
       res.json(transformedUsers);
     } catch (error) {
       logger.error('Error getting system persons:', { error: error.message });
       res.status(500).json({ error: error.message });
     }
   }
-  
+
   // GET /api/persons/:id
   async getPersonById(req, res) {
     try {
       const { id } = req.params;
       const { view, fields } = req.query || {};
       const person = await personService.getPersonById(id);
-      
+
       if (!person) {
         return res.status(404).json({ error: 'Person not found' });
       }
@@ -295,14 +299,14 @@ class PersonController {
       } catch (permErr) {
         logger.warn('Visibility metadata calculation failed, falling back to default', { error: permErr.message });
       }
-      
+
       res.json({ ...person, _visibility: visibilityMeta });
     } catch (error) {
       logger.error('Error getting person by ID:', { error: error.message, id: req.params.id });
       res.status(500).json({ error: error.message });
     }
   }
-  
+
   // GET /api/persons/:id/fields-visibility
   async getPersonFieldsVisibility(req, res) {
     try {
@@ -423,26 +427,26 @@ class PersonController {
       if (!errors.isEmpty()) {
         return res.status(400).json({ errors: errors.array() });
       }
-      
+
       const { roleType, companyId, tenantId, ...personData } = req.body;
-      
+
       // Controllo completo di req.person per debug se necessario
-      
+
       // Usa tenantId e companyId dell'utente autenticato se non forniti
-      const finalTenantId = tenantId 
-        || req.headers['x-tenant-id'] 
-        || req.tenantId 
-        || (req.tenant && req.tenant.id) 
+      const finalTenantId = tenantId
+        || req.headers['x-tenant-id']
+        || req.tenantId
+        || (req.tenant && req.tenant.id)
         || req.person?.tenantId;
       const finalCompanyId = companyId || req.person?.companyId;
-      
+
       // Verifica che tenantId sia presente
       if (!finalTenantId) {
-        return res.status(400).json({ 
-          error: 'TenantId is required. Please provide tenantId in request body or ensure user has a valid tenant.' 
+        return res.status(400).json({
+          error: 'TenantId is required. Please provide tenantId in request body or ensure user has a valid tenant.'
         });
       }
-      
+
       // Trasforma i campi da snake_case a camelCase se necessario
       const transformedData = {
         firstName: personData.firstName || personData.first_name,
@@ -480,7 +484,7 @@ class PersonController {
             // Altri formati: usa costruttore Date standard
             transformedData.birthDate = new Date(dateStr);
           }
-          
+
           // Verifica che la data sia valida
           if (isNaN(transformedData.birthDate.getTime())) {
             transformedData.birthDate = null;
@@ -498,7 +502,7 @@ class PersonController {
           } else {
             transformedData.hiredDate = new Date(dateStr);
           }
-          
+
           if (isNaN(transformedData.hiredDate.getTime())) {
             transformedData.hiredDate = null;
           }
@@ -524,13 +528,145 @@ class PersonController {
         });
       }
 
-      // Controlli duplicati di base
-      if (transformedData.email) {
-        const existingByEmail = await prisma.person.findFirst({ where: { email: transformedData.email, deletedAt: null } });
-        if (existingByEmail) {
-          return res.status(409).json({ error: 'Email already in use' });
+      // Check per persone esistenti (attive o eliminate)
+      // Se forceReactivate=true nel body, salta i check e procedi con riattivazione
+      const forceReactivate = req.body.forceReactivate === true;
+
+      // Cerca persone esistenti per email o taxCode (incluse le eliminate)
+      let existingPerson = null;
+      let existingPersonType = null; // 'active' o 'deleted'
+
+      // SOLO il codice fiscale (taxCode) è considerato univoco per le Person
+      // L'email NON deve causare conflitto - più persone possono avere la stessa email
+      if (transformedData.taxCode) {
+        existingPerson = await prisma.person.findFirst({
+          where: { taxCode: transformedData.taxCode },
+          include: {
+            personRoles: {
+              where: { deletedAt: null }
+            }
+          }
+        });
+        if (existingPerson) {
+          existingPersonType = existingPerson.deletedAt ? 'deleted' : 'active';
         }
       }
+      // NOTA: Rimosso il check su email - solo taxCode è univoco
+
+      // Se esiste una persona e non è forzato il riattivo, chiedi conferma
+      if (existingPerson && !forceReactivate) {
+        const existingRoles = existingPerson.personRoles.map(r => r.roleType);
+        const willReplaceRole = existingPersonType === 'deleted' && roleType && !existingRoles.includes(roleType);
+        const willAddRole = existingPersonType === 'active' && roleType && !existingRoles.includes(roleType);
+
+        return res.status(409).json({
+          error: existingPersonType === 'deleted'
+            ? 'Persona già esistente nel sistema (eliminata). Confermare per riattivare e aggiornare i dati.'
+            : 'Persona già esistente nel sistema.',
+          code: 'PERSON_EXISTS',
+          existingPerson: {
+            id: existingPerson.id,
+            firstName: existingPerson.firstName,
+            lastName: existingPerson.lastName,
+            email: existingPerson.email,
+            taxCode: existingPerson.taxCode,
+            status: existingPersonType,
+            deletedAt: existingPerson.deletedAt,
+            currentRoles: existingRoles
+          },
+          newRoleType: roleType,
+          action: existingPersonType === 'deleted' ? 'REACTIVATE_AND_UPDATE' : 'ADD_ROLE_OR_UPDATE',
+          willReplaceRole,
+          willAddRole,
+          message: existingPersonType === 'deleted'
+            ? `La persona ${existingPerson.firstName} ${existingPerson.lastName} è stata eliminata in precedenza. Vuoi riattivare l'account e aggiornare i dati? ${willReplaceRole ? `Il ruolo cambierà da ${existingRoles.join(', ')} a ${roleType}.` : ''}`
+            : `La persona ${existingPerson.firstName} ${existingPerson.lastName} esiste già. ${willAddRole ? `Vuoi aggiungere il ruolo ${roleType}?` : 'Vuoi aggiornare i dati?'}`
+        });
+      }
+
+      // Se forceReactivate=true e esiste una persona, aggiorniamo/riattiviamo
+      if (existingPerson && forceReactivate) {
+        logger.info('Reactivating/updating existing person', {
+          personId: existingPerson.id,
+          wasDeleted: existingPersonType === 'deleted',
+          newRole: roleType
+        });
+
+        // Prepara i dati da aggiornare
+        const updateData = {
+          ...transformedData,
+          deletedAt: null,
+          status: 'ACTIVE',
+          updatedAt: new Date()
+        };
+
+        // Rimuovi campi undefined
+        Object.keys(updateData).forEach(key => {
+          if (updateData[key] === undefined) delete updateData[key];
+        });
+
+        // Aggiorna la persona
+        const updated = await prisma.person.update({
+          where: { id: existingPerson.id },
+          data: updateData
+        });
+
+        // Gestisci i ruoli
+        if (roleType) {
+          const existingRole = await prisma.personRole.findFirst({
+            where: { personId: existingPerson.id, roleType, deletedAt: null }
+          });
+
+          if (!existingRole) {
+            // Se il ruolo precedente era diverso e la persona era eliminata, 
+            // soft-delete del vecchio ruolo e crea il nuovo
+            if (existingPersonType === 'deleted') {
+              await prisma.personRole.updateMany({
+                where: { personId: existingPerson.id, deletedAt: null },
+                data: { deletedAt: new Date(), isActive: false }
+              });
+            }
+
+            // Crea il nuovo ruolo
+            await prisma.personRole.create({
+              data: {
+                personId: existingPerson.id,
+                roleType,
+                isActive: true,
+                isPrimary: true,
+                companyId: finalCompanyId,
+                tenantId: finalTenantId
+              }
+            });
+          } else {
+            // Riattiva il ruolo esistente se era disattivato
+            await prisma.personRole.update({
+              where: { id: existingRole.id },
+              data: { isActive: true, deletedAt: null }
+            });
+          }
+        }
+
+        // Ritorna la persona aggiornata con i ruoli
+        const result = await prisma.person.findUnique({
+          where: { id: existingPerson.id },
+          include: {
+            personRoles: { where: { deletedAt: null } },
+            company: true,
+            tenant: true
+          }
+        });
+
+        return res.status(200).json({
+          ...result,
+          reactivated: existingPersonType === 'deleted',
+          message: existingPersonType === 'deleted'
+            ? 'Persona riattivata con successo'
+            : 'Dati persona aggiornati con successo'
+        });
+      }
+
+      // Controlli duplicati per nuove persone (non esistenti)
       if (transformedData.username) {
         const existingByUsername = await prisma.person.findFirst({ where: { username: transformedData.username, deletedAt: null } });
         if (existingByUsername) {
@@ -549,6 +685,19 @@ class PersonController {
     } catch (error) {
       logger.error('Error creating person:', { error: error.message });
       const message = (error && error.message) || '';
+
+      // Gestione errori Prisma per constraint violations
+      if (message.toLowerCase().includes('unique constraint') || error.code === 'P2002') {
+        // Estrai il campo dalla stringa di errore
+        const fieldMatch = message.match(/fields: \(`(\w+)`\)/);
+        const field = fieldMatch ? fieldMatch[1] : 'unknown';
+        return res.status(409).json({
+          error: `${field === 'taxCode' ? 'Tax code' : field === 'email' ? 'Email' : field} already in use`,
+          code: 'DUPLICATE_FIELD',
+          field
+        });
+      }
+
       if (message && message.toLowerCase().includes('tenantid is required')) {
         return res.status(400).json({ error: 'TenantId is required' });
       }
@@ -559,7 +708,7 @@ class PersonController {
       res.status(500).json(resp);
     }
   }
-  
+
   // PUT /api/persons/:id
   async updatePerson(req, res) {
     try {
@@ -576,7 +725,7 @@ class PersonController {
       res.status(500).json({ error: 'Failed to update person' });
     }
   }
-  
+
   // DELETE /api/persons/:id
   async deletePerson(req, res) {
     try {
@@ -588,7 +737,7 @@ class PersonController {
       res.status(500).json({ error: error.message });
     }
   }
-  
+
   // POST /api/persons/:id/roles
   async addRole(req, res) {
     try {
@@ -601,7 +750,7 @@ class PersonController {
       res.status(500).json({ error: 'Failed to add role to person' });
     }
   }
-  
+
   // DELETE /api/persons/:id/roles/:roleType
   async removeRole(req, res) {
     try {
@@ -613,7 +762,7 @@ class PersonController {
       res.status(500).json({ error: error.message });
     }
   }
-  
+
   // GET /api/persons
   async getPersons(req, res) {
     try {
@@ -623,15 +772,19 @@ class PersonController {
         search,
         roleType,
         companyId,
-        tenantId, // currently unused by core pagination
+        tenantId: queryTenantId,
         sortBy = 'lastLogin',
         sortOrder = 'desc',
         isActive
       } = req.query;
 
+      // Use tenantId from: 1) middleware req.tenantId, 2) person's tenantId, 3) query param
+      const effectiveTenantId = req.tenantId || req.person?.tenantId || queryTenantId;
+
       const options = {
         roleType,
         companyId,
+        tenantId: effectiveTenantId, // Pass tenant filter to service
         search,
         sortBy,
         sortOrder,
@@ -654,15 +807,43 @@ class PersonController {
         email: person.email,
         username: person.username,
         phone: person.phone,
+        taxCode: person.taxCode,
+        title: person.title, // ✅ Profilo professionale
         companyId: person.companyId, // ✅ Include companyId for schedules
-        companyName: person.company?.name,
+        company: person.company ? {
+          id: person.company.id,
+          ragioneSociale: person.company.ragioneSociale || person.company.name
+        } : undefined,
+        siteId: person.siteId, // ✅ Include siteId for employees
+        site: person.site ? {
+          id: person.site.id,
+          siteName: person.site.siteName,
+          citta: person.site.citta,
+          indirizzo: person.site.indirizzo
+        } : undefined,
+        personRoles: (person.personRoles || []).map(pr => ({
+          id: pr.id,
+          roleType: pr.roleType,
+          isActive: pr.isActive,
+          deletedAt: pr.deletedAt,
+          professionalProfile: pr.professionalProfile,
+          hiringDate: pr.hiringDate,
+          company: pr.company ? {
+            id: pr.company.id,
+            ragioneSociale: pr.company.ragioneSociale || pr.company.name
+          } : undefined,
+          assignedAt: pr.assignedAt
+        })),
         tenantId: person.tenantId, // ✅ Include tenantId for consistency
         tenantName: person.tenant?.name,
         birthDate: person.birthDate, // ✅ Include birthDate for display
+        hiredDate: person.hiredDate, // ✅ Include hiredDate for employees
         position: person.position,
         status: person.status,
         certifications: person.certifications, // ✅ Include certifications for trainers filtering
         specialties: person.specialties, // ✅ Include specialties for trainers
+        residenceCity: person.residenceCity, // ✅ Città residenza per trainers
+        hourlyRate: person.hourlyRate ? parseFloat(person.hourlyRate.toString()) : null, // ✅ Prezzo/ora per trainers
         createdAt: person.createdAt,
         updatedAt: person.updatedAt
       }));
@@ -722,8 +903,19 @@ class PersonController {
   async checkUsernameAvailability(req, res) {
     try {
       const { username } = req.query;
-      const available = await personService.checkUsernameAvailability(username);
-      res.json({ available });
+
+      if (!username) {
+        return res.status(400).json({ error: 'Username is required' });
+      }
+
+      const existing = await prisma.person.findFirst({
+        where: {
+          username: String(username),
+          deletedAt: null
+        }
+      });
+
+      res.json({ available: !existing });
     } catch (error) {
       logger.error('Error checking username availability:', { error: error.message, query: req.query });
       res.status(500).json({ error: error.message });
@@ -734,10 +926,44 @@ class PersonController {
   async checkEmailAvailability(req, res) {
     try {
       const { email } = req.query;
-      const available = await personService.checkEmailAvailability(email);
-      res.json({ available });
+
+      if (!email) {
+        return res.status(400).json({ error: 'Email is required' });
+      }
+
+      const existing = await prisma.person.findFirst({
+        where: {
+          email: String(email).toLowerCase().trim(),
+          deletedAt: null
+        }
+      });
+
+      res.json({ available: !existing });
     } catch (error) {
       logger.error('Error checking email availability:', { error: error.message, query: req.query });
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  // GET /api/persons/check-taxcode
+  async checkTaxCodeAvailability(req, res) {
+    try {
+      const { taxCode } = req.query;
+
+      if (!taxCode) {
+        return res.status(400).json({ error: 'Tax code is required' });
+      }
+
+      const existing = await prisma.person.findFirst({
+        where: {
+          taxCode: String(taxCode).toUpperCase().trim(),
+          deletedAt: null
+        }
+      });
+
+      res.json({ available: !existing });
+    } catch (error) {
+      logger.error('Error checking tax code availability:', { error: error.message, query: req.query });
       res.status(500).json({ error: error.message });
     }
   }
@@ -750,8 +976,8 @@ class PersonController {
       // Determina view effettiva (preferisci entità virtuale se presente)
       const effectiveView = viewQuery || (
         req.virtualEntity?.name === 'TRAINERS' ? 'trainer' :
-        req.virtualEntity?.name === 'EMPLOYEES' ? 'employee' :
-        'person'
+          req.virtualEntity?.name === 'EMPLOYEES' ? 'employee' :
+            'person'
       );
 
       // Costruisci filtri effettivi partendo dalla query
@@ -931,9 +1157,9 @@ class PersonController {
   async getPreferences(req, res) {
     try {
       const personId = req.person.id;
-      
+
       const preferences = await personService.getPersonPreferences(personId);
-      
+
       res.json(preferences || {});
     } catch (error) {
       logger.error('Error getting person preferences:', { error: error.message, personId: req.person?.id });
@@ -946,9 +1172,9 @@ class PersonController {
     try {
       const personId = req.person.id;
       const preferences = req.body;
-      
+
       const updatedPreferences = await personService.updatePersonPreferences(personId, preferences);
-      
+
       res.json(updatedPreferences);
     } catch (error) {
       logger.error('Error updating person preferences:', { error: error.message, personId: req.person?.id });
@@ -960,9 +1186,9 @@ class PersonController {
   async resetPreferences(req, res) {
     try {
       const personId = req.person.id;
-      
+
       const defaultPreferences = await personService.resetPersonPreferences(personId);
-      
+
       res.json(defaultPreferences);
     } catch (error) {
       logger.error('Error resetting person preferences:', { error: error.message, personId: req.person?.id });

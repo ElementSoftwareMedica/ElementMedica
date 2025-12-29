@@ -40,6 +40,7 @@ export interface CMSPageListFilters {
   search?: string;
   page?: number;
   limit?: number;
+  tenantId?: string; // Filtro per brand/tenant specifico
 }
 
 export interface CMSPageListResponse {
@@ -80,17 +81,18 @@ class CMSPagesService {
    */
   async listPages(filters?: CMSPageListFilters): Promise<CMSPageListResponse> {
     const params = new URLSearchParams();
-    
+
     if (filters?.status) params.append('status', filters.status);
     if (filters?.search) params.append('search', filters.search);
     if (filters?.page) params.append('page', filters.page.toString());
     if (filters?.limit) params.append('limit', filters.limit.toString());
+    if (filters?.tenantId) params.append('tenantId', filters.tenantId);
 
     const queryString = params.toString();
     const url = queryString ? `${this.baseURL}?${queryString}` : this.baseURL;
 
-    const response = await apiClient.get<{success: boolean; data: CMSPageListResponse; error?: string}>(url);
-    
+    const response = await apiClient.get<{ success: boolean; data: CMSPageListResponse; error?: string }>(url);
+
     if (!response.data.success) {
       throw new Error(response.data.error || 'Failed to list pages');
     }
@@ -102,8 +104,8 @@ class CMSPagesService {
    * Ottieni singola pagina per ID
    */
   async getPage(id: string): Promise<CMSPage> {
-    const response = await apiClient.get<{success: boolean; data: CMSPage; error?: string}>(`${this.baseURL}/${id}`);
-    
+    const response = await apiClient.get<{ success: boolean; data: CMSPage; error?: string }>(`${this.baseURL}/${id}`);
+
     if (!response.data.success) {
       throw new Error(response.data.error || 'Failed to get page');
     }
@@ -115,8 +117,8 @@ class CMSPagesService {
    * Ottieni singola pagina per slug (per frontend pubblico)
    */
   async getBySlug(slug: string): Promise<CMSPage> {
-    const response = await apiClient.get<{success: boolean; data: CMSPage; error?: string}>(`${this.baseURL}/slug/${slug}`);
-    
+    const response = await apiClient.get<{ success: boolean; data: CMSPage; error?: string }>(`${this.baseURL}/slug/${slug}`);
+
     if (!response.data.success) {
       throw new Error(response.data.error || 'Page not found');
     }
@@ -128,8 +130,8 @@ class CMSPagesService {
    * Crea nuova pagina
    */
   async createPage(data: CreateCMSPageData): Promise<CMSPage> {
-    const response = await apiClient.post<{success: boolean; data: CMSPage; error?: string}>(this.baseURL, data);
-    
+    const response = await apiClient.post<{ success: boolean; data: CMSPage; error?: string }>(this.baseURL, data);
+
     if (!response.data.success) {
       throw new Error(response.data.error || 'Failed to create page');
     }
@@ -141,8 +143,8 @@ class CMSPagesService {
    * Aggiorna pagina esistente
    */
   async updatePage(id: string, data: UpdateCMSPageData): Promise<CMSPage> {
-    const response = await apiClient.patch<{success: boolean; data: CMSPage; error?: string}>(`${this.baseURL}/${id}`, data);
-    
+    const response = await apiClient.patch<{ success: boolean; data: CMSPage; error?: string }>(`${this.baseURL}/${id}`, data);
+
     if (!response.data.success) {
       throw new Error(response.data.error || 'Failed to update page');
     }
@@ -154,8 +156,8 @@ class CMSPagesService {
    * Pubblica pagina
    */
   async publishPage(id: string): Promise<CMSPage> {
-    const response = await apiClient.post<{success: boolean; data: CMSPage; error?: string}>(`${this.baseURL}/${id}/publish`);
-    
+    const response = await apiClient.post<{ success: boolean; data: CMSPage; error?: string }>(`${this.baseURL}/${id}/publish`);
+
     if (!response.data.success) {
       throw new Error(response.data.error || 'Failed to publish page');
     }
@@ -167,8 +169,8 @@ class CMSPagesService {
    * Unpublish pagina
    */
   async unpublishPage(id: string): Promise<CMSPage> {
-    const response = await apiClient.post<{success: boolean; data: CMSPage; error?: string}>(`${this.baseURL}/${id}/unpublish`);
-    
+    const response = await apiClient.post<{ success: boolean; data: CMSPage; error?: string }>(`${this.baseURL}/${id}/unpublish`);
+
     if (!response.data.success) {
       throw new Error(response.data.error || 'Failed to unpublish page');
     }
@@ -180,8 +182,8 @@ class CMSPagesService {
    * Duplica pagina
    */
   async duplicatePage(id: string): Promise<CMSPage> {
-    const response = await apiClient.post<{success: boolean; data: CMSPage; error?: string}>(`${this.baseURL}/${id}/duplicate`);
-    
+    const response = await apiClient.post<{ success: boolean; data: CMSPage; error?: string }>(`${this.baseURL}/${id}/duplicate`);
+
     if (!response.data.success) {
       throw new Error(response.data.error || 'Failed to duplicate page');
     }
@@ -193,8 +195,8 @@ class CMSPagesService {
    * Elimina pagina (soft delete)
    */
   async deletePage(id: string): Promise<CMSPage> {
-    const response = await apiClient.delete<{success: boolean; data: CMSPage; error?: string}>(`${this.baseURL}/${id}`);
-    
+    const response = await apiClient.delete<{ success: boolean; data: CMSPage; error?: string }>(`${this.baseURL}/${id}`);
+
     if (!response.data.success) {
       throw new Error(response.data.error || 'Failed to delete page');
     }

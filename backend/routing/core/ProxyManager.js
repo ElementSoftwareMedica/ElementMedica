@@ -30,7 +30,7 @@ export default class ProxyManager {
   constructor(routerMap, logger) {
     const timestamp = new Date().toISOString();
     const cacheHash = Math.random().toString(36).substring(7);
-    
+
     // ProxyManager V41 initialized - debug logs removed to reduce verbosity
     this.routerMap = routerMap;
     this.logger = logger;
@@ -49,12 +49,12 @@ export default class ProxyManager {
    */
   initializeProxies() {
     console.log('🔄 Initializing proxy services...');
-    
+
     // Inizializza proxy per ogni servizio
     for (const [serviceName, serviceConfig] of Object.entries(this.routerMap.services)) {
       this.createServiceProxy(serviceName, serviceConfig);
     }
-    
+
     console.log(`✅ Initialized ${this.proxies.size} proxy services`);
   }
 
@@ -64,7 +64,7 @@ export default class ProxyManager {
   createServiceProxy(serviceName, serviceConfig) {
     // Creating proxy for service - debug logs removed to reduce verbosity
     const target = RouterMapUtils.getServiceUrl(serviceName);
-    
+
     if (!target) {
       console.error(`❌ Cannot create proxy for service ${serviceName}: invalid configuration`);
       return null;
@@ -75,37 +75,37 @@ export default class ProxyManager {
       changeOrigin: true,
       timeout: serviceConfig.timeout || 30000,
       proxyTimeout: serviceConfig.timeout || 30000,
-      
+
       // CRITICO: Configurazione per gestire correttamente il body
       selfHandleResponse: false,
       parseReqBody: false, // ✅ TENTATIVO 37: Disabilitato - raw body gestito manualmente
-      
+
       // CRITICO: Preserva i cookie per l'autenticazione
       cookieDomainRewrite: false,
       cookiePathRewrite: false,
-      
+
       // Handler per gestire manualmente il body raw
       onProxyReq: (proxyReq, req, res) => {
         // CRITICO: Assicura che i cookie siano preservati
         if (req.headers.cookie) {
           proxyReq.setHeader('cookie', req.headers.cookie);
         }
-        
+
         if (['POST', 'PUT', 'PATCH'].includes(req.method) && req.rawBody) {
           // Scrivi il raw body nella richiesta proxy
           proxyReq.write(req.rawBody);
           proxyReq.end();
         }
       },
-      
+
       // Logging
       logLevel: 'debug',
       logProvider: () => this.logger,
-      
+
       // Event handlers
       onError: this.createErrorHandler(serviceName),
       onProxyRes: this.createProxyResponseHandler(serviceName),
-      
+
       // Headers
       headers: {
         'X-Proxy-Service': serviceName,
@@ -116,7 +116,7 @@ export default class ProxyManager {
     // Proxy configuration and middleware creation - debug logs removed to reduce verbosity
     const proxy = createProxyMiddleware(proxyConfig);
     this.proxies.set(serviceName, proxy);
-    
+
     // Inizializza statistiche servizio
     this.stats.serviceStats[serviceName] = {
       requests: 0,
@@ -135,12 +135,12 @@ export default class ProxyManager {
   createDynamicProxyMiddleware() {
     return async (req, res, next) => {
       const startTime = Date.now();
-      
+
       // Processing request - debug logs removed to reduce verbosity
-      
+
       // Incrementa contatore richieste
       this.stats.totalRequests++;
-      
+
       // Il body parsing è già stato gestito dal middleware del sistema di routing avanzato
       // Procediamo direttamente con il proxy processing
       await this.continueProxyProcessing(req, res, next, startTime);
@@ -153,7 +153,7 @@ export default class ProxyManager {
   async continueProxyProcessing(req, res, next, startTime) {
     // Risolvi target e configurazione
     const routeConfig = this.resolveRoute(req);
-    
+
     if (!routeConfig) {
       return next(); // Passa al middleware successivo
     }
@@ -175,15 +175,15 @@ export default class ProxyManager {
     if (req.method === 'DELETE' && !req.rawBody) {
       // Continua con il proxy standard
     } else if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
-      
+
       if (req.rawBody) {
-        
+
         // TENTATIVO 41: Gestione completa con Promise per attendere la risposta
         const http = await import('http');
         const url = await import('url');
-        
+
         const targetUrl = new url.URL(routeConfig.target + routeConfig.rewrittenPath);
-        
+
         const options = {
           hostname: targetUrl.hostname,
           port: targetUrl.port,
@@ -197,27 +197,29 @@ export default class ProxyManager {
             'cookie': req.headers.cookie || ''
           }
         };
-        
+
         // Wrap in Promise per gestione completa
         return new Promise((resolve, reject) => {
-          const proxyReq = http.default.request(options, (proxyRes) => {
+          // Usa Agent con maxHeaderSize aumentato per supportare JWT con molti permessi
+          const agent = new http.default.Agent({ maxHeaderSize: 65536 });
+          const proxyReq = http.default.request({ ...options, agent }, (proxyRes) => {
             // Copia headers della risposta (escludi quelli che potrebbero causare problemi)
             Object.keys(proxyRes.headers).forEach(key => {
               if (!['connection', 'transfer-encoding'].includes(key.toLowerCase())) {
                 res.setHeader(key, proxyRes.headers[key]);
               }
             });
-            
+
             // Copia status code
             res.statusCode = proxyRes.statusCode;
-            
+
             // Gestisci la risposta completamente
             let responseData = Buffer.alloc(0);
-            
+
             proxyRes.on('data', (chunk) => {
               responseData = Buffer.concat([responseData, chunk]);
             });
-            
+
             proxyRes.on('end', () => {
               // Verifica se la risposta è JSON valida per debug
               if (proxyRes.headers['content-type']?.includes('application/json')) {
@@ -231,17 +233,17 @@ export default class ProxyManager {
                   });
                 }
               }
-              
+
               res.end(responseData);
               resolve();
             });
-            
+
             proxyRes.on('error', (error) => {
               console.error(`❌ [PROXY-V41] Response error:`, error);
               reject(error);
             });
           });
-          
+
           proxyReq.on('error', (error) => {
             console.error(`❌ [PROXY-V41] Request error:`, error);
             if (!res.headersSent) {
@@ -249,7 +251,7 @@ export default class ProxyManager {
             }
             reject(error);
           });
-          
+
           // Scrivi il body e termina la richiesta
           proxyReq.write(req.rawBody);
           proxyReq.end();
@@ -259,21 +261,21 @@ export default class ProxyManager {
 
     // Aggiungi header informativi
     this.addInformativeHeaders(req, res, routeConfig);
-    
+
     // Log richiesta
     this.logger.logProxyTarget(req, routeConfig.target, routeConfig.rewrittenPath);
-    
+
     // Applica pathRewrite se necessario
     if (routeConfig.pathRewrite) {
       req.url = this.applyPathRewrite(req.url, routeConfig.pathRewrite);
     }
-    
+
     // Ottieni proxy per il servizio (crea se non esiste)
     let proxy = this.proxies.get(routeConfig.service);
-    
+
     if (!proxy) {
       proxy = this.createServiceProxy(routeConfig.service, this.routerMap.services[routeConfig.service]);
-      
+
       if (!proxy) {
         console.error(`❌ Failed to create proxy for service: ${routeConfig.service}`);
         return res.status(502).json({
@@ -285,7 +287,7 @@ export default class ProxyManager {
 
     // Aggiungi handler per tracking tempo risposta
     const originalEnd = res.end;
-    res.end = function(...args) {
+    res.end = function (...args) {
       const duration = Date.now() - startTime;
       this.updateResponseTimeStats(routeConfig.service, duration);
       originalEnd.apply(res, args);
@@ -301,16 +303,16 @@ export default class ProxyManager {
   resolveRoute(req) {
     const version = req.apiVersion || RouterMapUtils.getDefaultVersion();
     const path = req.path;
-    
+
     // 1. Prima controlla le route per versione specifica (PRIORITÀ MASSIMA)
     const versionRoutes = RouterMapUtils.getRoutesForVersion(version);
-    
+
     // Trova route corrispondente
     for (const [routePattern, routeConfig] of Object.entries(versionRoutes)) {
       const matchResult = this.matchRoute(path, routePattern);
       if (matchResult.match) {
         const rewrittenPath = this.applyPathRewrite(path, routeConfig.pathRewrite);
-        
+
         return {
           service: routeConfig.target,
           target: RouterMapUtils.getServiceUrl(routeConfig.target),
@@ -323,18 +325,18 @@ export default class ProxyManager {
         };
       }
     }
-    
+
     // 2. Poi controlla le route dinamiche (solo se non trovate route specifiche)
     const dynamicMatch = RouterMapUtils.matchDynamicRoute(path);
-    
+
     if (dynamicMatch) {
       // Valida la versione se richiesto
       if (dynamicMatch.config.versionValidation && dynamicMatch.params.version && !RouterMapUtils.isVersionSupported(dynamicMatch.params.version)) {
         return null; // Versione non supportata
       }
-      
+
       const rewrittenPath = RouterMapUtils.resolveDynamicPathRewrite(path, dynamicMatch.config, dynamicMatch.params);
-      
+
       return {
         service: dynamicMatch.config.target,
         target: RouterMapUtils.getServiceUrl(dynamicMatch.config.target),
@@ -346,17 +348,17 @@ export default class ProxyManager {
         isDynamic: true
       };
     }
-    
+
     // 3. Infine controlla le route LEGACY con configurazione proxy (non redirect)
     const legacyRoutes = RouterMapUtils.getLegacyRoutes();
     for (const [routePattern, legacyConfig] of Object.entries(legacyRoutes)) {
       // Salta le entry che definiscono un semplice redirect; saranno gestite dal middleware legacy
       if (!legacyConfig || legacyConfig.redirect) continue;
-      
+
       const matchResult = this.matchRoute(path, routePattern);
       if (matchResult.match) {
         const rewrittenPath = this.applyPathRewrite(path, legacyConfig.pathRewrite);
-        
+
         return {
           service: legacyConfig.target,
           target: RouterMapUtils.getServiceUrl(legacyConfig.target),
@@ -369,7 +371,7 @@ export default class ProxyManager {
         };
       }
     }
-    
+
     return null;
   }
 
@@ -382,23 +384,23 @@ export default class ProxyManager {
       .replace(/:[^\/]+/g, '([^/]+)') // Sostituisce :param con gruppo di cattura
       .replace(/\*/g, '.*')           // Sostituisce * con .*
       .replace(/\//g, '\\/');         // Escape delle slash
-    
+
     const regex = new RegExp(`^${regexPattern}$`);
     const match = regex.exec(path);
-    
+
     if (match) {
       // Estrae i parametri dal match
       const params = {};
       const paramNames = pattern.match(/:[^\/]+/g) || [];
-      
+
       paramNames.forEach((paramName, index) => {
         const cleanParamName = paramName.substring(1); // Rimuove il ':'
         params[cleanParamName] = match[index + 1];
       });
-      
+
       return { match: true, params };
     }
-    
+
     return { match: false, params: {} };
   }
 
@@ -407,14 +409,14 @@ export default class ProxyManager {
    */
   applyPathRewrite(url, pathRewrite) {
     if (!pathRewrite) return url;
-    
+
     let rewrittenUrl = url;
-    
+
     for (const [pattern, replacement] of Object.entries(pathRewrite)) {
       const regex = new RegExp(pattern);
       rewrittenUrl = rewrittenUrl.replace(regex, replacement);
     }
-    
+
     return rewrittenUrl;
   }
 
@@ -437,13 +439,13 @@ export default class ProxyManager {
     return (err, req, res) => {
       this.stats.failedRequests++;
       this.stats.serviceStats[serviceName].errors++;
-      
+
       console.error(`❌ Proxy error for ${serviceName}:`, err.message);
-      
+
       // Determina status code basato sul tipo di errore
       let statusCode = 502;
       let message = 'Bad Gateway';
-      
+
       if (err.code === 'ECONNREFUSED') {
         statusCode = 503;
         message = 'Service Unavailable';
@@ -451,10 +453,10 @@ export default class ProxyManager {
         statusCode = 504;
         message = 'Gateway Timeout';
       }
-      
+
       // Log errore
       this.logger.logError(req, err, serviceName);
-      
+
       // Risposta errore
       if (!res.headersSent) {
         res.status(statusCode).json({
@@ -473,7 +475,7 @@ export default class ProxyManager {
   createProxyResponseHandler(serviceName) {
     return (proxyRes, req, res) => {
       this.stats.successfulRequests++;
-      
+
       // Aggiungi header di risposta
       proxyRes.headers['x-proxy-service'] = serviceName;
       proxyRes.headers['x-proxy-timestamp'] = new Date().toISOString();
@@ -485,13 +487,13 @@ export default class ProxyManager {
    */
   updateResponseTimeStats(serviceName, duration) {
     const serviceStats = this.stats.serviceStats[serviceName];
-    
+
     // Calcola media mobile
     const currentAvg = serviceStats.avgResponseTime;
     const requestCount = serviceStats.requests;
-    
+
     serviceStats.avgResponseTime = ((currentAvg * (requestCount - 1)) + duration) / requestCount;
-    
+
     // Aggiorna media globale
     const totalRequests = this.stats.totalRequests;
     this.stats.avgResponseTime = ((this.stats.avgResponseTime * (totalRequests - 1)) + duration) / totalRequests;
@@ -521,12 +523,12 @@ export default class ProxyManager {
     try {
       const serviceConfig = RouterMapUtils.getService(serviceName);
       const healthUrl = `${RouterMapUtils.getServiceUrl(serviceName)}${serviceConfig.healthCheck}`;
-      
+
       const response = await fetch(healthUrl, {
         method: 'GET',
         timeout: 5000
       });
-      
+
       return response.ok;
     } catch (error) {
       return false;
@@ -538,11 +540,11 @@ export default class ProxyManager {
    */
   async performHealthChecks() {
     const results = {};
-    
+
     for (const serviceName of Object.keys(this.routerMap.services)) {
       results[serviceName] = await this.isServiceHealthy(serviceName);
     }
-    
+
     return results;
   }
 
@@ -557,7 +559,7 @@ export default class ProxyManager {
       avgResponseTime: 0,
       serviceStats: {}
     };
-    
+
     // Reinizializza stats servizi
     for (const serviceName of Object.keys(this.routerMap.services)) {
       this.stats.serviceStats[serviceName] = {

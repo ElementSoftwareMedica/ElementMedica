@@ -63,7 +63,7 @@ export const Dropdown: React.FC<DropdownProps> = ({
 }) => {
   // Memoizza le azioni per evitare re-render inutili
   const memoizedActions = useMemo(() => actions, [actions]);
-  
+
   // Varianti di stile per il bottone
   const variantStyles = {
     primary: 'bg-blue-600 text-white hover:bg-blue-700',
@@ -72,40 +72,40 @@ export const Dropdown: React.FC<DropdownProps> = ({
     ghost: 'bg-transparent text-gray-700 hover:bg-gray-100',
     danger: 'bg-red-600 text-white hover:bg-red-700',
   };
-  
+
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger
         className={
-          customStyle 
-            ? className 
+          customStyle
+            ? className
             : cn(
-                'inline-flex items-center justify-center text-sm font-medium',
-                pill ? 'rounded-full' : 'rounded-md',
-                variantStyles[variant],
-                'focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50',
-                'py-1.5 px-3',
-                className
-              )
+              'inline-flex items-center justify-center text-sm font-medium',
+              pill ? 'rounded-full' : 'rounded-md',
+              variantStyles[variant],
+              'focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50',
+              'py-1.5 px-3',
+              className
+            )
         }
       >
         <span className="inline-flex items-center">
           {/* Icona opzionale a sinistra */}
           {icon && <span className="mr-1.5">{icon}</span>}
-          
+
           {/* Label del bottone */}
           {label && <span className="whitespace-nowrap">{label}</span>}
-          
+
           {/* Freccia (opzionale) */}
           {showArrow && <ChevronDown className="ml-1.5 h-4 w-4" aria-hidden="true" />}
         </span>
       </DropdownMenu.Trigger>
-      
+
       <DropdownMenu.Portal>
         <DropdownMenu.Content
           align="end"
           sideOffset={5}
-          className="z-50 min-w-[200px] overflow-hidden rounded-md border border-gray-200 bg-white p-1 shadow-md animate-in fade-in-80 data-[side=right]:slide-in-from-left-2 data-[side=left]:slide-in-from-right-2 data-[side=bottom]:slide-in-from-top-2 data-[side=top]:slide-in-from-bottom-2"
+          className="z-[1000] min-w-[200px] overflow-hidden rounded-md border border-gray-200 bg-white p-1 shadow-lg animate-in fade-in-80 data-[side=right]:slide-in-from-left-2 data-[side=left]:slide-in-from-right-2 data-[side=bottom]:slide-in-from-top-2 data-[side=top]:slide-in-from-bottom-2"
         >
           {memoizedActions.map((action, index) => (
             <DropdownMenu.Item

@@ -6,6 +6,10 @@
  */
 
 import { Role } from '../../../hooks/useRoles';
+import type { RoleEditData } from '../RoleHierarchy/types';
+
+// Re-export for convenience
+export type { RoleEditData };
 
 // ============================================================================
 // Permission Types
@@ -90,8 +94,8 @@ export interface RoleFormData {
 export interface RoleModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (roleData: Role) => Promise<void>;
-  role?: Role;
+  onSave: (roleData: RoleFormData) => Promise<void>;
+  role?: Role | RoleEditData | null;
   mode: 'create' | 'edit';
   hierarchy?: Record<string, HierarchyLevel>;
 }

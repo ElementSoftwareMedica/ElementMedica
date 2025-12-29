@@ -96,7 +96,545 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* CMS HTML Content Styling */
+.cms-html-content {
+  @apply w-full;
+}
+
+.cms-html-content section {
+  @apply w-full overflow-hidden;
+}
+
+.cms-html-content .container {
+  @apply mx-auto px-4 sm:px-6 lg:px-8;
+  max-width: 1280px;
+}
+
+.cms-html-content .max-w-7xl {
+  @apply mx-auto;
+  max-width: 1280px;
+}
+
+.cms-html-content .max-w-4xl {
+  max-width: 896px;
+}
+
+.cms-html-content .max-w-3xl {
+  max-width: 768px;
+}
+
+.cms-html-content .max-w-2xl {
+  max-width: 672px;
+}
+
+/* Ensure medical colors are applied */
+.cms-html-content .bg-medical-50 {
+  background-color: var(--color-medical-50);
+}
+
+.cms-html-content .bg-medical-100 {
+  background-color: var(--color-medical-100);
+}
+
+.cms-html-content .bg-medical-600 {
+  background-color: var(--color-medical-600);
+}
+
+.cms-html-content .bg-medical-700 {
+  background-color: var(--color-medical-700);
+}
+
+.cms-html-content .text-medical-600 {
+  color: var(--color-medical-600);
+}
+
+.cms-html-content .text-medical-700 {
+  color: var(--color-medical-700);
+}
+
+.cms-html-content .border-medical-100 {
+  border-color: var(--color-medical-100);
+}
+
+.cms-html-content .border-medical-500 {
+  border-color: var(--color-medical-500);
+}
+
+.cms-html-content .border-medical-600 {
+  border-color: var(--color-medical-600);
+}
+
+/* Premium gradient text effect */
+.cms-html-content .bg-clip-text {
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+.cms-html-content .text-transparent {
+  color: transparent;
+}
+
+/* Smooth transitions for premium feel */
+.cms-html-content .transition-all {
+  transition-property: all;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.cms-html-content .duration-500 {
+  transition-duration: 500ms;
+}
+
+/* Gradient utilities for medical theme */
+.cms-html-content .from-medical-50 {
+  --tw-gradient-from: var(--color-medical-50);
+  --tw-gradient-to: rgb(255 255 255 / 0);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+}
+
+.cms-html-content .to-medical-50 {
+  --tw-gradient-to: var(--color-medical-50);
+}
+
+.cms-html-content .from-medical-600 {
+  --tw-gradient-from: var(--color-medical-600);
+  --tw-gradient-to: rgb(255 255 255 / 0);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+}
+
+.cms-html-content .from-medical-800 {
+  --tw-gradient-from: var(--color-medical-800);
+  --tw-gradient-to: rgb(255 255 255 / 0);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+}
+
+.cms-html-content .to-medical-800 {
+  --tw-gradient-to: var(--color-medical-800);
+}
+
+.cms-html-content .via-white {
+  --tw-gradient-to: rgb(255 255 255 / 0);
+  --tw-gradient-stops: var(--tw-gradient-from), rgb(255 255 255), var(--tw-gradient-to);
+}
+
+/* Teal colors for medical theme */
+.cms-html-content .bg-teal-50 {
+  background-color: #f0fdfa;
+}
+
+.cms-html-content .bg-teal-100 {
+  background-color: #ccfbf1;
+}
+
+.cms-html-content .bg-teal-200 {
+  background-color: #99f6e4;
+}
+
+.cms-html-content .bg-teal-300 {
+  background-color: #5eead4;
+}
+
+.cms-html-content .bg-teal-400 {
+  background-color: #2dd4bf;
+}
+
+.cms-html-content .bg-teal-500 {
+  background-color: #14b8a6;
+}
+
+.cms-html-content .bg-teal-600 {
+  background-color: #0d9488;
+}
+
+.cms-html-content .bg-teal-700 {
+  background-color: #0f766e;
+}
+
+.cms-html-content .bg-teal-800 {
+  background-color: #115e59;
+}
+
+.cms-html-content .bg-teal-900 {
+  background-color: #134e4a;
+}
+
+.cms-html-content .text-teal-50 {
+  color: #f0fdfa;
+}
+
+.cms-html-content .text-teal-100 {
+  color: #ccfbf1;
+}
+
+.cms-html-content .text-teal-200 {
+  color: #99f6e4;
+}
+
+.cms-html-content .text-teal-300 {
+  color: #5eead4;
+}
+
+.cms-html-content .text-teal-400 {
+  color: #2dd4bf;
+}
+
+.cms-html-content .text-teal-500 {
+  color: #14b8a6;
+}
+
+.cms-html-content .text-teal-600 {
+  color: #0d9488;
+}
+
+.cms-html-content .text-teal-700 {
+  color: #0f766e;
+}
+
+.cms-html-content .text-teal-800 {
+  color: #115e59;
+}
+
+.cms-html-content .border-teal-50 {
+  border-color: #f0fdfa;
+}
+
+.cms-html-content .border-teal-100 {
+  border-color: #ccfbf1;
+}
+
+.cms-html-content .border-teal-200 {
+  border-color: #99f6e4;
+}
+
+.cms-html-content .border-teal-400 {
+  border-color: #2dd4bf;
+}
+
+.cms-html-content .border-teal-500 {
+  border-color: #14b8a6;
+}
+
+.cms-html-content .border-teal-600 {
+  border-color: #0d9488;
+}
+
+.cms-html-content .border-teal-700 {
+  border-color: #0f766e;
+}
+
+/* Blue colors for gradients */
+.cms-html-content .bg-blue-600 {
+  background-color: #2563eb;
+}
+
+.cms-html-content .bg-blue-700 {
+  background-color: #1d4ed8;
+}
+
+.cms-html-content .bg-blue-800 {
+  background-color: #1e40af;
+}
+
+.cms-html-content .text-blue-600 {
+  color: #2563eb;
+}
+
+/* Gradient utilities for teal/blue theme */
+.cms-html-content .from-teal-50\/30 {
+  --tw-gradient-from: rgb(240 253 250 / 0.3);
+  --tw-gradient-to: rgb(240 253 250 / 0);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+}
+
+.cms-html-content .to-blue-50\/30 {
+  --tw-gradient-to: rgb(239 246 255 / 0.3);
+}
+
+.cms-html-content .from-teal-400 {
+  --tw-gradient-from: #2dd4bf;
+  --tw-gradient-to: rgb(45 212 191 / 0);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+}
+
+.cms-html-content .from-teal-500 {
+  --tw-gradient-from: #14b8a6;
+  --tw-gradient-to: rgb(20 184 166 / 0);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+}
+
+.cms-html-content .from-teal-600 {
+  --tw-gradient-from: #0d9488;
+  --tw-gradient-to: rgb(13 148 136 / 0);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+}
+
+.cms-html-content .from-teal-700 {
+  --tw-gradient-from: #0f766e;
+  --tw-gradient-to: rgb(15 118 110 / 0);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+}
+
+.cms-html-content .to-teal-700 {
+  --tw-gradient-to: #0f766e;
+}
+
+.cms-html-content .to-blue-600 {
+  --tw-gradient-to: #2563eb;
+}
+
+.cms-html-content .to-blue-700 {
+  --tw-gradient-to: #1d4ed8;
+}
+
+.cms-html-content .to-blue-800 {
+  --tw-gradient-to: #1e40af;
+}
+
+.cms-html-content .via-teal-700 {
+  --tw-gradient-to: rgb(15 118 110 / 0);
+  --tw-gradient-stops: var(--tw-gradient-from), #0f766e, var(--tw-gradient-to);
+}
+
+/* Hover states */
+.cms-html-content .hover\:bg-teal-50:hover {
+  background-color: #f0fdfa;
+}
+
+.cms-html-content .hover\:bg-teal-700:hover {
+  background-color: #0f766e;
+}
+
+.cms-html-content .hover\:bg-teal-800:hover {
+  background-color: #115e59;
+}
+
+.cms-html-content .hover\:border-teal-400:hover {
+  border-color: #2dd4bf;
+}
+
+.cms-html-content .hover\:border-teal-700:hover {
+  border-color: #0f766e;
+}
+
+.cms-html-content .hover\:from-teal-700:hover {
+  --tw-gradient-from: #0f766e;
+}
+
+.cms-html-content .hover\:to-teal-800:hover {
+  --tw-gradient-to: #115e59;
+}
+
 /* Aggiunta di border-radius personalizzato */
 .rounded-xl {
   border-radius: 0.75rem;
+}
+
+/* Important text color overrides for CTA buttons on dark backgrounds */
+/* Using attribute selectors because escaped class names don't work reliably */
+.cms-html-content [class*="!text-teal-600"] {
+  color: #0d9488 !important;
+}
+
+.cms-html-content [class*="!text-teal-700"] {
+  color: #0f766e !important;
+}
+
+.cms-html-content [class*="!text-teal-800"] {
+  color: #115e59 !important;
+}
+
+.cms-html-content [class*="!text-teal-900"] {
+  color: #134e4a !important;
+}
+
+.cms-html-content [class*="!text-blue-600"] {
+  color: #2563eb !important;
+}
+
+.cms-html-content [class*="!text-blue-700"] {
+  color: #1d4ed8 !important;
+}
+
+.cms-html-content [class*="!text-blue-800"] {
+  color: #1e40af !important;
+}
+
+.cms-html-content [class*="!text-blue-900"] {
+  color: #1e3a8a !important;
+}
+
+/* Additional specificity for links inside white backgrounds */
+.cms-html-content a[class*="bg-white"][class*="!text-teal-600"],
+.cms-html-content a[class*="!text-teal-600"][class*="bg-white"] {
+  color: #0d9488 !important;
+}
+
+.cms-html-content a[class*="bg-white"][class*="!text-teal-700"],
+.cms-html-content a[class*="!text-teal-700"][class*="bg-white"] {
+  color: #0f766e !important;
+}
+
+.cms-html-content a[class*="bg-white"][class*="!text-teal-800"],
+.cms-html-content a[class*="!text-teal-800"][class*="bg-white"] {
+  color: #115e59 !important;
+}
+
+.cms-html-content a[class*="bg-white"][class*="!text-teal-900"],
+.cms-html-content a[class*="!text-teal-900"][class*="bg-white"] {
+  color: #134e4a !important;
+}
+
+/* Force color on ALL link states */
+.cms-html-content a[class*="!text-teal-600"]:link,
+.cms-html-content a[class*="!text-teal-600"]:visited {
+  color: #0d9488 !important;
+}
+
+.cms-html-content a[class*="!text-teal-800"]:link,
+.cms-html-content a[class*="!text-teal-800"]:visited {
+  color: #115e59 !important;
+}
+
+.cms-html-content a[class*="!text-teal-900"]:link,
+.cms-html-content a[class*="!text-teal-900"]:visited {
+  color: #134e4a !important;
+}
+
+/* ===================================
+   VISITE SPECIALISTICHE - CARD LAYOUT FIXES
+   =================================== */
+
+/* Ensure all cards have equal height and proper flex layout */
+.cms-html-content .grid > div[class*="flex-col"] {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* Card content grows to fill available space, pushing button to bottom */
+.cms-html-content .flex-grow {
+  flex-grow: 1;
+}
+
+/* Ensure consistent button sizing across all cards */
+.cms-html-content a[href="/prenota"].inline-flex {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 48px;
+}
+
+/* Fix for grid alignment */
+.cms-html-content .grid {
+  display: grid;
+  align-items: stretch;
+}
+
+/* Ensure white text stays white on colored backgrounds */
+.cms-html-content [class*="!text-white"] {
+  color: #ffffff !important;
+}
+
+.cms-html-content a[class*="!text-white"]:link,
+.cms-html-content a[class*="!text-white"]:visited {
+  color: #ffffff !important;
+}
+
+/* Enhance text readability on gradient backgrounds */
+.cms-html-content h2.text-white,
+.cms-html-content h2[class*="text-white"] {
+  color: #ffffff !important;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Ensure all gradient section text is readable */
+.cms-html-content .bg-gradient-to-r h2,
+.cms-html-content .bg-gradient-to-br h2 {
+  font-weight: 800;
+}
+
+/* Add subtle background to border-only buttons on gradients */
+.cms-html-content .border-white[class*="!text-white"] {
+  background-color: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(8px);
+}
+
+/* Pulse animation for CTA buttons */
+@keyframes pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(255, 255, 255, 0);
+  }
+}
+
+/* Gradient shift animation for backgrounds */
+@keyframes gradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.cms-html-content .border-white[class*="!text-white"]:hover {
+  background-color: #ffffff !important;
+}
+
+/* Smooth animations for cards and interactive elements */
+.cms-html-content .hover\:-translate-y-1:hover {
+  transform: translateY(-0.25rem);
+}
+
+.cms-html-content .hover\:scale-105:hover {
+  transform: scale(1.05);
+}
+
+/* Gradient text effect */
+.cms-html-content .bg-clip-text {
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+.cms-html-content .text-transparent {
+  color: transparent;
+}
+
+/* Enhance step numbers visibility */
+.cms-html-content .bg-gradient-to-br {
+  background-image: linear-gradient(to bottom right, var(--tw-gradient-stops));
+}
+
+/* Subtle pulse animation for CTA buttons */
+@keyframes subtle-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.95;
+  }
+}
+
+.cms-html-content a[href="/prenota"]:hover {
+  animation: subtle-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.cms-html-content a[class*="!text-teal-700"]:link,
+.cms-html-content a[class*="!text-teal-700"]:visited {
+  color: #0f766e !important;
+}
+
+.cms-html-content a[class*="!text-teal-800"]:link,
+.cms-html-content a[class*="!text-teal-800"]:visited {
+  color: #115e59 !important;
+}
+
+.cms-html-content a[class*="!text-teal-900"]:link,
+.cms-html-content a[class*="!text-teal-900"]:visited {
+  color: #134e4a !important;
 }

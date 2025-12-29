@@ -8,7 +8,7 @@
 import { useState, useEffect } from 'react';
 import { rolesService } from '../../../../services/roles';
 import { Role } from '../../../../hooks/useRoles';
-import type { RoleFormData } from '../types';
+import type { RoleFormData, RoleEditData } from '../types';
 
 interface UseRoleFormReturn {
   formData: RoleFormData;
@@ -26,7 +26,7 @@ interface UseRoleFormReturn {
 export const useRoleForm = (
   isOpen: boolean,
   mode: 'create' | 'edit',
-  role?: Role
+  role?: Role | RoleEditData | null
 ): UseRoleFormReturn => {
   const [formData, setFormData] = useState<RoleFormData>({
     name: '',

@@ -29,28 +29,28 @@ const createSubmission = async (req, res) => {
     } = req.body;
 
     // Validazione campi obbligatori
-  if (!name || !email || !subject || !message) {
-    return res.status(400).json({
-      error: 'Campi obbligatori mancanti',
-      required: ['name', 'email', 'subject', 'message']
-    });
-  }
+    if (!name || !email || !subject || !message) {
+      return res.status(400).json({
+        error: 'Campi obbligatori mancanti',
+        required: ['name', 'email', 'subject', 'message']
+      });
+    }
 
-  // Validazione formato email
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email)) {
-    return res.status(400).json({
-      error: 'Formato email non valido'
-    });
-  }
+    // Validazione formato email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        error: 'Formato email non valido'
+      });
+    }
 
-  // Validazione GDPR - privacyAccepted è obbligatorio
-  if (!privacyAccepted) {
-    return res.status(400).json({
-      error: 'Accettazione della privacy policy è obbligatoria',
-      field: 'privacyAccepted'
-    });
-  }
+    // Validazione GDPR - privacyAccepted è obbligatorio
+    if (!privacyAccepted) {
+      return res.status(400).json({
+        error: 'Accettazione della privacy policy è obbligatoria',
+        field: 'privacyAccepted'
+      });
+    }
 
     // Ottieni tenant ID - per le submission pubbliche, usa il primo tenant attivo
     logger.debug('Contact submission tenant resolution started', {
@@ -59,18 +59,18 @@ const createSubmission = async (req, res) => {
       reqTenantId: req.tenantId,
       reqTenantExists: !!req.tenant
     });
-    
+
     let tenantId = req.tenantId || req.tenant?.id;
     logger.debug('Initial tenantId resolved', {
       component: 'contactSubmissionController',
       tenantId: tenantId || 'none'
     });
-    
+
     if (!tenantId) {
       logger.debug('No tenantId found, searching for default tenant', {
         component: 'contactSubmissionController'
       });
-      
+
       // Per le submission pubbliche, trova il primo tenant attivo
       const defaultTenant = await prisma.tenant.findFirst({
         where: {
@@ -81,7 +81,7 @@ const createSubmission = async (req, res) => {
           createdAt: 'asc'
         }
       });
-      
+
       if (defaultTenant) {
         logger.debug('Default tenant found', {
           component: 'contactSubmissionController',
@@ -89,7 +89,7 @@ const createSubmission = async (req, res) => {
           tenantSlug: defaultTenant.slug
         });
       }
-      
+
       if (!defaultTenant) {
         logger.error('No active tenant found', {
           component: 'contactSubmissionController',
@@ -99,17 +99,46 @@ const createSubmission = async (req, res) => {
           error: 'Nessun tenant attivo trovato'
         });
       }
-      
+
       tenantId = defaultTenant.id;
       logger.debug('Final tenantId assigned', {
         component: 'contactSubmissionController',
         tenantId
       });
     }
-    
+
     // Ottieni informazioni aggiuntive dalla richiesta
     const clientIp = req.ip || req.connection.remoteAddress || 'unknown';
     const userAgent = req.get('User-Agent') || 'unknown';
+
+    // Try to find a matching CONTACT template for this tenant to link the submission
+    let templateName = null;
+    let formTemplateId = null;
+    try {
+      const contactTemplate = await prisma.form_templates.findFirst({
+        where: {
+          tenantId,
+          type: 'CONTACT',
+          isActive: true,
+          deletedAt: null
+        },
+        orderBy: { createdAt: 'asc' }
+      });
+      if (contactTemplate) {
+        templateName = contactTemplate.name;
+        formTemplateId = contactTemplate.id;
+        logger.debug('Found CONTACT template for submission', {
+          component: 'contactSubmissionController',
+          templateId: formTemplateId,
+          templateName
+        });
+      }
+    } catch (templateError) {
+      logger.warn('Failed to find CONTACT template', {
+        component: 'contactSubmissionController',
+        error: templateError.message
+      });
+    }
 
     const submission = await prisma.ContactSubmission.create({
       data: {
@@ -120,13 +149,17 @@ const createSubmission = async (req, res) => {
         company: company?.trim(),
         subject: subject.trim(),
         message: message.trim(),
-        metadata,
+        metadata: {
+          ...metadata,
+          ...(formTemplateId && { formTemplateId })
+        },
         ipAddress: clientIp,
         userAgent,
         source,
         privacyAccepted,
         marketingAccepted,
-        tenantId
+        tenantId,
+        templateName // Link to the template name for counting
       }
     });
 
@@ -162,6 +195,8 @@ const getSubmissions = async (req, res) => {
       status,
       type,
       search,
+      templateId,  // Can be either the template ID or name
+      templateName: templateNameParam,
       sortBy = 'createdAt',
       sortOrder = 'desc'
     } = req.query;
@@ -171,7 +206,19 @@ const getSubmissions = async (req, res) => {
       return res.status(400).json({ error: 'Tenant ID richiesto' });
     }
 
-    // Costruisci filtri
+    // Use templateName or templateId
+    const templateFilter = templateNameParam || templateId;
+
+    logger.info('Getting submissions with filters', {
+      tenantId,
+      templateFilter,
+      status,
+      type,
+      page,
+      limit
+    });
+
+    // Build base where clause
     const where = {
       tenantId,
       ...(status && { status }),
@@ -185,6 +232,20 @@ const getSubmissions = async (req, res) => {
         ]
       })
     };
+
+    // Add template filter: match by templateName OR by formTemplateId in metadata
+    if (templateFilter) {
+      where.OR = [
+        { templateName: templateFilter },
+        { templateName: { contains: templateFilter, mode: 'insensitive' } },
+        {
+          metadata: {
+            path: ['formTemplateId'],
+            equals: templateFilter
+          }
+        }
+      ];
+    }
 
     // Calcola offset
     const offset = (parseInt(page) - 1) * parseInt(limit);
@@ -423,7 +484,7 @@ const getSubmissionStats = async (req, res) => {
     // Calcola data inizio periodo
     const now = new Date();
     const startDate = new Date();
-    
+
     switch (period) {
       case '7d':
         startDate.setDate(now.getDate() - 7);

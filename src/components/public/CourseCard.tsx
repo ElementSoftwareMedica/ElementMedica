@@ -4,7 +4,10 @@ import {
   ArrowRight,
   Award,
   Clock,
-  Users
+  Users,
+  AlertTriangle,
+  AlertCircle,
+  CheckCircle
 } from 'lucide-react';
 import { PublicButton } from './PublicButton';
 import { PublicBadge } from './PublicBadge';
@@ -41,19 +44,35 @@ export const CourseCard: React.FC<CourseCardProps> = ({
 }) => {
   // Navigazione gestita tramite PublicButton.to
 
-  const getRiskLevelVariant = (riskLevel: string): 'red' | 'yellow' | 'green' | 'gray' => {
+  const getRiskLevelVariant = (riskLevel: string): 'safety-high' | 'safety-medium' | 'safety-low' | 'gray' => {
     switch (riskLevel) {
       case 'ALTO':
       case 'A':
-        return 'red';
+        return 'safety-high';
       case 'MEDIO':
       case 'B':
-        return 'yellow';
+        return 'safety-medium';
       case 'BASSO':
       case 'C':
-        return 'green';
+        return 'safety-low';
       default:
         return 'gray';
+    }
+  };
+
+  const getRiskLevelIcon = (riskLevel: string) => {
+    switch (riskLevel) {
+      case 'ALTO':
+      case 'A':
+        return <AlertTriangle className="w-3 h-3 mr-1" />;
+      case 'MEDIO':
+      case 'B':
+        return <AlertCircle className="w-3 h-3 mr-1" />;
+      case 'BASSO':
+      case 'C':
+        return <CheckCircle className="w-3 h-3 mr-1" />;
+      default:
+        return null;
     }
   };
 
@@ -91,7 +110,8 @@ export const CourseCard: React.FC<CourseCardProps> = ({
         
         {/* Badges */}
         <div className="absolute top-4 left-4 flex flex-col gap-2">
-          <PublicBadge variant={getRiskLevelVariant(course.riskLevel)} size="sm">
+          <PublicBadge variant={getRiskLevelVariant(course.riskLevel)} size="sm" className="flex items-center">
+            {getRiskLevelIcon(course.riskLevel)}
             {getRiskLevelLabel(course.riskLevel)}
           </PublicBadge>
           <PublicBadge variant={getCourseTypeVariant(course.courseType)} size="sm">

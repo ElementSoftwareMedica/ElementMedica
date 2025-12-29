@@ -10,30 +10,31 @@ import prisma from '../config/prisma-optimization.js';
 export class RBACService {
     /**
      * Check if person has specific permission
+     * Permissions are loaded from database via PersonRole -> RolePermission
      */
     static async hasPermission(personId, permission, resourceId = null) {
         try {
-            // Get mapped permissions
+            // Get mapped permissions from database
             const permissions = await this.getPersonPermissions(personId);
-            
+
             // Check if permission exists in mapped format
             if (permissions[permission]) {
                 return true;
             }
-            
+
             // Check for wildcard patterns (e.g., 'companies:*' matches 'companies:read')
             const [resource, action] = permission.split(':');
             if (resource && permissions[`${resource}:*`]) {
                 return true;
             }
-            
+
             // Check for all permissions wildcard
             if (permissions['*'] || permissions['all:*']) {
                 return true;
             }
-            
+
             return false;
-            
+
         } catch (error) {
             logger.error('Permission check failed', {
                 component: 'rbac-service',
@@ -46,24 +47,56 @@ export class RBACService {
             return false;
         }
     }
-    
+
     /**
      * Check if person has any of the specified roles
+     * Also considers globalRole from Person entity
      */
     static async hasRole(personId, roles) {
         try {
+            // First check globalRole from Person entity
+            const person = await prisma.person.findUnique({
+                where: { id: personId },
+                select: { globalRole: true }
+            });
+
+            const requiredRoles = Array.isArray(roles) ? roles : [roles];
+
+            // If person has globalRole and it's in requiredRoles, grant access
+            if (person?.globalRole && requiredRoles.includes(person.globalRole)) {
+                logger.debug('Role granted via globalRole', {
+                    component: 'rbac-service',
+                    action: 'hasRole',
+                    personId,
+                    globalRole: person.globalRole,
+                    requiredRoles
+                });
+                return true;
+            }
+
+            // SUPER_ADMIN and ADMIN globalRole can access all role-protected resources
+            if (person?.globalRole === 'SUPER_ADMIN' || person?.globalRole === 'ADMIN') {
+                logger.debug('All roles granted via admin globalRole', {
+                    component: 'rbac-service',
+                    action: 'hasRole',
+                    personId,
+                    globalRole: person.globalRole
+                });
+                return true;
+            }
+
+            // Check roles in PersonRole table
             const personRoles = await prisma.personRole.findMany({
                 where: {
                     personId: personId,
                     isActive: true
                 }
             });
-            
+
             const personRoleTypes = personRoles.map(pr => pr.roleType);
-            const requiredRoles = Array.isArray(roles) ? roles : [roles];
-            
+
             return requiredRoles.some(role => personRoleTypes.includes(role));
-            
+
         } catch (error) {
             logger.error('Role check failed', {
                 component: 'rbac-service',
@@ -75,10 +108,11 @@ export class RBACService {
             return false;
         }
     }
-    
+
     /**
      * Get person's effective permissions
      * Includes permission mapping from database format to frontend format
+     * ADMIN globalRole bypasses all permission checks
      */
     static async getPersonPermissions(personId) {
         try {
@@ -86,7 +120,7 @@ export class RBACService {
                 where: { id: personId },
                 include: {
                     personRoles: {
-                        where: { 
+                        where: {
                             isActive: true
                         },
                         include: {
@@ -99,7 +133,7 @@ export class RBACService {
                     }
                 }
             });
-            
+
             if (!person) {
                 logger.warn('Person not found', {
                     component: 'rbac-service',
@@ -108,21 +142,39 @@ export class RBACService {
                 });
                 return {};
             }
-            
+
             const permissions = {};
-            
+
+            // ADMIN globalRole has ALL permissions - bypass role-based checks
+            if (person.globalRole === 'ADMIN') {
+                logger.debug('Admin globalRole detected - granting all permissions', {
+                    component: 'rbac-service',
+                    action: 'getPersonPermissions',
+                    personId
+                });
+
+                // Grant wildcard permission for all resources
+                permissions['*'] = true;
+                permissions['all:*'] = true;
+
+                // Also explicitly grant common permissions for compatibility
+                this.grantAllPermissions(permissions);
+
+                return permissions;
+            }
+
             // Extract permissions from PersonRole -> RolePermission
             person.personRoles.forEach(personRole => {
                 const rolePermissions = this.getRolePermissions(personRole);
-                
+
                 rolePermissions.forEach(permission => {
                     // Map database permissions to frontend format
                     this.mapPermission(permission, permissions);
                 });
             });
-            
+
             return permissions;
-            
+
         } catch (error) {
             logger.error('Failed to get person permissions', {
                 component: 'rbac-service',
@@ -133,13 +185,70 @@ export class RBACService {
             return {};
         }
     }
-    
+
+    /**
+     * Grant ALL permissions for ADMIN users
+     * Used when globalRole === 'ADMIN'
+     */
+    static grantAllPermissions(permissions) {
+        // All core entity permissions
+        const entities = [
+            'companies', 'employees', 'persons', 'roles', 'permissions',
+            'courses', 'schedules', 'certifications', 'documents',
+            'forms', 'submissions', 'templates', 'cms', 'pages',
+            'preventivi', 'invoices', 'payments', 'settings',
+            'audit', 'gdpr', 'reports', 'analytics', 'dashboard',
+            'ambulatori', 'prestazioni', 'appuntamenti', 'visite',
+            'referti', 'poliambulatori', 'strumenti', 'convenzioni'
+        ];
+
+        const actions = ['read', 'create', 'edit', 'delete', 'write', '*'];
+
+        entities.forEach(entity => {
+            actions.forEach(action => {
+                permissions[`${entity}:${action}`] = true;
+            });
+        });
+
+        // All enum-style permissions
+        const enumPermissions = [
+            'VIEW_COMPANIES', 'CREATE_COMPANIES', 'EDIT_COMPANIES', 'DELETE_COMPANIES',
+            'VIEW_EMPLOYEES', 'CREATE_EMPLOYEES', 'EDIT_EMPLOYEES', 'DELETE_EMPLOYEES',
+            'VIEW_PERSONS', 'CREATE_PERSONS', 'EDIT_PERSONS', 'DELETE_PERSONS',
+            'VIEW_COURSES', 'CREATE_COURSES', 'EDIT_COURSES', 'DELETE_COURSES',
+            'VIEW_SCHEDULES', 'CREATE_SCHEDULES', 'EDIT_SCHEDULES', 'DELETE_SCHEDULES',
+            'VIEW_CERTIFICATIONS', 'CREATE_CERTIFICATIONS', 'EDIT_CERTIFICATIONS', 'DELETE_CERTIFICATIONS',
+            'VIEW_DOCUMENTS', 'CREATE_DOCUMENTS', 'EDIT_DOCUMENTS', 'DELETE_DOCUMENTS',
+            'VIEW_FORM_TEMPLATES', 'CREATE_FORM_TEMPLATES', 'EDIT_FORM_TEMPLATES', 'DELETE_FORM_TEMPLATES',
+            'VIEW_FORM_SUBMISSIONS', 'CREATE_FORM_SUBMISSIONS', 'EDIT_FORM_SUBMISSIONS', 'DELETE_FORM_SUBMISSIONS',
+            'MANAGE_FORM_SUBMISSIONS', 'EXPORT_FORM_DATA',
+            'VIEW_CMS', 'EDIT_CMS', 'PUBLISH_CMS',
+            'VIEW_SETTINGS', 'EDIT_SETTINGS',
+            'VIEW_AUDIT_LOG', 'EXPORT_AUDIT_LOG',
+            'VIEW_PREVENTIVI', 'CREATE_PREVENTIVI', 'EDIT_PREVENTIVI', 'DELETE_PREVENTIVI',
+            'MANAGE_ROLES', 'ASSIGN_ROLES',
+            'VIEW_DASHBOARD', 'VIEW_REPORTS', 'EXPORT_REPORTS',
+            'MANAGE_GDPR', 'EXPORT_DATA', 'DELETE_DATA',
+            'MANAGE_USERS', 'MANAGE_TENANTS',
+            // Clinical permissions
+            'VIEW_AMBULATORI', 'CREATE_AMBULATORI', 'EDIT_AMBULATORI', 'DELETE_AMBULATORI',
+            'VIEW_PRESTAZIONI', 'CREATE_PRESTAZIONI', 'EDIT_PRESTAZIONI', 'DELETE_PRESTAZIONI',
+            'VIEW_APPUNTAMENTI', 'CREATE_APPUNTAMENTI', 'EDIT_APPUNTAMENTI', 'DELETE_APPUNTAMENTI',
+            'VIEW_VISITE', 'CREATE_VISITE', 'EDIT_VISITE', 'DELETE_VISITE',
+            'VIEW_REFERTI', 'CREATE_REFERTI', 'EDIT_REFERTI', 'DELETE_REFERTI'
+        ];
+
+        enumPermissions.forEach(perm => {
+            permissions[perm] = true;
+        });
+    }
+
     /**
      * Map database permission to frontend format
      * Handles all permission mappings in one place
      */
     static mapPermission(permission, permissions) {
-        switch(permission) {
+        switch (permission) {
             // Companies permissions
             case 'VIEW_COMPANIES':
                 permissions['companies:read'] = true;
@@ -155,7 +264,7 @@ export class RBACService {
             case 'DELETE_COMPANIES':
                 permissions['companies:delete'] = true;
                 break;
-                
+
             // Employees permissions
             case 'VIEW_EMPLOYEES':
                 permissions['employees:read'] = true;
@@ -177,7 +286,7 @@ export class RBACService {
                 permissions['delete:employees'] = true;
                 permissions['companies:read'] = true;
                 break;
-                
+
             // Trainers permissions
             case 'VIEW_TRAINERS':
                 permissions['trainers:read'] = true;
@@ -195,7 +304,7 @@ export class RBACService {
                 permissions['trainers:delete'] = true;
                 permissions['delete:trainers'] = true;
                 break;
-                
+
             // Persons permissions
             case 'VIEW_PERSONS':
                 permissions['persons:read'] = true;
@@ -217,7 +326,7 @@ export class RBACService {
                 permissions['persons:delete_employees'] = true;
                 permissions['persons:delete_trainers'] = true;
                 break;
-                
+
             // Courses permissions
             case 'VIEW_COURSES':
                 permissions['courses:read'] = true;
@@ -233,7 +342,7 @@ export class RBACService {
             case 'DELETE_COURSES':
                 permissions['courses:delete'] = true;
                 break;
-                
+
             // Users permissions
             case 'VIEW_USERS':
                 permissions['users:read'] = true;
@@ -247,7 +356,7 @@ export class RBACService {
             case 'DELETE_USERS':
                 permissions['users:delete'] = true;
                 break;
-                
+
             // Admin permissions
             case 'ADMIN_PANEL':
                 permissions['admin:access'] = true;
@@ -264,7 +373,7 @@ export class RBACService {
             case 'ROLE_MANAGEMENT':
                 permissions['roles:manage'] = true;
                 break;
-                
+
             // Public CMS permissions
             case 'MANAGE_PUBLIC_CONTENT':
                 permissions['PUBLIC_CMS:read'] = true;
@@ -275,7 +384,7 @@ export class RBACService {
             case 'READ_PUBLIC_CONTENT':
                 permissions['PUBLIC_CMS:read'] = true;
                 break;
-                
+
             // CMS permissions
             case 'VIEW_CMS':
                 permissions['VIEW_CMS'] = true;
@@ -287,7 +396,89 @@ export class RBACService {
                 permissions['cms:edit'] = true;
                 permissions['cms:update'] = true;
                 break;
-                
+
+            // CMS Pages permissions
+            case 'VIEW_CMS_PAGES':
+                permissions['VIEW_CMS_PAGES'] = true;
+                permissions['cms_pages:view'] = true;
+                permissions['cms_pages:read'] = true;
+                permissions['cms:view'] = true;
+                break;
+            case 'CREATE_CMS_PAGES':
+                permissions['CREATE_CMS_PAGES'] = true;
+                permissions['cms_pages:create'] = true;
+                permissions['cms:create'] = true;
+                break;
+            case 'EDIT_CMS_PAGES':
+                permissions['EDIT_CMS_PAGES'] = true;
+                permissions['cms_pages:edit'] = true;
+                permissions['cms_pages:update'] = true;
+                permissions['cms:edit'] = true;
+                break;
+            case 'DELETE_CMS_PAGES':
+                permissions['DELETE_CMS_PAGES'] = true;
+                permissions['cms_pages:delete'] = true;
+                permissions['cms:delete'] = true;
+                break;
+            case 'PUBLISH_CMS_PAGES':
+                permissions['PUBLISH_CMS_PAGES'] = true;
+                permissions['cms_pages:publish'] = true;
+                break;
+            case 'MANAGE_CMS_PAGES':
+                permissions['MANAGE_CMS_PAGES'] = true;
+                permissions['VIEW_CMS_PAGES'] = true;
+                permissions['CREATE_CMS_PAGES'] = true;
+                permissions['EDIT_CMS_PAGES'] = true;
+                permissions['DELETE_CMS_PAGES'] = true;
+                permissions['PUBLISH_CMS_PAGES'] = true;
+                permissions['cms_pages:view'] = true;
+                permissions['cms_pages:read'] = true;
+                permissions['cms_pages:create'] = true;
+                permissions['cms_pages:edit'] = true;
+                permissions['cms_pages:update'] = true;
+                permissions['cms_pages:delete'] = true;
+                permissions['cms_pages:publish'] = true;
+                permissions['cms_pages:manage'] = true;
+                break;
+
+            // CMS Media permissions
+            case 'VIEW_CMS_MEDIA':
+                permissions['VIEW_CMS_MEDIA'] = true;
+                permissions['cms_media:view'] = true;
+                permissions['cms_media:read'] = true;
+                break;
+            case 'CREATE_CMS_MEDIA':
+            case 'UPLOAD_CMS_MEDIA':
+                permissions['CREATE_CMS_MEDIA'] = true;
+                permissions['UPLOAD_CMS_MEDIA'] = true;
+                permissions['cms_media:create'] = true;
+                permissions['cms_media:upload'] = true;
+                break;
+            case 'EDIT_CMS_MEDIA':
+                permissions['EDIT_CMS_MEDIA'] = true;
+                permissions['cms_media:edit'] = true;
+                permissions['cms_media:update'] = true;
+                break;
+            case 'DELETE_CMS_MEDIA':
+                permissions['DELETE_CMS_MEDIA'] = true;
+                permissions['cms_media:delete'] = true;
+                break;
+            case 'MANAGE_CMS_MEDIA':
+                permissions['MANAGE_CMS_MEDIA'] = true;
+                permissions['VIEW_CMS_MEDIA'] = true;
+                permissions['UPLOAD_CMS_MEDIA'] = true;
+                permissions['EDIT_CMS_MEDIA'] = true;
+                permissions['DELETE_CMS_MEDIA'] = true;
+                permissions['cms_media:view'] = true;
+                permissions['cms_media:read'] = true;
+                permissions['cms_media:create'] = true;
+                permissions['cms_media:upload'] = true;
+                permissions['cms_media:edit'] = true;
+                permissions['cms_media:update'] = true;
+                permissions['cms_media:delete'] = true;
+                permissions['cms_media:manage'] = true;
+                break;
+
             // Form Templates permissions
             case 'VIEW_FORM_TEMPLATES':
                 permissions['VIEW_FORM_TEMPLATES'] = true;
@@ -312,7 +503,7 @@ export class RBACService {
                 permissions['form_templates:delete'] = true;
                 permissions['form_templates:manage'] = true;
                 break;
-                
+
             // Form Submissions permissions
             case 'VIEW_SUBMISSIONS':
                 permissions['VIEW_SUBMISSIONS'] = true;
@@ -346,7 +537,7 @@ export class RBACService {
                 permissions['form_submissions:delete'] = true;
                 permissions['form_submissions:manage'] = true;
                 break;
-                
+
             // Attestati permissions
             case 'VIEW_ATTESTATI':
                 permissions['VIEW_ATTESTATI'] = true;
@@ -362,7 +553,7 @@ export class RBACService {
                 permissions['attestati:delete'] = true;
                 permissions['attestati:manage'] = true;
                 break;
-                
+
             // Documents permissions
             case 'VIEW_DOCUMENTS':
                 permissions['VIEW_DOCUMENTS'] = true;
@@ -378,381 +569,98 @@ export class RBACService {
                 permissions['documents:delete'] = true;
                 permissions['documents:manage'] = true;
                 break;
-                
-            // ==========================================
-            // Clinical Permissions (ElementMedica)
-            // ==========================================
-            
-            // Patients permissions
-            case 'VIEW_PATIENTS':
-                permissions['VIEW_PATIENTS'] = true;
-                permissions['patients:read'] = true;
-                permissions['patients:view'] = true;
+
+            // Preventivi permissions
+            case 'VIEW_PREVENTIVI':
+                permissions['VIEW_PREVENTIVI'] = true;
+                permissions['preventivi:read'] = true;
+                permissions['preventivi:view'] = true;
+                permissions['read:preventivi'] = true;
                 break;
-            case 'CREATE_PATIENTS':
-                permissions['CREATE_PATIENTS'] = true;
-                permissions['patients:create'] = true;
-                permissions['patients:write'] = true;
+            case 'CREATE_PREVENTIVI':
+                permissions['CREATE_PREVENTIVI'] = true;
+                permissions['preventivi:create'] = true;
+                permissions['create:preventivi'] = true;
                 break;
-            case 'EDIT_PATIENTS':
-                permissions['EDIT_PATIENTS'] = true;
-                permissions['patients:edit'] = true;
-                permissions['patients:update'] = true;
-                permissions['patients:write'] = true;
+            case 'EDIT_PREVENTIVI':
+                permissions['EDIT_PREVENTIVI'] = true;
+                permissions['preventivi:edit'] = true;
+                permissions['preventivi:update'] = true;
+                permissions['edit:preventivi'] = true;
+                permissions['update:preventivi'] = true;
                 break;
-            case 'DELETE_PATIENTS':
-                permissions['DELETE_PATIENTS'] = true;
-                permissions['patients:delete'] = true;
+            case 'DELETE_PREVENTIVI':
+                permissions['DELETE_PREVENTIVI'] = true;
+                permissions['preventivi:delete'] = true;
+                permissions['delete:preventivi'] = true;
                 break;
-            case 'MANAGE_PATIENTS':
-                permissions['MANAGE_PATIENTS'] = true;
-                permissions['patients:read'] = true;
-                permissions['patients:create'] = true;
-                permissions['patients:edit'] = true;
-                permissions['patients:update'] = true;
-                permissions['patients:delete'] = true;
-                permissions['patients:manage'] = true;
+            case 'MANAGE_PREVENTIVI':
+                permissions['MANAGE_PREVENTIVI'] = true;
+                permissions['preventivi:read'] = true;
+                permissions['preventivi:create'] = true;
+                permissions['preventivi:edit'] = true;
+                permissions['preventivi:update'] = true;
+                permissions['preventivi:delete'] = true;
+                permissions['preventivi:manage'] = true;
+                permissions['read:preventivi'] = true;
+                permissions['create:preventivi'] = true;
+                permissions['edit:preventivi'] = true;
+                permissions['update:preventivi'] = true;
+                permissions['delete:preventivi'] = true;
                 break;
-            case 'EXPORT_PATIENTS':
-                permissions['EXPORT_PATIENTS'] = true;
-                permissions['patients:export'] = true;
-                permissions['patients:read'] = true;
+
+            // Schedules permissions
+            case 'VIEW_SCHEDULES':
+                permissions['VIEW_SCHEDULES'] = true;
+                permissions['schedules:view'] = true;
+                permissions['schedules:read'] = true;
+                permissions['read:schedules'] = true;
                 break;
-            case 'VIEW_PATIENT_HISTORY':
-                permissions['VIEW_PATIENT_HISTORY'] = true;
-                permissions['patients:history'] = true;
-                permissions['patients:read'] = true;
+            case 'CREATE_SCHEDULES':
+                permissions['CREATE_SCHEDULES'] = true;
+                permissions['schedules:create'] = true;
+                permissions['create:schedules'] = true;
+                permissions['write:schedules'] = true;
                 break;
-                
-            // Appointments permissions
-            case 'VIEW_APPOINTMENTS':
-                permissions['VIEW_APPOINTMENTS'] = true;
-                permissions['appointments:read'] = true;
-                permissions['appointments:view'] = true;
+            case 'EDIT_SCHEDULES':
+                permissions['EDIT_SCHEDULES'] = true;
+                permissions['schedules:edit'] = true;
+                permissions['schedules:update'] = true;
+                permissions['update:schedules'] = true;
+                permissions['write:schedules'] = true;
                 break;
-            case 'CREATE_APPOINTMENTS':
-                permissions['CREATE_APPOINTMENTS'] = true;
-                permissions['appointments:create'] = true;
-                permissions['appointments:write'] = true;
+            case 'DELETE_SCHEDULES':
+                permissions['DELETE_SCHEDULES'] = true;
+                permissions['schedules:delete'] = true;
+                permissions['delete:schedules'] = true;
                 break;
-            case 'EDIT_APPOINTMENTS':
-                permissions['EDIT_APPOINTMENTS'] = true;
-                permissions['appointments:edit'] = true;
-                permissions['appointments:update'] = true;
-                permissions['appointments:write'] = true;
+            case 'MANAGE_SCHEDULES':
+                permissions['MANAGE_SCHEDULES'] = true;
+                permissions['VIEW_SCHEDULES'] = true;
+                permissions['CREATE_SCHEDULES'] = true;
+                permissions['EDIT_SCHEDULES'] = true;
+                permissions['DELETE_SCHEDULES'] = true;
+                permissions['schedules:view'] = true;
+                permissions['schedules:read'] = true;
+                permissions['schedules:create'] = true;
+                permissions['schedules:edit'] = true;
+                permissions['schedules:update'] = true;
+                permissions['schedules:delete'] = true;
+                permissions['schedules:manage'] = true;
+                permissions['read:schedules'] = true;
+                permissions['create:schedules'] = true;
+                permissions['update:schedules'] = true;
+                permissions['delete:schedules'] = true;
+                permissions['write:schedules'] = true;
                 break;
-            case 'DELETE_APPOINTMENTS':
-                permissions['DELETE_APPOINTMENTS'] = true;
-                permissions['appointments:delete'] = true;
-                break;
-            case 'MANAGE_APPOINTMENTS':
-                permissions['MANAGE_APPOINTMENTS'] = true;
-                permissions['appointments:read'] = true;
-                permissions['appointments:create'] = true;
-                permissions['appointments:edit'] = true;
-                permissions['appointments:update'] = true;
-                permissions['appointments:delete'] = true;
-                permissions['appointments:manage'] = true;
-                break;
-            case 'CONFIRM_APPOINTMENTS':
-                permissions['CONFIRM_APPOINTMENTS'] = true;
-                permissions['appointments:confirm'] = true;
-                break;
-            case 'CANCEL_APPOINTMENTS':
-                permissions['CANCEL_APPOINTMENTS'] = true;
-                permissions['appointments:cancel'] = true;
-                break;
-                
-            // Visits permissions
-            case 'VIEW_VISITS':
-                permissions['VIEW_VISITS'] = true;
-                permissions['visits:read'] = true;
-                permissions['visits:view'] = true;
-                break;
-            case 'CREATE_VISITS':
-                permissions['CREATE_VISITS'] = true;
-                permissions['visits:create'] = true;
-                permissions['visits:write'] = true;
-                break;
-            case 'EDIT_VISITS':
-                permissions['EDIT_VISITS'] = true;
-                permissions['visits:edit'] = true;
-                permissions['visits:update'] = true;
-                permissions['visits:write'] = true;
-                break;
-            case 'DELETE_VISITS':
-                permissions['DELETE_VISITS'] = true;
-                permissions['visits:delete'] = true;
-                break;
-            case 'MANAGE_VISITS':
-                permissions['MANAGE_VISITS'] = true;
-                permissions['visits:read'] = true;
-                permissions['visits:create'] = true;
-                permissions['visits:edit'] = true;
-                permissions['visits:update'] = true;
-                permissions['visits:delete'] = true;
-                permissions['visits:manage'] = true;
-                break;
-            case 'SIGN_VISITS':
-                permissions['SIGN_VISITS'] = true;
-                permissions['visits:sign'] = true;
-                break;
-            case 'COMPLETE_VISITS':
-                permissions['COMPLETE_VISITS'] = true;
-                permissions['visits:complete'] = true;
-                break;
-                
-            // Referti (Medical Reports) permissions
-            case 'VIEW_REFERTI':
-                permissions['VIEW_REFERTI'] = true;
-                permissions['referti:read'] = true;
-                permissions['referti:view'] = true;
-                break;
-            case 'CREATE_REFERTI':
-                permissions['CREATE_REFERTI'] = true;
-                permissions['referti:create'] = true;
-                permissions['referti:write'] = true;
-                break;
-            case 'EDIT_REFERTI':
-                permissions['EDIT_REFERTI'] = true;
-                permissions['referti:edit'] = true;
-                permissions['referti:update'] = true;
-                permissions['referti:write'] = true;
-                break;
-            case 'DELETE_REFERTI':
-                permissions['DELETE_REFERTI'] = true;
-                permissions['referti:delete'] = true;
-                break;
-            case 'SIGN_REFERTI':
-                permissions['SIGN_REFERTI'] = true;
-                permissions['referti:sign'] = true;
-                break;
-            case 'EXPORT_REFERTI':
-                permissions['EXPORT_REFERTI'] = true;
-                permissions['referti:export'] = true;
-                permissions['referti:read'] = true;
-                break;
-                
-            // Prestazioni (Medical Services) permissions
-            case 'VIEW_PRESTAZIONI':
-                permissions['VIEW_PRESTAZIONI'] = true;
-                permissions['prestazioni:read'] = true;
-                permissions['prestazioni:view'] = true;
-                break;
-            case 'CREATE_PRESTAZIONI':
-                permissions['CREATE_PRESTAZIONI'] = true;
-                permissions['prestazioni:create'] = true;
-                permissions['prestazioni:write'] = true;
-                break;
-            case 'EDIT_PRESTAZIONI':
-                permissions['EDIT_PRESTAZIONI'] = true;
-                permissions['prestazioni:edit'] = true;
-                permissions['prestazioni:update'] = true;
-                permissions['prestazioni:write'] = true;
-                break;
-            case 'DELETE_PRESTAZIONI':
-                permissions['DELETE_PRESTAZIONI'] = true;
-                permissions['prestazioni:delete'] = true;
-                break;
-            case 'MANAGE_PRESTAZIONI':
-                permissions['MANAGE_PRESTAZIONI'] = true;
-                permissions['prestazioni:read'] = true;
-                permissions['prestazioni:create'] = true;
-                permissions['prestazioni:edit'] = true;
-                permissions['prestazioni:update'] = true;
-                permissions['prestazioni:delete'] = true;
-                permissions['prestazioni:manage'] = true;
-                break;
-                
-            // Ambulatori permissions
-            case 'VIEW_AMBULATORI':
-                permissions['VIEW_AMBULATORI'] = true;
-                permissions['ambulatori:read'] = true;
-                permissions['ambulatori:view'] = true;
-                break;
-            case 'CREATE_AMBULATORI':
-                permissions['CREATE_AMBULATORI'] = true;
-                permissions['ambulatori:create'] = true;
-                permissions['ambulatori:write'] = true;
-                break;
-            case 'EDIT_AMBULATORI':
-                permissions['EDIT_AMBULATORI'] = true;
-                permissions['ambulatori:edit'] = true;
-                permissions['ambulatori:update'] = true;
-                permissions['ambulatori:write'] = true;
-                break;
-            case 'DELETE_AMBULATORI':
-                permissions['DELETE_AMBULATORI'] = true;
-                permissions['ambulatori:delete'] = true;
-                break;
-            case 'MANAGE_AMBULATORI':
-                permissions['MANAGE_AMBULATORI'] = true;
-                permissions['ambulatori:read'] = true;
-                permissions['ambulatori:create'] = true;
-                permissions['ambulatori:edit'] = true;
-                permissions['ambulatori:update'] = true;
-                permissions['ambulatori:delete'] = true;
-                permissions['ambulatori:manage'] = true;
-                break;
-                
-            // Poliambulatorio permissions
-            case 'VIEW_POLIAMBULATORIO':
-                permissions['VIEW_POLIAMBULATORIO'] = true;
-                permissions['poliambulatorio:read'] = true;
-                permissions['poliambulatorio:view'] = true;
-                break;
-            case 'CREATE_POLIAMBULATORIO':
-                permissions['CREATE_POLIAMBULATORIO'] = true;
-                permissions['poliambulatorio:create'] = true;
-                permissions['poliambulatorio:write'] = true;
-                break;
-            case 'EDIT_POLIAMBULATORIO':
-                permissions['EDIT_POLIAMBULATORIO'] = true;
-                permissions['poliambulatorio:edit'] = true;
-                permissions['poliambulatorio:update'] = true;
-                permissions['poliambulatorio:write'] = true;
-                break;
-            case 'DELETE_POLIAMBULATORIO':
-                permissions['DELETE_POLIAMBULATORIO'] = true;
-                permissions['poliambulatorio:delete'] = true;
-                break;
-            case 'MANAGE_POLIAMBULATORIO':
-                permissions['MANAGE_POLIAMBULATORIO'] = true;
-                permissions['poliambulatorio:read'] = true;
-                permissions['poliambulatorio:create'] = true;
-                permissions['poliambulatorio:edit'] = true;
-                permissions['poliambulatorio:update'] = true;
-                permissions['poliambulatorio:delete'] = true;
-                permissions['poliambulatorio:manage'] = true;
-                break;
-                
-            // Listino (Price List) permissions
-            case 'VIEW_LISTINO':
-                permissions['VIEW_LISTINO'] = true;
-                permissions['listino:read'] = true;
-                permissions['listino:view'] = true;
-                break;
-            case 'CREATE_LISTINO':
-                permissions['CREATE_LISTINO'] = true;
-                permissions['listino:create'] = true;
-                permissions['listino:write'] = true;
-                break;
-            case 'EDIT_LISTINO':
-                permissions['EDIT_LISTINO'] = true;
-                permissions['listino:edit'] = true;
-                permissions['listino:update'] = true;
-                permissions['listino:write'] = true;
-                break;
-            case 'DELETE_LISTINO':
-                permissions['DELETE_LISTINO'] = true;
-                permissions['listino:delete'] = true;
-                break;
-            case 'MANAGE_LISTINO':
-                permissions['MANAGE_LISTINO'] = true;
-                permissions['listino:read'] = true;
-                permissions['listino:create'] = true;
-                permissions['listino:edit'] = true;
-                permissions['listino:update'] = true;
-                permissions['listino:delete'] = true;
-                permissions['listino:manage'] = true;
-                break;
-                
-            // Strumenti (Equipment) permissions
-            case 'VIEW_STRUMENTI':
-                permissions['VIEW_STRUMENTI'] = true;
-                permissions['strumenti:read'] = true;
-                permissions['strumenti:view'] = true;
-                break;
-            case 'CREATE_STRUMENTI':
-                permissions['CREATE_STRUMENTI'] = true;
-                permissions['strumenti:create'] = true;
-                permissions['strumenti:write'] = true;
-                break;
-            case 'EDIT_STRUMENTI':
-                permissions['EDIT_STRUMENTI'] = true;
-                permissions['strumenti:edit'] = true;
-                permissions['strumenti:update'] = true;
-                permissions['strumenti:write'] = true;
-                break;
-            case 'DELETE_STRUMENTI':
-                permissions['DELETE_STRUMENTI'] = true;
-                permissions['strumenti:delete'] = true;
-                break;
-            case 'MANAGE_STRUMENTI':
-                permissions['MANAGE_STRUMENTI'] = true;
-                permissions['strumenti:read'] = true;
-                permissions['strumenti:create'] = true;
-                permissions['strumenti:edit'] = true;
-                permissions['strumenti:update'] = true;
-                permissions['strumenti:delete'] = true;
-                permissions['strumenti:manage'] = true;
-                break;
-                
-            // Agenda permissions
-            case 'VIEW_AGENDA':
-                permissions['VIEW_AGENDA'] = true;
-                permissions['agenda:read'] = true;
-                permissions['agenda:view'] = true;
-                break;
-            case 'MANAGE_AGENDA':
-                permissions['MANAGE_AGENDA'] = true;
-                permissions['agenda:read'] = true;
-                permissions['agenda:manage'] = true;
-                break;
-            case 'CONFIGURE_AGENDA':
-                permissions['CONFIGURE_AGENDA'] = true;
-                permissions['agenda:configure'] = true;
-                permissions['agenda:settings'] = true;
-                break;
-                
-            // Fatture Sanitarie (Medical Invoices) permissions
-            case 'VIEW_FATTURE_SANITARIE':
-                permissions['VIEW_FATTURE_SANITARIE'] = true;
-                permissions['fatture_sanitarie:read'] = true;
-                permissions['fatture_sanitarie:view'] = true;
-                break;
-            case 'CREATE_FATTURE_SANITARIE':
-                permissions['CREATE_FATTURE_SANITARIE'] = true;
-                permissions['fatture_sanitarie:create'] = true;
-                permissions['fatture_sanitarie:write'] = true;
-                break;
-            case 'EDIT_FATTURE_SANITARIE':
-                permissions['EDIT_FATTURE_SANITARIE'] = true;
-                permissions['fatture_sanitarie:edit'] = true;
-                permissions['fatture_sanitarie:update'] = true;
-                permissions['fatture_sanitarie:write'] = true;
-                break;
-            case 'DELETE_FATTURE_SANITARIE':
-                permissions['DELETE_FATTURE_SANITARIE'] = true;
-                permissions['fatture_sanitarie:delete'] = true;
-                break;
-            case 'SEND_FATTURE_SANITARIE':
-                permissions['SEND_FATTURE_SANITARIE'] = true;
-                permissions['fatture_sanitarie:send'] = true;
-                break;
-                
-            // Clinical Admin permissions
-            case 'CLINICAL_ADMIN_PANEL':
-                permissions['CLINICAL_ADMIN_PANEL'] = true;
-                permissions['clinical:admin'] = true;
-                permissions['clinical:access'] = true;
-                break;
-            case 'CLINICAL_SETTINGS':
-                permissions['CLINICAL_SETTINGS'] = true;
-                permissions['clinical:settings'] = true;
-                break;
-            case 'CLINICAL_REPORTS':
-                permissions['CLINICAL_REPORTS'] = true;
-                permissions['clinical:reports'] = true;
-                break;
-                
+
             // Default: pass through
             default:
                 permissions[permission] = true;
                 break;
         }
     }
-    
+
     /**
      * Get permissions from role object
      */
@@ -760,7 +668,7 @@ export class RBACService {
         if (!personRole.permissions || !Array.isArray(personRole.permissions)) {
             return [];
         }
-        
+
         try {
             return personRole.permissions
                 .filter(rp => rp.isGranted)
@@ -775,7 +683,7 @@ export class RBACService {
             return [];
         }
     }
-    
+
     /**
      * Check hierarchical permission - if manager can manage target role
      */
@@ -916,7 +824,7 @@ export class RBACService {
             return false;
         }
     }
-    
+
     /**
      * Check if person can access specific company
      */
@@ -930,20 +838,20 @@ export class RBACService {
                     }
                 }
             });
-            
+
             if (!person) {
                 return false;
             }
-            
+
             // Global admin can access any company
             const hasGlobalAdmin = person.personRoles.some(pr => pr.roleType === 'GLOBAL_ADMIN');
             if (hasGlobalAdmin) {
                 return true;
             }
-            
+
             // Check if person belongs to the target company
             return person.companyId === targetCompanyId;
-            
+
         } catch (error) {
             logger.error('Company access check failed', {
                 component: 'rbac-service',

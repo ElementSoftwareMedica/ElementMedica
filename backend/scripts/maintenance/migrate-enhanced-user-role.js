@@ -1,335 +1,365 @@
+import { logger } from '../utils/logger.js';
+
+const prisma = new PrismaClient();
+
 /**
  * Script di migrazione per consolidare EnhancedUserRole in PersonRole
  * Questo script migra tutti i dati da EnhancedUserRole a PersonRole
- * aggiungendo i campi gerarchici necessari
+ * mantenendo la compatibilità con la nuova gerarchia
  */
 
-import fs from 'fs/promises';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 class EnhancedUserRoleMigration {
-  constructor() {
-    this.prisma = new PrismaClient();
-    this.backupDir = path.join(__dirname, 'migration-backups');
-    this.logFile = path.join(this.backupDir, `migration-log-${new Date().toISOString().replace(/[:.]/g, '-')}.log`);
-  }
-
-  async log(message) {
-    const timestamp = new Date().toISOString();
-    const logMessage = `[${timestamp}] ${message}\n`;
-    console.log(logMessage.trim());
-    
+  
+  /**
+   * Esegue la migrazione completa
+   */
+  static async migrate() {
     try {
-      await fs.mkdir(this.backupDir, { recursive: true });
-      await fs.appendFile(this.logFile, logMessage);
+      logger.info('🚀 Inizio migrazione EnhancedUserRole → PersonRole');
+      
+      // 1. Verifica prerequisiti
+      await this.checkPrerequisites();
+      
+      // 2. Backup dei dati esistenti
+      await this.createBackup();
+      
+      // 3. Migra i dati
+      const migratedCount = await this.migrateData();
+      
+      // 4. Verifica integrità
+      await this.verifyMigration();
+      
+      logger.info(`✅ Migrazione completata con successo. ${migratedCount} record migrati.`);
+      
+      return {
+        success: true,
+        migratedCount,
+        message: 'Migrazione completata con successo'
+      };
+      
     } catch (error) {
-      console.error('Errore nella scrittura del log:', error);
-    }
-  }
-
-  async checkPrerequisites() {
-    await this.log('Verifica prerequisiti...');
-    
-    try {
-      // Verifica che PersonRole abbia i campi gerarchici
-      const personRoleFields = await this.prisma.$queryRaw`
-        SELECT column_name 
-        FROM information_schema.columns 
-        WHERE table_name = 'person_roles' 
-        AND column_name IN ('parentRoleId', 'level', 'path')
-      `;
-      
-      if (personRoleFields.length < 3) {
-        throw new Error('PersonRole non ha tutti i campi gerarchici necessari. Eseguire prima la migrazione dello schema.');
-      }
-      
-      await this.log('✓ PersonRole ha tutti i campi gerarchici necessari');
-      
-      // Verifica che EnhancedUserRole esista
-      const enhancedUserRoleExists = await this.prisma.$queryRaw`
-        SELECT table_name 
-        FROM information_schema.tables 
-        WHERE table_name = 'enhanced_user_roles'
-      `;
-      
-      if (enhancedUserRoleExists.length === 0) {
-        await this.log('⚠️ Tabella EnhancedUserRole non trovata - migrazione non necessaria');
-        return false;
-      }
-      
-      await this.log('✓ Tabella EnhancedUserRole trovata');
-      return true;
-    } catch (error) {
-      await this.log(`❌ Errore nella verifica prerequisiti: ${error.message}`);
+      logger.error('❌ Errore durante la migrazione:', error);
       throw error;
     }
   }
 
-  async createBackup() {
-    await this.log('Creazione backup dei dati EnhancedUserRole...');
+  /**
+   * Verifica i prerequisiti per la migrazione
+   */
+  static async checkPrerequisites() {
+    logger.info('🔍 Verifica prerequisiti...');
     
-    try {
-      await fs.mkdir(this.backupDir, { recursive: true });
-      
-      const enhancedUserRoles = await this.prisma.$queryRaw`
-        SELECT * FROM enhanced_user_roles
-      `;
-      
-      const backupFile = path.join(this.backupDir, `enhanced-user-roles-backup-${new Date().toISOString().replace(/[:.]/g, '-')}.json`);
-      await fs.writeFile(backupFile, JSON.stringify(enhancedUserRoles, null, 2));
-      
-      await this.log(`✓ Backup creato: ${backupFile}`);
-      await this.log(`✓ ${enhancedUserRoles.length} record salvati nel backup`);
-      
-      return enhancedUserRoles;
-    } catch (error) {
-      await this.log(`❌ Errore nella creazione del backup: ${error.message}`);
-      throw error;
+    // Verifica che PersonRole abbia i nuovi campi gerarchici
+    const personRoleFields = await prisma.$queryRaw`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'PersonRole' 
+      AND column_name IN ('parentRoleId', 'level', 'path')
+    `;
+    
+    if (personRoleFields.length < 3) {
+      throw new Error('PersonRole non ha i campi gerarchici necessari (parentRoleId, level, path)');
+    }
+    
+    // Conta i record da migrare
+    const enhancedRoleCount = await prisma.enhancedUserRole.count();
+    logger.info(`📊 Trovati ${enhancedRoleCount} record EnhancedUserRole da migrare`);
+    
+    if (enhancedRoleCount === 0) {
+      logger.info('ℹ️ Nessun record da migrare');
+      return;
     }
   }
 
-  getRoleHierarchyMapping() {
-    // Mappa dei livelli gerarchici per tipo di ruolo
+  /**
+   * Crea un backup dei dati esistenti
+   */
+  static async createBackup() {
+    logger.info('💾 Creazione backup...');
+    
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    
+    // Backup EnhancedUserRole
+    const enhancedRoles = await prisma.enhancedUserRole.findMany({
+      include: {
+        person: true,
+        tenant: true,
+        company: true
+      }
+    });
+    
+    // Salva il backup in un file JSON
+    const fs = await import('fs/promises');
+    const backupPath = `/Users/matteo.michielon/project 2.0/backend/backups/enhanced-user-role-backup-${timestamp}.json`;
+    
+    await fs.writeFile(backupPath, JSON.stringify({
+      timestamp,
+      count: enhancedRoles.length,
+      data: enhancedRoles
+    }, null, 2));
+    
+    logger.info(`💾 Backup salvato in: ${backupPath}`);
+  }
+
+  /**
+   * Migra i dati da EnhancedUserRole a PersonRole
+   */
+  static async migrateData() {
+    logger.info('🔄 Inizio migrazione dati...');
+    
+    const enhancedRoles = await prisma.enhancedUserRole.findMany({
+      where: { isActive: true },
+      include: {
+        person: true,
+        tenant: true,
+        company: true
+      }
+    });
+    
+    let migratedCount = 0;
+    
+    for (const enhancedRole of enhancedRoles) {
+      try {
+        // Verifica se esiste già un PersonRole equivalente
+        const existingPersonRole = await prisma.personRole.findFirst({
+          where: {
+            personId: enhancedRole.personId,
+            tenantId: enhancedRole.tenantId,
+            roleType: enhancedRole.roleType,
+            companyId: enhancedRole.companyId,
+            isActive: true
+          }
+        });
+        
+        if (existingPersonRole) {
+          logger.info(`⚠️ PersonRole già esistente per ${enhancedRole.person.email} - ${enhancedRole.roleType}`);
+          continue;
+        }
+        
+        // Calcola i campi gerarchici
+        const hierarchyData = await this.calculateHierarchyData(enhancedRole.roleType);
+        
+        // Crea il nuovo PersonRole
+        const newPersonRole = await prisma.personRole.create({
+          data: {
+            personId: enhancedRole.personId,
+            tenantId: enhancedRole.tenantId,
+            roleType: enhancedRole.roleType,
+            companyId: enhancedRole.companyId,
+            departmentId: enhancedRole.departmentId,
+            isActive: enhancedRole.isActive,
+            isPrimary: false, // Sarà aggiornato successivamente se necessario
+            assignedBy: enhancedRole.assignedBy,
+            assignedAt: enhancedRole.assignedAt,
+            validUntil: enhancedRole.expiresAt,
+            createdAt: enhancedRole.createdAt,
+            updatedAt: enhancedRole.updatedAt,
+            // Nuovi campi gerarchici
+            parentRoleId: hierarchyData.parentRoleId,
+            level: hierarchyData.level,
+            path: hierarchyData.path
+          }
+        });
+        
+        // Migra i permessi personalizzati se presenti
+        if (enhancedRole.permissions && typeof enhancedRole.permissions === 'object') {
+          await this.migrateCustomPermissions(newPersonRole.id, enhancedRole.permissions);
+        }
+        
+        migratedCount++;
+        logger.info(`✅ Migrato: ${enhancedRole.person.email} - ${enhancedRole.roleType}`);
+        
+      } catch (error) {
+        logger.error(`❌ Errore migrazione ${enhancedRole.person.email}:`, error);
+        // Continua con il prossimo record
+      }
+    }
+    
+    return migratedCount;
+  }
+
+  /**
+   * Calcola i dati gerarchici per un tipo di ruolo
+   */
+  static async calculateHierarchyData(roleType) {
+    // Mappa dei livelli gerarchici
+    const roleLevels = {
+      'SUPER_ADMIN': 0,
+      'ADMIN': 1,
+      'TENANT_ADMIN': 2,
+      'COMPANY_ADMIN': 3,
+      'HR_MANAGER': 4,
+      'MANAGER': 5,
+      'DEPARTMENT_HEAD': 6,
+      'TRAINER_COORDINATOR': 7,
+      'SENIOR_TRAINER': 8,
+      'TRAINER': 9,
+      'EXTERNAL_TRAINER': 10,
+      'SUPERVISOR': 11,
+      'COORDINATOR': 12,
+      'OPERATOR': 13,
+      'EMPLOYEE': 14,
+      'VIEWER': 15,
+      'GUEST': 16,
+      'CONSULTANT': 17,
+      'AUDITOR': 18
+    };
+    
+    // Mappa dei ruoli padre
+    const parentRoles = {
+      'ADMIN': 'SUPER_ADMIN',
+      'TENANT_ADMIN': 'ADMIN',
+      'COMPANY_ADMIN': 'TENANT_ADMIN',
+      'HR_MANAGER': 'COMPANY_ADMIN',
+      'MANAGER': 'HR_MANAGER',
+      'DEPARTMENT_HEAD': 'MANAGER',
+      'TRAINER_COORDINATOR': 'DEPARTMENT_HEAD',
+      'SENIOR_TRAINER': 'TRAINER_COORDINATOR',
+      'TRAINER': 'SENIOR_TRAINER',
+      'EXTERNAL_TRAINER': 'TRAINER_COORDINATOR',
+      'SUPERVISOR': 'MANAGER',
+      'COORDINATOR': 'SUPERVISOR',
+      'OPERATOR': 'COORDINATOR',
+      'EMPLOYEE': 'MANAGER',
+      'VIEWER': 'EMPLOYEE',
+      'GUEST': 'VIEWER',
+      'CONSULTANT': 'COMPANY_ADMIN',
+      'AUDITOR': 'ADMIN'
+    };
+    
+    const level = roleLevels[roleType] || 99;
+    const parentRoleType = parentRoles[roleType];
+    let parentRoleId = null;
+    let path = roleType;
+    
+    // Se ha un ruolo padre, cerca il parentRoleId nel database
+    if (parentRoleType) {
+      const parentRole = await prisma.personRole.findFirst({
+        where: {
+          roleType: parentRoleType,
+          isActive: true
+        },
+        orderBy: { createdAt: 'asc' }
+      });
+      
+      if (parentRole) {
+        parentRoleId = parentRole.id;
+        path = `${parentRole.path}/${roleType}`;
+      } else {
+        // Se non trova il parent, crea un path semplice
+        path = `${parentRoleType}/${roleType}`;
+      }
+    }
+    
     return {
-      'SUPER_ADMIN': { level: 0, parentRole: null },
-      'ADMIN': { level: 1, parentRole: 'SUPER_ADMIN' },
-      'COMPANY_ADMIN': { level: 2, parentRole: 'ADMIN' },
-      'TENANT_ADMIN': { level: 2, parentRole: 'ADMIN' },
-      'HR_MANAGER': { level: 3, parentRole: 'COMPANY_ADMIN' },
-      'DEPARTMENT_HEAD': { level: 3, parentRole: 'COMPANY_ADMIN' },
-      'TRAINER_COORDINATOR': { level: 4, parentRole: 'HR_MANAGER' },
-      'SENIOR_TRAINER': { level: 4, parentRole: 'TRAINER_COORDINATOR' },
-      'MANAGER': { level: 4, parentRole: 'DEPARTMENT_HEAD' },
-      'TRAINER': { level: 5, parentRole: 'SENIOR_TRAINER' },
-      'EXTERNAL_TRAINER': { level: 5, parentRole: 'TRAINER_COORDINATOR' },
-      'SUPERVISOR': { level: 5, parentRole: 'MANAGER' },
-      'COORDINATOR': { level: 5, parentRole: 'MANAGER' },
-      'OPERATOR': { level: 6, parentRole: 'SUPERVISOR' },
-      'EMPLOYEE': { level: 6, parentRole: 'SUPERVISOR' },
-      'VIEWER': { level: 7, parentRole: 'EMPLOYEE' },
-      'GUEST': { level: 7, parentRole: 'VIEWER' },
-      'CONSULTANT': { level: 6, parentRole: 'COORDINATOR' },
-      'AUDITOR': { level: 4, parentRole: 'COMPANY_ADMIN' }
+      parentRoleId,
+      level,
+      path
     };
   }
 
-  async migrateData(enhancedUserRoles) {
-    await this.log('Inizio migrazione dati...');
-    
-    const roleMapping = this.getRoleHierarchyMapping();
-    let migratedCount = 0;
-    let skippedCount = 0;
-    let errorCount = 0;
-
-    for (const role of enhancedUserRoles) {
-      try {
-        // Verifica se esiste già un PersonRole per questa persona/ruolo/tenant
-        const existingRole = await this.prisma.personRole.findFirst({
-          where: {
-            personId: role.personId,
-            roleType: role.roleType,
-            tenantId: role.tenantId,
-            companyId: role.companyId
+  /**
+   * Migra i permessi personalizzati
+   */
+  static async migrateCustomPermissions(personRoleId, permissions) {
+    try {
+      if (!permissions || !permissions.permissions || !Array.isArray(permissions.permissions)) {
+        return;
+      }
+      
+      for (const permission of permissions.permissions) {
+        await prisma.rolePermission.create({
+          data: {
+            personRoleId,
+            permissionId: permission,
+            granted: true,
+            assignedAt: new Date()
           }
         });
-
-        if (existingRole) {
-          await this.log(`⚠️ PersonRole già esistente per persona ${role.personId}, ruolo ${role.roleType} - aggiornamento`);
-          
-          // Aggiorna con i dati gerarchici
-          const hierarchyData = roleMapping[role.roleType] || { level: 0, parentRole: null };
-          
-          await this.prisma.personRole.update({
-            where: { id: existingRole.id },
-            data: {
-              level: hierarchyData.level,
-              path: this.generatePath(hierarchyData.level, existingRole.id),
-              validUntil: role.expiresAt,
-              // Migra i permessi personalizzati se presenti
-              ...(role.permissions && typeof role.permissions === 'object' && {
-                // I permessi personalizzati verranno gestiti separatamente
-              })
-            }
-          });
-          
-          migratedCount++;
-        } else {
-          // Crea nuovo PersonRole
-          const hierarchyData = roleMapping[role.roleType] || { level: 0, parentRole: null };
-          
-          // Trova il parentRoleId se esiste un ruolo padre
-          let parentRoleId = null;
-          if (hierarchyData.parentRole) {
-            const parentRole = await this.prisma.personRole.findFirst({
-              where: {
-                personId: role.personId,
-                roleType: hierarchyData.parentRole,
-                tenantId: role.tenantId,
-                isActive: true
-              }
-            });
-            parentRoleId = parentRole?.id || null;
-          }
-
-          const newPersonRole = await this.prisma.personRole.create({
-            data: {
-              personId: role.personId,
-              roleType: role.roleType,
-              isActive: role.isActive !== false,
-              isPrimary: role.isPrimary || false,
-              assignedAt: role.assignedAt || new Date(),
-              assignedBy: role.assignedBy,
-              validFrom: role.validFrom || new Date(),
-              validUntil: role.expiresAt,
-              companyId: role.companyId,
-              tenantId: role.tenantId,
-              departmentId: role.departmentId,
-              parentRoleId: parentRoleId,
-              level: hierarchyData.level,
-              path: this.generatePath(hierarchyData.level, null), // Sarà aggiornato dopo la creazione
-              createdAt: role.createdAt || new Date(),
-              updatedAt: role.updatedAt || new Date()
-            }
-          });
-
-          // Aggiorna il path con l'ID reale
-          await this.prisma.personRole.update({
-            where: { id: newPersonRole.id },
-            data: {
-              path: this.generatePath(hierarchyData.level, newPersonRole.id)
-            }
-          });
-
-          migratedCount++;
-        }
-      } catch (error) {
-        await this.log(`❌ Errore nella migrazione del ruolo ${role.id}: ${error.message}`);
-        errorCount++;
       }
+      
+    } catch (error) {
+      logger.error('Errore migrazione permessi personalizzati:', error);
     }
-
-    await this.log(`✓ Migrazione completata:`);
-    await this.log(`  - Record migrati: ${migratedCount}`);
-    await this.log(`  - Record saltati: ${skippedCount}`);
-    await this.log(`  - Errori: ${errorCount}`);
-
-    return { migratedCount, skippedCount, errorCount };
   }
 
-  generatePath(level, roleId) {
-    // Genera un path gerarchico semplice basato sul livello
-    const pathSegments = [];
-    for (let i = 0; i <= level; i++) {
-      pathSegments.push(i === level && roleId ? roleId.substring(0, 8) : (i + 1).toString());
+  /**
+   * Verifica l'integrità della migrazione
+   */
+  static async verifyMigration() {
+    logger.info('🔍 Verifica integrità migrazione...');
+    
+    const enhancedRoleCount = await prisma.enhancedUserRole.count({
+      where: { isActive: true }
+    });
+    
+    const personRoleCount = await prisma.personRole.count({
+      where: { isActive: true }
+    });
+    
+    logger.info(`📊 EnhancedUserRole attivi: ${enhancedRoleCount}`);
+    logger.info(`📊 PersonRole attivi: ${personRoleCount}`);
+    
+    // Verifica che non ci siano duplicati
+    const duplicates = await prisma.personRole.groupBy({
+      by: ['personId', 'tenantId', 'roleType', 'companyId'],
+      where: { isActive: true },
+      having: {
+        personId: {
+          _count: {
+            gt: 1
+          }
+        }
+      }
+    });
+    
+    if (duplicates.length > 0) {
+      logger.warn(`⚠️ Trovati ${duplicates.length} possibili duplicati in PersonRole`);
     }
-    return pathSegments.join('.');
+    
+    logger.info('✅ Verifica integrità completata');
   }
 
-  async verifyMigration() {
-    await this.log('Verifica integrità migrazione...');
+  /**
+   * Rollback della migrazione (solo per emergenze)
+   */
+  static async rollback(backupFile) {
+    logger.info('🔄 Inizio rollback migrazione...');
     
     try {
-      const enhancedUserRoleCount = await this.prisma.$queryRaw`
-        SELECT COUNT(*) as count FROM enhanced_user_roles
-      `;
+      const fs = await import('fs/promises');
+      const backupData = JSON.parse(await fs.readFile(backupFile, 'utf8'));
       
-      const personRoleCount = await this.prisma.personRole.count();
-      
-      await this.log(`✓ Record EnhancedUserRole: ${enhancedUserRoleCount[0].count}`);
-      await this.log(`✓ Record PersonRole totali: ${personRoleCount}`);
-      
-      // Verifica duplicati
-      const duplicates = await this.prisma.personRole.groupBy({
-        by: ['personId', 'roleType', 'tenantId', 'companyId'],
-        having: {
-          personId: {
-            _count: {
-              gt: 1
-            }
+      // Rimuovi i PersonRole creati dalla migrazione
+      await prisma.personRole.deleteMany({
+        where: {
+          createdAt: {
+            gte: new Date(backupData.timestamp)
           }
         }
       });
       
-      if (duplicates.length > 0) {
-        await this.log(`⚠️ Trovati ${duplicates.length} possibili duplicati in PersonRole`);
-      } else {
-        await this.log('✓ Nessun duplicato trovato in PersonRole');
-      }
+      logger.info('✅ Rollback completato');
       
-      return true;
     } catch (error) {
-      await this.log(`❌ Errore nella verifica: ${error.message}`);
-      return false;
-    }
-  }
-
-  async dropEnhancedUserRoleTable() {
-    await this.log('Rimozione tabella EnhancedUserRole...');
-    
-    try {
-      await this.prisma.$executeRaw`DROP TABLE IF EXISTS enhanced_user_roles CASCADE`;
-      await this.log('✓ Tabella EnhancedUserRole rimossa con successo');
-    } catch (error) {
-      await this.log(`❌ Errore nella rimozione della tabella: ${error.message}`);
+      logger.error('❌ Errore durante il rollback:', error);
       throw error;
-    }
-  }
-
-  async rollback(backupData) {
-    await this.log('ROLLBACK: Ripristino dati EnhancedUserRole...');
-    
-    try {
-      // Ricrea la tabella (questo richiede lo schema originale)
-      await this.log('⚠️ ROLLBACK non implementato - utilizzare il backup manualmente se necessario');
-      await this.log(`Backup disponibile in: ${this.backupDir}`);
-    } catch (error) {
-      await this.log(`❌ Errore nel rollback: ${error.message}`);
-      throw error;
-    }
-  }
-
-  async run() {
-    try {
-      await this.log('=== INIZIO MIGRAZIONE ENHANCED USER ROLE ===');
-      
-      // 1. Verifica prerequisiti
-      const canProceed = await this.checkPrerequisites();
-      if (!canProceed) {
-        await this.log('Migrazione non necessaria o non possibile');
-        return;
-      }
-      
-      // 2. Backup
-      const backupData = await this.createBackup();
-      
-      // 3. Migrazione
-      const result = await this.migrateData(backupData);
-      
-      // 4. Verifica
-      const verificationPassed = await this.verifyMigration();
-      
-      if (verificationPassed && result.errorCount === 0) {
-        // 5. Rimozione tabella originale
-        await this.dropEnhancedUserRoleTable();
-        await this.log('✅ MIGRAZIONE COMPLETATA CON SUCCESSO');
-      } else {
-        await this.log('⚠️ MIGRAZIONE COMPLETATA CON ERRORI - Tabella EnhancedUserRole mantenuta');
-      }
-      
-    } catch (error) {
-      await this.log(`❌ ERRORE CRITICO: ${error.message}`);
-      await this.log('La migrazione è stata interrotta');
-      throw error;
-    } finally {
-      await this.prisma.$disconnect();
     }
   }
 }
 
-// Esecuzione dello script
-const migration = new EnhancedUserRoleMigration();
-migration.run().catch(console.error);
+// Esporta la classe per l'uso in altri script
+export default EnhancedUserRoleMigration;
+
+// Se eseguito direttamente, avvia la migrazione
+if (import.meta.url === `file://${process.argv[1]}`) {
+  EnhancedUserRoleMigration.migrate()
+    .then(result => {
+      console.log('Migrazione completata:', result);
+      process.exit(0);
+    })
+    .catch(error => {
+      console.error('Errore migrazione:', error);
+      process.exit(1);
+    });
+}

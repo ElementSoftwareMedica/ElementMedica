@@ -12,6 +12,27 @@ import { logger } from '../utils/logger.js';
 import { redisClient } from '../config/redis.js';
 
 /**
+ * Get clean IP address from request (handles proxy headers)
+ */
+const getClientIp = (req) => {
+  // Check X-Forwarded-For header first (set by nginx proxy)
+  const forwarded = req.headers['x-forwarded-for'];
+  if (forwarded) {
+    // Get first IP from comma-separated list
+    const ip = forwarded.split(',')[0].trim();
+    // Clean any escape characters
+    return ip.replace(/\\/g, '');
+  }
+  // Check X-Real-IP header
+  const realIp = req.headers['x-real-ip'];
+  if (realIp) {
+    return realIp.replace(/\\/g, '');
+  }
+  // Fallback to req.ip with cleaning
+  return (req.ip || '127.0.0.1').replace(/\\/g, '').replace('::ffff:', '');
+};
+
+/**
  * Rate Limiting Configurations
  */
 export const rateLimiters = {
@@ -27,25 +48,28 @@ export const rateLimiters = {
     },
     standardHeaders: true,
     legacyHeaders: false,
+    validate: { ip: false }, // Disable IP validation to prevent errors with proxy
     keyGenerator: (req) => {
-      // Use IP + User-Agent for more specific rate limiting
-      const identifier = req.ip + (req.get('User-Agent') || '');
+      // Use cleaned IP + User-Agent for more specific rate limiting
+      const ip = getClientIp(req);
+      const identifier = ip + (req.get('User-Agent') || '');
       return createHash('sha256').update(identifier).digest('hex');
     },
     skip: (req) => {
       // Skip rate limiting for internal requests
-      return req.ip === '127.0.0.1' && req.get('X-Internal-Request') === 'true';
+      const ip = getClientIp(req);
+      return ip === '127.0.0.1' && req.get('X-Internal-Request') === 'true';
     },
     onLimitReached: (req, res, options) => {
       logger.warn('Rate limit exceeded for auth endpoint', {
-        ip: req.ip,
+        ip: getClientIp(req),
         userAgent: req.get('User-Agent'),
         path: req.path,
         component: 'rate-limiter'
       });
     }
   }),
-  
+
   // Moderate rate limiting for API endpoints
   api: rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
@@ -58,12 +82,13 @@ export const rateLimiters = {
     },
     standardHeaders: true,
     legacyHeaders: false,
+    validate: { ip: false }, // Disable IP validation to prevent errors with proxy
     keyGenerator: (req) => {
-      // Use user ID if authenticated, otherwise IP
-      return req.user?.id?.toString() || req.ip;
+      // Use user ID if authenticated, otherwise cleaned IP
+      return req.user?.id?.toString() || getClientIp(req);
     }
   }),
-  
+
   // Lenient rate limiting for public endpoints
   public: rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
@@ -75,9 +100,11 @@ export const rateLimiters = {
       retryAfter: 15 * 60
     },
     standardHeaders: true,
-    legacyHeaders: false
+    legacyHeaders: false,
+    validate: { ip: false }, // Disable IP validation to prevent errors with proxy
+    keyGenerator: getClientIp
   }),
-  
+
   // Strict rate limiting for file uploads
   upload: rateLimit({
     windowMs: 60 * 60 * 1000, // 1 hour
@@ -89,7 +116,9 @@ export const rateLimiters = {
       retryAfter: 60 * 60
     },
     standardHeaders: true,
-    legacyHeaders: false
+    legacyHeaders: false,
+    validate: { ip: false }, // Disable IP validation to prevent errors with proxy
+    keyGenerator: getClientIp
   })
 };
 
@@ -109,40 +138,40 @@ export const cacheMiddleware = {
       if (req.method !== 'GET') {
         return next();
       }
-      
+
       // Generate cache key
-      const cacheKey = keyGenerator 
+      const cacheKey = keyGenerator
         ? keyGenerator(req)
         : `api:${req.originalUrl}:${JSON.stringify(req.query)}`;
-      
+
       try {
         // Check if response is cached
         const cached = await redisClient.get(cacheKey);
-        
+
         if (cached) {
           const data = JSON.parse(cached);
-          
+
           // Set cache headers
           res.set({
             'X-Cache': 'HIT',
             'X-Cache-Key': createHash('md5').update(cacheKey).digest('hex').substring(0, 8),
             'Cache-Control': `public, max-age=${ttl}`
           });
-          
+
           logger.debug('Cache hit', {
             key: cacheKey,
             path: req.path,
             component: 'cache-middleware'
           });
-          
+
           return res.json(data);
         }
-        
+
         // Store original json method
         const originalJson = res.json;
-        
+
         // Override json method to cache response
-        res.json = function(data) {
+        res.json = function (data) {
           // Cache the response
           redisClient.setex(cacheKey, ttl, JSON.stringify(data)).catch(err => {
             logger.error('Failed to cache response', {
@@ -151,24 +180,24 @@ export const cacheMiddleware = {
               component: 'cache-middleware'
             });
           });
-          
+
           // Set cache headers
           res.set({
             'X-Cache': 'MISS',
             'X-Cache-Key': createHash('md5').update(cacheKey).digest('hex').substring(0, 8),
             'Cache-Control': `public, max-age=${ttl}`
           });
-          
+
           logger.debug('Cache miss - storing response', {
             key: cacheKey,
             path: req.path,
             component: 'cache-middleware'
           });
-          
+
           // Call original json method
           return originalJson.call(this, data);
         };
-        
+
         next();
       } catch (error) {
         logger.error('Cache middleware error', {
@@ -176,18 +205,18 @@ export const cacheMiddleware = {
           key: cacheKey,
           component: 'cache-middleware'
         });
-        
+
         // Continue without caching on error
         next();
       }
     };
   },
-  
+
   // Pre-configured cache middleware
   short: () => cacheMiddleware.create(60), // 1 minute
   medium: () => cacheMiddleware.create(300), // 5 minutes
   long: () => cacheMiddleware.create(3600), // 1 hour
-  
+
   /**
    * Cache invalidation middleware
    * @param {string|Function} pattern - Cache key pattern or function
@@ -196,17 +225,17 @@ export const cacheMiddleware = {
   invalidate: (pattern) => {
     return async (req, res, next) => {
       const originalJson = res.json;
-      
-      res.json = async function(data) {
+
+      res.json = async function (data) {
         try {
           let keys;
-          
+
           if (typeof pattern === 'function') {
             keys = pattern(req, data);
           } else {
             keys = [pattern];
           }
-          
+
           if (Array.isArray(keys)) {
             for (const key of keys) {
               if (key.includes('*')) {
@@ -220,7 +249,7 @@ export const cacheMiddleware = {
                 await redisClient.del(key);
               }
             }
-            
+
             logger.debug('Cache invalidated', {
               keys,
               path: req.path,
@@ -235,10 +264,10 @@ export const cacheMiddleware = {
             component: 'cache-middleware'
           });
         }
-        
+
         return originalJson.call(this, data);
       };
-      
+
       next();
     };
   }
@@ -254,19 +283,19 @@ export const requestLogger = (options = {}) => {
     excludePaths = ['/health', '/metrics'],
     excludeHeaders = ['authorization', 'cookie', 'x-api-key']
   } = options;
-  
+
   return (req, res, next) => {
     // Skip logging for excluded paths
     if (excludePaths.some(path => req.path.startsWith(path))) {
       return next();
     }
-    
+
     const startTime = Date.now();
     const requestId = req.id || createHash('md5').update(`${Date.now()}-${Math.random()}`).digest('hex').substring(0, 8);
-    
+
     // Add request ID to request object
     req.requestId = requestId;
-    
+
     // Prepare log data
     const logData = {
       requestId,
@@ -278,26 +307,26 @@ export const requestLogger = (options = {}) => {
       userId: req.user?.id,
       component: 'request-logger'
     };
-    
+
     // Add headers if enabled
     if (logHeaders) {
       const headers = { ...req.headers };
       excludeHeaders.forEach(header => delete headers[header]);
       logData.headers = headers;
     }
-    
+
     // Add body if enabled (for non-GET requests)
     if (logBody && req.method !== 'GET' && req.body) {
       logData.body = req.body;
     }
-    
+
     logger.info('Request started', logData);
-    
+
     // Override res.json to log response
     const originalJson = res.json;
-    res.json = function(data) {
+    res.json = function (data) {
       const duration = Date.now() - startTime;
-      
+
       logger.info('Request completed', {
         requestId,
         method: req.method,
@@ -307,16 +336,16 @@ export const requestLogger = (options = {}) => {
         responseSize: JSON.stringify(data).length,
         component: 'request-logger'
       });
-      
+
       return originalJson.call(this, data);
     };
-    
+
     // Log errors
     const originalStatus = res.status;
-    res.status = function(code) {
+    res.status = function (code) {
       if (code >= 400) {
         const duration = Date.now() - startTime;
-        
+
         logger.warn('Request failed', {
           requestId,
           method: req.method,
@@ -326,10 +355,10 @@ export const requestLogger = (options = {}) => {
           component: 'request-logger'
         });
       }
-      
+
       return originalStatus.call(this, code);
     };
-    
+
     next();
   };
 };
@@ -341,22 +370,22 @@ export const performanceMonitor = () => {
   return (req, res, next) => {
     const startTime = process.hrtime.bigint();
     const startMemory = process.memoryUsage();
-    
+
     // Override res.json to measure performance
     const originalJson = res.json;
-    res.json = function(data) {
+    res.json = function (data) {
       const endTime = process.hrtime.bigint();
       const endMemory = process.memoryUsage();
-      
+
       const duration = Number(endTime - startTime) / 1000000; // Convert to milliseconds
       const memoryDelta = endMemory.heapUsed - startMemory.heapUsed;
-      
+
       // Set performance headers
       res.set({
         'X-Response-Time': `${duration.toFixed(2)}ms`,
         'X-Memory-Usage': `${(memoryDelta / 1024 / 1024).toFixed(2)}MB`
       });
-      
+
       // Log slow requests
       if (duration > 1000) { // Log requests slower than 1 second
         logger.warn('Slow request detected', {
@@ -367,10 +396,10 @@ export const performanceMonitor = () => {
           component: 'performance-monitor'
         });
       }
-      
+
       return originalJson.call(this, data);
     };
-    
+
     next();
   };
 };
@@ -411,10 +440,10 @@ export const corsConfig = cors({
       'https://app.example.com',
       'https://admin.example.com'
     ];
-    
+
     // Allow requests with no origin (mobile apps, etc.)
     if (!origin) return callback(null, true);
-    
+
     if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
@@ -457,7 +486,7 @@ export const compressionConfig = compression({
     if (req.headers['cache-control'] && req.headers['cache-control'].includes('no-transform')) {
       return false;
     }
-    
+
     // Use compression filter function
     return compression.filter(req, res);
   },
@@ -472,10 +501,10 @@ export const compressionConfig = compression({
 export const requestSizeLimiter = (maxSize = '10mb') => {
   return (req, res, next) => {
     const contentLength = parseInt(req.get('Content-Length') || '0');
-    const maxBytes = typeof maxSize === 'string' 
+    const maxBytes = typeof maxSize === 'string'
       ? parseInt(maxSize) * (maxSize.includes('mb') ? 1024 * 1024 : 1024)
       : maxSize;
-    
+
     if (contentLength > maxBytes) {
       logger.warn('Request size limit exceeded', {
         contentLength,
@@ -483,14 +512,14 @@ export const requestSizeLimiter = (maxSize = '10mb') => {
         path: req.path,
         component: 'size-limiter'
       });
-      
+
       return res.status(413).json({
         error: 'Request entity too large',
         message: `Request size exceeds limit of ${maxSize}`,
         code: 'REQUEST_TOO_LARGE'
       });
     }
-    
+
     next();
   };
 };
@@ -504,9 +533,9 @@ export const apiVersioning = (defaultVersion = 'v1') => {
     const headerVersion = req.get('API-Version');
     const queryVersion = req.query.version;
     const urlVersion = req.path.match(/^\/v(\d+)\//)?.[1];
-    
+
     const version = headerVersion || queryVersion || (urlVersion ? `v${urlVersion}` : defaultVersion);
-    
+
     // Validate version format
     if (!/^v\d+$/.test(version)) {
       return res.status(400).json({
@@ -515,13 +544,13 @@ export const apiVersioning = (defaultVersion = 'v1') => {
         code: 'INVALID_API_VERSION'
       });
     }
-    
+
     // Add version to request object
     req.apiVersion = version;
-    
+
     // Set response header
     res.set('API-Version', version);
-    
+
     next();
   };
 };
@@ -540,7 +569,7 @@ export const healthCheck = () => {
         version: process.env.npm_package_version || '1.0.0'
       });
     }
-    
+
     next();
   };
 };
@@ -552,7 +581,7 @@ export class MiddlewareStack {
   constructor() {
     this.middlewares = [];
   }
-  
+
   /**
    * Add middleware to stack
    * @param {Function} middleware - Express middleware function
@@ -567,7 +596,7 @@ export class MiddlewareStack {
     }
     return this;
   }
-  
+
   /**
    * Add conditional middleware
    * @param {Function} condition - Condition function
@@ -583,7 +612,7 @@ export class MiddlewareStack {
     });
     return this;
   }
-  
+
   /**
    * Build middleware array
    * @returns {Array} Array of middleware functions
@@ -608,7 +637,7 @@ export const middlewareStacks = {
     .use(requestLogger())
     .use(performanceMonitor())
     .build(),
-  
+
   // Public API stack (with rate limiting)
   public: () => new MiddlewareStack()
     .use(healthCheck())
@@ -621,7 +650,7 @@ export const middlewareStacks = {
     .use(requestLogger())
     .use(performanceMonitor())
     .build(),
-  
+
   // Authenticated API stack
   authenticated: () => new MiddlewareStack()
     .use(healthCheck())
@@ -634,7 +663,7 @@ export const middlewareStacks = {
     .use(requestLogger({ logBody: true }))
     .use(performanceMonitor())
     .build(),
-  
+
   // Admin API stack (with enhanced logging)
   admin: () => new MiddlewareStack()
     .use(healthCheck())

@@ -15,24 +15,29 @@ export { default as useViewMode } from './useViewMode';
 export { default as useFormValidation } from './useFormValidation';
 export { default as useErrorHandler } from './useErrorHandler';
 
+// Export Branch hooks (Project 45)
+export { useBranch, useBranchRequired, useBranchApi } from './useBranch';
+export type { BranchType, BranchConfig, UseBranchReturn } from './useBranch';
+
 // Export API hooks
 export { default as useMutation } from './api/useMutation';
 export { default as useQueryData } from './api/useQueryData';
+export { useBranchApiMethods, useBranchParams, useBranchAwareApiService } from './api/useBranchApi';
 
 // Export optimized authentication hooks
 export { useAuth, default as useAuthDefault } from './auth/useAuth';
 export { usePermissions, default as usePermissionsDefault } from './auth/usePermissions';
 
 // Export optimized state management hooks
-export { 
-  useAppState, 
+export {
+  useAppState,
   useAppStateSelector,
   useLanguage,
   useTheme,
   useSidebar,
   useAttestatiProgress,
   useAppActions,
-  default as useAppStateDefault 
+  default as useAppStateDefault
 } from './state/useAppState';
 
 // Export optimized UI hooks
@@ -40,12 +45,12 @@ export { useToast, default as useToastDefault } from './ui/useToast';
 
 // Export optimized routing hooks
 export { useNavigation, default as useNavigationDefault } from './routing/useNavigation';
-export { 
+export {
   useRouteGuard,
   usePermissionCheck,
   useRoleCheck,
   useConditionalRender,
-  default as useRouteGuardDefault 
+  default as useRouteGuardDefault
 } from './routing/useRouteGuard';
 
 // Re-export legacy toast hook for backward compatibility
@@ -58,6 +63,10 @@ export { useDataExport } from './useDataExport';
 export { useDeletionRequest } from './useDeletionRequest';
 export { usePrivacySettings } from './usePrivacySettings';
 export { useGDPRAdmin } from './useGDPRAdmin';
+
+// Tenant Access Hooks
+export { useTenantAccess, default as useTenantAccessDefault } from './useTenantAccess';
+export type { AccessibleTenant } from './useTenantAccess';
 
 // User Preferences hooks
 // Removed useUserPreferences - now using unified PreferencesContext

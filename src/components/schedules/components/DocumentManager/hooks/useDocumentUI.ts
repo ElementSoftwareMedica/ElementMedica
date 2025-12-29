@@ -10,11 +10,17 @@ import { useState } from 'react';
 export interface UseDocumentUIReturn {
   showRegenerateModal: boolean;
   showPreventiviModal: boolean;
+  showRegistriModal: boolean;
+  showLettereModal: boolean;
   editingPreventivo: any | null;
   openRegenerateModal: () => void;
   closeRegenerateModal: () => void;
   openPreventiviModal: (preventivo?: any) => void;
   closePreventiviModal: () => void;
+  openRegistriModal: () => void;
+  closeRegistriModal: () => void;
+  openLettereModal: () => void;
+  closeLettereModal: () => void;
 }
 
 /**
@@ -24,6 +30,8 @@ export interface UseDocumentUIReturn {
 export const useDocumentUI = (): UseDocumentUIReturn => {
   const [showRegenerateModal, setShowRegenerateModal] = useState(false);
   const [showPreventiviModal, setShowPreventiviModal] = useState(false);
+  const [showRegistriModal, setShowRegistriModal] = useState(false);
+  const [showLettereModal, setShowLettereModal] = useState(false);
   const [editingPreventivo, setEditingPreventivo] = useState<any>(null);
 
   /**
@@ -58,13 +66,48 @@ export const useDocumentUI = (): UseDocumentUIReturn => {
     setEditingPreventivo(null);
   };
 
+  /**
+   * Open registri presenze modal
+   */
+  const openRegistriModal = () => {
+    setShowRegistriModal(true);
+  };
+
+  /**
+   * Close registri presenze modal
+   */
+  const closeRegistriModal = () => {
+    setShowRegistriModal(false);
+  };
+
+  /**
+   * Open lettere di incarico modal
+   */
+  const openLettereModal = () => {
+    console.log('🔵 openLettereModal called, setting showLettereModal to true');
+    setShowLettereModal(true);
+  };
+
+  /**
+   * Close lettere di incarico modal
+   */
+  const closeLettereModal = () => {
+    setShowLettereModal(false);
+  };
+
   return {
     showRegenerateModal,
     showPreventiviModal,
+    showRegistriModal,
+    showLettereModal,
     editingPreventivo,
     openRegenerateModal,
     closeRegenerateModal,
     openPreventiviModal,
-    closePreventiviModal
+    closePreventiviModal,
+    openRegistriModal,
+    closeRegistriModal,
+    openLettereModal,
+    closeLettereModal
   };
 };

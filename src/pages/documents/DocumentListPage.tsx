@@ -7,12 +7,12 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { 
-  FileText, 
-  Download, 
-  Mail, 
-  Trash2, 
-  RefreshCw, 
+import {
+  FileText,
+  Download,
+  Mail,
+  Trash2,
+  RefreshCw,
   AlertCircle,
   Search,
   Filter,
@@ -23,6 +23,8 @@ import {
 import ResizableTable, { ResizableTableColumn } from '../../components/shared/ResizableTable';
 import { documentService } from '../../services/documentService';
 import type { GeneratedDocument, DocumentStatus, TemplateType } from '../../types/templates';
+import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
+import { useToast } from '../../hooks/useToast';
 
 // Data row type for ResizableTable
 interface DataRow extends Record<string, unknown> {
@@ -40,6 +42,8 @@ interface DataRow extends Record<string, unknown> {
 const DocumentListPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { confirmDelete, confirm } = useConfirmDialog();
+  const { showToast } = useToast();
 
   // State
   const [documents, setDocuments] = useState<GeneratedDocument[]>([]);
@@ -155,12 +159,12 @@ const DocumentListPage: React.FC = () => {
     try {
       setResending(true);
       await documentService.resend(resendDocumentId, { email: resendEmail });
-      alert('Email inviata con successo');
+      showToast({ message: 'Email inviata con successo', type: 'success' });
       setResendDialogOpen(false);
       setResendDocumentId(null);
       setResendEmail('');
     } catch (err: any) {
-      alert(`Errore durante l'invio: ${err.response?.data?.error || err.message}`);
+      showToast({ message: `Errore durante l'invio: ${err.response?.data?.error || err.message}`, type: 'error' });
     } finally {
       setResending(false);
     }
@@ -170,14 +174,15 @@ const DocumentListPage: React.FC = () => {
    * Delete document
    */
   const handleDelete = async (id: string, filename: string) => {
-    if (!confirm(`Sei sicuro di voler eliminare "${filename}"?`)) return;
+    const shouldDelete = await confirmDelete(filename);
+    if (!shouldDelete) return;
 
     try {
       await documentService.delete(id);
-      alert('Documento eliminato con successo');
+      showToast({ message: 'Documento eliminato con successo', type: 'success' });
       loadDocuments();
     } catch (err: any) {
-      alert(`Errore durante l'eliminazione: ${err.response?.data?.error || err.message}`);
+      showToast({ message: `Errore durante l'eliminazione: ${err.response?.data?.error || err.message}`, type: 'error' });
     }
   };
 
@@ -186,18 +191,24 @@ const DocumentListPage: React.FC = () => {
    */
   const handleBulkDelete = async () => {
     if (selectedIds.size === 0) return;
-    
-    if (!confirm(`Sei sicuro di voler eliminare ${selectedIds.size} documenti?`)) return;
+
+    const shouldDelete = await confirm({
+      title: 'Conferma eliminazione multipla',
+      message: `Sei sicuro di voler eliminare ${selectedIds.size} documenti? L'operazione non può essere annullata.`,
+      confirmLabel: `Elimina ${selectedIds.size} documenti`,
+      variant: 'danger'
+    });
+    if (!shouldDelete) return;
 
     try {
       await Promise.all(
         Array.from(selectedIds).map(id => documentService.delete(id))
       );
-      alert(`${selectedIds.size} documenti eliminati con successo`);
+      showToast({ message: `${selectedIds.size} documenti eliminati con successo`, type: 'success' });
       setSelectedIds(new Set());
       loadDocuments();
     } catch (err: any) {
-      alert(`Errore durante l'eliminazione: ${err.message}`);
+      showToast({ message: `Errore durante l'eliminazione: ${err.message}`, type: 'error' });
     }
   };
 
@@ -504,7 +515,7 @@ const DocumentListPage: React.FC = () => {
           <ResizableTable
             data={tableData}
             columns={columns}
-            onRowClick={(row) => {}}
+            onRowClick={(row) => { }}
           />
         )}
 

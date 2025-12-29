@@ -29,13 +29,16 @@ export const DocumentList: React.FC<DocumentListProps> = ({
   onDownloadZip,
   getDocumentName
 }) => {
-  if (documents.length === 0) return null;
+  // Defensive check: ensure documents is an array
+  const safeDocuments = Array.isArray(documents) ? documents : [];
+
+  if (safeDocuments.length === 0) return null;
 
   return (
     <div className="mt-3 pt-3 border-t space-y-2">
       <div className="flex items-center justify-between mb-2">
         <div className="text-xs font-medium text-gray-600">Documenti generati:</div>
-        {showZipDownload && documents.length > 1 && onDownloadZip && (
+        {showZipDownload && safeDocuments.length > 1 && onDownloadZip && (
           <button
             onClick={onDownloadZip}
             className={`text-xs flex items-center gap-1 ${iconColor.replace('text-', 'text-')} hover:opacity-80 font-medium`}
@@ -45,13 +48,15 @@ export const DocumentList: React.FC<DocumentListProps> = ({
           </button>
         )}
       </div>
-      {documents.map(doc => (
+      {safeDocuments.map(doc => (
         <DocumentItem
           key={doc.id}
           id={doc.id}
           name={getDocumentName(doc)}
           numero={doc.numeroProgressivo}
           anno={doc.annoProgressivo}
+          price={doc.importoFinale} // Pass price for preventivi
+          imponibile={doc.imponibile} // Pass imponibile (al netto IVA)
           iconColor={iconColor}
           onDownload={() => onDownload(doc.id)}
           onEdit={onEdit ? () => onEdit(doc) : undefined}

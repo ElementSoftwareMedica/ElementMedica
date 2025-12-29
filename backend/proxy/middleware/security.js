@@ -54,7 +54,7 @@ const CSP_CONFIG = {
       frameAncestors: ["'none'"]
     }
   },
-  
+
   // Configurazione per produzione
   production: {
     directives: {
@@ -95,7 +95,7 @@ const HSTS_CONFIG = {
     includeSubDomains: false,
     preload: false
   },
-  
+
   production: {
     maxAge: 31536000, // 1 anno
     includeSubDomains: true,
@@ -111,44 +111,44 @@ const HSTS_CONFIG = {
 export function createHelmetMiddleware(options = {}) {
   const env = process.env.NODE_ENV || 'development';
   const isProduction = env === 'production';
-  
+
   const helmetConfig = {
     // Content Security Policy
     contentSecurityPolicy: {
       directives: CSP_CONFIG[env]?.directives || CSP_CONFIG.development.directives,
       reportOnly: !isProduction // Solo report in sviluppo
     },
-    
+
     // HTTP Strict Transport Security
     hsts: isProduction ? HSTS_CONFIG.production : HSTS_CONFIG.development,
-    
+
     // X-Frame-Options
     frameguard: {
       action: 'deny'
     },
-    
+
     // X-Content-Type-Options
     noSniff: true,
-    
+
     // X-XSS-Protection
     xssFilter: true,
-    
+
     // Referrer Policy
     referrerPolicy: {
       policy: ['no-referrer', 'strict-origin-when-cross-origin']
     },
-    
+
     // Hide X-Powered-By
     hidePoweredBy: true,
-    
+
     // DNS Prefetch Control
     dnsPrefetchControl: {
       allow: false
     },
-    
+
     // IE No Open
     ieNoOpen: true,
-    
+
     // Permissions Policy (ex Feature Policy)
     permissionsPolicy: {
       camera: [],
@@ -160,12 +160,12 @@ export function createHelmetMiddleware(options = {}) {
       gyroscope: [],
       accelerometer: []
     },
-    
+
     ...options
   };
-  
+
   const helmetMiddleware = helmet(helmetConfig);
-  
+
   return (req, res, next) => {
     if (process.env.DEBUG_SECURITY || process.env.DEBUG_ALL) {
       debugSecurity('Applying security headers:', {
@@ -177,7 +177,7 @@ export function createHelmetMiddleware(options = {}) {
         isProduction
       });
     }
-    
+
     helmetMiddleware(req, res, next);
   };
 }
@@ -191,7 +191,7 @@ export function createSecureCorsMiddleware(allowedOrigins = []) {
   return (req, res, next) => {
     const origin = req.get('Origin');
     const env = process.env.NODE_ENV || 'development';
-    
+
     // In sviluppo, permetti localhost
     if (env === 'development') {
       const localhostPattern = /^https?:\/\/localhost(:\d+)?$/;
@@ -204,12 +204,12 @@ export function createSecureCorsMiddleware(allowedOrigins = []) {
         res.setHeader('Access-Control-Allow-Origin', origin);
       }
     }
-    
+
     // Headers di sicurezza aggiuntivi per CORS
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Max-Age', '86400'); // 24 ore
     res.setHeader('Vary', 'Origin');
-    
+
     if (process.env.DEBUG_SECURITY || process.env.DEBUG_ALL) {
       debugSecurity('Secure CORS applied:', {
         origin,
@@ -217,7 +217,7 @@ export function createSecureCorsMiddleware(allowedOrigins = []) {
         environment: env
       });
     }
-    
+
     next();
   };
 }
@@ -235,21 +235,21 @@ export function createSecurityRateLimiter(options = {}) {
     standardHeaders = true,
     legacyHeaders = false
   } = options;
-  
+
   const requests = new Map();
-  
+
   return (req, res, next) => {
     const ip = req.ip || req.connection.remoteAddress;
     const now = Date.now();
     const windowStart = now - windowMs;
-    
+
     // Pulisci richieste vecchie
     if (!requests.has(ip)) {
       requests.set(ip, []);
     }
-    
+
     const ipRequests = requests.get(ip).filter(time => time > windowStart);
-    
+
     if (ipRequests.length >= max) {
       logger.warn('Rate limit exceeded', {
         service: 'proxy-server',
@@ -258,30 +258,30 @@ export function createSecurityRateLimiter(options = {}) {
         userAgent: req.get('User-Agent'),
         requestCount: ipRequests.length
       });
-      
+
       if (standardHeaders) {
         res.setHeader('RateLimit-Limit', max);
         res.setHeader('RateLimit-Remaining', 0);
         res.setHeader('RateLimit-Reset', new Date(now + windowMs));
       }
-      
+
       return res.status(429).json({
         error: 'Rate limit exceeded',
         message,
         retryAfter: Math.ceil(windowMs / 1000)
       });
     }
-    
+
     // Aggiungi richiesta corrente
     ipRequests.push(now);
     requests.set(ip, ipRequests);
-    
+
     if (standardHeaders) {
       res.setHeader('RateLimit-Limit', max);
       res.setHeader('RateLimit-Remaining', max - ipRequests.length);
       res.setHeader('RateLimit-Reset', new Date(now + windowMs));
     }
-    
+
     next();
   };
 }
@@ -294,14 +294,14 @@ export function createSecurityRateLimiter(options = {}) {
 export function createInputValidationMiddleware(options = {}) {
   const {
     maxBodySize = '10mb',
-    allowedContentTypes = ['application/json', 'application/x-www-form-urlencoded'],
+    allowedContentTypes = ['application/json', 'application/x-www-form-urlencoded', 'multipart/form-data'],
     sanitizeInput = true
   } = options;
-  
+
   return (req, res, next) => {
     const contentType = req.get('Content-Type');
     const contentLength = parseInt(req.get('Content-Length') || '0');
-    
+
     // Verifica content type
     if (contentType && !allowedContentTypes.some(type => contentType.includes(type))) {
       logger.warn('Invalid content type', {
@@ -310,13 +310,13 @@ export function createInputValidationMiddleware(options = {}) {
         path: req.path,
         ip: req.ip
       });
-      
+
       return res.status(415).json({
         error: 'Unsupported Media Type',
         allowedTypes: allowedContentTypes
       });
     }
-    
+
     // Verifica dimensione body
     const maxBytes = parseInt(maxBodySize.replace(/\D/g, '')) * (maxBodySize.includes('mb') ? 1024 * 1024 : 1024);
     if (contentLength > maxBytes) {
@@ -327,13 +327,13 @@ export function createInputValidationMiddleware(options = {}) {
         path: req.path,
         ip: req.ip
       });
-      
+
       return res.status(413).json({
         error: 'Request Entity Too Large',
         maxSize: maxBodySize
       });
     }
-    
+
     if (process.env.DEBUG_SECURITY || process.env.DEBUG_ALL) {
       debugSecurity('Input validation passed:', {
         contentType,
@@ -341,7 +341,7 @@ export function createInputValidationMiddleware(options = {}) {
         path: req.path
       });
     }
-    
+
     next();
   };
 }
@@ -359,7 +359,7 @@ export function createSecurityLogger() {
       'origin': req.get('Origin'),
       'referer': req.get('Referer')
     };
-    
+
     // Log richieste sospette
     const suspiciousPatterns = [
       /\.\.\//, // Path traversal
@@ -370,10 +370,10 @@ export function createSecurityLogger() {
       /onload=/i, // Event handler injection
       /onerror=/i // Event handler injection
     ];
-    
+
     const url = req.originalUrl || req.url;
     const isSuspicious = suspiciousPatterns.some(pattern => pattern.test(url));
-    
+
     if (isSuspicious) {
       logger.warn('Suspicious request detected', {
         service: 'proxy-server',
@@ -385,10 +385,10 @@ export function createSecurityLogger() {
         timestamp: new Date().toISOString()
       });
     }
-    
+
     // Log per audit trail GDPR - log removed to reduce verbosity
     // API request logging disabled to prevent excessive log generation
-    
+
     next();
   };
 }
@@ -407,12 +407,12 @@ export function setupSecurity(app, options = {}) {
     customCSP = {},
     customHSTS = {}
   } = options;
-  
+
   // Security logger
   if (enableSecurityLogger) {
     app.use(createSecurityLogger());
   }
-  
+
   // Helmet con configurazione personalizzata
   if (enableHelmet) {
     const env = process.env.NODE_ENV || 'development';
@@ -431,20 +431,20 @@ export function setupSecurity(app, options = {}) {
         ...customHSTS
       }
     };
-    
+
     app.use(createHelmetMiddleware(helmetOptions));
   }
-  
+
   // CORS sicuro
   if (allowedOrigins.length > 0) {
     app.use(createSecureCorsMiddleware(allowedOrigins));
   }
-  
+
   // Input validation
   if (enableInputValidation) {
     app.use(createInputValidationMiddleware());
   }
-  
+
   if (process.env.DEBUG_SECURITY || process.env.DEBUG_ALL) {
     console.log('✅ Security middleware configured:');
     console.log('   - Helmet enabled:', enableHelmet);
@@ -461,7 +461,7 @@ export function setupSecurity(app, options = {}) {
  */
 export function getSecurityConfig() {
   const env = process.env.NODE_ENV || 'development';
-  
+
   return {
     environment: env,
     csp: CSP_CONFIG[env],

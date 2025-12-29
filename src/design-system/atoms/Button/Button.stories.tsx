@@ -2,6 +2,7 @@
  * Design System - Button Stories
  * Week 8 Implementation - Component Library
  */
+/* eslint-disable react-hooks/rules-of-hooks */
 
 import React from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
@@ -207,15 +208,15 @@ export const AllSizes: Story = {
 export const Interactive: Story = {
   render: () => {
     const [loading, setLoading] = React.useState(false);
-    
+
     const handleClick = () => {
       setLoading(true);
       setTimeout(() => setLoading(false), 2000);
     };
-    
+
     return (
-      <Button 
-        loading={loading} 
+      <Button
+        loading={loading}
         onClick={handleClick}
         leftIcon={!loading ? <Plus className="h-4 w-4" /> : undefined}
       >

@@ -43,7 +43,7 @@ router.get('/',
                     details: errors.array()
                 });
             }
-            
+
             const {
                 entityType,
                 personId = req.person.id,
@@ -52,7 +52,9 @@ router.get('/',
                 startDate,
                 endDate
             } = req.query;
-            
+
+            const tenantId = req.person.tenantId;
+
             // Check if user can access other person's data
             if (personId !== req.person.id && !req.person.roles.includes('global_admin')) {
                 return res.status(403).json({
@@ -60,50 +62,70 @@ router.get('/',
                     code: 'GDPR_ACCESS_DENIED'
                 });
             }
-            
+
             const whereClause = {
-                personId: personId === 'current-user' ? req.person.id : personId
+                personId: personId === 'current-user' ? req.person.id : personId,
+                tenantId,
+                deletedAt: null
             };
-            
+
+            // Map entityType to resourceType (schema field name)
             if (entityType) {
-                whereClause.entityType = entityType;
+                whereClause.resourceType = entityType;
             }
-            
+
             if (startDate || endDate) {
-                whereClause.timestamp = {};
-                if (startDate) whereClause.timestamp.gte = new Date(startDate);
-                if (endDate) whereClause.timestamp.lte = new Date(endDate);
+                whereClause.createdAt = {};
+                if (startDate) whereClause.createdAt.gte = new Date(startDate);
+                if (endDate) whereClause.createdAt.lte = new Date(endDate);
             }
-            
+
             const auditEntries = await prisma.gdprAuditLog.findMany({
                 where: whereClause,
                 orderBy: {
-                    timestamp: 'desc'
+                    createdAt: 'desc'
                 },
                 take: parseInt(limit),
                 skip: parseInt(offset),
                 select: {
                     id: true,
                     action: true,
-                    entityType: true,
-                    entityId: true,
-                    details: true,
-                    timestamp: true,
+                    resourceType: true,
+                    resourceId: true,
+                    dataAccessed: true,
+                    createdAt: true,
                     ipAddress: true
                 }
             });
-            
+
             const total = await prisma.gdprAuditLog.count({
                 where: whereClause
             });
-            
+
+            // Map response to expected frontend format
+            const entries = auditEntries.map(entry => ({
+                id: entry.id,
+                action: entry.action,
+                entityType: entry.resourceType, // Alias
+                dataType: entry.resourceType,   // Alias
+                entityId: entry.resourceId,     // Alias
+                details: entry.dataAccessed,    // Alias
+                timestamp: entry.createdAt,     // Alias
+                ipAddress: entry.ipAddress
+            }));
+
             res.json({
-                entries: auditEntries,
+                success: true,
+                data: {
+                    auditTrail: entries,
+                    total
+                },
+                entries,
                 total,
                 limit: parseInt(limit),
                 offset: parseInt(offset)
             });
-            
+
         } catch (error) {
             logger.error('Failed to get audit history', {
                 component: 'gdpr-audit-compliance',
@@ -112,7 +134,7 @@ router.get('/',
                 personId: req.person?.id,
                 query: req.query
             });
-            
+
             res.status(500).json({
                 error: 'Failed to get audit history',
                 code: 'GDPR_AUDIT_GET_FAILED'
@@ -140,13 +162,15 @@ router.get('/export',
                     details: errors.array()
                 });
             }
-            
+
             const {
                 entityType,
                 personId = req.person.id,
                 format = 'json'
             } = req.query;
-            
+
+            const tenantId = req.person.tenantId;
+
             // Check if user can access other person's data
             if (personId !== req.person.id && !req.person.roles.includes('global_admin')) {
                 return res.status(403).json({
@@ -154,42 +178,56 @@ router.get('/export',
                     code: 'GDPR_ACCESS_DENIED'
                 });
             }
-            
+
             const whereClause = {
-                personId: personId === 'current-user' ? req.person.id : personId
+                personId: personId === 'current-user' ? req.person.id : personId,
+                tenantId,
+                deletedAt: null
             };
-            
+
+            // Map entityType to resourceType (schema field name)
             if (entityType) {
-                whereClause.entityType = entityType;
+                whereClause.resourceType = entityType;
             }
-            
+
             const auditEntries = await prisma.gdprAuditLog.findMany({
                 where: whereClause,
                 orderBy: {
-                    timestamp: 'desc'
+                    createdAt: 'desc'
                 },
                 select: {
                     id: true,
                     action: true,
-                    entityType: true,
-                    entityId: true,
-                    details: true,
-                    timestamp: true,
+                    resourceType: true,
+                    resourceId: true,
+                    dataAccessed: true,
+                    createdAt: true,
                     ipAddress: true
                 }
             });
-            
+
+            // Map to frontend expected format
+            const mappedEntries = auditEntries.map(entry => ({
+                id: entry.id,
+                action: entry.action,
+                entityType: entry.resourceType,
+                entityId: entry.resourceId,
+                details: entry.dataAccessed,
+                timestamp: entry.createdAt,
+                ipAddress: entry.ipAddress
+            }));
+
             // Set appropriate headers for download
             const timestamp = new Date().toISOString().split('T')[0];
             const filename = `gdpr_audit_${personId}_${timestamp}.${format}`;
-            
+
             res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-            
+
             if (format === 'csv') {
                 res.setHeader('Content-Type', 'text/csv');
                 // Convert to CSV format
                 const csvHeader = 'ID,Action,Entity Type,Entity ID,Details,Timestamp,IP Address\n';
-                const csvRows = auditEntries.map(entry => 
+                const csvRows = mappedEntries.map(entry =>
                     `${entry.id},${entry.action},${entry.entityType || ''},${entry.entityId || ''},"${entry.details || ''}",${entry.timestamp},${entry.ipAddress || ''}`
                 ).join('\n');
                 res.send(csvHeader + csvRows);
@@ -199,10 +237,10 @@ router.get('/export',
                     exportDate: new Date().toISOString(),
                     personId,
                     entityType,
-                    entries: auditEntries
+                    entries: mappedEntries
                 });
             }
-            
+
         } catch (error) {
             logger.error('Failed to export audit history', {
                 component: 'gdpr-audit-compliance',
@@ -211,7 +249,7 @@ router.get('/export',
                 personId: req.person?.id,
                 query: req.query
             });
-            
+
             res.status(500).json({
                 error: 'Failed to export audit history',
                 code: 'GDPR_AUDIT_EXPORT_FAILED'
@@ -240,37 +278,51 @@ router.post('/',
                     details: errors.array()
                 });
             }
-            
+
             const { action, entityType, entityId, details } = req.body;
             const personId = req.person.id;
-            
+            const tenantId = req.person.tenantId;
+
+            // Map frontend field names to schema field names
             const auditEntry = await prisma.gdprAuditLog.create({
                 data: {
                     personId,
+                    tenantId,
                     action,
-                    entityType,
-                    entityId,
-                    details,
-                    ipAddress: req.ip,
-                    timestamp: new Date()
+                    resourceType: entityType,   // Schema uses resourceType
+                    resourceId: entityId,       // Schema uses resourceId
+                    dataAccessed: details,      // Schema uses dataAccessed
+                    ipAddress: req.ip
+                    // createdAt is auto-generated by Prisma
                 }
             });
-            
+
             logger.info('GDPR audit entry created', {
                 component: 'gdpr-audit-compliance',
                 action: 'createAuditEntry',
                 personId,
+                tenantId,
                 auditAction: action,
-                entityType,
-                entityId,
+                resourceType: entityType,
+                resourceId: entityId,
                 auditEntryId: auditEntry.id
             });
-            
+
+            // Map response to frontend expected format
             res.status(201).json({
                 message: 'Audit entry created successfully',
-                entry: auditEntry
+                entry: {
+                    id: auditEntry.id,
+                    personId: auditEntry.personId,
+                    action: auditEntry.action,
+                    entityType: auditEntry.resourceType,
+                    entityId: auditEntry.resourceId,
+                    details: auditEntry.dataAccessed,
+                    timestamp: auditEntry.createdAt,
+                    ipAddress: auditEntry.ipAddress
+                }
             });
-            
+
         } catch (error) {
             logger.error('Failed to create audit entry', {
                 component: 'gdpr-audit-compliance',
@@ -279,7 +331,7 @@ router.post('/',
                 personId: req.person?.id,
                 body: req.body
             });
-            
+
             res.status(500).json({
                 error: 'Failed to create audit entry',
                 code: 'GDPR_AUDIT_CREATE_FAILED'
@@ -309,34 +361,38 @@ router.post('/batch',
                     details: errors.array()
                 });
             }
-            
+
             const { entries } = req.body;
             const personId = req.person.id;
-            
+            const tenantId = req.person.tenantId;
+
+            // Map frontend field names to schema field names
             const auditEntries = await prisma.gdprAuditLog.createMany({
                 data: entries.map(entry => ({
                     personId,
+                    tenantId,
                     action: entry.action,
-                    entityType: entry.entityType,
-                    entityId: entry.entityId,
-                    details: entry.details,
-                    ipAddress: req.ip,
-                    timestamp: new Date()
+                    resourceType: entry.entityType,   // Schema uses resourceType
+                    resourceId: entry.entityId,       // Schema uses resourceId
+                    dataAccessed: entry.details,      // Schema uses dataAccessed
+                    ipAddress: req.ip
+                    // createdAt is auto-generated by Prisma
                 }))
             });
-            
+
             logger.info('GDPR batch audit entries created', {
                 component: 'gdpr-audit-compliance',
                 action: 'createBatchAuditEntries',
                 personId,
+                tenantId,
                 entriesCount: entries.length
             });
-            
+
             res.status(201).json({
                 message: 'Batch audit entries created successfully',
                 count: auditEntries.count
             });
-            
+
         } catch (error) {
             logger.error('Failed to create batch audit entries', {
                 component: 'gdpr-audit-compliance',
@@ -345,7 +401,7 @@ router.post('/batch',
                 personId: req.person?.id,
                 body: req.body
             });
-            
+
             res.status(500).json({
                 error: 'Failed to create batch audit entries',
                 code: 'GDPR_AUDIT_BATCH_CREATE_FAILED'
@@ -375,7 +431,7 @@ router.get('/trail',
                     details: errors.array()
                 });
             }
-            
+
             const personId = req.person.id;
             const {
                 limit = 50,
@@ -384,7 +440,7 @@ router.get('/trail',
                 startDate,
                 endDate
             } = req.query;
-            
+
             const auditTrail = await GDPRService.getAuditTrail(personId, {
                 limit: parseInt(limit),
                 offset: parseInt(offset),
@@ -392,9 +448,9 @@ router.get('/trail',
                 startDate,
                 endDate
             });
-            
+
             res.json(auditTrail);
-            
+
         } catch (error) {
             logger.error('Failed to get audit trail', {
                 component: 'gdpr-audit-compliance',
@@ -403,7 +459,7 @@ router.get('/trail',
                 personId: req.person?.id,
                 query: req.query
             });
-            
+
             res.status(500).json({
                 error: 'Failed to get audit trail',
                 code: 'GDPR_AUDIT_TRAIL_FAILED'
@@ -430,9 +486,9 @@ router.get('/compliance-report',
                     details: errors.array()
                 });
             }
-            
+
             const { companyId } = req.query;
-            
+
             // Check if user can access company data
             if (companyId && req.person.companyId !== companyId && !req.person.roles.includes('global_admin')) {
                 return res.status(403).json({
@@ -440,9 +496,9 @@ router.get('/compliance-report',
                     code: 'GDPR_COMPANY_ACCESS_DENIED'
                 });
             }
-            
+
             const report = await GDPRService.generateComplianceReport(companyId);
-            
+
             logger.info('GDPR compliance report generated', {
                 component: 'gdpr-audit-compliance',
                 action: 'generateComplianceReport',
@@ -450,9 +506,9 @@ router.get('/compliance-report',
                 companyId,
                 reportSummary: report.summary
             });
-            
+
             res.json(report);
-            
+
         } catch (error) {
             logger.error('Failed to generate compliance report', {
                 component: 'gdpr-audit-compliance',
@@ -461,7 +517,7 @@ router.get('/compliance-report',
                 adminPersonId: req.person?.id,
                 query: req.query
             });
-            
+
             res.status(500).json({
                 error: 'Failed to generate compliance report',
                 code: 'GDPR_COMPLIANCE_REPORT_FAILED'

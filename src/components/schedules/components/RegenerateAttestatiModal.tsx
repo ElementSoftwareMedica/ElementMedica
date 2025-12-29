@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, AlertTriangle, CheckCircle } from 'lucide-react';
 import { Button } from '../../../design-system/atoms/Button';
+import { useConfirmDialog } from '../../../contexts/ConfirmDialogContext';
 
 interface Person {
   id: string;
@@ -34,6 +35,7 @@ export const RegenerateAttestatiModal: React.FC<RegenerateAttestatiModalProps> =
   const [selectedPersons, setSelectedPersons] = useState<Set<string>>(new Set());
   const [selectAll, setSelectAll] = useState(false);
   const [regenerateExisting, setRegenerateExisting] = useState(false);
+  const { confirm } = useConfirmDialog();
 
   // Identifica persone con attestati esistenti
   const personsWithAttestati = new Set(existingAttestati.map(a => a.personId));
@@ -71,21 +73,26 @@ export const RegenerateAttestatiModal: React.FC<RegenerateAttestatiModalProps> =
     setSelectAll(!selectAll);
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (selectedPersons.size === 0) {
       alert('⚠️ Seleziona almeno un partecipante');
       return;
     }
 
     // Verifica se ci sono attestati esistenti selezionati
-    const selectedWithExisting = Array.from(selectedPersons).filter(id => 
+    const selectedWithExisting = Array.from(selectedPersons).filter(id =>
       personsWithAttestati.has(id)
     );
 
     if (selectedWithExisting.length > 0 && !regenerateExisting) {
-      if (!confirm(`⚠️ Hai selezionato ${selectedWithExisting.length} partecipanti che hanno già un attestato. Verranno ignorati. Vuoi procedere comunque?`)) {
-        return;
-      }
+      const confirmed = await confirm({
+        title: 'Attestati Esistenti',
+        message: `Hai selezionato ${selectedWithExisting.length} partecipanti che hanno già un attestato. Verranno ignorati. Vuoi procedere comunque?`,
+        variant: 'warning',
+        confirmLabel: 'Procedi',
+        cancelLabel: 'Annulla'
+      });
+      if (!confirmed) return;
     }
 
     onConfirm(Array.from(selectedPersons), regenerateExisting);
@@ -93,21 +100,23 @@ export const RegenerateAttestatiModal: React.FC<RegenerateAttestatiModalProps> =
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col border border-slate-200">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-slate-200">
+        <div className="flex items-center justify-between p-6 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-white">
           <div className="flex items-center gap-3">
-            <AlertTriangle className="h-6 w-6 text-amber-500" />
+            <div className="p-2 bg-amber-100 rounded-lg">
+              <AlertTriangle className="h-5 w-5 text-amber-600" />
+            </div>
             <h2 className="text-xl font-semibold text-slate-900">
               Genera/Rigenera Attestati
             </h2>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-slate-100 rounded-full transition-colors"
+            className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-500 hover:text-slate-700"
           >
-            <X className="h-5 w-5 text-slate-500" />
+            <X className="h-5 w-5" />
           </button>
         </div>
 
@@ -148,7 +157,7 @@ export const RegenerateAttestatiModal: React.FC<RegenerateAttestatiModalProps> =
                     Attestati già esistenti
                   </p>
                   <p className="text-xs text-amber-700">
-                    {personsWithExistingAttestati.length} partecipanti hanno già un attestato. 
+                    {personsWithExistingAttestati.length} partecipanti hanno già un attestato.
                     Puoi scegliere di rigenerarli (gli attestati vecchi verranno eliminati).
                   </p>
                 </div>
@@ -230,9 +239,8 @@ export const RegenerateAttestatiModal: React.FC<RegenerateAttestatiModalProps> =
                 {personsWithExistingAttestati.map((person) => (
                   <label
                     key={person.id}
-                    className={`flex items-center gap-3 p-2 hover:bg-amber-50 rounded cursor-pointer border border-transparent hover:border-amber-200 ${
-                      !regenerateExisting ? 'opacity-50' : ''
-                    }`}
+                    className={`flex items-center gap-3 p-2 hover:bg-amber-50 rounded cursor-pointer border border-transparent hover:border-amber-200 ${!regenerateExisting ? 'opacity-50' : ''
+                      }`}
                   >
                     <input
                       type="checkbox"

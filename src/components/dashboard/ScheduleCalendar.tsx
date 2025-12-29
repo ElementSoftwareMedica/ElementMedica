@@ -6,6 +6,8 @@ import { format, parse, startOfWeek, getDay } from 'date-fns';
 import { it } from 'date-fns/locale/it';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import './ScheduleCalendar.custom.css';
+import { getStatusCalendarColor } from '../../utils/scheduleStatusColors';
+import type { ScheduleEvent } from '../../pages/Dashboard/hooks/useCalendarEvents';
 
 const locales = {
   'it-IT': it,
@@ -18,19 +20,6 @@ const localizer = dateFnsLocalizer({
   getDay,
   locales,
 });
-
-export interface ScheduleEvent {
-  id: string;
-  title: string;
-  start: Date;
-  end: Date;
-  resource?: Record<string, unknown>;
-  scheduleId?: string;
-  tooltip?: string;
-  sessioniTooltipHtml?: string;
-  allDay?: boolean;
-  status?: string;
-}
 
 interface SlotInfo {
   start: Date;
@@ -109,7 +98,7 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({ events, onSelectSlo
   // Wrapper compatibile: clona il child e aggiunge solo overlay/tooltip
   const EventWrapper = (props: { children: React.ReactElement; event: ScheduleEvent }) => {
     const { children, event } = props;
-    const [mouse, setMouse] = useState<{x: number, y: number} | null>(null);
+    const [mouse, setMouse] = useState<{ x: number, y: number } | null>(null);
     const [hovered, setHovered] = useState(false);
     const ref = useRef<HTMLDivElement>(null);
 
@@ -124,14 +113,13 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({ events, onSelectSlo
     });
 
     // Calcola colore di hover coerente con lo stato
-    let bg = '#2563eb';
-    let hoverBg = '#1d4ed8';
-    let textColor = '#fff';
-    let hoverTextColor = '#fff';
-    if (event.status === 'Preventivo') { bg = '#fef9c3'; hoverBg = '#fde047'; textColor = '#b45309'; hoverTextColor = '#b45309'; }
-    else if (event.status === 'Confermato') { bg = '#fef3c7'; hoverBg = '#fbbf24'; textColor = '#b45309'; hoverTextColor = '#b45309'; }
-    else if (event.status === 'Fatturato') { bg = '#dbeafe'; hoverBg = '#2563eb'; textColor = '#2563eb'; hoverTextColor = '#fff'; }
-    else if (event.status === 'Pagato') { bg = '#bbf7d0'; hoverBg = '#22c55e'; textColor = '#15803d'; hoverTextColor = '#fff'; }
+    // Colori dinamici basati sullo stato (unificati)
+    const colors = getStatusCalendarColor(event.status);
+    const bg = colors.bg;
+    const hoverBg = colors.hover;
+    const textColor = colors.text;
+    const borderColor = colors.border;
+    const hoverTextColor = colors.text;
 
     // Tooltip overlay
     const tooltip = hovered && event.tooltip && mouse ? ReactDOM.createPortal(
@@ -140,7 +128,7 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({ events, onSelectSlo
         zIndex: 9999,
         background: '#fff',
         color: '#1e293b',
-        border: '2px solid #2563eb',
+        border: `2px solid ${borderColor}`,
         padding: '12px 16px 12px 16px',
         borderRadius: '10px',
         fontSize: '0.98rem',
@@ -155,7 +143,7 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({ events, onSelectSlo
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
           <div style={{ fontWeight: 600, fontSize: '1.08em', color: '#2563eb', letterSpacing: 0.2, flex: 1, marginRight: 8 }}>{event.title}</div>
-          {/* Stato pillola colorata */}
+          {/* Stato pillola colorata - usa colori dinamici come il bordo */}
           {event.status && (
             <span style={{
               display: 'inline-block',
@@ -163,17 +151,9 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({ events, onSelectSlo
               borderRadius: '999px',
               fontWeight: 600,
               fontSize: '0.92em',
-              background: event.status === 'Preventivo' ? '#fef9c3'
-                        : event.status === 'Confermato' ? '#fef3c7'
-                        : event.status === 'Fatturato' ? '#dbeafe'
-                        : event.status === 'Pagato' ? '#bbf7d0'
-                        : '#e5e7eb',
-              color: event.status === 'Preventivo' ? '#b45309'
-                    : event.status === 'Confermato' ? '#b45309'
-                    : event.status === 'Fatturato' ? '#2563eb'
-                    : event.status === 'Pagato' ? '#15803d'
-                    : '#334155',
-              border: '1px solid #e5e7eb',
+              background: colors.bg,
+              color: colors.text,
+              border: `1px solid ${colors.border}`,
               marginLeft: 4,
               minWidth: 0,
               textAlign: 'center',

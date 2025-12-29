@@ -1,6 +1,8 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { usePreventivi } from '../../../hooks/finance/usePreventivi';
+import { useToast } from '../../../hooks/useToast';
 import preventiviService from '../../../services/preventiviService';
 
 // Import extracted modules
@@ -29,6 +31,8 @@ interface PreventiviModalProps {
   dates: DateEntry[];
   scheduleId?: string | number | null;
   editingPreventivo?: any | null;
+  attendance?: Record<number, (string | number)[]>;
+  persons?: Array<{ id: string | number; aziendaId?: string | number;[key: string]: any }>;
   onPreventiviCreated: (ids: string[]) => void;
 }
 
@@ -40,10 +44,13 @@ export const PreventiviModal = ({
   dates,
   scheduleId,
   editingPreventivo = null,
+  attendance,
+  persons = [],
   onPreventiviCreated,
 }: PreventiviModalProps) => {
   // API hooks
   const { createPreventivo, applySconto, loading } = usePreventivi();
+  const { showToast } = useToast();
 
   // Extracted custom hooks
   const {
@@ -53,7 +60,7 @@ export const PreventiviModal = ({
     updateCompanyParticipants,
     toggleCompanyEnabled,
     enabledCount,
-  } = useCompanyConfig(selectedCompanies, editingPreventivo);
+  } = useCompanyConfig(selectedCompanies, editingPreventivo, attendance, persons);
 
   const {
     prezzoUnitario,
@@ -91,8 +98,15 @@ export const PreventiviModal = ({
       tipoServizio,
       selectedCourse
     );
-    if (result) {
-      setScontoApplicato(result);
+
+    // Show toast with result message
+    showToast({
+      message: result.message,
+      type: result.type
+    });
+
+    if (result.success && result.sconto) {
+      setScontoApplicato(result.sconto);
     } else {
       setScontoApplicato(null);
     }
@@ -101,7 +115,7 @@ export const PreventiviModal = ({
   // Generate or update preventivi
   const handleGeneratePreventivi = async () => {
     if (!scheduleId) {
-      alert('❌ Salva il calendario prima di generare i preventivi');
+      showToast({ message: 'Salva il calendario prima di generare i preventivi', type: 'warning' });
       return;
     }
 
@@ -112,7 +126,7 @@ export const PreventiviModal = ({
         const totals = companyTotals.get(editingPreventivo.aziendaId);
 
         if (!config || !totals) {
-          alert('❌ Configurazione non valida');
+          showToast({ message: 'Configurazione non valida', type: 'error' });
           return;
         }
 
@@ -145,11 +159,16 @@ export const PreventiviModal = ({
           await preventiviService.removeSconto(editingPreventivo.id);
         }
 
-        alert('✅ Preventivo aggiornato con successo!');
+        showToast({ message: 'Preventivo aggiornato con successo!', type: 'success' });
         onPreventiviCreated([editingPreventivo.id]);
+        // Chiudi automaticamente il modal dopo l'aggiornamento
+        onClose();
       } catch (error: any) {
         console.error('Errore aggiornamento preventivo:', error);
-        alert(`❌ Errore: ${error.response?.data?.message || error.message || 'Aggiornamento fallito'}`);
+        showToast({
+          message: error.response?.data?.message || error.message || 'Aggiornamento fallito',
+          type: 'error'
+        });
       }
       return;
     }
@@ -183,6 +202,7 @@ export const PreventiviModal = ({
             aziendaId: String(companyId),
             corsoId: String(scheduleId),
             tipoServizio,
+            quantita: config.numPartecipanti,
             prezzoTotale: totals.prezzoBase + totals.totaleSpese,
             imponibile: totals.imponibile,
             importoIva: totals.importoIva,
@@ -190,6 +210,13 @@ export const PreventiviModal = ({
             percentualeIva: totals.percentualeIva,
             note: noteBreakdown,
           };
+
+          console.log('[PreventiviModal] 🔍 Creating preventivo with data:', {
+            aziendaId: preventivoData.aziendaId,
+            quantita: preventivoData.quantita,
+            numPartecipanti: config.numPartecipanti,
+            prezzoTotale: preventivoData.prezzoTotale
+          });
 
           const preventivo = await createPreventivo(preventivoData);
 
@@ -209,18 +236,22 @@ export const PreventiviModal = ({
       }
 
       if (successCount > 0) {
-        alert(
-          `✅ Generati ${successCount} preventivo/i!${errorCount > 0 ? ` (${errorCount} errori)` : ''}`
-        );
+        showToast({
+          message: `Generati ${successCount} preventivo/i!${errorCount > 0 ? ` (${errorCount} errori)` : ''}`,
+          type: errorCount > 0 ? 'warning' : 'success'
+        });
         onPreventiviCreated(preventiviCreati);
+        // Chiudi automaticamente il modal dopo la creazione
+        onClose();
       } else {
-        alert('❌ Nessun preventivo generato con successo');
+        showToast({ message: 'Nessun preventivo generato con successo', type: 'error' });
       }
     } catch (error: any) {
       console.error('Errore generazione preventivi:', error);
-      alert(
-        `❌ Errore: ${error.response?.data?.message || error.message || 'Generazione fallita'}`
-      );
+      showToast({
+        message: error.response?.data?.message || error.message || 'Generazione fallita',
+        type: 'error'
+      });
     }
   };
 
@@ -230,107 +261,114 @@ export const PreventiviModal = ({
 
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-7xl max-h-[90vh] overflow-hidden flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900">
-              {editingPreventivo ? 'Modifica Preventivo' : 'Genera Preventivi'}
-            </h2>
-            <p className="text-sm text-gray-600 mt-1">
-              {editingPreventivo
-                ? 'Modifica i dettagli del preventivo'
-                : `${enabledCount} ${enabledCount === 1 ? 'azienda selezionata' : 'aziende selezionate'}`}
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-white/50 rounded-lg transition-colors"
-            title="Chiudi"
-          >
-            <X className="w-6 h-6 text-gray-600" />
-          </button>
-        </div>
+  return createPortal(
+    <>
+      {/* Backdrop separato con z-index superiore al modal parent */}
+      <div className="fixed inset-0 bg-black/60 z-[1099]" onClick={onClose}></div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-hidden">
-          <div className="grid grid-cols-12 h-full">
-            {/* Sidebar - Company List */}
-            <div className="col-span-4 border-r border-gray-200 overflow-y-auto bg-gray-50 p-4">
-              <CompanyList
-                selectedCompanies={selectedCompanies}
-                companiesConfig={companiesConfig}
-                companyTotals={companyTotals}
-                selectedCompanyId={selectedCompanyId}
-                onSelectCompany={setSelectedCompanyId}
-                onUpdateParticipants={updateCompanyParticipants}
-                onToggleEnabled={toggleCompanyEnabled}
-              />
+      {/* Modal content con z-index superiore */}
+      <div className="fixed inset-0 flex items-center justify-center z-[1100] p-4 pointer-events-none">
+        <div className="bg-white rounded-xl shadow-2xl w-full max-w-7xl max-h-[90vh] overflow-hidden flex flex-col pointer-events-auto">
+          {/* Header */}
+          <div className="flex items-center justify-between p-6 bg-white border-b border-gray-200 relative">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">
+                {editingPreventivo ? 'Modifica Preventivo' : 'Genera Preventivi'}
+              </h2>
+              <p className="text-sm text-gray-600 mt-1">
+                {editingPreventivo
+                  ? 'Modifica i dettagli del preventivo'
+                  : `${enabledCount} ${enabledCount === 1 ? 'azienda selezionata' : 'aziende selezionate'}`}
+              </p>
             </div>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-white/50 rounded-lg transition-colors"
+              title="Chiudi"
+            >
+              <X className="w-6 h-6 text-gray-600" />
+            </button>
+          </div>
 
-            {/* Main Form */}
-            <div className="col-span-8 overflow-y-auto p-6">
-              {selectedCompanyId && selectedConfig ? (
-                <div className="space-y-6">
-                  <FormFields
-                    prezzoUnitario={prezzoUnitario}
-                    tipoServizio={tipoServizio}
-                    speseAccessorie={speseAccessorie}
-                    codiceSconto={codiceSconto}
-                    scontoApplicato={scontoApplicato}
-                    note={note}
-                    onPrezzoChange={setPrezzoUnitario}
-                    onTipoServizioChange={setTipoServizio}
-                    onAddSpesa={handleAddSpesa}
-                    onRemoveSpesa={handleRemoveSpesa}
-                    onUpdateSpesa={handleUpdateSpesa}
-                    onCodiceChange={setCodiceSconto}
-                    onValidateSconto={handleValidateSconto}
-                    onNoteChange={setNote}
-                    loadingSconto={loadingSconto}
-                  />
+          {/* Content */}
+          <div className="flex-1 overflow-hidden">
+            <div className="grid grid-cols-12 gap-0 h-full divide-x divide-gray-200">
+              {/* Sidebar - Company List */}
+              <div className="col-span-4 bg-gray-50">
+                <CompanyList
+                  selectedCompanies={selectedCompanies}
+                  companiesConfig={companiesConfig}
+                  companyTotals={companyTotals}
+                  selectedCompanyId={selectedCompanyId}
+                  onSelectCompany={setSelectedCompanyId}
+                  onUpdateParticipants={updateCompanyParticipants}
+                  onToggleEnabled={toggleCompanyEnabled}
+                />
+              </div>
 
-                  {selectedTotals && selectedConfig && (
-                    <PriceBreakdown 
-                      totals={selectedTotals}
-                      config={selectedConfig}
+              {/* Main Form */}
+              <div className="col-span-8 overflow-y-auto p-6">
+                {selectedCompanyId && selectedConfig ? (
+                  <div className="space-y-6">
+                    <FormFields
+                      prezzoUnitario={prezzoUnitario}
+                      tipoServizio={tipoServizio}
+                      speseAccessorie={speseAccessorie}
+                      codiceSconto={codiceSconto}
                       scontoApplicato={scontoApplicato}
+                      note={note}
+                      onPrezzoChange={setPrezzoUnitario}
+                      onTipoServizioChange={setTipoServizio}
+                      onAddSpesa={handleAddSpesa}
+                      onRemoveSpesa={handleRemoveSpesa}
+                      onUpdateSpesa={handleUpdateSpesa}
+                      onCodiceChange={setCodiceSconto}
+                      onValidateSconto={handleValidateSconto}
+                      onNoteChange={setNote}
+                      loadingSconto={loadingSconto}
                     />
-                  )}
-                </div>
-              ) : (
-                <div className="flex items-center justify-center h-full text-gray-500">
-                  <p>Seleziona un'azienda dalla lista per configurare il preventivo</p>
-                </div>
-              )}
+
+                    {selectedTotals && selectedConfig && (
+                      <PriceBreakdown
+                        totals={selectedTotals}
+                        config={selectedConfig}
+                        scontoApplicato={scontoApplicato}
+                      />
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center h-full text-gray-500">
+                    <p>Seleziona un'azienda dalla lista per configurare il preventivo</p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-between gap-4 p-6 border-t border-gray-200 bg-gray-50">
-          <button
-            onClick={onClose}
-            className="px-6 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-          >
-            Annulla
-          </button>
-          <button
-            onClick={handleGeneratePreventivi}
-            disabled={loading || enabledCount === 0}
-            className="px-8 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-          >
-            {loading
-              ? 'Elaborazione...'
-              : editingPreventivo
-              ? 'Aggiorna Preventivo'
-              : `Genera ${enabledCount} Preventivo${enabledCount !== 1 ? 'i' : ''}`}
-          </button>
+          {/* Footer */}
+          <div className="flex items-center justify-between gap-4 p-6 border-t border-gray-200 bg-gray-50">
+            <button
+              onClick={onClose}
+              className="px-6 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-full hover:bg-gray-50 transition-colors font-medium"
+            >
+              Annulla
+            </button>
+            <button
+              onClick={handleGeneratePreventivi}
+              disabled={loading || enabledCount === 0}
+              className="px-8 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-full hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+            >
+              {loading
+                ? 'Elaborazione...'
+                : editingPreventivo
+                  ? 'Aggiorna Preventivo'
+                  : `Genera ${enabledCount} Preventiv${enabledCount === 1 ? 'o' : 'i'}`}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </>,
+    document.body
   );
 };
 

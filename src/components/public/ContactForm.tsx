@@ -60,7 +60,7 @@ export const ContactForm: React.FC<ContactFormProps> = ({
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
     const checked = (e.target as HTMLInputElement).checked;
-    
+
     setFormData(prev => ({
       ...prev,
       [name]: type === 'checkbox' ? checked : value
@@ -80,7 +80,7 @@ export const ContactForm: React.FC<ContactFormProps> = ({
         await submitContactForm(formData);
         alert('Grazie per il tuo messaggio! Ti contatteremo presto.');
       }
-      
+
       // Reset form after successful submission
       setFormData({
         name: '',
@@ -113,7 +113,7 @@ export const ContactForm: React.FC<ContactFormProps> = ({
 
   const getInputClasses = () => {
     const baseClasses = 'w-full border border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200';
-    
+
     switch (variant) {
       case 'compact':
         return `${baseClasses} px-3 py-2 rounded-lg text-sm`;
@@ -153,8 +153,8 @@ export const ContactForm: React.FC<ContactFormProps> = ({
           {title}
         </h2>
       )}
-      
-      <form onSubmit={handleSubmit} className={getFormClasses()}>
+
+      <form onSubmit={handleSubmit} className={getFormClasses()} noValidate>
         <div className={getGridClasses()}>
           <div>
             <label htmlFor="name" className={getLabelClasses()}>
@@ -172,7 +172,7 @@ export const ContactForm: React.FC<ContactFormProps> = ({
               disabled={isSubmitting}
             />
           </div>
-          
+
           <div>
             <label htmlFor="email" className={getLabelClasses()}>
               Email *
@@ -210,7 +210,7 @@ export const ContactForm: React.FC<ContactFormProps> = ({
                 />
               </div>
             )}
-            
+
             {showCompanyField && (
               <div>
                 <label htmlFor="company" className={getLabelClasses()}>
@@ -310,7 +310,7 @@ export const ContactForm: React.FC<ContactFormProps> = ({
               *
             </label>
           </div>
-          
+
           <div className="flex items-start">
             <input
               type="checkbox"
@@ -327,9 +327,9 @@ export const ContactForm: React.FC<ContactFormProps> = ({
           </div>
         </div>
 
-        <PublicButton 
-          type="submit" 
-          size={variant === 'compact' ? 'sm' : 'lg'} 
+        <PublicButton
+          type="submit"
+          size={variant === 'compact' ? 'sm' : 'lg'}
           className="w-full"
           variant={variant === 'inline' ? 'outline' : 'primary'}
           disabled={isSubmitting}

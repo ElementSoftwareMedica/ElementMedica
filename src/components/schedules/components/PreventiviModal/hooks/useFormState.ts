@@ -33,7 +33,7 @@ export function useFormState(
   editingPreventivo?: any | null
 ): UseFormStateReturn {
   const [prezzoUnitario, setPrezzoUnitario] = useState<number>(0);
-  const [tipoServizio, setTipoServizio] = useState<TipoServizio>('MEDICO_COMPETENTE');
+  const [tipoServizio, setTipoServizio] = useState<TipoServizio>('CORSO');
   const [speseAccessorie, setSpeseAccessorie] = useState<SpesaAccessoria[]>([]);
   const [codiceSconto, setCodiceSconto] = useState<string>('');
   const [scontoApplicato, setScontoApplicato] = useState<ScontoApplicato | null>(null);
@@ -43,8 +43,10 @@ export function useFormState(
 
   // Auto-populate prezzoUnitario from course
   useEffect(() => {
-    if (selectedCourse && 'price' in selectedCourse && !editingPreventivo) {
-      setPrezzoUnitario((selectedCourse as any).price || 0);
+    if (selectedCourse && !editingPreventivo) {
+      const course = selectedCourse as any;
+      const coursePrice = course.pricePerPerson || course.price || course.prezzo || course.prezzoBase || 0;
+      setPrezzoUnitario(coursePrice);
     }
   }, [selectedCourse, editingPreventivo]);
 

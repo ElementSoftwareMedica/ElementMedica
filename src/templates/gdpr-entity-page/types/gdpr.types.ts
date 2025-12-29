@@ -9,6 +9,68 @@
  */
 
 /**
+ * Status di conformità GDPR
+ */
+export type GDPRComplianceStatus = 
+  | 'COMPLIANT'
+  | 'PARTIAL'
+  | 'NON_COMPLIANT'
+  | 'PENDING';
+
+/**
+ * Controllo di conformità GDPR
+ */
+export interface GDPRComplianceCheck {
+  id: string;
+  name: string;
+  description?: string;
+  status: GDPRComplianceStatus;
+  lastChecked?: Date;
+  details?: string;
+}
+
+/**
+ * Formato di esportazione dati GDPR
+ */
+export type GDPRExportFormat = 'JSON' | 'CSV' | 'XML';
+
+/**
+ * Status di richiesta esportazione GDPR
+ */
+export type GDPRExportStatus = 
+  | 'PENDING'
+  | 'PROCESSING'
+  | 'COMPLETED'
+  | 'FAILED';
+
+/**
+ * Richiesta di esportazione dati GDPR
+ */
+export interface GDPRExportRequest {
+  id: string;
+  entityId: string;
+  entityType: string;
+  format: GDPRExportFormat;
+  includeMetadata: boolean;
+  includeAuditTrail: boolean;
+  reason?: string;
+  status: GDPRExportStatus;
+  createdAt: Date;
+  completedAt?: Date;
+  downloadUrl?: string;
+}
+
+/**
+ * Status di richiesta cancellazione GDPR
+ */
+export type GDPRDeletionStatus = 
+  | 'PENDING'
+  | 'UNDER_REVIEW'
+  | 'APPROVED'
+  | 'COMPLETED'
+  | 'REJECTED';
+
+/**
  * Livelli di audit GDPR
  */
 export type GDPRAuditLevel = 'minimal' | 'standard' | 'comprehensive';

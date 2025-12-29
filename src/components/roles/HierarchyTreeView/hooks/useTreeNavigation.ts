@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import type { TreeNode } from '../types';
 
 interface UseTreeNavigationOptions {
@@ -19,9 +19,9 @@ interface UseTreeNavigationReturn {
  * Hook per la gestione della navigazione nell'albero (expand/collapse)
  * Gestisce lo stato di espansione dei nodi e le operazioni di navigazione
  */
-export const useTreeNavigation = ({ 
-  treeData, 
-  autoExpandLevels = 2 
+export const useTreeNavigation = ({
+  treeData,
+  autoExpandLevels = 2
 }: UseTreeNavigationOptions): UseTreeNavigationReturn => {
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
 
@@ -48,6 +48,14 @@ export const useTreeNavigation = ({
     return ids;
   };
 
+  // Create a stable key from treeData to prevent infinite loops
+  const treeDataKey = useMemo(() => {
+    const getIds = (nodes: TreeNode[]): string => {
+      return nodes.map(n => `${n.id}:${getIds(n.children)}`).join(',');
+    };
+    return getIds(treeData);
+  }, [treeData]);
+
   // Inizializza l'espansione dei primi livelli
   useEffect(() => {
     if (treeData.length > 0) {
@@ -60,7 +68,7 @@ export const useTreeNavigation = ({
       });
       setExpandedNodes(initialExpanded);
     }
-  }, [treeData, autoExpandLevels]);
+  }, [treeDataKey, autoExpandLevels]);
 
   const toggleNode = (nodeId: string) => {
     const newExpanded = new Set(expandedNodes);

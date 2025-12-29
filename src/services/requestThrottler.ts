@@ -23,21 +23,27 @@ class RequestThrottler {
    * Aggiunge una richiesta alla coda con throttling
    */
   async throttleRequest<T>(
-    url: string, 
+    url: string,
     requestFn: () => Promise<T>,
     priority: number = 1
   ): Promise<T> {
     const requestKey = this.getRequestKey(url);
-    
+
     // Le richieste di autenticazione hanno priorità massima e non vengono mai throttled
     if (requestKey.startsWith('auth-')) {
       console.log(`🔐 RequestThrottler: Auth request detected for ${url}, executing immediately`);
       return this.executeRequest(url, requestFn);
     }
-    
+
     // Le richieste di permessi e ruoli sono critiche e non devono essere throttled
     if (requestKey.startsWith('roles-') || requestKey.startsWith('permissions-') || requestKey.includes('permissions')) {
       console.log(`🔑 RequestThrottler: Critical permissions request detected for ${url}, executing immediately`);
+      return this.executeRequest(url, requestFn);
+    }
+
+    // Batch delete operations should not be throttled
+    if (url.includes('/batch-delete') || url.includes('/persons/batch')) {
+      console.log(`🗑️ RequestThrottler: Batch delete request detected for ${url}, executing immediately`);
       return this.executeRequest(url, requestFn);
     }
 
@@ -46,14 +52,49 @@ class RequestThrottler {
       console.log(`📦 RequestThrottler: Bulk import request detected for ${url}, executing immediately`);
       return this.executeRequest(url, requestFn);
     }
-    
+
     // ✅ FIX: Schedules requests are critical for page rendering, execute immediately
     // Evita race conditions tra preloader e componente che causano dati intermittenti
     if (requestKey.includes('schedules')) {
       console.log(`📅 RequestThrottler: Schedules request detected for ${url}, executing immediately`);
       return this.executeRequest(url, requestFn);
     }
-    
+
+    // ✅ FIX: Templates requests are critical for editor, execute immediately
+    // Evita timeout quando si apre l'editor dei template
+    if (requestKey.includes('templates')) {
+      console.log(`📄 RequestThrottler: Templates request detected for ${url}, executing immediately`);
+      return this.executeRequest(url, requestFn);
+    }
+
+    // ✅ FIX: Companies, company-sites and persons requests are critical for forms/modals, execute immediately
+    // Evita timeout quando si aprono modali con selezione dipendenti/aziende o caricamento sedi
+    if (requestKey.includes('companies') || requestKey.includes('company-sites') || requestKey.includes('persons')) {
+      console.log(`👥 RequestThrottler: Companies/CompanySites/Persons request detected for ${url}, executing immediately`);
+      return this.executeRequest(url, requestFn);
+    }
+
+    // ✅ FIX: Preventivi requests are critical for finance section, execute immediately
+    // Evita timeout quando si caricano i preventivi
+    if (requestKey.includes('preventivi')) {
+      console.log(`💰 RequestThrottler: Preventivi request detected for ${url}, executing immediately`);
+      return this.executeRequest(url, requestFn);
+    }
+
+    // ✅ FIX: Codici sconto requests are critical for discount management, execute immediately
+    // Evita timeout quando si caricano/validano i codici sconto
+    if (requestKey.includes('codici-sconto')) {
+      console.log(`🏷️ RequestThrottler: Codici sconto request detected for ${url}, executing immediately`);
+      return this.executeRequest(url, requestFn);
+    }
+
+    // ✅ FIX: Logs and activity requests are critical for system monitoring, execute immediately
+    // Evita timeout nella pagina SystemLogsPage
+    if (requestKey.includes('logs') || requestKey.includes('activity')) {
+      console.log(`📊 RequestThrottler: Logs/Activity request detected for ${url}, executing immediately`);
+      return this.executeRequest(url, requestFn);
+    }
+
     // Controlla se c'è già una richiesta identica in corso
     if (this.activeRequests.has(requestKey)) {
       console.log(`🔄 RequestThrottler: Duplicate request detected for ${url}, waiting...`);
@@ -74,26 +115,33 @@ class RequestThrottler {
    */
   private async executeRequest<T>(url: string, requestFn: () => Promise<T>): Promise<T> {
     const requestKey = this.getRequestKey(url);
-    
+
     try {
       this.activeRequests.add(requestKey);
       this.updateRequestStats(requestKey);
-      
+
       console.log(`🚀 RequestThrottler: Executing ${url} (active: ${this.activeRequests.size})`);
-      
+
       const result = await requestFn();
-      
+
       console.log(`✅ RequestThrottler: Completed ${url}`);
       return result;
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
-      console.error(`❌ RequestThrottler: Failed ${url}:`, msg);
-      
+
+      // Suppress expected 401 errors for public users on auth endpoints
+      const isAuthEndpoint = url.includes('/auth/');
+      const is401 = (error as any)?.response?.status === 401;
+
+      if (!(isAuthEndpoint && is401 && process.env.NODE_ENV !== 'development')) {
+        console.error(`❌ RequestThrottler: Failed ${url}:`, msg);
+      }
+
       // Se è un errore di risorse insufficienti, aumenta il throttling
       if (this.isErrnoException(error) && error.code === 'ERR_INSUFFICIENT_RESOURCES') {
         this.handleResourceError();
       }
-      
+
       throw error;
     } finally {
       this.activeRequests.delete(requestKey);
@@ -105,7 +153,7 @@ class RequestThrottler {
    * Aggiunge una richiesta alla coda
    */
   private queueRequest<T>(
-    url: string, 
+    url: string,
     requestFn: () => Promise<T>,
     priority: number
   ): Promise<T> {
@@ -176,7 +224,7 @@ class RequestThrottler {
     if (requestKey.startsWith('auth-')) {
       return false;
     }
-    
+
     // Le richieste di permessi e ruoli non devono mai essere throttled
     if (requestKey.startsWith('roles-') || requestKey.startsWith('permissions-') || requestKey.includes('permissions')) {
       return false;
@@ -186,17 +234,17 @@ class RequestThrottler {
     if (requestKey === 'courses-bulk-import') {
       return false;
     }
-    
+
     // Le richieste di dettaglio entità (courses, persons, companies) hanno throttling ridotto
     if (requestKey.endsWith('-detail')) {
       const lastTime = this.lastRequestTime.get(requestKey) || 0;
       const timeSinceLastRequest = Date.now() - lastTime;
       return timeSinceLastRequest < 50; // Throttling ridotto a 50ms per dettagli
     }
-    
+
     const lastTime = this.lastRequestTime.get(requestKey) || 0;
     const timeSinceLastRequest = Date.now() - lastTime;
-    
+
     return timeSinceLastRequest < this.minInterval;
   }
 
@@ -218,9 +266,9 @@ class RequestThrottler {
   private handleResourceError(): void {
     // Riduce temporaneamente il numero di richieste simultanee
     this.maxConcurrentRequests = Math.max(1, this.maxConcurrentRequests - 1);
-    
+
     console.warn(`⚠️ RequestThrottler: Resource error, reducing concurrent requests to ${this.maxConcurrentRequests}`);
-    
+
     // Ripristina dopo 10 secondi
     setTimeout(() => {
       this.maxConcurrentRequests = Math.min(3, this.maxConcurrentRequests + 1);
@@ -239,7 +287,7 @@ class RequestThrottler {
           resolve();
         }
       }, 50);
-      
+
       // Timeout dopo 5 secondi
       setTimeout(() => {
         clearInterval(checkInterval);
@@ -254,7 +302,7 @@ class RequestThrottler {
   private getRequestKey(url: string): string {
     // Normalizza l'URL per raggruppare richieste simili
     const cleanUrl = url.split('?')[0]; // Rimuove query parameters
-    
+
     // Raggruppa per tipo di endpoint
     // PRIORITÀ ALTA: Richieste di autenticazione (non devono essere throttled)
     if (cleanUrl.includes('/auth/login')) return 'auth-login';
@@ -262,7 +310,7 @@ class RequestThrottler {
     if (cleanUrl.includes('/auth/refresh')) return 'auth-refresh';
     if (cleanUrl.includes('/auth/verify')) return 'auth-verify';
     if (cleanUrl.includes('/auth/')) return 'auth-other';
-    
+
     // PRIORITÀ ALTA: Richieste di permessi e ruoli (critiche per il funzionamento)
     if (cleanUrl.includes('/roles/') && cleanUrl.includes('/permissions')) return 'permissions-role-specific';
     if (cleanUrl.includes('/advanced-permissions')) return 'permissions-advanced';
@@ -272,10 +320,16 @@ class RequestThrottler {
 
     // Eccezione: bulk import corsi
     if (cleanUrl.endsWith('/courses/bulk-import') || cleanUrl.includes('/courses/bulk-import')) return 'courses-bulk-import';
-    
+
+    // Templates - high priority for editor
+    if (cleanUrl.includes('/templates/')) return 'templates-detail';
+    if (cleanUrl.includes('/templates')) return 'templates-general';
+
     // Altri endpoint
     if (cleanUrl.includes('/tenants')) return 'tenants';
     if (cleanUrl.includes('/users')) return 'users';
+    if (cleanUrl.includes('/preventivi/')) return 'preventivi-detail';
+    if (cleanUrl.includes('/preventivi')) return 'preventivi-general';
     if (cleanUrl.includes('/schedules/')) return 'schedules-detail';
     if (cleanUrl.includes('/schedules')) return 'schedules-general';
     if (cleanUrl.includes('/courses/')) return 'courses-detail';
@@ -284,7 +338,7 @@ class RequestThrottler {
     if (cleanUrl.includes('/persons')) return 'persons-general';
     if (cleanUrl.includes('/companies/')) return 'companies-detail';
     if (cleanUrl.includes('/companies')) return 'companies-general';
-    
+
     return cleanUrl;
   }
 

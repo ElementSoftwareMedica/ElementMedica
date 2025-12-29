@@ -3,6 +3,7 @@ import { useCallback } from 'react';
 interface UseNavigationHandlersParams {
   currentStep: number;
   setCurrentStep: (step: number) => void;
+  addVisitedStep?: (step: number) => void; // Optional: mark step as visited
   validateCurrentStep: () => { isValid: boolean; errors: Array<{ field?: string; message: string }> };
   setError: (error: string | null) => void;
 }
@@ -10,6 +11,7 @@ interface UseNavigationHandlersParams {
 export function useNavigationHandlers({
   currentStep,
   setCurrentStep,
+  addVisitedStep,
   validateCurrentStep,
   setError
 }: UseNavigationHandlersParams) {
@@ -25,12 +27,16 @@ export function useNavigationHandlers({
       }
       setError(null);
     }
-    setCurrentStep(currentStep + 1);
-  }, [currentStep, validateCurrentStep, setCurrentStep, setError]);
+    const nextStep = currentStep + 1;
+    setCurrentStep(nextStep);
+    addVisitedStep?.(nextStep); // Mark next step as visited
+  }, [currentStep, validateCurrentStep, setCurrentStep, setError, addVisitedStep]);
 
   const handleBack = useCallback(() => {
     setError(null);
-    setCurrentStep(currentStep - 1);
+    const prevStep = currentStep - 1;
+    setCurrentStep(prevStep);
+    // No need to mark as visited since we're going back
   }, [currentStep, setCurrentStep, setError]);
 
   return { handleNext, handleBack } as const;

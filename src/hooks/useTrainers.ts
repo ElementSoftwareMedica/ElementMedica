@@ -1,28 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { getTrainers, createTrainer, updateTrainer, Trainer } from '../services/trainers';
+import { 
+  getTrainers, 
+  createTrainer, 
+  updateTrainer, 
+  Trainer,
+  CreateTrainerDTO,
+  UpdateTrainerDTO
+} from '../services/trainers';
 import { useQuery } from '@tanstack/react-query';
 
-export interface TrainerInsert {
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone?: string;
-  specialization?: string;
-  specialties?: string[];
-  certifications?: string[];
-  status?: 'Active' | 'Inactive';
-}
+// Re-export DTOs for convenience
+export type { CreateTrainerDTO, UpdateTrainerDTO };
 
-export interface TrainerUpdate {
-  firstName?: string;
-  lastName?: string;
-  email?: string;
-  phone?: string;
-  specialization?: string;
-  specialties?: string[];
-  certifications?: string[];
-  status?: 'Active' | 'Inactive';
-}
+// Legacy aliases - deprecated, use DTOs directly
+/** @deprecated Use CreateTrainerDTO instead */
+export type TrainerInsert = CreateTrainerDTO;
+/** @deprecated Use UpdateTrainerDTO instead */
+export type TrainerUpdate = UpdateTrainerDTO;
 
 export function useTrainers() {
   const [trainers, setTrainers] = useState<Trainer[]>([]);
@@ -54,7 +48,7 @@ export function useTrainers() {
     }
   }
 
-  async function addTrainer(trainer: TrainerInsert) {
+  async function addTrainer(trainer: CreateTrainerDTO) {
     try {
       setError(null);
       const newTrainer = await createTrainer(trainer);
@@ -66,7 +60,7 @@ export function useTrainers() {
     }
   }
 
-  async function editTrainer(id: string, trainer: TrainerUpdate) {
+  async function editTrainer(id: string, trainer: UpdateTrainerDTO) {
     try {
       setError(null);
       const updatedTrainer = await updateTrainer(id, trainer);

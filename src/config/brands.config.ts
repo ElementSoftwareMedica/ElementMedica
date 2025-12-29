@@ -255,7 +255,7 @@ export const elementMedicaBrand: BrandConfig = {
   },
 
   backend: {
-    tenantId: import.meta.env.VITE_TENANT_ID || 'tenant-element-medica-001',
+    tenantId: import.meta.env.VITE_TENANT_ID || '2996a1a3-e148-42a6-9059-eddd7543f094',
     frontendId: 'element-medica',
   },
 

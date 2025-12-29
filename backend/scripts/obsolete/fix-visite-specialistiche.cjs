@@ -1,0 +1,354 @@
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
+
+/**
+ * Fix visite-specialistiche page:
+ * 1. Fix CTA section visibility (white box issue)
+ * 2. Extend content with more sections
+ */
+
+async function fixAndExtendVisiteSpecialistiche() {
+  console.log('🔧 Fixing and extending visite-specialistiche page...\n');
+  
+  const page = await prisma.cMSPage.findFirst({
+    where: { slug: 'visite-specialistiche' }
+  });
+  
+  if (!page) {
+    console.log('❌ Page not found!');
+    return;
+  }
+  
+  let content = String(page.content);
+  const oldLength = content.length;
+  
+  console.log(`📊 Current length: ${oldLength} chars\n`);
+  
+  // STEP 1: Fix the white CTA section (add bg-gradient and ensure text is visible)
+  // Find the CTA section and fix it
+  const ctaPattern = /<div class="bg-gradient-to-r from-teal-900 to-blue-900 text-white p-8 rounded-lg my-12">/;
+  
+  if (!ctaPattern.test(content)) {
+    console.log('⚠️  CTA section needs fixing - adding proper background');
+    
+    // If there's a white div with buttons, replace it
+    content = content.replace(
+      /<div class="([^"]*(?:bg-white|p-8)[^"]*)">\s*<h2/g,
+      '<div class="bg-gradient-to-r from-teal-900 to-blue-900 text-white p-8 rounded-lg my-12">\n              <h2'
+    );
+  }
+  
+  // STEP 2: Ensure all CTA buttons have !text-teal with !important
+  content = content.replace(
+    /class="([^"]*bg-white[^"]*)text-teal-([0-9]+)([^"]*)"/g,
+    'class="$1!text-teal-$2$3"'
+  );
+  
+  // STEP 3: Add comprehensive new sections before the closing
+  const newSections = `
+      
+      <!-- Specialisti Section -->
+      <section class="py-16 bg-gray-50">`
+        <div class="container mx-auto px-4">
+          <h2 class="text-3xl font-bold text-center text-gray-900 mb-4">I Nostri Specialisti</h2>
+          <p class="text-center text-gray-600 mb-12 max-w-2xl mx-auto">
+            Professionisti qualificati e costantemente aggiornati per garantirti le migliori cure
+          </p>
+          
+          <div class="grid md:grid-cols-3 gap-8">
+            <div class="bg-white p-6 rounded-xl shadow-lg hover:shadow-xl transition-shadow">
+              <div class="w-16 h-16 bg-gradient-to-br from-teal-500 to-teal-600 rounded-full flex items-center justify-center mb-4">
+                <span class="text-white text-2xl font-bold">CM</span>
+              </div>
+              <h3 class="text-xl font-bold text-gray-900 mb-2">Dr. Carlo Marini</h3>
+              <p class="text-teal-600 font-semibold mb-3">Cardiologo</p>
+              <p class="text-gray-600 text-sm">Specialista in cardiologia con oltre 20 anni di esperienza. Esperto in ecocardiografia e prevenzione cardiovascolare.</p>
+            </div>
+            
+            <div class="bg-white p-6 rounded-xl shadow-lg hover:shadow-xl transition-shadow">
+              <div class="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center mb-4">
+                <span class="text-white text-2xl font-bold">LR</span>
+              </div>
+              <h3 class="text-xl font-bold text-gray-900 mb-2">Dr.ssa Laura Rossi</h3>
+              <p class="text-teal-600 font-semibold mb-3">Ortopedica</p>
+              <p class="text-gray-600 text-sm">Specialista in ortopedia e traumatologia dello sport. Tratta patologie articolari, traumatiche e degenerative.</p>
+            </div>
+            
+            <div class="bg-white p-6 rounded-xl shadow-lg hover:shadow-xl transition-shadow">
+              <div class="w-16 h-16 bg-gradient-to-br from-teal-500 to-blue-600 rounded-full flex items-center justify-center mb-4">
+                <span class="text-white text-2xl font-bold">MB</span>
+              </div>
+              <h3 class="text-xl font-bold text-gray-900 mb-2">Dr. Marco Bianchi</h3>
+              <p class="text-teal-600 font-semibold mb-3">Dermatologo</p>
+              <p class="text-gray-600 text-sm">Specialista in dermatologia clinica ed estetica. Esperto in trattamenti laser e medicina estetica.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+      
+      <!-- Come Funziona la Prenotazione -->
+      <section class="py-16 bg-white">
+        <div class="container mx-auto px-4">
+          <h2 class="text-3xl font-bold text-center text-gray-900 mb-4">Come Prenotare una Visita</h2>
+          <p class="text-center text-gray-600 mb-12 max-w-2xl mx-auto">
+            Processo semplice e veloce per prenotare la tua visita specialistica
+          </p>
+          
+          <div class="grid md:grid-cols-4 gap-6">
+            <div class="text-center">
+              <div class="w-16 h-16 bg-teal-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span class="text-2xl font-bold text-teal-600">1</span>
+              </div>
+              <h3 class="text-lg font-bold text-gray-900 mb-2">Scegli la Specialità</h3>
+              <p class="text-gray-600 text-sm">Seleziona la visita specialistica di cui hai bisogno</p>
+            </div>
+            
+            <div class="text-center">
+              <div class="w-16 h-16 bg-teal-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span class="text-2xl font-bold text-teal-600">2</span>
+              </div>
+              <h3 class="text-lg font-bold text-gray-900 mb-2">Scegli Data e Ora</h3>
+              <p class="text-gray-600 text-sm">Verifica la disponibilità e prenota online</p>
+            </div>
+            
+            <div class="text-center">
+              <div class="w-16 h-16 bg-teal-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span class="text-2xl font-bold text-teal-600">3</span>
+              </div>
+              <h3 class="text-lg font-bold text-gray-900 mb-2">Conferma</h3>
+              <p class="text-gray-600 text-sm">Ricevi conferma via email e SMS</p>
+            </div>
+            
+            <div class="text-center">
+              <div class="w-16 h-16 bg-teal-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span class="text-2xl font-bold text-teal-600">4</span>
+              </div>
+              <h3 class="text-lg font-bold text-gray-900 mb-2">Vieni in Studio</h3>
+              <p class="text-gray-600 text-sm">Presentati 10 minuti prima con i documenti</p>
+            </div>
+          </div>
+          
+          <div class="text-center mt-12">
+            <a href="/prenota" class="inline-block bg-teal-600 !text-white px-8 py-4 rounded-xl font-bold hover:bg-teal-700 shadow-xl transition-all duration-300">
+              📅 Prenota Ora la Tua Visita
+            </a>
+          </div>
+        </div>
+      </section>
+      
+      <!-- Convenzioni e Costi -->
+      <section class="py-16 bg-gradient-to-br from-teal-50 to-blue-50">
+        <div class="container mx-auto px-4">
+          <h2 class="text-3xl font-bold text-center text-gray-900 mb-4">Convenzioni e Tariffe</h2>
+          <p class="text-center text-gray-600 mb-12 max-w-2xl mx-auto">
+            Accettiamo diverse forme di pagamento e convenzioni con assicurazioni
+          </p>
+          
+          <div class="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+            <div class="bg-white p-8 rounded-xl shadow-lg">
+              <div class="flex items-center mb-4">
+                <svg class="w-8 h-8 text-teal-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <h3 class="text-xl font-bold text-gray-900">Convenzioni Attive</h3>
+              </div>
+              <ul class="space-y-3">
+                <li class="flex items-start">
+                  <svg class="w-5 h-5 text-teal-600 mr-2 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                  </svg>
+                  <span class="text-gray-700">Assicurazioni sanitarie principali</span>
+                </li>
+                <li class="flex items-start">
+                  <svg class="w-5 h-5 text-teal-600 mr-2 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                  </svg>
+                  <span class="text-gray-700">Fondi sanitari integrativi</span>
+                </li>
+                <li class="flex items-start">
+                  <svg class="w-5 h-5 text-teal-600 mr-2 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                  </svg>
+                  <span class="text-gray-700">Casse mutue aziendali</span>
+                </li>
+                <li class="flex items-start">
+                  <svg class="w-5 h-5 text-teal-600 mr-2 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                  </svg>
+                  <span class="text-gray-700">Convenzioni aziendali dirette</span>
+                </li>
+              </ul>
+            </div>
+            
+            <div class="bg-white p-8 rounded-xl shadow-lg">
+              <div class="flex items-center mb-4">
+                <svg class="w-8 h-8 text-blue-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                </svg>
+                <h3 class="text-xl font-bold text-gray-900">Modalità di Pagamento</h3>
+              </div>
+              <ul class="space-y-3">
+                <li class="flex items-start">
+                  <svg class="w-5 h-5 text-blue-600 mr-2 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                  </svg>
+                  <span class="text-gray-700">Contanti</span>
+                </li>
+                <li class="flex items-start">
+                  <svg class="w-5 h-5 text-blue-600 mr-2 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                  </svg>
+                  <span class="text-gray-700">Carte di credito/debito</span>
+                </li>
+                <li class="flex items-start">
+                  <svg class="w-5 h-5 text-blue-600 mr-2 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                  </svg>
+                  <span class="text-gray-700">Bonifico bancario</span>
+                </li>
+                <li class="flex items-start">
+                  <svg class="w-5 h-5 text-blue-600 mr-2 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                  </svg>
+                  <span class="text-gray-700">Pagamenti digitali (Satispay, PayPal)</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+          
+          <div class="text-center mt-8">
+            <p class="text-gray-600 text-sm">
+              💳 <strong>Fatturazione elettronica disponibile</strong> - Riceverai fattura via email per detrazioni fiscali
+            </p>
+          </div>
+        </div>
+      </section>
+      
+      <!-- FAQ Section -->
+      <section class="py-16 bg-white">
+        <div class="container mx-auto px-4 max-w-4xl">
+          <h2 class="text-3xl font-bold text-center text-gray-900 mb-4">Domande Frequenti</h2>
+          <p class="text-center text-gray-600 mb-12">
+            Le risposte alle domande più comuni sulle visite specialistiche
+          </p>
+          
+          <div class="space-y-4">
+            <details class="bg-gray-50 rounded-lg p-6 hover:bg-gray-100 transition-colors group">
+              <summary class="font-bold text-gray-900 cursor-pointer flex items-center justify-between">
+                <span>Serve l'impegnativa del medico di base?</span>
+                <svg class="w-5 h-5 text-teal-600 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                </svg>
+              </summary>
+              <p class="mt-4 text-gray-600">
+                Per le visite private non è necessaria l'impegnativa. Se hai una convenzione assicurativa, verifica con la tua assicurazione se richiede la prescrizione medica.
+              </p>
+            </details>
+            
+            <details class="bg-gray-50 rounded-lg p-6 hover:bg-gray-100 transition-colors group">
+              <summary class="font-bold text-gray-900 cursor-pointer flex items-center justify-between">
+                <span>Quanto dura una visita specialistica?</span>
+                <svg class="w-5 h-5 text-teal-600 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                </svg>
+              </summary>
+              <p class="mt-4 text-gray-600">
+                La durata varia a seconda della specialità, ma mediamente una visita dura 30-45 minuti. Il tempo include anamnesi, esame obiettivo e refertazione.
+              </p>
+            </details>
+            
+            <details class="bg-gray-50 rounded-lg p-6 hover:bg-gray-100 transition-colors group">
+              <summary class="font-bold text-gray-900 cursor-pointer flex items-center justify-between">
+                <span>Cosa devo portare alla visita?</span>
+                <svg class="w-5 h-5 text-teal-600 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                </svg>
+              </summary>
+              <p class="mt-4 text-gray-600">
+                Porta con te: documento d'identità, tessera sanitaria, eventuali esami precedenti, elenco farmaci in uso, e se hai una convenzione, la tessera assicurativa.
+              </p>
+            </details>
+            
+            <details class="bg-gray-50 rounded-lg p-6 hover:bg-gray-100 transition-colors group">
+              <summary class="font-bold text-gray-900 cursor-pointer flex items-center justify-between">
+                <span>Posso disdire o spostare l'appuntamento?</span>
+                <svg class="w-5 h-5 text-teal-600 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                </svg>
+              </summary>
+              <p class="mt-4 text-gray-600">
+                Sì, puoi disdire o spostare l'appuntamento contattandoci con almeno 24 ore di anticipo via telefono o email. Modifiche last-minute potrebbero comportare penali.
+              </p>
+            </details>
+            
+            <details class="bg-gray-50 rounded-lg p-6 hover:bg-gray-100 transition-colors group">
+              <summary class="font-bold text-gray-900 cursor-pointer flex items-center justify-between">
+                <span>Il referto viene consegnato subito?</span>
+                <svg class="w-5 h-5 text-teal-600 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                </svg>
+              </summary>
+              <p class="mt-4 text-gray-600">
+                Nella maggior parte dei casi sì, ricevi il referto al termine della visita. Per alcune specialità che richiedono elaborazioni (es. holter, test da sforzo), i tempi possono essere di 3-5 giorni lavorativi.
+              </p>
+            </details>
+          </div>
+        </div>
+      </section>
+      
+      <!-- Final CTA -->
+      <section class="py-16 bg-gradient-to-r from-teal-600 to-blue-600 text-white">
+        <div class="container mx-auto px-4 text-center">
+          <h2 class="text-4xl font-bold mb-4">Prenota Subito la Tua Visita Specialistica</h2>
+          <p class="text-xl mb-8 max-w-2xl mx-auto">
+            Professionisti qualificati, tecnologie all'avanguardia e tempi di attesa ridotti
+          </p>
+          <div class="flex flex-col sm:flex-row gap-4 justify-center items-center">
+            <a href="/prenota" class="inline-flex items-center justify-center px-8 py-4 bg-white !text-teal-600 font-bold rounded-lg hover:bg-teal-50 transition-colors shadow-lg">
+              <span>📅 Prenota Online</span>
+            </a>
+            <a href="/contatti" class="inline-block border-2 border-white !text-white px-8 py-4 rounded-xl font-bold hover:bg-white hover:!text-teal-700 transition-all duration-300">
+              📞 Richiedi Informazioni
+            </a>
+          </div>
+        </div>
+      </section>`;
+  
+  // Find where to insert new sections (before closing tags)
+  const endMarker = '</section>\n    </div>';
+  const insertIndex = content.lastIndexOf(endMarker);
+  
+  if (insertIndex === -1) {
+    console.log('❌ Could not find insertion point');
+    return;
+  }
+  
+  // Insert new sections
+  content = content.substring(0, insertIndex) + newSections + '\n      ' + content.substring(insertIndex);
+  
+  // Update page
+  await prisma.cMSPage.update({
+    where: { id: page.id },
+    data: { content }
+  });
+  
+  const newLength = content.length;
+  const addedChars = newLength - oldLength;
+  
+  console.log('✅ visite-specialistiche updated successfully!');
+  console.log(`📊 Old length: ${oldLength} chars`);
+  console.log(`📊 New length: ${newLength} chars (+${addedChars} chars)`);
+  console.log(`📊 Growth: ${Math.round((addedChars / oldLength) * 100)}%\n`);
+  
+  console.log('🎉 Added sections:');
+  console.log('   - Fixed CTA section background (gradient)');
+  console.log('   - I Nostri Specialisti (3 doctors)');
+  console.log('   - Come Prenotare (4 steps)');
+  console.log('   - Convenzioni e Tariffe (payment methods)');
+  console.log('   - FAQ (5 questions)');
+  console.log('   - Final CTA Banner');
+  
+  await prisma.$disconnect();
+}
+
+fixAndExtendVisiteSpecialistiche().catch(console.error);

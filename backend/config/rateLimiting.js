@@ -7,6 +7,27 @@ import rateLimit from 'express-rate-limit';
 import { logger } from '../utils/logger.js';
 
 /**
+ * Get clean IP address from request (handles proxy headers)
+ */
+const getClientIp = (req) => {
+  // Check X-Forwarded-For header first (set by nginx proxy)
+  const forwarded = req.headers['x-forwarded-for'];
+  if (forwarded) {
+    // Get first IP from comma-separated list
+    const ip = forwarded.split(',')[0].trim();
+    // Clean any escape characters
+    return ip.replace(/\\/g, '');
+  }
+  // Check X-Real-IP header
+  const realIp = req.headers['x-real-ip'];
+  if (realIp) {
+    return realIp.replace(/\\/g, '');
+  }
+  // Fallback to req.ip with cleaning
+  return (req.ip || '127.0.0.1').replace(/\\/g, '').replace('::ffff:', '');
+};
+
+/**
  * Configurazioni predefinite per diversi tipi di rate limiting
  */
 export const RATE_LIMIT_CONFIGS = {
@@ -20,6 +41,8 @@ export const RATE_LIMIT_CONFIGS = {
     },
     standardHeaders: true,
     legacyHeaders: false,
+    validate: { ip: false }, // Disable IP validation for proxy compatibility
+    keyGenerator: getClientIp,
     skip: (req) => {
       // Skip rate limiting per health checks e test endpoints
       return req.path === '/health' || req.path === '/test' || req.path.startsWith('/test-');
@@ -36,6 +59,8 @@ export const RATE_LIMIT_CONFIGS = {
     },
     standardHeaders: true,
     legacyHeaders: false,
+    validate: { ip: false }, // Disable IP validation for proxy compatibility
+    keyGenerator: getClientIp,
     skipSuccessfulRequests: true, // Non contare login riusciti
     skipFailedRequests: false // Conta login falliti
   },
@@ -49,7 +74,9 @@ export const RATE_LIMIT_CONFIGS = {
       retryAfter: '10 minutes'
     },
     standardHeaders: true,
-    legacyHeaders: false
+    legacyHeaders: false,
+    validate: { ip: false }, // Disable IP validation for proxy compatibility
+    keyGenerator: getClientIp
   },
 
   // Rate limiting per API di ricerca
@@ -61,7 +88,9 @@ export const RATE_LIMIT_CONFIGS = {
       retryAfter: '1 minute'
     },
     standardHeaders: true,
-    legacyHeaders: false
+    legacyHeaders: false,
+    validate: { ip: false }, // Disable IP validation for proxy compatibility
+    keyGenerator: getClientIp
   },
 
   // Rate limiting per API di creazione/modifica
@@ -73,7 +102,9 @@ export const RATE_LIMIT_CONFIGS = {
       retryAfter: '5 minutes'
     },
     standardHeaders: true,
-    legacyHeaders: false
+    legacyHeaders: false,
+    validate: { ip: false }, // Disable IP validation for proxy compatibility
+    keyGenerator: getClientIp
   },
 
   // Rate limiting per API pubbliche
@@ -85,7 +116,9 @@ export const RATE_LIMIT_CONFIGS = {
       retryAfter: '1 minute'
     },
     standardHeaders: true,
-    legacyHeaders: false
+    legacyHeaders: false,
+    validate: { ip: false }, // Disable IP validation for proxy compatibility
+    keyGenerator: getClientIp
   }
 };
 
@@ -130,7 +163,7 @@ export const ENVIRONMENT_CONFIGS = {
 export const createRateLimiter = (type = 'global', customOptions = {}) => {
   const environment = process.env.NODE_ENV || 'development';
   const baseConfig = ENVIRONMENT_CONFIGS[environment]?.[type] || RATE_LIMIT_CONFIGS[type];
-  
+
   if (!baseConfig) {
     logger.warn(`Rate limit type '${type}' not found, using global config`, {
       service: 'rate-limiting',
@@ -152,7 +185,7 @@ export const createRateLimiter = (type = 'global', customOptions = {}) => {
         type,
         userAgent: req.get('User-Agent')
       });
-      
+
       res.status(429).json({
         error: 'Rate limit exceeded',
         message: message.error || 'Too many requests',
@@ -182,7 +215,7 @@ export const rateLimiters = {
  */
 export const conditionalRateLimit = (type, condition) => {
   const limiter = createRateLimiter(type);
-  
+
   return (req, res, next) => {
     if (condition && !condition(req)) {
       return next();
@@ -210,17 +243,17 @@ export const ROUTE_RATE_LIMITS = {
  */
 export const autoRateLimit = (req, res, next) => {
   const path = req.path;
-  
+
   // Trova il tipo di rate limit appropriato
   let limitType = 'global';
-  
+
   for (const [pattern, type] of Object.entries(ROUTE_RATE_LIMITS)) {
     if (path.startsWith(pattern)) {
       limitType = type;
       break;
     }
   }
-  
+
   // Applica il rate limiter appropriato
   const limiter = createRateLimiter(limitType);
   return limiter(req, res, next);
@@ -231,19 +264,19 @@ export const autoRateLimit = (req, res, next) => {
  */
 export const validateRateLimitConfig = (config) => {
   const errors = [];
-  
+
   if (!config.windowMs || config.windowMs < 1000) {
     errors.push('windowMs must be at least 1000ms');
   }
-  
+
   if (!config.max || config.max < 1) {
     errors.push('max must be at least 1');
   }
-  
+
   if (config.message && typeof config.message !== 'object') {
     errors.push('message must be an object');
   }
-  
+
   return {
     isValid: errors.length === 0,
     errors
@@ -255,7 +288,7 @@ export const validateRateLimitConfig = (config) => {
  */
 export const getRateLimitConfig = (environment = process.env.NODE_ENV || 'development') => {
   const config = ENVIRONMENT_CONFIGS[environment];
-  
+
   if (!config) {
     logger.warn(`Environment '${environment}' not found, using development config`, {
       service: 'rate-limiting',
@@ -263,7 +296,7 @@ export const getRateLimitConfig = (environment = process.env.NODE_ENV || 'develo
     });
     return ENVIRONMENT_CONFIGS.development;
   }
-  
+
   return config;
 };
 

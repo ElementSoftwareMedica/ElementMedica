@@ -1,0 +1,288 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e1]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]:
+        - link "ElementSoftware" [ref=e6]:
+          - /url: /
+          - generic [ref=e7]:
+            - img [ref=e8]
+            - generic [ref=e10]: ElementSoftware
+        - button "Close sidebar" [ref=e11] [cursor=pointer]:
+          - generic [ref=e12] [cursor=pointer]: Close sidebar
+          - img [ref=e13] [cursor=pointer]
+      - generic [ref=e16]:
+        - generic [ref=e17]:
+          - heading "Main" [level=3] [ref=e18]
+          - list [ref=e19]:
+            - listitem [ref=e20]:
+              - link "Dashboard" [ref=e21]:
+                - /url: /dashboard
+                - generic [ref=e22]:
+                  - img [ref=e23]
+                  - generic [ref=e28]: Dashboard
+            - listitem [ref=e29]:
+              - link "Companies" [ref=e30]:
+                - /url: /companies
+                - generic [ref=e31]:
+                  - img [ref=e32]
+                  - generic [ref=e36]: Companies
+            - listitem [ref=e37]:
+              - link "Persone" [ref=e38]:
+                - /url: /persons
+                - generic [ref=e39]:
+                  - img [ref=e40]
+                  - generic [ref=e45]: Persone
+            - listitem [ref=e46]:
+              - link "Dipendenti" [ref=e47]:
+                - /url: /employees
+                - generic [ref=e48]:
+                  - img [ref=e49]
+                  - generic [ref=e61]: Dipendenti
+            - listitem [ref=e62]:
+              - link "Courses" [ref=e63]:
+                - /url: /courses
+                - generic [ref=e64]:
+                  - img [ref=e65]
+                  - generic [ref=e68]: Courses
+            - listitem [ref=e69]:
+              - link "Formatori" [ref=e70]:
+                - /url: /trainers
+                - generic [ref=e71]:
+                  - img [ref=e72]
+                  - generic [ref=e76]: Formatori
+            - listitem [ref=e77]:
+              - link "Scheduled Courses" [ref=e78]:
+                - /url: /scheduled-courses
+                - generic [ref=e79]:
+                  - img [ref=e80]
+                  - generic [ref=e82]: Scheduled Courses
+            - listitem [ref=e83]:
+              - link "Documenti Corsi" [ref=e84]:
+                - /url: /documents-corsi
+                - generic [ref=e85]:
+                  - img [ref=e86]
+                  - generic [ref=e88]: Documenti Corsi
+            - listitem [ref=e89]:
+              - link "Preventivi e Fatture" [ref=e90]:
+                - /url: /quotes-invoices
+                - generic [ref=e91]:
+                  - img [ref=e92]
+                  - generic [ref=e95]: Preventivi e Fatture
+            - listitem [ref=e96]:
+              - link "Forms" [ref=e97]:
+                - /url: /forms
+                - generic [ref=e98]:
+                  - img [ref=e99]
+                  - generic [ref=e102]: Forms
+        - generic [ref=e103]:
+          - heading "Settings" [level=3] [ref=e104]
+          - list [ref=e105]:
+            - listitem [ref=e106]:
+              - link "Tenants" [ref=e107]:
+                - /url: /tenants
+                - generic [ref=e108]:
+                  - img [ref=e109]
+                  - generic [ref=e112]: Tenants
+            - listitem [ref=e113]:
+              - link "Frontend Pubblico" [ref=e114]:
+                - /url: /settings/cms
+                - generic [ref=e115]:
+                  - img [ref=e116]
+                  - generic [ref=e119]: Frontend Pubblico
+            - listitem [ref=e120]:
+              - link "GDPR & Privacy" [ref=e121]:
+                - /url: /gdpr
+                - generic [ref=e122]:
+                  - img [ref=e123]
+                  - generic [ref=e125]: GDPR & Privacy
+            - listitem [ref=e126]:
+              - link "Admin GDPR" [ref=e127]:
+                - /url: /admin/gdpr
+                - generic [ref=e128]:
+                  - img [ref=e129]
+                  - generic [ref=e131]: Admin GDPR
+            - listitem [ref=e132]:
+              - link "Settings" [ref=e133]:
+                - /url: /settings
+                - generic [ref=e134]:
+                  - img [ref=e135]
+                  - generic [ref=e138]: Settings
+      - generic [ref=e140]:
+        - generic [ref=e141]:
+          - generic [ref=e143]: JD
+          - generic [ref=e144]:
+            - generic [ref=e145]: John Doe
+            - generic [ref=e146]: Administrator
+        - button "Log out" [ref=e147] [cursor=pointer]:
+          - generic [ref=e148] [cursor=pointer]: Log out
+          - img [ref=e149] [cursor=pointer]
+    - generic [ref=e152]:
+      - banner [ref=e153]:
+        - generic [ref=e155]:
+          - button "Open sidebar" [ref=e157] [cursor=pointer]:
+            - generic [ref=e158] [cursor=pointer]: Open sidebar
+            - img [ref=e159] [cursor=pointer]
+          - generic [ref=e160]:
+            - button "Notifications" [ref=e161] [cursor=pointer]:
+              - generic [ref=e162] [cursor=pointer]: Notifications
+              - img [ref=e163] [cursor=pointer]
+            - button "AU" [ref=e168] [cursor=pointer]:
+              - generic [ref=e169] [cursor=pointer]: AU
+      - main [ref=e170]:
+        - generic [ref=e171]:
+          - generic [ref=e173]:
+            - heading "Pianificazioni" [level=1] [ref=e174]
+            - paragraph [ref=e175]: Gestisci tutti i corsi pianificati
+          - generic [ref=e177]:
+            - generic [ref=e178]:
+              - generic [ref=e179]:
+                - textbox "Cerca..." [ref=e182]
+                - generic:
+                  - img
+              - button [disabled] [ref=e184]:
+                - img
+            - generic [ref=e186]:
+              - generic [ref=e189]:
+                - button [pressed] [ref=e191] [cursor=pointer]:
+                  - img [ref=e192] [cursor=pointer]
+                - button [ref=e193] [cursor=pointer]:
+                  - img [ref=e194] [cursor=pointer]
+              - button "Aggiungi Programmazione" [ref=e200] [cursor=pointer]:
+                - generic [ref=e201] [cursor=pointer]:
+                  - img [ref=e203] [cursor=pointer]
+                  - generic [ref=e204] [cursor=pointer]: Aggiungi Programmazione
+                  - img [ref=e205] [cursor=pointer]
+          - table [ref=e208]:
+            - rowgroup [ref=e209]:
+              - row "Corso Aziende Formatore Co-Formatore Partecipanti Data Inizio Data Fine Sessioni Modalità Location Azioni" [ref=e210]:
+                - cell [ref=e211]
+                - cell "Corso" [ref=e214]:
+                  - generic [ref=e217] [cursor=pointer]: Corso
+                - cell "Aziende" [ref=e221]:
+                  - generic [ref=e224] [cursor=pointer]: Aziende
+                - cell "Formatore" [ref=e228]:
+                  - generic [ref=e231] [cursor=pointer]: Formatore
+                - cell "Co-Formatore" [ref=e235]:
+                  - generic [ref=e238]: Co-Formatore
+                - cell "Partecipanti" [ref=e241]:
+                  - generic [ref=e244]: Partecipanti
+                - cell "Data Inizio" [ref=e247]:
+                  - generic [ref=e250] [cursor=pointer]: Data Inizio
+                - cell "Data Fine" [ref=e254]:
+                  - generic [ref=e257] [cursor=pointer]: Data Fine
+                - cell "Sessioni" [ref=e261]:
+                  - generic [ref=e264]: Sessioni
+                - cell "Modalità" [ref=e267]:
+                  - generic [ref=e270]: Modalità
+                - cell "Location" [ref=e273]:
+                  - generic [ref=e276]: Location
+                - cell "Azioni" [ref=e279]:
+                  - generic [ref=e282]: Azioni
+            - rowgroup [ref=e283]:
+              - row "Nessun dato disponibile" [ref=e284]:
+                - cell "Nessun dato disponibile" [ref=e285]
+  - dialog "Programma Nuovo Evento" [ref=e288]:
+    - generic [ref=e289]:
+      - heading "Programma Nuovo Evento" [level=2] [ref=e290]
+      - button "Close modal" [active] [ref=e291] [cursor=pointer]:
+        - img [ref=e292] [cursor=pointer]
+    - generic [ref=e296]:
+      - generic [ref=e297]:
+        - generic [ref=e298]:
+          - generic [ref=e299]: "1"
+          - generic [ref=e300]: Dettagli corso
+        - generic [ref=e301]:
+          - generic [ref=e302]: "2"
+          - generic [ref=e303]: Destinatari
+        - generic [ref=e304]:
+          - generic [ref=e305]: "3"
+          - generic [ref=e306]: Presenze
+        - generic [ref=e307]:
+          - generic [ref=e308]: "4"
+          - generic [ref=e309]: Documenti
+        - generic [ref=e310]:
+          - generic [ref=e311]: "5"
+          - generic [ref=e312]: Conferma
+      - generic [ref=e314]:
+        - generic [ref=e315]:
+          - heading "Dettagli del Corso" [level=3] [ref=e316]
+          - generic [ref=e317]:
+            - generic [ref=e318]: Corso *
+            - generic [ref=e319]:
+              - log [ref=e321]
+              - generic [ref=e322]:
+                - generic [ref=e323]:
+                  - generic [ref=e324]: Seleziona un corso
+                  - combobox [ref=e326]
+                - img [ref=e330]
+            - generic [ref=e332]:
+              - generic [ref=e333]:
+                - generic [ref=e334]: Livello di Rischio
+                - generic [ref=e335]: Non applicabile per questo corso
+              - generic [ref=e336]:
+                - generic [ref=e337]: Tipo Corso
+                - generic [ref=e338]: Non applicabile per questo corso
+            - generic [ref=e339]:
+              - generic [ref=e340]:
+                - generic [ref=e341]: Luogo *
+                - textbox "Inserisci il luogo del corso" [ref=e344]
+              - generic [ref=e345]:
+                - generic [ref=e346]: Modalità di Erogazione
+                - generic [ref=e347]:
+                  - log [ref=e349]
+                  - generic [ref=e350]:
+                    - generic [ref=e351]:
+                      - generic [ref=e352]: Seleziona modalità
+                      - combobox [ref=e354]
+                    - img [ref=e358]
+            - generic [ref=e361]:
+              - generic [ref=e362]: "Formatori qualificati disponibili: 3"
+              - generic [ref=e363]: Seleziona i formatori nella sezione "Date e Orari" per ogni sessione.
+        - generic [ref=e364]:
+          - generic [ref=e365]:
+            - heading "Date e Orari" [level=3] [ref=e366]
+            - button "+ Aggiungi Data" [ref=e367] [cursor=pointer]
+          - generic [ref=e368]:
+            - heading "Sessione 1" [level=4] [ref=e370]
+            - generic [ref=e371]:
+              - generic [ref=e372]:
+                - generic [ref=e373]: Data
+                - textbox "Seleziona data" [ref=e376]
+              - generic [ref=e377]:
+                - generic [ref=e378]:
+                  - generic [ref=e379]: Ora Inizio
+                  - textbox [ref=e382]: 09:00
+                - generic [ref=e383]:
+                  - generic [ref=e384]: Ora Fine
+                  - textbox [ref=e387]: 13:00
+              - generic [ref=e388]:
+                - generic [ref=e389]: Formatore Principale
+                - generic [ref=e390]:
+                  - log [ref=e392]
+                  - generic [ref=e393]:
+                    - generic [ref=e394]:
+                      - generic [ref=e395]: Seleziona formatore
+                      - combobox [ref=e397]
+                    - img [ref=e401]
+              - generic [ref=e403]:
+                - generic [ref=e404]: Co-Formatore (Opzionale)
+                - generic [ref=e405]:
+                  - log [ref=e407]
+                  - generic [ref=e408]:
+                    - generic [ref=e409]:
+                      - generic [ref=e410]: Seleziona co-formatore
+                      - combobox [ref=e412]
+                    - img [ref=e416]
+          - generic [ref=e419]:
+            - generic [ref=e420]: "Ore selezionate:"
+            - text: 4h
+        - generic [ref=e421]:
+          - generic [ref=e422]: Note
+          - textbox "Note aggiuntive sul corso..." [ref=e423]
+    - generic [ref=e425]:
+      - button "Annulla" [ref=e426] [cursor=pointer]
+      - button "Avanti" [disabled] [ref=e428]
+```

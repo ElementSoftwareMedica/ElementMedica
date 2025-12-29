@@ -303,6 +303,7 @@ router.put('/:id', authenticateToken(), requirePermission('read:templates'), req
     const { id } = req.params;
     const {
       name,
+      type,
       content,
       header,
       footer,
@@ -322,6 +323,14 @@ router.put('/:id', authenticateToken(), requirePermission('read:templates'), req
       autoSync,
       changesSummary
     } = req.body;
+
+    // DEBUG: Log type field
+    logger.info('Template update request', {
+      templateId: id,
+      receivedType: type,
+      bodyType: req.body.type,
+      hasType: type !== undefined
+    });
 
     // Check if template exists and belongs to tenant
     const existing = await prisma.templateLink.findFirst({
@@ -352,6 +361,7 @@ router.put('/:id', authenticateToken(), requirePermission('read:templates'), req
       where: { id },
       data: {
         ...(name !== undefined && { name }),
+        ...(type !== undefined && { type }),
         ...(content !== undefined && { content }),
         ...(header !== undefined && { header }),
         ...(footer !== undefined && { footer }),

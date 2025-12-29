@@ -3,7 +3,7 @@ import { ChevronUp, ChevronDown } from 'lucide-react';
 // Removed unused imports: ArrowUpDown, GripHorizontal, saveTablePreferences
 import { cn } from '../../design-system/utils';
 
-export interface ResizableTableColumn<T = Record<string, unknown> & { id?: string | number }> {
+export interface ResizableTableColumn<T = { id?: string | number }> {
   key: string;
   label: string;
   width?: number;
@@ -17,7 +17,7 @@ export interface ResizableTableColumn<T = Record<string, unknown> & { id?: strin
 
 export type SortDirection = 'asc' | 'desc' | null;
 
-interface ResizableTableProps<T = Record<string, unknown> & { id?: string | number }> {
+interface ResizableTableProps<T = { id?: string | number }> {
   columns: ResizableTableColumn<T>[];
   data: T[];
   tableProps?: React.TableHTMLAttributes<HTMLTableElement>;
@@ -36,7 +36,7 @@ interface ResizableTableProps<T = Record<string, unknown> & { id?: string | numb
   zebra?: boolean;
 }
 
-const ResizableTable = <T extends Record<string, unknown> & { id?: string | number } = Record<string, unknown> & { id?: string | number }>({
+const ResizableTable = <T extends { id?: string | number } = { id?: string | number }>({
   columns,
   data,
   tableProps = {},
@@ -113,17 +113,17 @@ const ResizableTable = <T extends Record<string, unknown> & { id?: string | numb
     }
   }, [tableName]);
   const { loadedWidths, loadedHiddenColumns, loadedColumnOrder } = initialState;
-  
+
   // Set default widths from column definitions (memoized to avoid changing on each render)
   const defaultWidths = useMemo(() => (
     Object.fromEntries(columns.map((col) => [col.key, col.width || 120]))
   ), [columns]);
-  
+
   // Initialize with saved data or defaults
-  const [colWidths, setColWidths] = useState<Record<string, number>>({ 
-    ...defaultWidths, 
+  const [colWidths, setColWidths] = useState<Record<string, number>>({
+    ...defaultWidths,
     ...loadedWidths,
-    ...initialWidths 
+    ...initialWidths
   });
 
   // Mantieni colWidths allineato quando cambia l'elenco delle colonne
@@ -152,51 +152,55 @@ const ResizableTable = <T extends Record<string, unknown> & { id?: string | numb
   useEffect(() => {
     colWidthsRef.current = colWidths;
   }, [colWidths]);
-  
-  const [localHiddenColumns, setLocalHiddenColumns] = useState<string[]>(
-    hiddenColumns.length > 0 ? hiddenColumns : loadedHiddenColumns
-  );
-  
+
+  const [localHiddenColumns, setLocalHiddenColumns] = useState<string[]>(() => {
+    // Combina colonne con hidden: true dalla definizione + hiddenColumns prop + localStorage
+    const columnsWithHiddenFlag = columns.filter(col => col.hidden).map(col => col.key);
+    const propsHidden = hiddenColumns.length > 0 ? hiddenColumns : loadedHiddenColumns;
+    const combined = Array.from(new Set([...columnsWithHiddenFlag, ...propsHidden]));
+    return combined;
+  });
+
   const [effectiveColumnOrder, setEffectiveColumnOrder] = useState(
     Object.keys(columnOrder).length > 0 ? columnOrder : loadedColumnOrder
   );
-  
+
   // Refs for resize handling
   const resizingCol = useRef<string | null>(null);
   const startX = useRef<number>(0);
   const startWidth = useRef<number>(0);
   const tableContainerRef = useRef<HTMLDivElement>(null);
-  
+
   // Removed draggingCol and dropTargetCol - drag and drop not used
-  
+
   const minColWidth = 50; // Minimum column width
-  
+
   // Array of visible columns (not hidden)
   const visibleColumns = useMemo(() => {
     return columns.filter(col => !localHiddenColumns.includes(col.key));
   }, [columns, localHiddenColumns]);
-  
+
   // Check if column is the last visible one
   const isLastVisibleColumn = (col: ResizableTableColumn<T>) => {
     const lastCol = visibleColumns[visibleColumns.length - 1];
     return lastCol && lastCol.key === col.key;
   };
-  
+
   // Sort columns by order
   const orderedColumns = [...columns].sort((a, b) => {
     const orderA = effectiveColumnOrder[a.key] ?? columns.findIndex(c => c.key === a.key);
     const orderB = effectiveColumnOrder[b.key] ?? columns.findIndex(c => c.key === b.key);
     return orderA - orderB;
   });
-  
+
   // Filter out hidden columns
   const sortedColumns = orderedColumns.filter(col => !localHiddenColumns.includes(col.key));
-  
+
   // Save preferences to localStorage only
   const savePreferences = (type: 'widths' | 'hiddenColumns' | 'order', data: unknown) => {
     // Only save to localStorage - no API calls
     if (typeof window === 'undefined') return;
-    
+
     try {
       if (type === 'widths') {
         localStorage.setItem(`${tableName}-column-widths`, JSON.stringify(data));
@@ -210,39 +214,39 @@ const ResizableTable = <T extends Record<string, unknown> & { id?: string | numb
       console.error('Failed to save preferences to localStorage:', error);
     }
   };
-  
+
   // Handle column resize start with improved event handling
   const handleResizeStart = (colKey: string, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    
+
     // Set the active column being resized
     resizingCol.current = colKey;
     startX.current = e.clientX;
     startWidth.current = colWidthsRef.current[colKey] || columns.find(c => c.key === colKey)?.width || 120;
-    
+
     // Setup mouse move and mouse up handlers
     const handleMouseMove = (e: MouseEvent) => {
       if (!resizingCol.current) return;
       e.preventDefault();
       e.stopPropagation();
-      
+
       // Get the current width and calculate difference
       const diff = e.clientX - startX.current;
-      
+
       // Calculate new width with a minimum to ensure columns stay visible
       const newWidth = Math.max(startWidth.current + diff, minColWidth);
-      
+
       // Update the width in state
       setColWidths(prev => ({
         ...prev,
         [resizingCol.current!]: newWidth
       }));
     };
-    
+
     const handleMouseUp = () => {
       if (!resizingCol.current) return;
-      
+
       const currentCol = resizingCol.current;
       const latest = colWidthsRef.current;
       // Create a new widths object with the updated width from the latest state
@@ -250,51 +254,51 @@ const ResizableTable = <T extends Record<string, unknown> & { id?: string | numb
         ...latest,
         [currentCol]: latest[currentCol] ?? defaultWidths[currentCol]
       };
-      
+
       // Save the new width to localStorage
       savePreferences('widths', updatedWidths);
-      
+
       // Notify parent if needed
       if (onWidthsChange) {
         onWidthsChange(updatedWidths);
       }
-      
+
       // Reset the resizing column state
       resizingCol.current = null;
       document.body.style.cursor = '';
-      
+
       // Remove the event listeners
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-    
+
     // Apply cursor to whole document while resizing
     document.body.style.cursor = 'col-resize';
-    
+
     // Add event listeners
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
   };
-  
+
   // Handle column sort click
   const handleSortClick = (colKey: string) => {
     if (!onSort) return;
-    
+
     let direction: SortDirection = 'asc';
     if (sortKey === colKey) {
       // Toggle between asc and desc only (eliminating null state)
       direction = sortDirection === 'asc' ? 'desc' : 'asc';
     }
-    
+
     onSort(colKey, direction);
   };
-  
+
   // Render column header content
   const renderColumnHeader = (col: ResizableTableColumn<T>) => {
     if (col.renderHeader) {
       return col.renderHeader(col);
     }
-    
+
     // Default rendering
     return (
       <div className="flex items-center justify-between w-full">
@@ -308,18 +312,18 @@ const ResizableTable = <T extends Record<string, unknown> & { id?: string | numb
 
   // Apply column visibility changes from external sources
   useEffect(() => {
-    if (hiddenColumns.length > 0) {
-      setLocalHiddenColumns(prev => (arraysShallowEqual(prev, hiddenColumns) ? prev : hiddenColumns));
-    }
-  }, [hiddenColumns]);
-  
+    const columnsWithHiddenFlag = columns.filter(col => col.hidden).map(col => col.key);
+    const combined = Array.from(new Set([...columnsWithHiddenFlag, ...hiddenColumns]));
+    setLocalHiddenColumns(prev => (arraysShallowEqual(prev, combined) ? prev : combined));
+  }, [hiddenColumns, columns]);
+
   // Apply column order changes from external sources
   useEffect(() => {
     if (Object.keys(columnOrder).length > 0) {
       setEffectiveColumnOrder(prev => (objectsShallowEqual(prev, columnOrder as Record<string, number>) ? prev : columnOrder));
     }
   }, [columnOrder]);
-  
+
   // Apply width changes from external sources (only if actually different)
   useEffect(() => {
     if (Object.keys(initialWidths).length > 0) {
@@ -339,27 +343,27 @@ const ResizableTable = <T extends Record<string, unknown> & { id?: string | numb
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialWidths]);
-  
+
   // Render table header cell with sorting and resizing
   const renderHeaderCell = (col: ResizableTableColumn<T>) => {
     // Don't render header cell for hidden columns
     if (col.hidden || localHiddenColumns.includes(col.key)) {
       return null;
     }
-    
+
     const width = colWidths[col.key] || col.width || 200;
     const isSorted = sortKey === col.key;
-    
+
     const onSortClick = () => {
       if (!col.sortable) return;
       handleSortClick(col.key);
     };
-    
+
     return (
-      <th 
+      <th
         key={col.key}
-        style={{ 
-          width: `${width}px`, 
+        style={{
+          width: `${width}px`,
           minWidth: `${width}px`,
         }}
         className={cn(
@@ -368,7 +372,7 @@ const ResizableTable = <T extends Record<string, unknown> & { id?: string | numb
           isSorted ? 'bg-blue-100' : '',
         )}
       >
-        <div 
+        <div
           className={cn(
             'flex items-center gap-1',
             col.sortable ? 'cursor-pointer group' : ''
@@ -376,7 +380,7 @@ const ResizableTable = <T extends Record<string, unknown> & { id?: string | numb
           onClick={col.sortable ? onSortClick : undefined}
         >
           {renderColumnHeader(col)}
-          
+
           {col.sortable && (
             <div className={cn(
               'flex-shrink-0 h-4 w-4 opacity-0 group-hover:opacity-70',
@@ -388,7 +392,7 @@ const ResizableTable = <T extends Record<string, unknown> & { id?: string | numb
             </div>
           )}
         </div>
-        
+
         {/* Resize handle */}
         {!isLastVisibleColumn(col) && (
           <div
@@ -404,32 +408,31 @@ const ResizableTable = <T extends Record<string, unknown> & { id?: string | numb
       </th>
     );
   };
-  
+
   // Render table cell with proper content
   const renderCell = (row: T, col: ResizableTableColumn<T>, rowIndex: number) => {
     // Don't render cell for hidden columns
     if (col.hidden || localHiddenColumns.includes(col.key)) {
       return null;
     }
-    
+
     const width = colWidths[col.key] || col.width || 200;
     const isLastColumn = isLastVisibleColumn(col);
     const isFirstColumn = col.key === 'actions';
-    
+
     const rowBgClass = zebra && rowIndex % 2 === 1 ? 'bg-gray-50' : 'bg-white';
-    
+
     return (
-      <td 
+      <td
         key={`${rowIndex}-${col.key}`}
-        style={{ 
-          width: `${width}px`, 
+        style={{
+          width: `${width}px`,
           minWidth: `${width}px`,
           maxWidth: `${width}px`,
         }}
         className={cn(
           'px-4 py-3 overflow-hidden text-sm text-gray-700 align-middle',
           isFirstColumn ? 'sticky left-0 z-20' : '',
-          isLastColumn ? 'sticky right-0 z-10' : '', 
           rowBgClass
         )}
       >
@@ -443,15 +446,15 @@ const ResizableTable = <T extends Record<string, unknown> & { id?: string | numb
       </td>
     );
   };
-  
+
   // Utility function to reset column widths in localStorage
   // Rimosso reset automatico delle larghezze: evita side-effect su mount che possono causare loop
   // Se necessario, esporre un controllo esplicito fuori da questo componente per pulire le preferenze
-  
+
   return (
     <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm" ref={tableContainerRef}>
-      <table 
-        {...tableProps} 
+      <table
+        {...tableProps}
         className={cn(
           'w-full border-collapse border-spacing-0',
           tableProps?.className
@@ -477,11 +480,11 @@ const ResizableTable = <T extends Record<string, unknown> & { id?: string | numb
               {sortedColumns.map((col) => renderCell(row, col, rowIndex))}
             </tr>
           ))}
-          
+
           {data.length === 0 && (
             <tr>
-              <td 
-                colSpan={sortedColumns.length} 
+              <td
+                colSpan={sortedColumns.length}
                 className="p-6 text-center text-gray-500"
               >
                 Nessun dato disponibile

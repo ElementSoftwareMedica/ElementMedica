@@ -1,73 +1,97 @@
 # 📦 Deployment Documentation
 
-**Versione**: 2.0 Post-Refactoring  
-**Data**: 25 Gennaio 2025  
-**Stato**: Sistema Completamente Refactorizzato e GDPR-Compliant
+**Versione**: 3.0 - ElementMedica Production  
+**Data**: Dicembre 2024  
+**Dominio**: elementmedica.com  
+**Stato**: Sistema Pronto per Production Deployment
 
 ## 🎯 Panoramica
 
-Questa cartella contiene tutta la documentazione relativa al deployment del sistema unificato Person con GDPR compliance. Il sistema è basato su un'architettura a tre server che garantisce separazione dei concern e scalabilità.
+Questa cartella contiene la documentazione per il deployment in produzione di ElementMedica.
+Tutta la documentazione è stata consolidata in un'unica guida completa.
 
 ## 📁 Struttura Documentazione
 
-- **[deployment-guide.md](./deployment-guide.md)** - Guida completa al deployment
-- **[environment-setup.md](./environment-setup.md)** - Configurazione ambiente
-- **[server-management.md](./server-management.md)** - Gestione server e processi
-- **[monitoring.md](./monitoring.md)** - Monitoraggio e health checks
-- **[backup-restore.md](./backup-restore.md)** - Procedure backup e restore
-- **[security.md](./security.md)** - Configurazioni di sicurezza
-
-## 🏗️ Architettura Sistema
-
-### Tre Server Obbligatori
-
-#### 1. API Server (Porta 4001)
-- **Responsabilità**: Business logic, autenticazione, database
-- **Tecnologie**: Node.js, Express, Prisma, PostgreSQL
-- **Endpoint**: `/api/*`
-
-#### 2. Documents Server (Porta 4002)
-- **Responsabilità**: Generazione PDF, template management
-- **Tecnologie**: Node.js, PDF generation libraries
-- **Endpoint**: `/generate/*`, `/templates/*`
-
-#### 3. Proxy Server (Porta 4003)
-- **Responsabilità**: Routing, CORS, rate limiting
-- **Tecnologie**: Node.js, Express
-- **Endpoint**: Entry point per tutte le richieste
-
-## 🚫 Regole Critiche Deployment
-
-### ⚠️ DIVIETO ASSOLUTO GESTIONE SERVER
-- **🚫 NON riavviare** server senza autorizzazione
-- **🚫 NON killare** processi server
-- **🚫 NON modificare** configurazioni di processo
-- **✅ RICHIEDERE** autorizzazione al proprietario per interventi
-
-### 🔑 Credenziali Test Standard
-- **Email**: `admin@example.com`
-- **Password**: `Admin123!`
-- **Utilizzo**: SOLO per testing e sviluppo
-
-### 🛡️ Protezione Sistema Login
-- **Massima attenzione** su modifiche autenticazione
-- **Testing obbligatorio** prima di ogni modifica
-- **Backup automatico** prima di modifiche critiche
+| File | Descrizione |
+|------|-------------|
+| **[DEPLOYMENT_GUIDE_UNIFIED.md](./DEPLOYMENT_GUIDE_UNIFIED.md)** | ✅ **GUIDA PRINCIPALE** - Documentazione completa e consolidata |
+| `archive/` | 📦 Documenti storici (obsoleti, mantenuti per riferimento) |
 
 ## 🚀 Quick Start
 
-1. **Prerequisiti**: Node.js 18+, PostgreSQL 14+, PM2
-2. **Configurazione**: Seguire [environment-setup.md](./environment-setup.md)
-3. **Deployment**: Seguire [deployment-guide.md](./deployment-guide.md)
-4. **Monitoraggio**: Configurare [monitoring.md](./monitoring.md)
+**Per il deployment, consultare esclusivamente:**
 
-## 📞 Supporto
+→ **[DEPLOYMENT_GUIDE_UNIFIED.md](./DEPLOYMENT_GUIDE_UNIFIED.md)**
 
-Per problemi di deployment:
-1. Consultare [troubleshooting](../troubleshooting/)
-2. Verificare logs dei server
-3. Contattare il proprietario del sistema per interventi sui server
+Questa guida include:
+- ✅ Credenziali complete (Hetzner, Supabase, GitHub, S3)
+- ✅ Architettura 3 server (API:4001, Documents:4002, Proxy:4003)
+- ✅ Setup Hetzner VPS step-by-step
+- ✅ Configurazione Nginx con SSL
+- ✅ Configurazione PM2
+- ✅ Setup database Supabase
+- ✅ DNS e dominio elementmedica.com
+- ✅ Monitoring e health checks
+- ✅ Backup e disaster recovery
+- ✅ Troubleshooting completo
+
+## 🏗️ Architettura Sistema
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        INTERNET                              │
+│                     elementmedica.com                        │
+└───────────────────────────┬─────────────────────────────────┘
+                            │ HTTPS (443)
+┌───────────────────────────▼─────────────────────────────────┐
+│                      NGINX PROXY                             │
+│                   (SSL Termination)                          │
+└───────┬───────────────────┬─────────────────────┬───────────┘
+        │                   │                     │
+        ▼                   ▼                     ▼
+┌───────────────┐   ┌───────────────┐   ┌───────────────┐
+│  Frontend     │   │  Proxy Server │   │  Direct API   │
+│  (Static)     │   │  :4003        │   │  :4001/:4002  │
+└───────────────┘   └───────┬───────┘   └───────────────┘
+                            │
+            ┌───────────────┴───────────────┐
+            ▼                               ▼
+    ┌───────────────┐               ┌───────────────┐
+    │  API Server   │               │  Documents    │
+    │  :4001        │               │  Server :4002 │
+    └───────┬───────┘               └───────────────┘
+            │
+            ▼
+    ┌───────────────────────────────────────────────┐
+    │           SUPABASE POSTGRESQL                  │
+    │     (aws-1-eu-central-1.pooler.supabase.com)  │
+    └───────────────────────────────────────────────┘
+```
+
+## 📦 Archive
+
+La cartella `archive/` contiene i documenti storici che sono stati consolidati:
+- `backup-restore.md` - Procedure backup (→ consolidato)
+- `database.md` - Configurazione DB (→ consolidato)
+- `deployment-guide.md` - Vecchia guida (→ consolidato)
+- `disaster-recovery.md` - DR procedures (→ consolidato)
+- `DOCKER_CONTAINERIZATION_GUIDE.md` - Docker setup (→ consolidato)
+- `environment-setup.md` - Ambiente (→ consolidato)
+- `monitoring.md` - Monitoring (→ consolidato)
+- `optimization-summary.md` - Ottimizzazioni (→ consolidato)
+- `phase7-deployment-notes.md` - Note fase 7 (→ consolidato)
+- `PREVENTIVI_DEPLOYMENT.md` - Preventivi (→ consolidato)
+- `prisma-migrations.md` - Migrazioni (→ consolidato)
+- `server-management.md` - Gestione server (→ consolidato)
+- `template-management-phase0-setup.md` - Template setup (→ consolidato)
+
+## ⚠️ Regole Critiche
+
+1. **NON modificare credenziali** senza autorizzazione
+2. **NON riavviare server** senza autorizzazione
+3. **SEMPRE fare backup** prima di modifiche
+4. **SEMPRE testare** in staging prima di production
 
 ---
 
-**⚠️ Importante**: Rispettare sempre le regole di gestione server. Ogni intervento non autorizzato può compromettere la stabilità del sistema.
+**📌 Riferimento principale: [DEPLOYMENT_GUIDE_UNIFIED.md](./DEPLOYMENT_GUIDE_UNIFIED.md)**

@@ -5,7 +5,7 @@
 
 import prisma from '../config/prisma-optimization.js';
 import logger from '../utils/logger.js';
-import { getAllBrands, BRAND_CONFIGS } from '../middleware/brandDetection.js';
+import { getAllBrands, BRAND_FEATURES, getTenantBySlug } from '../middleware/brandDetection.js';
 
 class CMSMultiBrandController {
   /**
@@ -14,12 +14,18 @@ class CMSMultiBrandController {
    */
   async getBrands(req, res) {
     try {
-      const brands = Object.entries(BRAND_CONFIGS).map(([id, config]) => ({
-        id,
-        name: config.name,
-        tenantId: config.tenantId,
-        allowedFeatures: config.allowedFeatures,
-      }));
+      // Carica tenant dal database per ogni brand
+      const brandsPromises = Object.entries(BRAND_FEATURES).map(async ([id, config]) => {
+        const tenant = await getTenantBySlug(id);
+        return {
+          id,
+          name: config.name,
+          tenantId: tenant?.id || null,
+          allowedFeatures: config.allowedFeatures,
+        };
+      });
+
+      const brands = await Promise.all(brandsPromises);
 
       logger.info('Retrieved brands', { count: brands.length });
 
@@ -44,16 +50,24 @@ class CMSMultiBrandController {
   async getBrandContent(req, res) {
     try {
       const { brandId } = req.params;
-      const brandConfig = BRAND_CONFIGS[brandId];
+      const brandFeatures = BRAND_FEATURES[brandId];
 
-      if (!brandConfig) {
+      if (!brandFeatures) {
         return res.status(404).json({
           success: false,
           error: 'Brand not found',
         });
       }
 
-      const tenantId = brandConfig.tenantId;
+      const tenant = await getTenantBySlug(brandId);
+      if (!tenant) {
+        return res.status(404).json({
+          success: false,
+          error: 'Tenant not found for brand',
+        });
+      }
+
+      const tenantId = tenant.id;
 
       // Statistiche contenuti per brand
       const [coursesCount, pagesCount, formsCount] = await Promise.all([
@@ -82,14 +96,14 @@ class CMSMultiBrandController {
 
       const stats = {
         brandId,
-        brandName: brandConfig.name,
+        brandName: brandFeatures.name,
         tenantId,
         content: {
           courses: coursesCount,
           pages: pagesCount,
           forms: formsCount,
         },
-        features: brandConfig.allowedFeatures,
+        features: brandFeatures.allowedFeatures,
       };
 
       logger.info('Retrieved brand content stats', { brandId, stats });
@@ -115,7 +129,7 @@ class CMSMultiBrandController {
   async getBrandCourses(req, res) {
     try {
       const { brandId } = req.params;
-      const brandConfig = BRAND_CONFIGS[brandId];
+      const brandConfig = BRAND_FEATURES[brandId];
 
       if (!brandConfig) {
         return res.status(404).json({
@@ -135,7 +149,14 @@ class CMSMultiBrandController {
         });
       }
 
-      const tenantId = brandConfig.tenantId;
+      const tenant = await getTenantBySlug(brandId);
+      if (!tenant) {
+        return res.status(404).json({
+          success: false,
+          error: 'Tenant not found for brand',
+        });
+      }
+      const tenantId = tenant.id;
       const { page = 1, limit = 20, search } = req.query;
       const offset = (parseInt(page) - 1) * parseInt(limit);
 
@@ -210,7 +231,7 @@ class CMSMultiBrandController {
   async getBrandPages(req, res) {
     try {
       const { brandId } = req.params;
-      const brandConfig = BRAND_CONFIGS[brandId];
+      const brandConfig = BRAND_FEATURES[brandId];
 
       if (!brandConfig) {
         return res.status(404).json({
@@ -219,7 +240,14 @@ class CMSMultiBrandController {
         });
       }
 
-      const tenantId = brandConfig.tenantId;
+      const tenant = await getTenantBySlug(brandId);
+      if (!tenant) {
+        return res.status(404).json({
+          success: false,
+          error: 'Tenant not found for brand',
+        });
+      }
+      const tenantId = tenant.id;
       const { page = 1, limit = 20, search } = req.query;
       const offset = (parseInt(page) - 1) * parseInt(limit);
 
@@ -292,7 +320,7 @@ class CMSMultiBrandController {
   async createBrandPage(req, res) {
     try {
       const { brandId } = req.params;
-      const brandConfig = BRAND_CONFIGS[brandId];
+      const brandConfig = BRAND_FEATURES[brandId];
 
       if (!brandConfig) {
         return res.status(404).json({
@@ -301,7 +329,14 @@ class CMSMultiBrandController {
         });
       }
 
-      const tenantId = brandConfig.tenantId;
+      const tenant = await getTenantBySlug(brandId);
+      if (!tenant) {
+        return res.status(404).json({
+          success: false,
+          error: 'Tenant not found for brand',
+        });
+      }
+      const tenantId = tenant.id;
       const userId = req.user.id;
 
       const {
@@ -389,7 +424,7 @@ class CMSMultiBrandController {
   async updateBrandPage(req, res) {
     try {
       const { brandId, pageId } = req.params;
-      const brandConfig = BRAND_CONFIGS[brandId];
+      const brandConfig = BRAND_FEATURES[brandId];
 
       if (!brandConfig) {
         return res.status(404).json({
@@ -398,7 +433,14 @@ class CMSMultiBrandController {
         });
       }
 
-      const tenantId = brandConfig.tenantId;
+      const tenant = await getTenantBySlug(brandId);
+      if (!tenant) {
+        return res.status(404).json({
+          success: false,
+          error: 'Tenant not found for brand',
+        });
+      }
+      const tenantId = tenant.id;
 
       // Verifica esistenza pagina
       const existingPage = await prisma.cMSPage.findFirst({
@@ -477,7 +519,7 @@ class CMSMultiBrandController {
   async deleteBrandPage(req, res) {
     try {
       const { brandId, pageId } = req.params;
-      const brandConfig = BRAND_CONFIGS[brandId];
+      const brandConfig = BRAND_FEATURES[brandId];
 
       if (!brandConfig) {
         return res.status(404).json({
@@ -486,7 +528,14 @@ class CMSMultiBrandController {
         });
       }
 
-      const tenantId = brandConfig.tenantId;
+      const tenant = await getTenantBySlug(brandId);
+      if (!tenant) {
+        return res.status(404).json({
+          success: false,
+          error: 'Tenant not found for brand',
+        });
+      }
+      const tenantId = tenant.id;
 
       // Verifica esistenza
       const page = await prisma.cMSPage.findFirst({

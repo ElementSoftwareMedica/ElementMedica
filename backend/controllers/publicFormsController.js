@@ -4,17 +4,17 @@
  */
 
 import { z } from 'zod';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../config/prisma-optimization.js';
 import crypto from 'crypto';
 import logger from '../utils/logger.js';
-
-const prisma = new PrismaClient();
 
 // Schema di validazione per submission pubblica
 const publicSubmissionSchema = z.object({
   formData: z.record(z.any()).refine(data => Object.keys(data).length > 0, {
     message: "I dati del form sono richiesti"
   }),
+  // Sezioni visitate (per multi-step forms)
+  visitedSectionIds: z.array(z.string()).optional(),
   // Campi opzionali per metadati
   source: z.string().optional().default('public_form'),
   userAgent: z.string().optional(),
@@ -58,16 +58,21 @@ const getPublicFormTemplate = async (req, res) => {
       name: template.name,
       description: template.description,
       type: template.type,
+      isActive: template.isActive,
+      isPublic: template.isPublic || false,
+      allowAnonymous: template.allowAnonymous || false,
+      settings: template.settings, // Include settings with sections
       fields: template.form_fields.map(field => ({
         name: field.name,
         label: field.label,
-        type: field.type,
+        type: field.type.toLowerCase(), // Normalize to lowercase for HTML input types
         required: field.required,
         placeholder: field.placeholder,
         helpText: field.helpText,
         options: field.options,
         validation: field.validation,
         conditional: field.conditional,
+        sectionId: field.sectionId, // Include sectionId for section mapping
         order: field.order
       }))
     };
@@ -99,10 +104,10 @@ const getPublicFormTemplate = async (req, res) => {
 const submitPublicForm = async (req, res) => {
   try {
     const { formTemplateId } = req.params;
-    
+
     // Validazione dati
     const validatedData = publicSubmissionSchema.parse(req.body);
-    const { formData, source, userAgent, ipAddress, referrer } = validatedData;
+    const { formData, visitedSectionIds, source, userAgent, ipAddress, referrer } = validatedData;
 
     // Verifica esistenza e validità del template
     const template = await prisma.form_templates.findFirst({
@@ -141,10 +146,18 @@ const submitPublicForm = async (req, res) => {
       });
     }
 
-    // Validazione campi richiesti
-    const requiredFields = template.form_fields.filter(field => field.required);
-    const missingFields = requiredFields.filter(field => 
-      !formData[field.name] || 
+    // Validazione campi richiesti (solo sezioni visitate)
+    let requiredFields = template.form_fields.filter(field => field.required);
+
+    // Se sono state passate le sezioni visitate, valida solo quei campi
+    if (visitedSectionIds && Array.isArray(visitedSectionIds) && visitedSectionIds.length > 0) {
+      requiredFields = requiredFields.filter(field =>
+        visitedSectionIds.includes(field.sectionId)
+      );
+    }
+
+    const missingFields = requiredFields.filter(field =>
+      !formData[field.name] ||
       (typeof formData[field.name] === 'string' && formData[field.name].trim() === '')
     );
 
@@ -161,10 +174,10 @@ const submitPublicForm = async (req, res) => {
 
     // Estrai informazioni base dal formData per compatibilità
     const extractedData = {
-      name: formData.name || formData.firstName || formData.fullName || 'Utente Anonimo',
-      email: formData.email || null,
-      phone: formData.phone || formData.telefono || null,
-      company: formData.company || formData.azienda || null,
+      name: formData.name || formData.firstName || formData.fullName || formData.namePersonal || formData.companyName || 'Utente Anonimo',
+      email: formData.email || formData.emailPersonal || formData.companyEmail || 'noreply@example.com',
+      phone: formData.phone || formData.telefono || formData.phonePersonal || formData.companyPhone || null,
+      company: formData.company || formData.azienda || formData.companyName || null,
       subject: formData.subject || formData.oggetto || template.name,
       message: formData.message || formData.messaggio || JSON.stringify(formData)
     };
@@ -199,7 +212,7 @@ const submitPublicForm = async (req, res) => {
       }
 
       // Crea la submission
-      const submission = await tx.ContactSubmission.create({
+      const submission = await tx.contactSubmission.create({
         data: {
           id: crypto.randomUUID(),
           type: template.type,
@@ -219,15 +232,17 @@ const submitPublicForm = async (req, res) => {
           formVersion: template.version,
           isTemplate: false,
           templateName: template.name,
+          // NOTE: templateId field removed - does not exist in ContactSubmission model
+          // The templateId is stored as part of metadata for tracking purposes
           autoCreatePerson: true,
           createdPersonId,
-          // Metadati della richiesta
+          // Metadati della richiesta (including formTemplateId for reference)
           metadata: {
             source,
             userAgent,
             ipAddress,
             referrer,
-            templateId: formTemplateId,
+            formTemplateId,
             submittedAt: new Date().toISOString()
           }
         }

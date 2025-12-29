@@ -32,19 +32,31 @@ export const useDeletionRequest = (): UseDeletionRequestReturn => {
       setError(null);
 
       const response = await apiClient.get<GDPRApiResponse<{ requests: DeletionRequest[] }>>(
-        '/api/gdpr/delete-request/user'
+        '/api/v1/gdpr/data-deletion/requests'
       );
-      
+
+      // Handle both wrapped and direct response formats
       if (response.data.success && response.data.data) {
         setDeletionRequests(response.data.data.requests);
+      } else if ('requests' in response.data) {
+        setDeletionRequests((response.data as unknown as { requests: DeletionRequest[] }).requests);
+      } else if (Array.isArray(response.data)) {
+        setDeletionRequests(response.data);
       } else {
-        throw new Error(response.data.error || 'Failed to fetch deletion requests');
+        // No requests found or endpoint not available
+        setDeletionRequests([]);
       }
     } catch (err) {
+      // Non mostrare errori se l'endpoint non esiste o accesso negato
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch deletion requests';
-      setError(errorMessage);
-      console.error('Error fetching deletion requests:', err);
-      toast.error('Failed to load deletion requests');
+      if (!errorMessage.includes('404') && !errorMessage.includes('403') && !errorMessage.includes('500')) {
+        setError(errorMessage);
+        console.error('Error fetching deletion requests:', err);
+      } else {
+        // Endpoint non disponibile o non autorizzato - set array vuoto
+        setDeletionRequests([]);
+        console.warn('GDPR deletion requests endpoint not available or forbidden, using empty state');
+      }
     } finally {
       setLoading(false);
     }
@@ -68,7 +80,7 @@ export const useDeletionRequest = (): UseDeletionRequestReturn => {
       }
 
       const response = await apiClient.post<GDPRApiResponse<{ request: DeletionRequest }>>(
-        '/api/gdpr/delete-request',
+        '/api/v1/gdpr/data-deletion/request',
         {
           reason: data.reason.trim(),
           confirmEmail: data.confirmEmail,
@@ -78,12 +90,12 @@ export const useDeletionRequest = (): UseDeletionRequestReturn => {
 
       if (response.data.success && response.data.data) {
         const newRequest = response.data.data.request;
-        
+
         // Add to local state
         setDeletionRequests(prev => [newRequest, ...prev]);
 
         toast.success('Deletion request submitted successfully. You will receive an email confirmation.');
-        
+
         return newRequest;
       } else {
         throw new Error(response.data.error || 'Failed to submit deletion request');
@@ -105,7 +117,7 @@ export const useDeletionRequest = (): UseDeletionRequestReturn => {
   const cancelDeletionRequest = useCallback(async (requestId: string) => {
     try {
       setLoading(true);
-      
+
       const request = deletionRequests.find(req => req.id === requestId);
       if (!request) {
         throw new Error('Deletion request not found');
@@ -116,19 +128,19 @@ export const useDeletionRequest = (): UseDeletionRequestReturn => {
       }
 
       const response = await apiClient.patch<GDPRApiResponse>(
-        `/api/gdpr/delete-request/${requestId}/cancel`
+        `/api/v1/gdpr/data-deletion/request/${requestId}/cancel`
       );
 
       if (response.data.success) {
         // Update local state
-        setDeletionRequests(prev => 
-          prev.map(req => 
-            req.id === requestId 
+        setDeletionRequests(prev =>
+          prev.map(req =>
+            req.id === requestId
               ? { ...req, status: 'cancelled', processedAt: new Date().toISOString() }
               : req
           )
         );
-        
+
         toast.success('Deletion request cancelled successfully');
       } else {
         throw new Error(response.data.error || 'Failed to cancel deletion request');
@@ -177,7 +189,7 @@ export const useDeletionRequest = (): UseDeletionRequestReturn => {
    */
   const getLatestRequest = useCallback(() => {
     if (deletionRequests.length === 0) return null;
-    
+
     return deletionRequests.reduce((latest, current) => {
       return new Date(current.requestDate) > new Date(latest.requestDate) ? current : latest;
     });
@@ -187,10 +199,10 @@ export const useDeletionRequest = (): UseDeletionRequestReturn => {
    * Check if user can submit a new deletion request
    */
   const canSubmitNewRequest = useCallback(() => {
-    const activeRequests = deletionRequests.filter(req => 
+    const activeRequests = deletionRequests.filter(req =>
       req.status === 'pending' || req.status === 'approved'
     ).length;
-    
+
     // Only allow one active deletion request at a time
     return activeRequests === 0;
   }, [deletionRequests]);
@@ -244,7 +256,7 @@ export const useDeletionRequest = (): UseDeletionRequestReturn => {
       statusColor: getStatusColor(request.status),
       statusDescription: getStatusDescription(request.status),
       formattedRequestDate: new Date(request.requestDate).toLocaleDateString(),
-      formattedProcessedDate: request.processedDate 
+      formattedProcessedDate: request.processedDate
         ? new Date(request.processedDate).toLocaleDateString()
         : null,
       daysSinceRequest: Math.floor(

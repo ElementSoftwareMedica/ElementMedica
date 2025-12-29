@@ -31,7 +31,7 @@ const CourseDetails: React.FC = () => {
       setLoading(true);
       try {
         const data = await apiGet(`/courses/${id}`);
-        setCourse(data);
+        setCourse(data as Course);
       } catch {
         setNotFound(true);
         setCourse(null);
@@ -120,7 +120,6 @@ const CourseDetails: React.FC = () => {
         actionButton={
           <Button
             variant="primary"
-            shape="pill"
             leftIcon={<Edit className="h-4 w-4" />}
             onClick={() => navigate(`/courses/${id}/edit`)}
           >
@@ -298,7 +297,6 @@ const CourseDetails: React.FC = () => {
               <h2 className="text-lg font-semibold text-gray-800">Upcoming Sessions</h2>
               <Button
                 variant="primary"
-                shape="pill"
                 leftIcon={<Calendar className="h-4 w-4" />}
                 onClick={() => {/* Implementare logica */}}
               >
@@ -382,7 +380,6 @@ const CourseDetails: React.FC = () => {
               <h2 className="text-lg font-semibold text-gray-800">Enrolled Employees</h2>
               <Button
                 variant="primary"
-                shape="pill"
                 leftIcon={<UserPlus className="h-4 w-4" />}
                 onClick={() => {/* Implementare logica */}}
               >
@@ -437,7 +434,6 @@ const CourseDetails: React.FC = () => {
                       <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium">
                         <Button
                           variant="outline"
-                          shape="pill"
                           size="sm"
                           leftIcon={employee.status === 'Completed' ? <Download className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
                         >

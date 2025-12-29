@@ -40,22 +40,28 @@ export { SearchBox } from './molecules/SearchBox';
 export { SearchBar } from './molecules/SearchBar';
 export { Tabs, TabsContent, TabsList, TabsTrigger } from './molecules/Tabs';
 
-// Types
+// Types from atoms
 export type {
-  // Button types
   ButtonProps,
   ButtonVariant,
   ButtonSize,
-  // Input types
+} from './atoms/Button';
+
+export type {
   InputProps,
   InputVariant,
   InputSize,
   InputState,
-  // Card types
+} from './atoms/Input';
+
+export type {
   CardProps,
   CardVariant,
   CardSize,
-  // Token types
+} from './molecules/Card';
+
+// Token types
+export type {
   ColorToken,
   ColorShade,
   FontFamily,

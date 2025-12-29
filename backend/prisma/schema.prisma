@@ -38,14 +38,15 @@ model Company {
   schedules          CourseSchedule[]
   scheduleCompanies  ScheduleCompany[]
   templateLinks      TemplateLink[]
+  codiciSconto       CodiceAzienda[]
   fatturaAzienda     FatturaAzienda[]
   personRoles        PersonRole[]
   persons            Person[]
-  preventivi         Preventivo[]      @relation("PreventivoAziendaDiretta")
-  codiciSconto       CodiceAzienda[] // Relazione con codici sconto
+  preventivi         Preventivo[]
+  convenzioni        ConvenzioneAzienda[]
+  tariffariAziendali TariffarioAziendale[]
 
   @@index([tenantId])
-  @@index([tenantId, deletedAt]) // Phase 2: Soft delete performance
 }
 
 model CompanySite {
@@ -94,40 +95,44 @@ model CompanySite {
 }
 
 model Course {
-  id               String           @id @default(uuid())
+  id               String                 @id @default(uuid())
   title            String
   category         String?
   description      String?
   duration         String?
   certifications   String?
-  code             String?          @unique
+  code             String?                @unique
   contents         String?
   maxPeople        Int?
   pricePerPerson   Float?
   regulation       String?
-  practicalHours   Int?
   validityYears    Int?
+  branchType       BranchType             @default(FORMAZIONE) @map("branch_type") // Progetto 45
   tenantId         String
-  status           CourseStatus?    @default(DRAFT)
-  createdAt        DateTime         @default(now())
+  status           CourseStatus?          @default(DRAFT)
+  createdAt        DateTime               @default(now())
   deletedAt        DateTime?
-  updatedAt        DateTime         @default(now()) @updatedAt
+  updatedAt        DateTime               @default(now()) @updatedAt
   courseType       CourseType?
   fullDescription  String?
   image1Url        String?
   image2Url        String?
-  isPublic         Boolean          @default(false)
+  isPublic         Boolean                @default(false)
   riskLevel        RiskLevel?
   seoDescription   String?
   seoTitle         String?
   shortDescription String?
-  slug             String?          @unique
+  slug             String?                @unique
   subcategory      String?
-  tenant           Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  practicalHours   Int?
+  seoId            String?                @unique
+  tenant           Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   schedules        CourseSchedule[]
-  codiciSconto     CodiceCorso[] // Relazione con codici sconto
+  codiciSconto     CodiceCorso[]
+  testAssignments  CourseTestAssignment[]
 
   @@index([tenantId])
+  @@index([tenantId, branchType]) // Progetto 45
   @@index([tenantId, status])
   @@index([status, createdAt])
   @@index([isPublic])
@@ -136,41 +141,47 @@ model Course {
   @@index([courseType])
   @@index([category, riskLevel])
   @@index([isPublic, status])
-  @@index([tenantId, deletedAt]) // Phase 2: Soft delete performance
 }
 
 model CourseSchedule {
-  id                  String              @id @default(uuid())
-  courseId            String
-  location            String?
-  companyId           String?
-  notes               String?
-  trainerId           String?
-  attendance          Json?
-  hasAttestati        Boolean             @default(false)
-  deliveryMode        DeliveryMode?
-  endDate             DateTime
-  maxParticipants     Int?
-  startDate           DateTime
-  status              EnrollmentStatus?   @default(PENDING)
-  createdAt           DateTime            @default(now())
-  deletedAt           DateTime?
-  tenantId            String
-  updatedAt           DateTime            @updatedAt
-  company             Company?            @relation(fields: [companyId], references: [id])
-  course              Course              @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  tenant              Tenant              @relation(fields: [tenantId], references: [id])
-  trainer             Person?             @relation("ScheduleTrainer", fields: [trainerId], references: [id])
-  sessions            CourseSession[]
-  companies           ScheduleCompany[]
-  attestati           Attestato[]
-  contact_submissions ContactSubmission[]
-  enrollments         CourseEnrollment[]
-  fatture             Fattura[]
-  lettereIncarico     LetteraIncarico[]
-  preventivi          Preventivo[]
-  registriPresenze    RegistroPresenze[]
-  testDocuments       TestDocument[]
+  id                    String              @id @default(uuid())
+  courseId              String
+  location              String?
+  companyId             String?
+  notes                 String?
+  trainerId             String?
+  attendance            Json?
+  hasAttestati          Boolean             @default(false)
+  deliveryMode          DeliveryMode?
+  endDate               DateTime
+  maxParticipants       Int?
+  startDate             DateTime
+  status                EnrollmentStatus?   @default(PENDING)
+  createdAt             DateTime            @default(now())
+  deletedAt             DateTime?
+  branchType            BranchType          @default(FORMAZIONE) @map("branch_type") // Progetto 45
+  tenantId              String
+  updatedAt             DateTime            @updatedAt
+  isPublic              Boolean?            @default(false)
+  source                ScheduleSource?     @default(INTERNAL)
+  externalCompletedDate DateTime?
+  importedBy            String?
+  importedAt            DateTime?
+  importNotes           String?
+  company               Company?            @relation(fields: [companyId], references: [id])
+  course                Course              @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  tenant                Tenant              @relation(fields: [tenantId], references: [id])
+  trainer               Person?             @relation("ScheduleTrainer", fields: [trainerId], references: [id])
+  sessions              CourseSession[]
+  companies             ScheduleCompany[]
+  attestati             Attestato[]
+  contact_submissions   ContactSubmission[]
+  enrollments           CourseEnrollment[]
+  fatture               Fattura[]
+  lettereIncarico       LetteraIncarico[]
+  preventivi            Preventivo[]
+  registriPresenze      RegistroPresenze[]
+  testResults           CourseTestResult[]
 
   @@index([companyId])
   @@index([courseId])
@@ -181,8 +192,8 @@ model CourseSchedule {
   @@index([startDate, endDate])
   @@index([companyId, startDate])
   @@index([tenantId])
+  @@index([tenantId, branchType]) // Progetto 45
   @@index([tenantId, status])
-  @@index([tenantId, deletedAt]) // Phase 2: Soft delete performance
 }
 
 model CourseEnrollment {
@@ -245,94 +256,76 @@ model ScheduleCompany {
 }
 
 model Attestato {
-  id                String   @id @default(uuid())
-  personId          String   @map("partecipante_id")
-  fileName          String   @map("nome_file")
-  fileUrl           String   @map("url")
-  generatedAt       DateTime @default(now()) @map("data_generazione")
+  id                String         @id @default(uuid())
+  personId          String         @map("partecipante_id")
+  fileName          String         @map("nome_file")
+  fileUrl           String         @map("url")
+  generatedAt       DateTime       @default(now()) @map("data_generazione")
   annoProgressivo   Int
   numeroProgressivo Int
   scheduledCourseId String
-
-  // Template integration
-  templateId      String?
-  templateVersion Int?
-  markers         Json? // Resolved marker values used
-  generatedBy     String?
-  fileSize        Int? // Size in bytes
-
-  createdAt       DateTime       @default(now())
-  deletedAt       DateTime?
-  tenantId        String
-  updatedAt       DateTime       @updatedAt
-  person          Person         @relation("Attestato_Person", fields: [personId], references: [id], onDelete: Cascade)
-  scheduledCourse CourseSchedule @relation(fields: [scheduledCourseId], references: [id], onDelete: Cascade)
-  tenant          Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  template        TemplateLink?  @relation(fields: [templateId], references: [id])
+  createdAt         DateTime       @default(now())
+  deletedAt         DateTime?
+  tenantId          String
+  updatedAt         DateTime       @updatedAt
+  fileSize          Int?
+  generatedBy       String?
+  markers           Json?
+  templateId        String?
+  templateVersion   Int?
+  person            Person         @relation("Attestato_Person", fields: [personId], references: [id], onDelete: Cascade)
+  scheduledCourse   CourseSchedule @relation(fields: [scheduledCourseId], references: [id], onDelete: Cascade)
+  template          TemplateLink?  @relation(fields: [templateId], references: [id])
+  tenant            Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@index([personId])
   @@index([scheduledCourseId])
   @@index([templateId])
-  @@index([tenantId, deletedAt]) // Phase 2: Soft delete performance
   @@map("attestati")
 }
 
 model TemplateLink {
-  id            String         @id @default(uuid())
-  name          String
-  url           String
-  type          TemplateType
-  content       String?        @db.Text
-  footer        String?        @db.Text
-  header        String?        @db.Text
-  isDefault     Boolean        @default(false)
-  logoPosition  String?
-  fileFormat    TemplateFormat @default(HTML)
-  googleDocsUrl String?
-  logoImage     String?
-  companyId     String?
-
-  // Versioning
-  version  Int     @default(1)
-  isActive Boolean @default(true)
-
-  // Markers and Schema
-  markers      Json? // Array of marker definitions: [{key, label, type, format, required}]
-  markerSchema Json? // Validation schema for marker values
-
-  // Layout and Styling
-  styles Json? // CSS and styling configuration
-  layout Json? // Page layout settings (margins, orientation, etc.)
-
-  // Google Integration
-  googleDocsId   String? // Extracted Google Docs document ID
-  googleSlidesId String? // Extracted Google Slides presentation ID
-  lastSyncedAt   DateTime?
-  syncEnabled    Boolean   @default(false)
-  autoSync       Boolean   @default(false) // Automatically sync changes from Google
-
-  // Metadata
-  description String?
-  category    String?
-  tags        String[] @default([])
-  createdBy   String?
-
-  // Standard fields
-  createdAt DateTime  @default(now())
-  deletedAt DateTime?
-  tenantId  String
-  updatedAt DateTime  @updatedAt
-
-  // Relations
-  company          Company?            @relation(fields: [companyId], references: [id])
-  tenant           Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  creator          Person?             @relation("TemplateCreator", fields: [createdBy], references: [id])
-  versions         TemplateVersion[]
+  id               String              @id @default(uuid())
+  name             String
+  url              String
+  content          String?
+  footer           String?
+  header           String?
+  isDefault        Boolean             @default(false)
+  logoPosition     String?
+  googleDocsUrl    String?
+  logoImage        String?
+  companyId        String?
+  createdAt        DateTime            @default(now())
+  deletedAt        DateTime?
+  tenantId         String
+  updatedAt        DateTime            @updatedAt
+  category         String?
+  createdBy        String?
+  description      String?
+  isActive         Boolean             @default(true)
+  lastSyncedAt     DateTime?
+  layout           Json?
+  markerSchema     Json?
+  markers          Json?
+  styles           Json?
+  syncEnabled      Boolean             @default(false)
+  tags             String[]            @default([])
+  version          Int                 @default(1)
+  type             TemplateType
+  fileFormat       TemplateFormat      @default(HTML)
+  autoSync         Boolean             @default(false)
+  googleDocsId     String?
+  googleSlidesId   String?
   generatedDocs    GeneratedDocument[]
+  company          Company?            @relation(fields: [companyId], references: [id])
+  creator          Person?             @relation("TemplateCreator", fields: [createdBy], references: [id])
+  tenant           Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  versions         TemplateVersion[]
+  attestati        Attestato[]
   lettereIncarico  LetteraIncarico[]
   registriPresenze RegistroPresenze[]
-  attestati        Attestato[]
 
   @@index([tenantId])
   @@index([companyId])
@@ -344,25 +337,23 @@ model TemplateLink {
 }
 
 model TemplateVersion {
-  id             String   @id @default(uuid())
+  id             String       @id @default(uuid())
   templateId     String
   version        Int
-  content        String   @db.Text
-  header         String?  @db.Text
-  footer         String?  @db.Text
-  styles         Json? // CSS and styling configuration for this version
-  layout         Json? // Page layout settings for this version
-  markers        Json? // Marker definitions used in this version
-  changesSummary String? // Brief description of what changed
-  changeDetails  Json? // Detailed change log
+  content        String
+  header         String?
+  footer         String?
+  styles         Json?
+  layout         Json?
+  markers        Json?
+  changesSummary String?
+  changeDetails  Json?
   createdBy      String
-  createdAt      DateTime @default(now())
+  createdAt      DateTime     @default(now())
   tenantId       String
-
-  // Relations
-  template TemplateLink @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  creator  Person       @relation("VersionCreator", fields: [createdBy], references: [id])
-  tenant   Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  creator        Person       @relation("VersionCreator", fields: [createdBy], references: [id])
+  template       TemplateLink @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  tenant         Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([templateId, version])
   @@index([templateId, createdAt])
@@ -374,41 +365,31 @@ model GeneratedDocument {
   templateId      String
   templateVersion Int
   type            TemplateType
-  entityType      String // 'person', 'scheduledCourse', 'company', etc.
-  entityId        String // ID of the related entity
+  entityType      String
+  entityId        String
   filename        String
-  filepath        String // Path in storage service
-  fileUrl         String // Public URL for download
-  fileSize        Int // Size in bytes
-  fileHash        String? // SHA-256 hash for integrity
+  filepath        String
+  fileUrl         String
+  fileSize        Int
+  fileHash        String?
   mimeType        String         @default("application/pdf")
-  markers         Json // Resolved marker values used for generation
-  metadata        Json? // Additional document metadata
+  markers         Json
+  metadata        Json?
   status          DocumentStatus @default(GENERATED)
-
-  // Batch generation tracking
-  batchId    String? // Group multiple documents generated together
-  batchSize  Int? // Total documents in batch
-  batchIndex Int? // Position in batch
-
-  // Delivery tracking
-  sentAt DateTime?
-  sentTo String? // Email address
-
-  // Download tracking
-  downloadCount  Int       @default(0)
-  lastDownloadAt DateTime?
-
-  // Standard fields
-  generatedBy String
-  generatedAt DateTime  @default(now())
-  tenantId    String
-  deletedAt   DateTime?
-
-  // Relations
-  template  TemplateLink @relation(fields: [templateId], references: [id])
-  generator Person       @relation("DocumentGenerator", fields: [generatedBy], references: [id])
-  tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  batchId         String?
+  batchSize       Int?
+  batchIndex      Int?
+  sentAt          DateTime?
+  sentTo          String?
+  downloadCount   Int            @default(0)
+  lastDownloadAt  DateTime?
+  generatedBy     String
+  generatedAt     DateTime       @default(now())
+  tenantId        String
+  deletedAt       DateTime?
+  generator       Person         @relation("DocumentGenerator", fields: [generatedBy], references: [id])
+  template        TemplateLink   @relation(fields: [templateId], references: [id])
+  tenant          Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([templateId])
   @@index([entityType, entityId])
@@ -419,23 +400,19 @@ model GeneratedDocument {
   @@index([type, status])
 }
 
-// Google OAuth2 Tokens for Workspace Integration
 model GoogleTokens {
   id           String   @id @default(uuid())
   userId       String
   tenantId     String
-  accessToken  String   @db.Text // Encrypted OAuth2 access token
-  refreshToken String?  @db.Text // Encrypted OAuth2 refresh token
-  expiryDate   BigInt // Token expiration timestamp (Unix milliseconds)
-  scope        String[] @default([]) // OAuth scopes granted
+  accessToken  String
+  refreshToken String?
+  expiryDate   BigInt
+  scope        String[] @default([])
   tokenType    String   @default("Bearer")
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  user   Person @relation("GoogleTokensUser", fields: [userId], references: [id], onDelete: Cascade)
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user         Person   @relation("GoogleTokensUser", fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, tenantId])
   @@index([userId])
@@ -444,30 +421,27 @@ model GoogleTokens {
 }
 
 model LetteraIncarico {
-  id                String   @id @default(uuid())
+  id                String         @id @default(uuid())
   scheduledCourseId String
   trainerId         String
   nomeFile          String
   url               String
-  dataGenerazione   DateTime @default(now())
+  dataGenerazione   DateTime       @default(now())
   numeroProgressivo Int
   annoProgressivo   Int
-
-  // Template integration
-  templateId      String?
-  templateVersion Int?
-  markers         Json? // Resolved marker values used
-  generatedBy     String?
-  fileSize        Int? // Size in bytes
-
-  createdAt       DateTime       @default(now())
-  deletedAt       DateTime?
-  tenantId        String
-  updatedAt       DateTime       @updatedAt
-  scheduledCourse CourseSchedule @relation(fields: [scheduledCourseId], references: [id], onDelete: Cascade)
-  tenant          Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  trainer         Person         @relation("LetteraIncaricoTrainer", fields: [trainerId], references: [id], onDelete: Cascade)
-  template        TemplateLink?  @relation(fields: [templateId], references: [id])
+  createdAt         DateTime       @default(now())
+  deletedAt         DateTime?
+  tenantId          String
+  updatedAt         DateTime       @updatedAt
+  fileSize          Int?
+  generatedBy       String?
+  markers           Json?
+  templateId        String?
+  templateVersion   Int?
+  scheduledCourse   CourseSchedule @relation(fields: [scheduledCourseId], references: [id], onDelete: Cascade)
+  template          TemplateLink?  @relation(fields: [templateId], references: [id])
+  tenant            Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  trainer           Person         @relation("LetteraIncaricoTrainer", fields: [trainerId], references: [id], onDelete: Cascade)
 
   @@unique([scheduledCourseId, trainerId])
   @@index([templateId])
@@ -478,33 +452,30 @@ model LetteraIncarico {
 }
 
 model RegistroPresenze {
-  id                String   @id @default(uuid())
+  id                String                         @id @default(uuid())
   scheduledCourseId String
   sessionId         String
   nomeFile          String
   url               String
-  dataGenerazione   DateTime @default(now())
+  dataGenerazione   DateTime                       @default(now())
   numeroProgressivo Int
   annoProgressivo   Int
   formatoreId       String
-
-  // Template integration
-  templateId      String?
-  templateVersion Int?
-  markers         Json? // Resolved marker values used
-  generatedBy     String?
-  fileSize        Int? // Size in bytes
-
-  createdAt       DateTime                       @default(now())
-  deletedAt       DateTime?
-  tenantId        String
-  updatedAt       DateTime                       @updatedAt
-  formatore       Person                         @relation("RegistroFormatore", fields: [formatoreId], references: [id], onDelete: Cascade)
-  scheduledCourse CourseSchedule                 @relation(fields: [scheduledCourseId], references: [id], onDelete: Cascade)
-  session         CourseSession                  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  tenant          Tenant                         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  template        TemplateLink?                  @relation(fields: [templateId], references: [id])
-  presenti        RegistroPresenzePartecipante[]
+  createdAt         DateTime                       @default(now())
+  deletedAt         DateTime?
+  tenantId          String
+  updatedAt         DateTime                       @updatedAt
+  fileSize          Int?
+  generatedBy       String?
+  markers           Json?
+  templateId        String?
+  templateVersion   Int?
+  formatore         Person                         @relation("RegistroFormatore", fields: [formatoreId], references: [id], onDelete: Cascade)
+  scheduledCourse   CourseSchedule                 @relation(fields: [scheduledCourseId], references: [id], onDelete: Cascade)
+  session           CourseSession                  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  template          TemplateLink?                  @relation(fields: [templateId], references: [id])
+  tenant            Tenant                         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  presenti          RegistroPresenzePartecipante[]
 
   @@index([tenantId])
   @@index([formatoreId])
@@ -536,97 +507,58 @@ model RegistroPresenzePartecipante {
   @@map("registro_presenze_partecipanti")
 }
 
-// ========================================
-// MODELLO PREVENTIVO ESTESO - Multi-Servizio
-// ========================================
-
 model Preventivo {
-  id String @id @default(uuid())
+  id                  String             @id @default(uuid())
+  scheduledCourseId   String?            @map("scheduledCourseId")
+  nomeFile            String?
+  url                 String?
+  dataGenerazione     DateTime?
+  numeroProgressivo   Int
+  annoProgressivo     Int
+  createdAt           DateTime           @default(now())
+  deletedAt           DateTime?
+  updatedAt           DateTime           @updatedAt
+  tenantId            String
+  aziendaId           String?
+  clienteType         ClienteType
+  condizioniPagamento String?
+  corsoId             String?
+  dataAccettazione    DateTime?
+  dataEmissione       DateTime           @default(now())
+  dataFineServizio    DateTime?
+  dataInizioServizio  DateTime?
+  dataInvio           DateTime?
+  dataRifiuto         DateTime?
+  dataScadenza        DateTime
+  descrizioneServizio String?
+  dettagliServizio    Json               @default("{}")
+  fileName            String?
+  fileSize            Int?
+  fileUrl             String?
+  generatedBy         String?
+  importoFinale       Decimal            @db.Decimal(10, 2)
+  motivoRifiuto       String?
+  note                String?
+  numero              String
+  personaId           String?
+  prezzoTotale        Decimal            @db.Decimal(10, 2)
+  prezzoUnitario      Decimal            @db.Decimal(10, 2)
+  quantita            Int                @default(1)
+  scontoTotale        Decimal            @default(0) @db.Decimal(10, 2)
+  stato               StatoPreventivo    @default(BOZZA)
+  tipoPrezzo          TipoPrezzo         @default(PER_PERSONA)
+  tipoServizio        TipoServizio       @default(CORSO)
+  titoloServizio      String
+  aliquotaIva         Decimal            @default(22.00) @db.Decimal(5, 2)
+  imponibile          Decimal            @db.Decimal(10, 2)
+  importoIva          Decimal            @db.Decimal(10, 2)
+  branchTypes         BranchType[]       @default([]) @map("branch_types") // Progetto 45: array dei branch coinvolti
+  azienda             Company?           @relation(fields: [aziendaId], references: [id])
+  persona             Person?            @relation(fields: [personaId], references: [id])
+  schedule            CourseSchedule?    @relation(fields: [scheduledCourseId], references: [id])
+  tenant              Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sconti              PreventivoSconto[]
 
-  // Numerazione progressiva
-  numero            String // Formato: "PREV-2025-0001"
-  annoProgressivo   Int // Anno di riferimento
-  numeroProgressivo Int // Numero nell'anno
-
-  // Tipo Servizio e Prezzo
-  tipoServizio TipoServizio @default(CORSO)
-  tipoPrezzo   TipoPrezzo   @default(PER_PERSONA)
-
-  // Dettagli Specifici (JSON per flessibilità)
-  dettagliServizio Json @default("{}")
-
-  // Riferimenti (opzionali per supportare multi-servizio)
-  scheduledCourseId String?         @map("scheduledCourseId")
-  schedule          CourseSchedule? @relation(fields: [scheduledCourseId], references: [id], onDelete: SetNull)
-
-  corsoId String? // Riferimento al corso (opzionale)
-
-  // Cliente
-  clienteType ClienteType // AZIENDA o PERSONA
-  aziendaId   String? // Se clienteType = AZIENDA
-  personaId   String? // Se clienteType = PERSONA
-
-  // Relazioni cliente
-  azienda Company? @relation("PreventivoAziendaDiretta", fields: [aziendaId], references: [id], onDelete: SetNull)
-  persona Person?  @relation("PreventivoPersonaDiretta", fields: [personaId], references: [id], onDelete: SetNull)
-
-  // Campi Unificati
-  titoloServizio      String // Titolo generico del servizio
-  descrizioneServizio String? @db.Text
-
-  // Calcoli finanziari
-  quantita       Int     @default(1) // N° partecipanti, visite, mesi, etc.
-  prezzoUnitario Decimal @db.Decimal(10, 2)
-  prezzoTotale   Decimal @db.Decimal(10, 2) // prezzoUnitario × quantita
-  scontoTotale   Decimal @default(0) @db.Decimal(10, 2)
-  imponibile     Decimal @db.Decimal(10, 2) // prezzoTotale - scontoTotale
-
-  // Gestione IVA
-  aliquotaIva Decimal @default(22.00) @db.Decimal(5, 2) // Aliquota IVA % (4, 10, 22, etc.)
-  importoIva  Decimal @db.Decimal(10, 2) // Importo IVA calcolato
-
-  // Totale finale con IVA
-  importoFinale Decimal @db.Decimal(10, 2) // imponibile + importoIva
-
-  // Date
-  dataEmissione      DateTime  @default(now())
-  dataScadenza       DateTime
-  dataInizioServizio DateTime? // Data inizio erogazione (opzionale)
-  dataFineServizio   DateTime? // Data fine erogazione (opzionale)
-
-  // Workflow
-  stato            StatoPreventivo @default(BOZZA)
-  dataInvio        DateTime?
-  dataAccettazione DateTime?
-  dataRifiuto      DateTime?
-  motivoRifiuto    String?         @db.Text
-
-  // Note e condizioni
-  note                String? @db.Text
-  condizioniPagamento String? @db.Text
-
-  // File PDF (campi legacy mantenuti per compatibilità)
-  nomeFile        String?
-  url             String?
-  fileUrl         String?
-  fileName        String?
-  fileSize        Int?
-  dataGenerazione DateTime?
-
-  // Relazioni
-  sconti PreventivoSconto[] // Sconti applicati
-
-  // Multi-tenancy
-  tenantId String
-  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-
-  // Audit
-  generatedBy String? // User ID che ha generato
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  deletedAt   DateTime? // Soft delete
-
-  // Indexes
   @@unique([tenantId, numero])
   @@index([tenantId, stato, dataEmissione])
   @@index([tenantId, tipoServizio])
@@ -676,60 +608,47 @@ model FatturaAzienda {
   @@map("fattura_aziende")
 }
 
-// ========================================
-// MODELLI CODICI SCONTO
-// ========================================
-
 model CodiceSconto {
-  id String @id @default(uuid())
-
-  // Identificazione
-  codice      String // Es: "PROMO2025", "VIP50"
-  nome        String // Nome descrittivo
-  descrizione String? @db.Text
-
-  // Tipo e valore sconto
-  tipoSconto TipoSconto
-  valore     Decimal    @db.Decimal(10, 2) // Percentuale (0-100) o valore assoluto in €
-
-  // Validità temporale
-  dataInizio DateTime
-  dataFine   DateTime
-  attivo     Boolean  @default(true) // Toggle on/off manuale
-
-  // Limitazioni utilizzo
-  utilizzoMassimo   Int? // Max utilizzi globali (null = illimitato)
-  utilizzoCorrente  Int  @default(0) // Contatore utilizzi
-  utilizzoPerUtente Int? // Max utilizzi per singolo utente (null = illimitato)
-
-  // Regole applicazione
-  cumulabile Boolean  @default(false) // Può essere combinato con altri sconti
-  minImporto Decimal? @db.Decimal(10, 2) // Importo minimo richiesto
-  maxImporto Decimal? @db.Decimal(10, 2) // Sconto massimo applicabile (cap)
-
-  // Applicabilità
+  id                 String              @id @default(uuid())
+  codice             String
+  nome               String
+  descrizione        String?
+  tipoSconto         TipoSconto
+  valore             Decimal             @db.Decimal(10, 2)
+  dataInizio         DateTime
+  dataFine           DateTime
+  attivo             Boolean             @default(true)
+  utilizzoMassimo    Int?
+  utilizzoCorrente   Int                 @default(0)
+  utilizzoPerUtente  Int?
+  cumulabile         Boolean             @default(false)
+  minImporto         Decimal?            @db.Decimal(10, 2)
+  maxImporto         Decimal?            @db.Decimal(10, 2)
   applicabileA       ApplicabilitaSconto @default(TUTTI)
-  applicabileServizi TipoServizio[]      @default([CORSO]) // Array: [CORSO, DVR, RSPP]
-  tipoCorso          TipoCorsoSconto?    @default(TUTTI) // Legacy: mantenuto per compatibilità
-  categorieCorso     String[]            @default([]) // Array categorie corsi
+  applicabileServizi TipoServizio[]      @default([CORSO])
+  tipoCorso          TipoCorsoSconto?    @default(TUTTI)
+  categorieCorso     String[]            @default([])
+  prestazioniIds     String[]            @default([])
 
-  // Relazioni
-  aziende    CodiceAzienda[] // Aziende specifiche autorizzate
-  persone    CodicePersona[] // Persone specifiche autorizzate
-  corsi      CodiceCorso[] // Corsi specifici applicabili
-  preventivi PreventivoSconto[] // Preventivi che usano questo codice
+  // Criteri avanzati di applicabilità (Progetto 44 Enhancement)
+  etaMinima         Int? // Età minima paziente (anni)
+  etaMassima        Int? // Età massima paziente (anni)
+  genereApplicabile Gender? // Solo per genere specifico (MALE/FEMALE)
+  soloNuoviPazienti Boolean  @default(false) // Solo prima visita
+  convenzioniIds    String[] @default([]) // IDs convenzioni compatibili
+  bundleIds         String[] @default([]) // IDs bundle compatibili
 
-  // Multi-tenancy
-  tenantId String
-  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId   String
+  createdBy  String
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+  deletedAt  DateTime?
+  aziende    CodiceAzienda[]
+  corsi      CodiceCorso[]
+  persone    CodicePersona[]
+  tenant     Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  preventivi PreventivoSconto[]
 
-  // Audit
-  createdBy String // User ID che ha creato
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime? // Soft delete
-
-  // Indexes
   @@unique([codice, tenantId])
   @@index([tenantId, attivo, dataInizio, dataFine])
   @@index([tenantId, tipoSconto])
@@ -739,33 +658,25 @@ model CodiceSconto {
 }
 
 model PreventivoSconto {
-  id String @id @default(uuid())
+  id                String       @id @default(uuid())
+  preventivoId      String
+  codiceId          String
+  codiceTesto       String
+  nomeCodice        String
+  descrizioneCodice String?
+  tipoSconto        TipoSconto
+  valoreSconto      Decimal      @db.Decimal(10, 2)
+  importoScontato   Decimal      @db.Decimal(10, 2)
+  applicatoDa       String
+  applicatoIl       DateTime     @default(now())
+  tenantId          String
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  deletedAt         DateTime?
+  codice            CodiceSconto @relation(fields: [codiceId], references: [id])
+  preventivo        Preventivo   @relation(fields: [preventivoId], references: [id], onDelete: Cascade)
+  tenant            Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  // Relazioni
-  preventivoId String
-  codiceId     String
-  preventivo   Preventivo   @relation(fields: [preventivoId], references: [id], onDelete: Cascade)
-  codice       CodiceSconto @relation(fields: [codiceId], references: [id], onDelete: Restrict)
-
-  // Snapshot dei dati al momento dell'applicazione
-  codiceTesto       String // Codice testuale applicato
-  nomeCodice        String // Nome del codice
-  descrizioneCodice String?    @db.Text
-  tipoSconto        TipoSconto // PERCENTUALE o VALORE_ASSOLUTO
-  valoreSconto      Decimal    @db.Decimal(10, 2) // Valore al momento dell'applicazione
-  importoScontato   Decimal    @db.Decimal(10, 2) // Importo effettivo scontato in €
-
-  // Audit
-  applicatoDa String // User ID che ha applicato
-  applicatoIl DateTime @default(now())
-  tenantId    String
-  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
-
-  // Indexes
   @@unique([preventivoId, codiceId])
   @@index([preventivoId])
   @@index([codiceId])
@@ -773,19 +684,17 @@ model PreventivoSconto {
   @@map("preventivi_sconti")
 }
 
-// Join tables per relazioni many-to-many CodiciSconto
-
 model CodiceAzienda {
   id        String       @id @default(uuid())
   codiceId  String
   aziendaId String
-  codice    CodiceSconto @relation(fields: [codiceId], references: [id], onDelete: Cascade)
-  azienda   Company      @relation(fields: [aziendaId], references: [id], onDelete: Cascade)
   tenantId  String
-  tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
   deletedAt DateTime?
+  azienda   Company      @relation(fields: [aziendaId], references: [id], onDelete: Cascade)
+  codice    CodiceSconto @relation(fields: [codiceId], references: [id], onDelete: Cascade)
+  tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([codiceId, aziendaId])
   @@index([codiceId])
@@ -798,13 +707,13 @@ model CodicePersona {
   id        String       @id @default(uuid())
   codiceId  String
   personaId String
-  codice    CodiceSconto @relation(fields: [codiceId], references: [id], onDelete: Cascade)
-  persona   Person       @relation("CodicePersona_Person", fields: [personaId], references: [id], onDelete: Cascade)
   tenantId  String
-  tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
   deletedAt DateTime?
+  codice    CodiceSconto @relation(fields: [codiceId], references: [id], onDelete: Cascade)
+  persona   Person       @relation("CodicePersona_Person", fields: [personaId], references: [id], onDelete: Cascade)
+  tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([codiceId, personaId])
   @@index([codiceId])
@@ -817,13 +726,13 @@ model CodiceCorso {
   id        String       @id @default(uuid())
   codiceId  String
   corsoId   String
-  codice    CodiceSconto @relation(fields: [codiceId], references: [id], onDelete: Cascade)
-  corso     Course       @relation(fields: [corsoId], references: [id], onDelete: Cascade)
   tenantId  String
-  tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
   deletedAt DateTime?
+  codice    CodiceSconto @relation(fields: [codiceId], references: [id], onDelete: Cascade)
+  corso     Course       @relation(fields: [corsoId], references: [id], onDelete: Cascade)
+  tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([codiceId, corsoId])
   @@index([codiceId])
@@ -851,81 +760,50 @@ model Permission {
 }
 
 model ActivityLog {
-  id        String    @id @default(uuid())
-  personId  String    @map("user_id")
-  action    String
-  details   String?
-  timestamp DateTime  @default(now())
-  createdAt DateTime  @default(now())
-  deletedAt DateTime?
-  updatedAt DateTime  @updatedAt
-  tenantId  String
-  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  person    Person    @relation("ActivityLog_Person", fields: [personId], references: [id], onDelete: Cascade)
+  id         String      @id @default(uuid())
+  personId   String      @map("user_id")
+  action     String // Azione eseguita (enum ActivityType)
+  category   String? // Categoria (AUTH, CRUD, NAVIGATION, etc.)
+  resource   String? // Risorsa coinvolta (Company, Course, etc.)
+  resourceId String? // ID della risorsa
+  details    String? // Dettagli aggiuntivi (legacy, JSON string)
+  metadata   Json? // Metadata strutturato (nuovo)
+  ipAddress  String? // IP address
+  userAgent  String?     @db.VarChar(500) // Browser/device info
+  sessionId  String? // Link a PersonSession
+  duration   Int? // Durata operazione (ms)
+  success    Boolean     @default(true) // Successo/fallimento
+  errorCode  String? // Codice errore se fallito
+  branchType BranchType? @map("branch_type") // Progetto 45: branch in cui è avvenuta l'azione (null = cross-branch)
+  timestamp  DateTime    @default(now())
+  createdAt  DateTime    @default(now())
+  deletedAt  DateTime?
+  updatedAt  DateTime    @updatedAt
+  tenantId   String
 
+  // Relations
+  tenant  Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  person  Person         @relation("ActivityLog_Person", fields: [personId], references: [id], onDelete: Cascade)
+  session PersonSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  // Indexes for performance
   @@index([tenantId])
+  @@index([tenantId, branchType]) // Progetto 45
   @@index([personId])
   @@index([personId, timestamp])
   @@index([action, timestamp])
+  @@index([category, timestamp])
+  @@index([resource, resourceId])
+  @@index([sessionId])
   @@index([timestamp])
+  @@index([tenantId, deletedAt])
   @@map("activity_logs")
 }
 
-model TestDocument {
-  id                String             @id @default(uuid())
-  scheduledCourseId String
-  trainerId         String?
-  nomeFile          String
-  url               String
-  dataGenerazione   DateTime           @default(now())
-  numeroProgressivo Int
-  annoProgressivo   Int
-  punteggio         Decimal?           @db.Decimal(5, 2)
-  durata            Int?
-  note              String?
-  dataTest          DateTime?
-  sogliaSuperamento Decimal?           @db.Decimal(5, 2)
-  createdAt         DateTime           @default(now())
-  deletedAt         DateTime?
-  updatedAt         DateTime           @updatedAt
-  stato             TestStatus         @default(GENERATED)
-  tipologia         TestType           @default(INITIAL)
-  tenantId          String
-  scheduledCourse   CourseSchedule     @relation(fields: [scheduledCourseId], references: [id], onDelete: Cascade)
-  tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  trainer           Person?            @relation("TestDocumentTrainer", fields: [trainerId], references: [id], onDelete: Cascade)
-  partecipanti      TestPartecipante[]
-
-  @@index([tenantId])
-  @@index([scheduledCourseId])
-  @@index([trainerId])
-  @@map("test_documents")
-}
-
-model TestPartecipante {
-  id             String                @id @default(uuid())
-  personId       String                @map("partecipante_id")
-  punteggio      Decimal?              @db.Decimal(5, 2)
-  note           String?
-  createdAt      DateTime              @default(now())
-  dataConsegna   DateTime?
-  deletedAt      DateTime?
-  tempoImpiegato Int?
-  testId         String
-  updatedAt      DateTime              @updatedAt
-  status         ParticipantTestStatus @default(TO_COMPLETE) @map("stato")
-  tenantId       String
-  person         Person                @relation("TestPartecipante_Person", fields: [personId], references: [id], onDelete: Cascade)
-  tenant         Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  test           TestDocument          @relation(fields: [testId], references: [id], onDelete: Cascade)
-
-  @@unique([testId, personId])
-  @@index([tenantId])
-  @@index([personId])
-  @@index([testId])
-  @@index([status])
-  @@map("test_partecipanti")
-}
+// DEPRECATED: TestDocument e TestPartecipante sono stati sostituiti da:
+// - CourseTestAssignment: Associazione test-corso
+// - CourseTestResult: Risultati test partecipanti
+// Migrazione completata il 01/12/2025
 
 model RefreshToken {
   id         String    @id @default(uuid())
@@ -994,20 +872,21 @@ model ConsentRecord {
 }
 
 model PersonSession {
-  id             String    @id @default(uuid())
+  id             String        @id @default(uuid())
   personId       String
-  sessionToken   String    @unique
+  sessionToken   String        @unique
   ipAddress      String?
   userAgent      String?
-  isActive       Boolean   @default(true)
-  lastActivityAt DateTime  @default(now())
+  isActive       Boolean       @default(true)
+  lastActivityAt DateTime      @default(now())
   expiresAt      DateTime
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
   deletedAt      DateTime?
   tenantId       String
-  person         Person    @relation("PersonSessions", fields: [personId], references: [id], onDelete: Cascade)
-  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  person         Person        @relation("PersonSessions", fields: [personId], references: [id], onDelete: Cascade)
+  tenant         Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  activityLogs   ActivityLog[]
 
   @@index([tenantId])
   @@index([personId])
@@ -1021,6 +900,7 @@ model Person {
   email                                                String?                        @unique @db.VarChar(255)
   phone                                                String?                        @db.VarChar(20)
   birthDate                                            DateTime?                      @db.Date
+  gender                                               Gender? // Derived from taxCode or manually set
   taxCode                                              String?                        @unique @db.VarChar(16)
   vatNumber                                            String?                        @db.VarChar(11)
   residenceAddress                                     String?                        @db.VarChar(255)
@@ -1035,6 +915,10 @@ model Person {
   hourlyRate                                           Decimal?                       @db.Decimal(10, 2)
   iban                                                 String?                        @db.VarChar(34)
   registerCode                                         String?                        @db.VarChar(50)
+  registerCode2                                        String?                        @db.VarChar(50)
+  pec                                                  String?                        @db.VarChar(255)
+  shortDescription                                     String?                        @db.VarChar(500)
+  fullDescription                                      String?
   certifications                                       String[]
   specialties                                          String[]
   profileImage                                         String?                        @db.VarChar(500)
@@ -1062,10 +946,15 @@ model Person {
   sessionsAsCoTrainer                                  CourseSession[]                @relation("SessionCoTrainer")
   sessionsAsTrainer                                    CourseSession[]                @relation("SessionTrainer")
   gdprAuditLogs                                        GdprAuditLog[]
+  generatedDocuments                                   GeneratedDocument[]            @relation("DocumentGenerator")
+  googleTokens                                         GoogleTokens[]                 @relation("GoogleTokensUser")
   repartiResponsabile                                  Reparto[]                      @relation("RepartoResponsabile")
   sopralluogiEseguiti                                  Sopralluogo[]                  @relation("SopralluogoEsecutore")
+  createdTemplates                                     TemplateLink[]                 @relation("TemplateCreator")
+  createdVersions                                      TemplateVersion[]              @relation("VersionCreator")
   activityLogs                                         ActivityLog[]                  @relation("ActivityLog_Person")
   attestati                                            Attestato[]                    @relation("Attestato_Person")
+  codiciSconto                                         CodicePersona[]                @relation("CodicePersona_Person")
   assignedContactSubmissions                           ContactSubmission[]
   persons_contact_submissions_createdPersonIdTopersons ContactSubmission[]            @relation("contact_submissions_createdPersonIdTopersons")
   persons_contact_submissions_relatedPersonIdTopersons ContactSubmission[]            @relation("contact_submissions_relatedPersonIdTopersons")
@@ -1084,27 +973,28 @@ model Person {
   registriPresenze                                     RegistroPresenze[]             @relation("RegistroFormatore")
   registroPresenzePartecipanti                         RegistroPresenzePartecipante[] @relation("RegistroPresenzePartecipante_Person")
   grantedPermissions                                   RolePermission[]               @relation("GrantedPermissions")
-  testDocuments                                        TestDocument[]                 @relation("TestDocumentTrainer")
-  testPartecipanti                                     TestPartecipante[]             @relation("TestPartecipante_Person")
-  createdTemplates                                     TemplateLink[]                 @relation("TemplateCreator")
-  createdVersions                                      TemplateVersion[]              @relation("VersionCreator")
-  generatedDocuments                                   GeneratedDocument[]            @relation("DocumentGenerator")
-  googleTokens                                         GoogleTokens[]                 @relation("GoogleTokensUser")
-  codiciSconto                                         CodicePersona[]                @relation("CodicePersona_Person")
-  preventivi                                           Preventivo[]                   @relation("PreventivoPersonaDiretta")
+  preventivi                                           Preventivo[]
+  courseTestResults                                    CourseTestResult[]             @relation("CourseTestResult_Person")
+  sediDirettoreSanitario                               SedePoliambulatorio[]          @relation("SedeDirettoreSanitario")
+  visiteComePaziente                                   Visita[]                       @relation("VisitaPaziente")
+  visiteComeMedico                                     Visita[]                       @relation("VisitaMedico")
+  fattureSanitarie                                     FatturaSanitaria[]             @relation("FatturaPaziente")
 
-  // Clinical Relations (ElementMedica)
-  poliambulatoriDiretti                                Poliambulatorio[]              @relation("DirettoreSanitario")
-  appuntamentiPaziente                                 Appuntamento[]                 @relation("AppuntamentiPaziente")
-  appuntamentiMedico                                   Appuntamento[]                 @relation("AppuntamentiMedico")
-  visitePaziente                                       Visita[]                       @relation("VisitePaziente")
-  visiteMedico                                         Visita[]                       @relation("VisiteMedico")
-  disponibilita                                        DisponibilitaMedico[]          @relation("DisponibilitaMedico")
-  ferieAssenze                                         FerieAssenza[]                 @relation("FerieAssenzaMedico")
-  fattureSanitarie                                     FatturaSanitaria[]             @relation("FattureSanitariePaziente")
-  firmeDigitali                                        FirmaDigitale[]                @relation("FirmeDigitali")
-  slotsDisponibilita                                   SlotDisponibilita[]            @relation("SlotsDisponibilita")
-  auditLogsClinici                                     AuditLogClinico[]              @relation("AuditLogsClinici")
+  // Tariffario: relazioni medico
+  listiniMedico   ListinoPrezzo[]    @relation("ListinoMedico")
+  tariffariMedico TariffarioMedico[] @relation("TariffarioMedico")
+  abilitazioni    MedicoAbilitato[]  @relation("MedicoAbilitazioni")
+
+  // Documenti personali (Progetto 44)
+  documents         PersonDocument[] @relation("PersonDocuments")
+  uploadedDocuments PersonDocument[] @relation("DocumentUploader")
+
+  // Multi-tenant access (Progetto 43)
+  tenantAccesses        PersonTenantAccess[] @relation("PersonTenantAccesses")
+  grantedTenantAccesses PersonTenantAccess[] @relation("GrantedTenantAccesses")
+
+  // Riconoscimenti convenzioni (come paziente)
+  riconoscimentiRicevuti RiconoscimentoErogato[] @relation("RiconoscimentiPaziente")
 
   @@index([email])
   @@index([username])
@@ -1186,26 +1076,146 @@ model RolePermission {
   @@map("role_permissions")
 }
 
+// Documenti unificati per persone (personale + clinici)
+// Sostituisce DocumentoClinico - entità unica per tutti i documenti
+model PersonDocument {
+  id          String                 @id @default(uuid())
+  personId    String // Proprietario del documento (medico, paziente, dipendente)
+  tipo        TipoDocumentoPersonale
+  titolo      String
+  descrizione String?
+  fileName    String
+  fileUrl     String
+  fileSize    Int?
+  mimeType    String                 @default("application/pdf")
+  hashFile    String? // SHA-256 per integrità
+
+  // Contesto clinico (opzionale, per documenti legati a visite)
+  visitaId   String? // Collegamento a visita medica (se applicabile)
+  pazienteId String? // ID paziente se diverso da personId
+
+  // Versioning
+  version           Int     @default(1)
+  isCurrentVersion  Boolean @default(true)
+  previousVersionId String? // Collegamento alla versione precedente
+
+  // Validità e scadenza
+  dataDocumento DateTime  @default(now())
+  dataScadenza  DateTime? // Per documenti con scadenza (assicurazione, certificati)
+  isExpired     Boolean   @default(false)
+  valido        Boolean   @default(true) // Flag validità manuale
+
+  // Audit
+  uploadedBy String
+  tenantId   String
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
+
+  // Relations
+  person          Person           @relation("PersonDocuments", fields: [personId], references: [id], onDelete: Cascade)
+  uploader        Person           @relation("DocumentUploader", fields: [uploadedBy], references: [id])
+  previousVersion PersonDocument?  @relation("DocumentVersions", fields: [previousVersionId], references: [id])
+  newerVersions   PersonDocument[] @relation("DocumentVersions")
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  visita          Visita?          @relation("VisitaDocuments", fields: [visitaId], references: [id])
+
+  @@index([personId, tipo])
+  @@index([tenantId])
+  @@index([tenantId, deletedAt])
+  @@index([personId, isCurrentVersion])
+  @@index([tipo, isExpired])
+  @@index([dataScadenza])
+  @@index([uploadedBy])
+  @@index([visitaId])
+  @@index([pazienteId])
+  @@map("person_documents")
+}
+
 model AdvancedPermission {
-  id            String       @id @default(uuid())
+  id            String    @id @default(uuid())
   resource      String
   action        String
-  scope         String       @default("global")
+  scope         String    @default("global")
   conditions    Json?
   allowedFields Json?
-  createdAt     DateTime     @default(now())
+  createdAt     DateTime  @default(now())
   deletedAt     DateTime?
   personRoleId  String
-  updatedAt     DateTime     @updatedAt
-  siteAccess    String?      @default("ALL_COMPANY_SITES")
+  updatedAt     DateTime  @updatedAt
+  siteAccess    String?   @default("ALL_COMPANY_SITES")
   siteId        String?
-  personRole    PersonRole   @relation(fields: [personRoleId], references: [id], onDelete: Cascade)
-  site          CompanySite? @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  // NEW: Campi per scope relazionale
+  relationType   String? // Tipo di relazione (es: "trainer_courses")
+  relationConfig Json? // Configurazione completa della relazione
+  deniedFields   Json? // Campi esplicitamente negati
+  priority       Int     @default(0) // Priorità per override
+  isInherited    Boolean @default(false) // Se ereditato
+  sourceRoleId   String? // Da quale ruolo è ereditato
+
+  personRole PersonRole   @relation(fields: [personRoleId], references: [id], onDelete: Cascade)
+  site       CompanySite? @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   @@index([personRoleId])
   @@index([resource, action])
   @@index([siteId])
+  @@index([relationType])
   @@map("advanced_permissions")
+}
+
+// Sistema di visibilità dati basato su relazioni
+model RelationDefinition {
+  id          String  @id @default(uuid())
+  name        String  @unique // Es: "trainer_courses"
+  displayName String // Es: "Formatore - Corsi Assegnati"
+  description String?
+
+  // Configurazione relazione
+  baseEntity     String // Entità base (es: "Person")
+  targetEntities Json // Entità raggiungibili ["Company", "Person"]
+  relationChain  Json // Catena di relazioni
+
+  // Metadata
+  isActive  Boolean   @default(true)
+  isSystem  Boolean   @default(false) // Se definita dal sistema
+  tenantId  String? // null = globale
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@index([name])
+  @@map("relation_definitions")
+}
+
+// Enum per tipi di relazione predefiniti
+enum RelationType {
+  TRAINER_COURSES // Formatore vede corsi assegnati e partecipanti
+  COMPANY_MANAGER // Manager vede propria azienda e dipendenti
+  DEPARTMENT_HEAD // Responsabile reparto vede proprio reparto
+  SITE_MANAGER // Responsabile sede vede propria sede
+  HR_TENANT // HR vede tutti i dipendenti del tenant
+  COURSE_PARTICIPANT // Partecipante vede propri corsi
+  AUDITOR_TENANT // Auditor vede dati audit del tenant
+  CONSULTANT_ASSIGNED // Consulente vede aziende assegnate
+}
+
+// ============================================
+// BRANCH TYPE (Progetto 45)
+// Gestione branch commerciali per multi-prodotto
+// ============================================
+enum BranchType {
+  MEDICA      // Poliambulatorio, visite, prestazioni, referti
+  FORMAZIONE  // Corsi, schedules, attestati, registri presenze
+  // Futuri branch:
+  // LABORATORIO  // Analisi cliniche
+  // CONSULENZA   // Servizi consulenziali
+  // SICUREZZA    // DVR, sopralluoghi (ora condiviso)
+
+  @@map("branch_types")
 }
 
 model Tenant {
@@ -1230,15 +1240,22 @@ model Tenant {
   dvrs                         DVR[]
   dataRetentionPolicies        DataRetentionPolicy[]
   gdprAuditLogs                GdprAuditLog[]
+  generatedDocuments           GeneratedDocument[]
+  googleTokens                 GoogleTokens[]
   reparti                      Reparto[]
   scheduleCompanies            ScheduleCompany[]
   securityAuditLogs            SecurityAuditLog[]
   sopralluoghi                 Sopralluogo[]
   templateLinks                TemplateLink[]
+  templateVersions             TemplateVersion[]
   activityLogs                 ActivityLog[]
   attestati                    Attestato[]
   cmsMedia                     CMSMedia[]
   cmsPages                     CMSPage[]
+  codiciAziende                CodiceAzienda[]
+  codiciCorsi                  CodiceCorso[]
+  codiciPersone                CodicePersona[]
+  codiciSconto                 CodiceSconto[]
   contactSubmissions           ContactSubmission[]
   courseEnrollments            CourseEnrollment[]
   customRoles                  CustomRole[]
@@ -1250,43 +1267,25 @@ model Tenant {
   personSessions               PersonSession[]
   persons                      Person[]
   preventivi                   Preventivo[]
+  preventiviSconti             PreventivoSconto[]
   refreshTokens                RefreshToken[]
   registriPresenze             RegistroPresenze[]
   registroPresenzePartecipanti RegistroPresenzePartecipante[]
   configurations               TenantConfiguration[]
   usage                        TenantUsage[]
-  testDocuments                TestDocument[]
-  testPartecipanti             TestPartecipante[]
-  templateVersions             TemplateVersion[]
-  generatedDocuments           GeneratedDocument[]
-  googleTokens                 GoogleTokens[]
-  codiciSconto                 CodiceSconto[]
-  preventiviSconti             PreventivoSconto[]
-  codiciAziende                CodiceAzienda[]
-  codiciPersone                CodicePersona[]
-  codiciCorsi                  CodiceCorso[]
+  courseTestAssignments        CourseTestAssignment[]
+  courseTestResults            CourseTestResult[]
+  relationDefinitions          RelationDefinition[]
 
-  // Clinical Relations (ElementMedica)
-  poliambulatori               Poliambulatorio[]
-  ambulatori                   Ambulatorio[]
-  prestazioni                  Prestazione[]
-  strumenti                    Strumento[]
-  listinoPrezzi                ListinoPrezzo[]
-  appuntamenti                 Appuntamento[]
-  visite                       Visita[]
-  referti                      Referto[]
-  disponibilitaMedici          DisponibilitaMedico[]
-  ferieAssenze                 FerieAssenza[]
-  fattureSanitarie             FatturaSanitaria[]
-  orariAmbulatorio             OrarioAmbulatorio[]
-  manutenzioniStrumento        ManutenzioneStrumento[]
-  convenzioni                  Convenzione[]
-  codiciScontoClinici          CodiceScontoClinico[]        @relation("CodiciScontoClinici")
-  templateCampiVisita          TemplateCampoVisita[]
-  firmeDigitali                FirmaDigitale[]
-  slotsDisponibilita           SlotDisponibilita[]
-  numeriChiamata               NumeroChiamata[]
-  auditLogsClinici             AuditLogClinico[]
+  // Documenti personali (Progetto 44)
+  personDocuments PersonDocument[]
+
+  // Multi-tenant access (Progetto 43)
+  personAccesses PersonTenantAccess[] @relation("TenantPersonAccesses")
+
+  // Branch commerciali abilitati (Progetto 45)
+  enabledBranches BranchType[] @default([MEDICA, FORMAZIONE]) @map("enabled_branches")
+  primaryBranch   BranchType?  @map("primary_branch") // Branch default per UI
 
   @@map("tenants")
 }
@@ -1324,6 +1323,76 @@ model TenantUsage {
   @@unique([tenantId, usageType, billingPeriod])
   @@index([tenantId])
   @@map("tenant_usage")
+}
+
+// ============================================
+// PERSONA-TENANT ACCESS (Progetto 43)
+// Gestione accesso multi-tenant per utenti
+// ============================================
+
+// Enum per livello di accesso al tenant
+enum TenantAccessLevel {
+  READ // Solo lettura
+  WRITE // Lettura + scrittura
+  ADMIN // Amministratore del tenant
+  FULL // Accesso completo (come il proprietario)
+
+  @@map("tenant_access_levels")
+}
+
+// Modello per gestire accesso utente a multipli tenant
+model PersonTenantAccess {
+  id          String            @id @default(uuid())
+  personId    String
+  tenantId    String
+  accessLevel TenantAccessLevel @default(READ)
+
+  // Features abilitate per questo utente in questo tenant
+  // Es: ["formazione", "medica", "fatturazione"]
+  // DEPRECATO: Usare enabledBranches per controllo branch
+  enabledFeatures String[] @default([])
+
+  // Branch commerciali abilitati per questo utente (Progetto 45)
+  // Intersezione con Tenant.enabledBranches per l'accesso effettivo
+  enabledBranches BranchType[] @default([]) @map("enabled_branches")
+
+  // Ruolo specifico in questo tenant (opzionale)
+  // Se null, usa i PersonRole standard
+  defaultRoleType RoleType?
+
+  // Permessi personalizzati (override)
+  customPermissions Json? @default("{}")
+
+  // Restrizioni specifiche
+  restrictions Json? @default("{}")
+
+  // Metadata
+  isActive     Boolean   @default(true)
+  isPrimary    Boolean   @default(false) // Tenant principale
+  grantedBy    String? // Chi ha concesso l'accesso
+  grantedAt    DateTime  @default(now())
+  validFrom    DateTime  @default(now())
+  validUntil   DateTime? // Accesso temporaneo
+  lastAccessAt DateTime? // Ultimo accesso
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  // Relations
+  person          Person  @relation("PersonTenantAccesses", fields: [personId], references: [id], onDelete: Cascade)
+  tenant          Tenant  @relation("TenantPersonAccesses", fields: [tenantId], references: [id], onDelete: Cascade)
+  grantedByPerson Person? @relation("GrantedTenantAccesses", fields: [grantedBy], references: [id], onDelete: SetNull)
+
+  @@unique([personId, tenantId])
+  @@index([personId])
+  @@index([tenantId])
+  @@index([personId, isActive])
+  @@index([tenantId, isActive])
+  @@index([accessLevel])
+  @@index([grantedBy])
+  @@index([deletedAt])
+  @@map("person_tenant_accesses")
 }
 
 model CustomRole {
@@ -1470,23 +1539,58 @@ model Reparto {
 }
 
 model CMSPage {
-  id             String    @id @default(uuid())
-  slug           String    @unique
+  id             String        @id @default(uuid())
+  slug           String        @unique
   title          String
   content        Json
   seoTitle       String?
   seoDescription String?
-  isPublished    Boolean   @default(false)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  isPublished    Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
   deletedAt      DateTime?
   tenantId       String
-  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  blocks         Json?
+  layout         String?       @default("full-width") @db.VarChar(50)
+  status         String?       @default("draft") @db.VarChar(20)
+  publishedAt    DateTime?     @map("published_at")
+  scheduledAt    DateTime?     @map("scheduled_at")
+  seoId          String?       @unique @map("seo_id")
+  createdBy      String?       @map("created_by")
+  tenant         Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  pageViews      CMSPageView[]
 
   @@index([slug])
   @@index([isPublished])
   @@index([tenantId])
+  @@index([createdBy], map: "idx_cms_pages_creator")
+  @@index([tenantId, status], map: "idx_cms_pages_status")
   @@map("cms_pages")
+}
+
+// Analytics per le pagine CMS pubbliche
+model CMSPageView {
+  id        String   @id @default(uuid())
+  pageId    String
+  sessionId String? // Per tracciare sessioni uniche
+  ipAddress String?  @db.VarChar(45) // IPv6 compatible
+  userAgent String?  @db.Text
+  referer   String?  @db.Text
+  country   String?  @db.VarChar(2)
+  city      String?  @db.VarChar(100)
+  device    String?  @db.VarChar(20) // desktop, mobile, tablet
+  browser   String?  @db.VarChar(50)
+  os        String?  @db.VarChar(50)
+  duration  Int? // Tempo sulla pagina in secondi
+  createdAt DateTime @default(now())
+
+  page CMSPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@index([pageId])
+  @@index([createdAt])
+  @@index([sessionId])
+  @@index([pageId, createdAt])
+  @@map("cms_page_views")
 }
 
 model CMSMedia {
@@ -1500,10 +1604,24 @@ model CMSMedia {
   createdAt    DateTime  @default(now())
   deletedAt    DateTime?
   tenantId     String
+  path         String?
+  variants     Json?
+  title        String?   @db.VarChar(255)
+  description  String?
+  folder_id    String?
+  tags         String[]  @default([])
+  metadata     Json?
+  created_by   String?
+  updated_at   DateTime? @default(now())
   tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@index([filename])
+  @@index([created_by], map: "idx_cms_media_created_by")
+  @@index([folder_id], map: "idx_cms_media_folder")
+  @@index([mimeType], map: "idx_cms_media_mime_type")
+  @@index([tags], map: "idx_cms_media_tags", type: Gin)
+  @@index([tenantId, deletedAt], map: "idx_cms_media_tenant_deleted")
   @@map("cms_media")
 }
 
@@ -1521,25 +1639,25 @@ model ContactSubmission {
   ipAddress                                            String?
   userAgent                                            String?
   source                                               String?          @default("public_website")
-  privacyAccepted                                      Boolean          @default(false)
-  marketingAccepted                                    Boolean          @default(false)
   tenantId                                             String
   createdAt                                            DateTime         @default(now())
   updatedAt                                            DateTime         @updatedAt
   readAt                                               DateTime?
   resolvedAt                                           DateTime?
   assignedToId                                         String?
-  courseScheduleId                                     String?
-  relatedPersonId                                      String?
-  formSchema                                           Json?
-  formData                                             Json?
-  validationRules                                      Json?
-  conditionalFields                                    Json?
   autoCreatePerson                                     Boolean?         @default(false)
+  conditionalFields                                    Json?
+  courseScheduleId                                     String?
   createdPersonId                                      String?
+  formData                                             Json?
+  formSchema                                           Json?
   formVersion                                          Int?             @default(1)
   isTemplate                                           Boolean?         @default(false)
+  relatedPersonId                                      String?
   templateName                                         String?
+  validationRules                                      Json?
+  marketingAccepted                                    Boolean          @default(false)
+  privacyAccepted                                      Boolean          @default(false)
   assignedTo                                           Person?          @relation(fields: [assignedToId], references: [id])
   CourseSchedule                                       CourseSchedule?  @relation(fields: [courseScheduleId], references: [id], onUpdate: NoAction)
   persons_contact_submissions_createdPersonIdTopersons Person?          @relation("contact_submissions_createdPersonIdTopersons", fields: [createdPersonId], references: [id], onUpdate: NoAction)
@@ -1579,6 +1697,8 @@ model form_fields {
   isActive       Boolean        @default(true)
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @default(now())
+  scoring        Json?
+  sectionId      String?
   form_templates form_templates @relation(fields: [templateId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([templateId, name])
@@ -1589,29 +1709,170 @@ model form_fields {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model form_templates {
-  id                String         @id
-  name              String
-  description       String?
-  type              SubmissionType
-  schema            Json
-  validationRules   Json?
-  conditionalFields Json?
-  isActive          Boolean        @default(true)
-  version           Int            @default(1)
-  tenantId          String
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @default(now())
-  deletedAt         DateTime?
-  createdById       String?
-  form_fields       form_fields[]
-  persons           Person?        @relation(fields: [createdById], references: [id], onUpdate: NoAction)
-  tenants           Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  id                    String                 @id
+  name                  String
+  description           String?
+  type                  SubmissionType
+  schema                Json
+  validationRules       Json?
+  conditionalFields     Json?
+  isActive              Boolean                @default(true)
+  version               Int                    @default(1)
+  tenantId              String
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @default(now())
+  deletedAt             DateTime?
+  createdById           String?
+  allowAnonymous        Boolean                @default(false)
+  isPublic              Boolean                @default(false)
+  settings              Json?
+  form_fields           form_fields[]
+  persons               Person?                @relation(fields: [createdById], references: [id], onUpdate: NoAction)
+  tenants               Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  courseTestAssignments CourseTestAssignment[]
 
   @@unique([tenantId, name, version])
   @@index([isActive])
   @@index([name])
   @@index([tenantId])
   @@index([type])
+}
+
+/// Associazione tra form templates (test) e corsi
+/// Permette di assegnare test specifici per riskLevel e courseType
+model CourseTestAssignment {
+  id             String      @id @default(uuid())
+  formTemplateId String
+  courseId       String? // Se specificato, test associato a un corso specifico
+  riskLevel      RiskLevel? // Test per specifico livello di rischio
+  courseType     CourseType? // Test per tipo corso (primo corso, aggiornamento)
+  testType       TestType    @default(INITIAL) // Tipo test: iniziale, finale, intermedio
+  isRequired     Boolean     @default(true) // Se il test è obbligatorio
+  order          Int         @default(0) // Ordine di presentazione
+  passingScore   Float? // Punteggio minimo per superare (es. 60%)
+  timeLimit      Int? // Tempo limite in minuti
+  isActive       Boolean     @default(true)
+  tenantId       String
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  deletedAt      DateTime?
+
+  formTemplate form_templates     @relation(fields: [formTemplateId], references: [id], onDelete: Cascade)
+  course       Course?            @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  tenant       Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  results      CourseTestResult[]
+
+  @@unique([formTemplateId, courseId, riskLevel, courseType, testType, tenantId])
+  @@index([tenantId])
+  @@index([courseId])
+  @@index([riskLevel])
+  @@index([courseType])
+  @@index([testType])
+  @@index([formTemplateId])
+  @@map("course_test_assignments")
+}
+
+/// Risultati dei test compilati dai partecipanti
+model CourseTestResult {
+  id                     String    @id @default(uuid())
+  courseTestAssignmentId String
+  scheduleId             String
+  personId               String
+  formSubmissionId       String? // Link alla submission del form
+  score                  Float? // Punteggio ottenuto
+  passed                 Boolean? // Se ha superato il test
+  startedAt              DateTime?
+  completedAt            DateTime?
+  timeSpent              Int? // Tempo impiegato in secondi
+  answers                Json? // Risposte date
+  feedback               String? // Feedback aggiuntivo
+  tenantId               String
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+  deletedAt              DateTime?
+
+  assignment CourseTestAssignment @relation(fields: [courseTestAssignmentId], references: [id], onDelete: Cascade)
+  schedule   CourseSchedule       @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  person     Person               @relation("CourseTestResult_Person", fields: [personId], references: [id], onDelete: Cascade)
+  tenant     Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([courseTestAssignmentId, scheduleId, personId])
+  @@index([tenantId])
+  @@index([scheduleId])
+  @@index([personId])
+  @@index([courseTestAssignmentId])
+  @@index([passed])
+  @@map("course_test_results")
+}
+
+/// CMS Media Folders - Usato in mediaService.js
+model cms_media_folders {
+  id         String    @id @default(dbgenerated("(gen_random_uuid())::text"))
+  name       String    @db.VarChar(255)
+  parent_id  String?
+  tenant_id  String
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  @@index([parent_id], map: "idx_cms_media_folders_parent")
+  @@index([tenant_id, deleted_at], map: "idx_cms_media_folders_tenant")
+}
+
+// DEPRECATED: Le seguenti tabelle cms_* e preventivo_* non sono più utilizzate.
+// cms_navigation → Rimosso (non usato nel codice)
+// cms_page_versions → Rimosso (non usato nel codice)
+// preventivo_aziende → Dati gestiti direttamente in Preventivo.companies (relazione M:N)
+// preventivo_partecipanti → Dati gestiti direttamente in Preventivo (JSON o relazioni)
+// Migrazione completata il 01/12/2025
+
+model seo_configs {
+  id             String   @id
+  pageId         String?  @unique
+  courseId       String?  @unique
+  title          String
+  description    String
+  keywords       String[] @default([])
+  canonicalUrl   String?
+  noindex        Boolean  @default(false)
+  nofollow       Boolean  @default(false)
+  ogTitle        String?
+  ogDescription  String?
+  ogImage        String?
+  ogType         String?  @default("website")
+  twitterCard    String?  @default("summary_large_image")
+  twitterSite    String?
+  twitterCreator String?
+  twitterImage   String?
+  structuredData Json?
+  hreflang       Json?
+  preloadImages  String[] @default([])
+  tenantId       String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @default(now())
+
+  @@index([courseId])
+  @@index([pageId])
+  @@index([tenantId])
+}
+
+model sitemaps {
+  id         String   @id
+  url        String
+  changefreq String
+  priority   Float    @default(0.5)
+  lastmod    DateTime @default(now())
+  entityType String
+  entityId   String
+  isPublic   Boolean  @default(true)
+  tenantId   String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now())
+
+  @@unique([url, tenantId])
+  @@index([entityType, entityId])
+  @@index([lastmod])
+  @@index([tenantId, isPublic])
 }
 
 enum CourseStatus {
@@ -1663,6 +1924,15 @@ enum ParticipantTestStatus {
   EXPIRED
 }
 
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  NOT_SPECIFIED
+
+  @@map("gender")
+}
+
 enum PersonStatus {
   ACTIVE
   INACTIVE
@@ -1674,7 +1944,6 @@ enum PersonStatus {
 }
 
 enum RoleType {
-  // General Roles
   EMPLOYEE
   MANAGER
   HR_MANAGER
@@ -1697,27 +1966,13 @@ enum RoleType {
   TRAINING_ADMIN
   CLINIC_ADMIN
   COMPANY_MANAGER
-
-  // Clinical Roles (ElementMedica)
+  // Clinical roles
   MEDICO
-  MEDICO_SPECIALISTA
-  DIRETTORE_SANITARIO
-  INFERMIERE
-  INFERMIERE_CAPO
-  TECNICO_SANITARIO
-  SEGRETERIA_MEDICA
-  RECEPTIONIST_MEDICO
   PAZIENTE
+  INFERMIERE
+  SEGRETERIA_CLINICA
 
   @@map("role_types")
-}
-
-// App type for multi-frontend support
-enum AppType {
-  FORMAZIONE   // elementformazione.com
-  MEDICA       // elementmedica.com
-
-  @@map("app_types")
 }
 
 enum PersonPermission {
@@ -1810,17 +2065,13 @@ enum PersonPermission {
   EDIT_CMS
   DELETE_CMS
   MANAGE_PUBLIC_CONTENT
-  READ_PUBLIC_CONTENT
   VIEW_SUBMISSIONS
+  MANAGE_SUBMISSIONS
+  EXPORT_SUBMISSIONS
+  READ_PUBLIC_CONTENT
   CREATE_SUBMISSIONS
   EDIT_SUBMISSIONS
   DELETE_SUBMISSIONS
-  MANAGE_SUBMISSIONS
-  EXPORT_SUBMISSIONS
-  VIEW_FORM_SUBMISSIONS
-  CREATE_FORM_SUBMISSIONS
-  EDIT_FORM_SUBMISSIONS
-  DELETE_FORM_SUBMISSIONS
   VIEW_FORM_TEMPLATES
   CREATE_FORM_TEMPLATES
   EDIT_FORM_TEMPLATES
@@ -1831,6 +2082,10 @@ enum PersonPermission {
   EDIT_PUBLIC_CMS
   DELETE_PUBLIC_CMS
   MANAGE_PUBLIC_CMS
+  VIEW_FORM_SUBMISSIONS
+  CREATE_FORM_SUBMISSIONS
+  EDIT_FORM_SUBMISSIONS
+  DELETE_FORM_SUBMISSIONS
   VIEW_TEMPLATES
   CREATE_TEMPLATES
   EDIT_TEMPLATES
@@ -1868,97 +2123,100 @@ enum PersonPermission {
   MANAGE_PREVENTIVI
   GENERATE_PREVENTIVI_PDF
   SEND_PREVENTIVI
+  VIEW_CMS_MEDIA
+  CREATE_CMS_MEDIA
+  EDIT_CMS_MEDIA
+  DELETE_CMS_MEDIA
+  MANAGE_CMS_MEDIA
+  VIEW_CMS_PAGES
+  CREATE_CMS_PAGES
+  EDIT_CMS_PAGES
+  DELETE_CMS_PAGES
+  PUBLISH_CMS_PAGES
+  MANAGE_CMS_PAGES
+  VIEW_CMS_NAVIGATION
+  EDIT_CMS_NAVIGATION
+  MANAGE_CMS_NAVIGATION
+  VIEW_CMS_VERSIONS
+  RESTORE_CMS_VERSIONS
+  VIEW_SEO
+  CREATE_SEO
+  EDIT_SEO
+  DELETE_SEO
+  MANAGE_SEO
+  GENERATE_SITEMAP
+  UPLOAD_CMS_MEDIA
 
-  // ==========================================
-  // Clinical Permissions (ElementMedica)
-  // ==========================================
-
-  // Pazienti
-  VIEW_PATIENTS
-  CREATE_PATIENTS
-  EDIT_PATIENTS
-  DELETE_PATIENTS
-  MANAGE_PATIENTS
-  EXPORT_PATIENTS
-  VIEW_PATIENT_HISTORY
-
-  // Appuntamenti
-  VIEW_APPOINTMENTS
-  CREATE_APPOINTMENTS
-  EDIT_APPOINTMENTS
-  DELETE_APPOINTMENTS
-  MANAGE_APPOINTMENTS
-  CONFIRM_APPOINTMENTS
-  CANCEL_APPOINTMENTS
-
-  // Visite Mediche
-  VIEW_VISITS
-  CREATE_VISITS
-  EDIT_VISITS
-  DELETE_VISITS
-  MANAGE_VISITS
-  SIGN_VISITS
-  COMPLETE_VISITS
-
-  // Referti
-  VIEW_REFERTI
-  CREATE_REFERTI
-  EDIT_REFERTI
-  DELETE_REFERTI
-  SIGN_REFERTI
-  EXPORT_REFERTI
-
-  // Prestazioni Mediche
-  VIEW_PRESTAZIONI
-  CREATE_PRESTAZIONI
-  EDIT_PRESTAZIONI
-  DELETE_PRESTAZIONI
-  MANAGE_PRESTAZIONI
-
-  // Ambulatori
-  VIEW_AMBULATORI
-  CREATE_AMBULATORI
-  EDIT_AMBULATORI
-  DELETE_AMBULATORI
-  MANAGE_AMBULATORI
-
-  // Poliambulatorio
+  // Permessi Poliambulatorio/Clinica
   VIEW_POLIAMBULATORIO
   CREATE_POLIAMBULATORIO
   EDIT_POLIAMBULATORIO
   DELETE_POLIAMBULATORIO
   MANAGE_POLIAMBULATORIO
-
-  // Listino Prezzi
+  VIEW_AMBULATORIO
+  CREATE_AMBULATORIO
+  EDIT_AMBULATORIO
+  DELETE_AMBULATORIO
+  MANAGE_AMBULATORIO
+  VIEW_STRUMENTO
+  CREATE_STRUMENTO
+  EDIT_STRUMENTO
+  DELETE_STRUMENTO
+  MANAGE_STRUMENTO
+  VIEW_PRESTAZIONE
+  CREATE_PRESTAZIONE
+  EDIT_PRESTAZIONE
+  DELETE_PRESTAZIONE
+  MANAGE_PRESTAZIONE
   VIEW_LISTINO
   CREATE_LISTINO
   EDIT_LISTINO
   DELETE_LISTINO
   MANAGE_LISTINO
-
-  // Strumentario
-  VIEW_STRUMENTI
-  CREATE_STRUMENTI
-  EDIT_STRUMENTI
-  DELETE_STRUMENTI
-  MANAGE_STRUMENTI
-
-  // Agenda Medica
-  VIEW_AGENDA
+  VIEW_CONVENZIONE
+  CREATE_CONVENZIONE
+  EDIT_CONVENZIONE
+  DELETE_CONVENZIONE
+  MANAGE_CONVENZIONE
+  VIEW_APPUNTAMENTO
+  CREATE_APPUNTAMENTO
+  EDIT_APPUNTAMENTO
+  DELETE_APPUNTAMENTO
+  MANAGE_APPUNTAMENTO
+  ACCETTA_PAZIENTE
+  CHIAMA_PAZIENTE
+  VIEW_VISITA
+  CREATE_VISITA
+  EDIT_VISITA
+  DELETE_VISITA
+  MANAGE_VISITA
+  VIEW_REFERTO
+  CREATE_REFERTO
+  EDIT_REFERTO
+  DELETE_REFERTO
+  MANAGE_REFERTO
+  FIRMA_REFERTO
+  VIEW_DOCUMENTO_CLINICO
+  CREATE_DOCUMENTO_CLINICO
+  EDIT_DOCUMENTO_CLINICO
+  DELETE_DOCUMENTO_CLINICO
+  MANAGE_DOCUMENTO_CLINICO
+  VIEW_FATTURA_SANITARIA
+  CREATE_FATTURA_SANITARIA
+  EDIT_FATTURA_SANITARIA
+  DELETE_FATTURA_SANITARIA
+  MANAGE_FATTURA_SANITARIA
+  VIEW_AUDIT_CLINICO
+  EXPORT_AUDIT_CLINICO
   MANAGE_AGENDA
-  CONFIGURE_AGENDA
-
-  // Fatturazione Sanitaria
-  VIEW_FATTURE_SANITARIE
-  CREATE_FATTURE_SANITARIE
-  EDIT_FATTURE_SANITARIE
-  DELETE_FATTURE_SANITARIE
-  SEND_FATTURE_SANITARIE
-
-  // Clinical Admin
-  CLINICAL_ADMIN_PANEL
-  CLINICAL_SETTINGS
-  CLINICAL_REPORTS
+  VIEW_DISPONIBILITA
+  CREATE_DISPONIBILITA
+  EDIT_DISPONIBILITA
+  DELETE_DISPONIBILITA
+  MANAGE_DISPONIBILITA
+  VIEW_CARTELLA_PAZIENTE
+  EDIT_CARTELLA_PAZIENTE
+  EXPORT_CARTELLA_PAZIENTE
 
   @@map("person_permissions")
 }
@@ -1975,6 +2233,12 @@ enum RiskLevel {
 enum CourseType {
   PRIMO_CORSO
   AGGIORNAMENTO
+}
+
+enum ScheduleSource {
+  INTERNAL
+  EXTERNAL
+  IMPORT
 }
 
 enum SubmissionType {
@@ -1997,61 +2261,67 @@ enum SubmissionStatus {
   ARCHIVED
 }
 
-// Template Management System Enums
 enum TemplateType {
-  LETTER_OF_ENGAGEMENT // Lettera di Incarico
-  ATTENDANCE_REGISTER // Registro Presenze
-  CERTIFICATE // Attestato
-  PREVENTIVO // Preventivo/Quotazione (FASE 5)
-  INVOICE // Fattura (future)
-  COURSE_PROGRAM // Programma Corso (future)
-  CUSTOM // Custom documents
+  LETTER_OF_ENGAGEMENT
+  ATTENDANCE_REGISTER
+  CERTIFICATE
+  INVOICE
+  COURSE_PROGRAM
+  CUSTOM
+  PREVENTIVO
 }
 
 enum TemplateFormat {
-  HTML // HTML template (default)
-  DOCX // Microsoft Word
-  GOOGLE_DOCS // Google Docs
-  GOOGLE_SLIDES // Google Slides (for certificates)
+  HTML
+  DOCX
+  GOOGLE_DOCS
+  GOOGLE_SLIDES
 }
 
 enum DocumentStatus {
-  DRAFT // Document in draft
-  GENERATED // Document generated
-  SENT // Document sent via email
-  ARCHIVED // Document archived
+  DRAFT
+  GENERATED
+  SENT
+  ARCHIVED
 }
-
-// ========================================
-// ENUMS - Sistema Preventivi e Codici Sconto
-// ========================================
 
 enum TipoSconto {
   PERCENTUALE
   VALORE_ASSOLUTO
 }
 
+// Tariffario: tipo compenso per medici
+enum TipoCompensoMedico {
+  PERCENTUALE // % del prezzo praticato (es. 30% del prezzo fatturato)
+  FISSO // Importo fisso indipendente dal prezzo (es. €20 a prestazione)
+  MINIMO_MASSIMO // Percentuale con floor/ceiling (es. 30% min €15 max €100)
+
+  @@map("tipo_compenso_medico")
+}
+
 enum ApplicabilitaSconto {
-  TUTTI // Applicabile a tutti
-  AZIENDE // Solo aziende
-  PERSONE // Solo persone fisiche
-  SPECIFICI // Solo aziende/persone/corsi specifici
+  TUTTI
+  AZIENDE
+  PERSONE
+  SPECIFICI
 }
 
 enum TipoCorsoSconto {
-  TUTTI // Tutti i corsi
-  SPECIFICI // Solo corsi nella lista corsiApplicabili
+  TUTTI
+  SPECIFICI
 }
 
 enum StatoPreventivo {
-  BOZZA // Appena creato, ancora modificabile
-  INVIATO // Inviato al cliente
-  VISUALIZZATO // Cliente ha aperto il PDF
-  ACCETTATO // Cliente ha accettato
-  RIFIUTATO // Cliente ha rifiutato
-  SCADUTO // Oltre dataScadenza
-  CONVERTITO // Convertito in ordine/fattura
-  ANNULLATO // Annullato manualmente
+  BOZZA
+  INVIATO
+  VISUALIZZATO
+  ACCETTATO
+  RIFIUTATO
+  SCADUTO
+  CONVERTITO
+  FATTURATO
+  ANNULLATO
+  ARCHIVIATO
 }
 
 enum ClienteType {
@@ -2060,56 +2330,106 @@ enum ClienteType {
 }
 
 enum TipoServizio {
-  CORSO // Corsi di formazione (default)
-  DVR // Documento Valutazione Rischi
-  RSPP // Responsabile Servizio Prevenzione Protezione
-  MEDICO_COMPETENTE // Sorveglianza sanitaria
-  CONSULENZA // Consulenza generica
-  ALTRO // Servizi custom
+  CORSO
+  DVR
+  RSPP
+  MEDICO_COMPETENTE
+  CONSULENZA
+  COMPENSO_FORMATORE
+  PRESTAZIONE_CLINICA
+  VISITA               // Visite Mediche
+  BUNDLE               // Bundle/Pacchetti
+  CONVENZIONE          // Convenzioni
+  ALTRO
 }
 
 enum TipoPrezzo {
-  PER_PERSONA // Prezzo × numero persone (corsi)
-  PER_UNITA // Prezzo × quantità (visite mediche)
-  FORFAIT // Prezzo fisso (DVR)
-  MENSILE // Abbonamento mensile (RSPP)
-  ORARIO // Prezzo all'ora (consulenze)
-  PERSONALIZZATO // Altro
+  PER_PERSONA
+  PER_UNITA
+  FORFAIT
+  MENSILE
+  ORARIO
+  PERSONALIZZATO
 }
 
-// ========================================
-// CLINICAL MODELS - ElementMedica
-// ========================================
+// ===========================================
+// CLINICAL MODULE - ENUMS
+// ===========================================
 
-// Enums for Clinical Module
+enum StatoAmbulatorio {
+  ATTIVO
+  INATTIVO
+  MANUTENZIONE
+  CHIUSO
+}
+
+enum StatoPoliambulatorio {
+  ATTIVO
+  INATTIVO
+  SOSPESO
+}
+
 enum TipoPrestazione {
-  VISITA
-  ESAME
-  TERAPIA
-  INTERVENTO
-  CONSULTO
-  ALTRO
-
-  @@map("tipo_prestazione")
+  VISITA_SPECIALISTICA
+  VISITA_MEDICINA_LAVORO
+  ESAME_STRUMENTALE
+  ESAME_LABORATORIO
+  INTERVENTO_AMBULATORIALE
+  VACCINAZIONE
+  CERTIFICAZIONE
+  CONSULENZA
 }
 
 enum StatoStrumento {
-  DISPONIBILE
-  IN_USO
-  MANUTENZIONE
-  GUASTO
+  ATTIVO
+  IN_MANUTENZIONE
+  FUORI_SERVIZIO
   DISMESSO
-
-  @@map("stato_strumento")
+  IN_TARATURA
 }
 
-enum TipoListino {
-  PRIVATO
-  SSN
-  CONVENZIONATO
-  ASSICURAZIONE
+// Tipologia di strumento medico - usato per requisiti prestazioni
+enum TipologiaStrumento {
+  ECOGRAFO                  // Ecografia
+  ELETTROCARDIOGRAFO        // ECG
+  LASER                     // Laser terapeutico
+  CARBOSSITERAPIA           // Carbossiterapia
+  SPIROMETRO                // Spirometria
+  AUDIOMETRO                // Audiometria
+  OFTALMOSCOPIO             // Esame oculistico
+  DERMATOSCOPIO             // Dermatoscopia
+  HOLTER_ECG                // Holter cardiaco
+  HOLTER_PRESSORIO          // Holter pressorio
+  ELETTROMIOGRAFO           // Elettromiografia
+  DENSITOMETRO              // MOC/Densitometria ossea
+  COLPOSCOPIO               // Colposcopia
+  ENDOSCOPIO                // Endoscopia
+  RADIOGRAFO                // Radiografia
+  MAMMOGRAFO                // Mammografia
+  TAC                       // Tomografia computerizzata
+  RMN                       // Risonanza magnetica
+  MONITOR_MULTIPARAMETRICO  // Monitoraggio parametri vitali
+  DEFIBRILLATORE            // Defibrillatore
+  ELETTROBISTURI            // Elettrobisturi
+  CRIOCHIRURGIA             // Criochirurgia
+  ALTRO                     // Altro tipo
+}
 
-  @@map("tipo_listino")
+enum TipoManutenzione {
+  PROGRAMMATA
+  STRAORDINARIA
+  CALIBRAZIONE
+  VERIFICA_SICUREZZA
+  PULIZIA
+  AGGIORNAMENTO
+}
+
+enum StatoManutenzione {
+  PROGRAMMATA
+  IN_CORSO
+  COMPLETATA
+  ANNULLATA
+  RIMANDATA
 }
 
 enum StatoAppuntamento {
@@ -2120,863 +2440,1580 @@ enum StatoAppuntamento {
   COMPLETATO
   ANNULLATO
   NO_SHOW
-
-  @@map("stato_appuntamento")
+  RINVIATO
 }
 
 enum StatoVisita {
-  INIZIATA
+  PROGRAMMATA
   IN_CORSO
-  SOSPESA
   COMPLETATA
   ANNULLATA
-
-  @@map("stato_visita")
+  SOSPESA
 }
 
 enum StatoReferto {
   BOZZA
-  IN_REVISIONE
+  IN_ELABORAZIONE
+  DA_FIRMARE
   FIRMATO
   CONSEGNATO
-  ARCHIVIATO
-
-  @@map("stato_referto")
+  ANNULLATO
 }
 
-// Poliambulatorio - Main clinic structure
+enum TipoDocumentoClinico {
+  REFERTO
+  CERTIFICATO
+  FATTURA
+  RICEVUTA
+  CONSENSO
+  ANAMNESI
+  PRESCRIZIONE
+  ALTRO
+}
+
+// Tipi di documenti (unificato personali + clinici)
+enum TipoDocumentoPersonale {
+  // Documenti personali medico/dipendente
+  ALLEGATO_3 // Allegato 3 - Autocertificazione
+  CONTRATTO // Contratto di lavoro
+  ASSICURAZIONE // Polizza RC professionale
+  ISCRIZIONE_ALBO // Certificato iscrizione albo
+  CURRICULUM // CV/Resume
+  LAUREA // Diploma di laurea
+  SPECIALIZZAZIONE // Attestato specializzazione
+  FORMAZIONE // Attestato ECM/formazione
+  DOCUMENTO_IDENTITA // Carta identità/passaporto
+  CODICE_FISCALE // Tessera sanitaria/CF
+  CERTIFICATO_PENALE // Casellario giudiziale
+  VISITA_MEDICA_IDONEITA // Idoneità sanitaria dipendente
+  PRIVACY // Consenso privacy
+
+  // Documenti clinici paziente (ex DocumentoClinico)
+  REFERTO // Referto medico
+  CERTIFICATO_MEDICO // Certificato medico
+  FATTURA_SANITARIA // Fattura sanitaria
+  RICEVUTA_SANITARIA // Ricevuta sanitaria
+  CONSENSO_INFORMATO // Consenso informato
+  ANAMNESI // Scheda anamnesi
+  PRESCRIZIONE // Prescrizione medica
+  ESAME_LABORATORIO // Risultati esami laboratorio
+  IMAGING // Radiografie, ecografie, TAC, RMN
+
+  ALTRO
+}
+
+enum StatoFatturaSanitaria {
+  BOZZA
+  EMESSA
+  PAGATA
+  ANNULLATA
+  STORNATA
+}
+
+enum TipoConvenzione {
+  AZIENDALE
+  ASSICURATIVA
+  PUBBLICA
+  PRIVATA
+}
+
+// Tipo di riconoscimento per aziende in convenzione
+enum TipoRiconoscimento {
+  PERCENTUALE     // Percentuale sul prezzo prestazione/bundle
+  VALORE_ASSOLUTO // Valore fisso in euro
+}
+
+// Stato del riconoscimento erogato
+enum StatoRiconoscimento {
+  DA_EROGARE
+  EROGATO
+  ANNULLATO
+}
+
+// Tipo di tariffario aziendale
+enum TipoTariffario {
+  BASE       // Template riutilizzabile
+  AZIENDALE  // Specifico per un'azienda
+}
+
+// Tipo di voce nel tariffario
+enum TipoVoceTariffario {
+  PRESTAZIONE       // Collegata a Prestazione MDL
+  SPESA_FISSA       // Costo fisso una tantum
+  SPESA_RICORRENTE  // Costo periodico
+}
+
+// Frequenza di applicazione della voce tariffario
+enum FrequenzaTariffario {
+  UNA_TANTUM        // Una volta sola
+  PER_VISITA        // Ad ogni visita
+  PER_DIPENDENTE    // Per ogni dipendente
+  MENSILE           // Ogni mese
+  TRIMESTRALE       // Ogni 3 mesi
+  SEMESTRALE        // Ogni 6 mesi
+  ANNUALE           // Ogni anno
+}
+
+// ===========================================
+// CLINICAL MODULE - MODELS
+// ===========================================
+
 model Poliambulatorio {
-  id                   String        @id @default(uuid())
-  tenantId             String
-  nome                 String
+  id                   String               @id @default(uuid())
   codice               String
-  indirizzo            String?
-  citta                String?
-  cap                  String?
+  nome                 String
+  descrizione          String?
+  indirizzo            String
+  citta                String
+  cap                  String
   provincia            String?
   telefono             String?
   email                String?
   pec                  String?
-  partitaIva           String?
+  piva                 String?
   codiceFiscale        String?
-  codiceRegionale      String?
   direttoreSanitarioId String?
-  isActive             Boolean       @default(true)
-  createdAt            DateTime      @default(now()) @db.Timestamp(6)
-  updatedAt            DateTime      @updatedAt @db.Timestamp(6)
+  stato                StatoPoliambulatorio @default(ATTIVO)
+  orariApertura        Json?                @default("{}")
+  branchType           BranchType           @default(MEDICA) @map("branch_type") // Progetto 45
+  tenantId             String
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
   deletedAt            DateTime?
+  createdBy            String?
 
-  // Relations
-  tenant             Tenant          @relation(fields: [tenantId], references: [id])
-  direttoreSanitario Person?         @relation("DirettoreSanitario", fields: [direttoreSanitarioId], references: [id], onDelete: SetNull)
-  ambulatori         Ambulatorio[]
-  numeriChiamata     NumeroChiamata[]
+  sedi        SedePoliambulatorio[]
+  ambulatori  Ambulatorio[]
+  convenzioni ConvenzionePoliambulatorio[]
+  listiniBase ListinoPrezzo[]
 
   @@unique([tenantId, codice])
-  @@index([tenantId, deletedAt])
-  @@index([codiceRegionale])
-  @@index([direttoreSanitarioId])
+  @@index([tenantId])
+  @@index([tenantId, stato])
+  @@index([tenantId, branchType]) // Progetto 45
+  @@index([deletedAt])
   @@map("poliambulatori")
 }
 
-// Ambulatorio - Individual clinic room
+model SedePoliambulatorio {
+  id                   String    @id @default(uuid())
+  poliambulatorioId    String
+  direttoreSanitarioId String? // Direttore Sanitario per questa sede (Person)
+  nome                 String
+  codice               String?
+  indirizzo            String
+  citta                String
+  cap                  String
+  provincia            String
+  telefono             String?
+  email                String?
+  latitudine           Float?
+  longitudine          Float?
+  isPrincipale         Boolean   @default(false)
+  isAttiva             Boolean   @default(true)
+  oraAperturaOverride  String?
+  oraChiusuraOverride  String?
+  noteAccessibilita    String?
+  tenantId             String
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  deletedAt            DateTime?
+  createdBy            String?
+
+  poliambulatorio    Poliambulatorio       @relation(fields: [poliambulatorioId], references: [id], onDelete: Cascade)
+  direttoreSanitario Person?               @relation("SedeDirettoreSanitario", fields: [direttoreSanitarioId], references: [id], onDelete: SetNull)
+  ambulatori         Ambulatorio[]
+  orariSettimanali   OrarioSede[]          // Orari di apertura per ogni giorno della settimana
+  chiusureSpeciali   ChiusuraSpecialeSede[] // Chiusure per festivi, ponti, ferie
+
+  @@unique([tenantId, codice])
+  @@index([tenantId])
+  @@index([poliambulatorioId])
+  @@index([isAttiva])
+  @@index([direttoreSanitarioId])
+  @@map("sedi_poliambulatorio")
+}
+
+// Orari di apertura settimanali della sede - supporta multiple fasce orarie per giorno
+model OrarioSede {
+  id              String    @id @default(uuid())
+  sedeId          String
+  giornoSettimana Int       // 0=Domenica, 1=Lunedì, 2=Martedì, 3=Mercoledì, 4=Giovedì, 5=Venerdì, 6=Sabato
+  fascia          Int       @default(1) // 1=Prima fascia (es. mattina), 2=Seconda fascia (es. pomeriggio), 3+=fasce aggiuntive
+  oraInizio       String    // Formato HH:MM (es. "08:30")
+  oraFine         String    // Formato HH:MM (es. "12:30")
+  isChiuso        Boolean   @default(false) // Se true, la sede è chiusa in questo giorno
+  note            String?   // Note opzionali (es. "Solo su appuntamento")
+  tenantId        String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  sede SedePoliambulatorio @relation(fields: [sedeId], references: [id], onDelete: Cascade)
+
+  @@unique([sedeId, giornoSettimana, fascia])
+  @@index([tenantId])
+  @@index([sedeId])
+  @@index([giornoSettimana])
+  @@map("orari_sede")
+}
+
+// Tipi di chiusura speciale
+enum TipoChiusuraSpeciale {
+  FESTIVITA         // Festività nazionali (Natale, Pasqua, etc.)
+  PONTE             // Ponti (es. ponte 2 Giugno)
+  FERIE_ESTIVE      // Chiusura estiva
+  FERIE_NATALIZIE   // Chiusura natalizia
+  FERIE_PASQUALI    // Chiusura pasquale
+  STRAORDINARIA     // Chiusura straordinaria (es. ristrutturazione)
+  FORMAZIONE        // Chiusura per formazione del personale
+  EVENTO            // Chiusura per evento speciale
+  ALTRO             // Altro tipo di chiusura
+}
+
+// Chiusure speciali della sede (festivi, ponti, ferie, etc.)
+model ChiusuraSpecialeSede {
+  id            String               @id @default(uuid())
+  sedeId        String
+  tipo          TipoChiusuraSpeciale
+  nome          String               // Nome della chiusura (es. "Natale", "Ponte 2 Giugno")
+  descrizione   String?              // Descrizione opzionale
+  dataInizio    DateTime             // Data inizio chiusura (può essere singola giornata)
+  dataFine      DateTime             // Data fine chiusura (per chiusure multi-giorno)
+  oraInizio     String?              // Orario inizio chiusura (se chiusura parziale)
+  oraFine       String?              // Orario fine chiusura (se chiusura parziale)
+  isParziale    Boolean              @default(false) // Se true, chiusura solo in parte della giornata
+  ricorrente    Boolean              @default(false) // Se true, si ripete ogni anno alla stessa data
+  annoRiferimento Int?               // Anno di riferimento per chiusure ricorrenti
+  attivo        Boolean              @default(true)
+  tenantId      String
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  deletedAt     DateTime?
+
+  sede SedePoliambulatorio @relation(fields: [sedeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([sedeId])
+  @@index([dataInizio, dataFine])
+  @@index([tipo])
+  @@index([ricorrente])
+  @@map("chiusure_speciali_sede")
+}
+
 model Ambulatorio {
-  id                String                   @id @default(uuid())
-  tenantId          String
+  id                String           @id @default(uuid())
   poliambulatorioId String
-  nome              String
+  sedeId            String?
   codice            String
+  nome              String
   specializzazione  String?
+  descrizione       String?
   piano             String?
-  stanza            String?
-  capienzaMax       Int                      @default(1)
-  attrezzature      String?                  // JSON array of equipment
-  isActive          Boolean                  @default(true)
-  createdAt         DateTime                 @default(now()) @db.Timestamp(6)
-  updatedAt         DateTime                 @updatedAt @db.Timestamp(6)
+  capacita          Int              @default(1)
+  stato             StatoAmbulatorio @default(ATTIVO)
+  colore            String?          @default("#3B82F6")
+  tenantId          String
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
   deletedAt         DateTime?
 
-  // Relations
-  tenant          Tenant                   @relation(fields: [tenantId], references: [id])
-  poliambulatorio Poliambulatorio          @relation(fields: [poliambulatorioId], references: [id], onDelete: Cascade)
-  strumenti       StrumentoAmbulatorio[]
-  appuntamenti    Appuntamento[]
-  prestazioni     PrestazioneAmbulatorio[]
-  orari           OrarioAmbulatorio[]
+  poliambulatorio        Poliambulatorio          @relation(fields: [poliambulatorioId], references: [id], onDelete: Cascade)
+  sede                   SedePoliambulatorio?     @relation(fields: [sedeId], references: [id])
+  orari                  OrarioAmbulatorio[]
+  strumenti              Strumento[]
+  strumentiAssegnati     StrumentoAmbulatorio[]
+  prestazioniAmbulatorio AmbulatorioPrestazione[]
+  appuntamenti           Appuntamento[]
+  visite                 Visita[]
 
   @@unique([poliambulatorioId, codice])
-  @@index([tenantId, deletedAt])
+  @@index([tenantId])
   @@index([poliambulatorioId])
   @@index([specializzazione])
+  @@index([stato])
   @@map("ambulatori")
 }
 
-// Prestazione - Medical service definition
-model Prestazione {
-  id                    String                   @id @default(uuid())
-  tenantId              String
-  codice                String
-  codiceNazionale       String?                  // National nomenclator code
-  nome                  String
-  descrizione           String?
-  tipo                  TipoPrestazione          @default(VISITA)
-  durataPrevista        Int                      @default(30) // minutes
-  richiedeReferto       Boolean                  @default(true)
-  richiedeConsenso      Boolean                  @default(false)
-  preparazioneRichiesta String?                  // Patient preparation instructions
-  note                  String?
-  isActive              Boolean                  @default(true)
-  createdAt             DateTime                 @default(now()) @db.Timestamp(6)
-  updatedAt             DateTime                 @updatedAt @db.Timestamp(6)
-  deletedAt             DateTime?
-
-  // Relations
-  tenant              Tenant                   @relation(fields: [tenantId], references: [id])
-  listinoPrezzi       ListinoPrezzo[]
-  ambulatoriAbilitati PrestazioneAmbulatorio[]
-  visite              Visita[]
-  templateCampi       TemplateCampoVisita[]
-
-  @@unique([tenantId, codice])
-  @@index([tenantId, deletedAt])
-  @@index([codiceNazionale])
-  @@index([tipo])
-  @@map("prestazioni")
-}
-
-// Junction table: Prestazione <-> Ambulatorio
-model PrestazioneAmbulatorio {
-  id            String      @id @default(uuid())
-  prestazioneId String
-  ambulatorioId String
-  isActive      Boolean     @default(true)
-  createdAt     DateTime    @default(now()) @db.Timestamp(6)
-
-  prestazione Prestazione @relation(fields: [prestazioneId], references: [id], onDelete: Cascade)
-  ambulatorio Ambulatorio @relation(fields: [ambulatorioId], references: [id], onDelete: Cascade)
-
-  @@unique([prestazioneId, ambulatorioId])
-  @@index([prestazioneId])
-  @@index([ambulatorioId])
-  @@map("prestazione_ambulatorio")
-}
-
-// Strumento - Medical equipment
-model Strumento {
-  id                   String                 @id @default(uuid())
-  tenantId             String
-  codice               String
-  nome                 String
-  descrizione          String?
-  marca                String?
-  modello              String?
-  numeroSerie          String?
-  dataAcquisto         DateTime?              @db.Date
-  dataScadenzaGaranzia DateTime?              @db.Date
-  dataUltimaManutenz   DateTime?              @db.Date
-  dataProssimaManutenz DateTime?              @db.Date
-  stato                StatoStrumento         @default(DISPONIBILE)
-  note                 String?
-  isActive             Boolean                @default(true)
-  createdAt            DateTime               @default(now()) @db.Timestamp(6)
-  updatedAt            DateTime               @updatedAt @db.Timestamp(6)
-  deletedAt            DateTime?
-
-  // Relations
-  tenant              Tenant                  @relation(fields: [tenantId], references: [id])
-  ambulatoriAssegnati StrumentoAmbulatorio[]
-  manutenzioni        ManutenzioneStrumento[]
-
-  @@unique([tenantId, codice])
-  @@index([tenantId, deletedAt])
-  @@index([stato])
-  @@index([dataProssimaManutenz])
-  @@map("strumenti")
-}
-
-// Junction table: Strumento <-> Ambulatorio
-model StrumentoAmbulatorio {
-  id                   String      @id @default(uuid())
-  strumentoId          String
-  ambulatorioId        String
-  dataAssegnazione     DateTime    @default(now()) @db.Date
-  dataFineAssegnazione DateTime?   @db.Date
-  isActive             Boolean     @default(true)
-
-  strumento   Strumento   @relation(fields: [strumentoId], references: [id], onDelete: Cascade)
-  ambulatorio Ambulatorio @relation(fields: [ambulatorioId], references: [id], onDelete: Cascade)
-
-  @@unique([strumentoId, ambulatorioId, dataAssegnazione])
-  @@index([strumentoId])
-  @@index([ambulatorioId])
-  @@map("strumento_ambulatorio")
-}
-
-// ListinoPrezzo - Price list for services
-model ListinoPrezzo {
-  id                String      @id @default(uuid())
-  tenantId          String
-  prestazioneId     String
-  tipo              TipoListino @default(PRIVATO)
-  prezzo            Decimal     @db.Decimal(10, 2)
-  prezzoMinimo      Decimal?    @db.Decimal(10, 2)
-  prezzoMassimo     Decimal?    @db.Decimal(10, 2)
-  codiceConvenzione String?
-  nomeConvenzione   String?
-  validoDa          DateTime    @default(now()) @db.Date
-  validoA           DateTime?   @db.Date
-  note              String?
-  isActive          Boolean     @default(true)
-  createdAt         DateTime    @default(now()) @db.Timestamp(6)
-  updatedAt         DateTime    @updatedAt @db.Timestamp(6)
-  deletedAt         DateTime?
-
-  // Relations
-  tenant      Tenant             @relation(fields: [tenantId], references: [id])
-  prestazione Prestazione        @relation(fields: [prestazioneId], references: [id], onDelete: Cascade)
-  convenzioni ConvenzioneListino[]
-
-  @@unique([tenantId, prestazioneId, tipo, codiceConvenzione, validoDa])
-  @@index([tenantId, deletedAt])
-  @@index([prestazioneId])
-  @@index([tipo])
-  @@index([validoDa, validoA])
-  @@map("listino_prezzi")
-}
-
-// Appuntamento - Appointment
-model Appuntamento {
-  id                   String            @id @default(uuid())
-  tenantId             String
-  numero               String            // Progressive number per day
-  pazienteId           String
-  medicoId             String
-  ambulatorioId        String
-  prestazioneId        String?
-  dataOra              DateTime          @db.Timestamp(6)
-  durataPrevista       Int               @default(30) // minutes
-  stato                StatoAppuntamento @default(PRENOTATO)
-  note                 String?
-  noteInterne          String?           // Staff only notes
-  promemoria           Boolean           @default(true)
-  promemoriaInviato    Boolean           @default(false)
-  dataConferma         DateTime?         @db.Timestamp(6)
-  dataAnnullamento     DateTime?         @db.Timestamp(6)
-  motivoAnnullamento   String?
-  numeroCoda           Int?              // Queue number for waiting room
-  oraArrivo            DateTime?         @db.Timestamp(6)
-  oraInizio            DateTime?         @db.Timestamp(6)
-  oraFine              DateTime?         @db.Timestamp(6)
-  isRecurring          Boolean           @default(false)
-  recurringPattern     String?           // JSON with recurrence rules
-  parentAppuntamentoId String?
-  createdBy            String?
-  createdAt            DateTime          @default(now()) @db.Timestamp(6)
-  updatedAt            DateTime          @updatedAt @db.Timestamp(6)
-  deletedAt            DateTime?
-
-  // Relations
-  tenant             Tenant         @relation(fields: [tenantId], references: [id])
-  paziente           Person         @relation("AppuntamentiPaziente", fields: [pazienteId], references: [id], onDelete: Restrict)
-  medico             Person         @relation("AppuntamentiMedico", fields: [medicoId], references: [id], onDelete: Restrict)
-  ambulatorio        Ambulatorio    @relation(fields: [ambulatorioId], references: [id], onDelete: Restrict)
-  parentAppuntamento Appuntamento?  @relation("RecurringAppuntamenti", fields: [parentAppuntamentoId], references: [id], onDelete: SetNull)
-  childAppuntamenti  Appuntamento[] @relation("RecurringAppuntamenti")
-  visite             Visita[]
-
-  @@unique([tenantId, numero, dataOra])
-  @@index([tenantId, deletedAt])
-  @@index([pazienteId])
-  @@index([medicoId])
-  @@index([ambulatorioId])
-  @@index([dataOra])
-  @@index([stato])
-  @@index([tenantId, dataOra, stato])
-  @@index([medicoId, dataOra])
-  @@index([ambulatorioId, dataOra])
-  @@map("appuntamenti")
-}
-
-// Visita - Medical visit
-model Visita {
-  id                  String      @id @default(uuid())
-  tenantId            String
-  appuntamentoId      String?
-  pazienteId          String
-  medicoId            String
-  prestazioneId       String
-  dataOra             DateTime    @db.Timestamp(6)
-  stato               StatoVisita @default(INIZIATA)
-  // Clinical data
-  anamnesi            String?     // Patient history
-  esamObiettivo       String?     // Physical examination
-  diagnosi            String?
-  diagnosiIcd10       String?     // ICD-10 code
-  terapia             String?
-  prescrizioni        String?     // JSON array of prescriptions
-  noteClinic          String?     // Clinical notes (encrypted)
-  // Follow-up
-  followUpRichiesto   Boolean     @default(false)
-  followUpData        DateTime?   @db.Date
-  followUpNote        String?
-  // Digital signature
-  firmaMedico         String?     // Digital signature reference
-  dataFirma           DateTime?   @db.Timestamp(6)
-  // Consents
-  consensoInformato   Boolean     @default(false)
-  consensoTrattamento Boolean     @default(false)
-  createdBy           String?
-  createdAt           DateTime    @default(now()) @db.Timestamp(6)
-  updatedAt           DateTime    @updatedAt @db.Timestamp(6)
-  deletedAt           DateTime?
-
-  // Relations
-  tenant       Tenant             @relation(fields: [tenantId], references: [id])
-  appuntamento Appuntamento?      @relation(fields: [appuntamentoId], references: [id], onDelete: SetNull)
-  paziente     Person             @relation("VisitePaziente", fields: [pazienteId], references: [id], onDelete: Restrict)
-  medico       Person             @relation("VisiteMedico", fields: [medicoId], references: [id], onDelete: Restrict)
-  prestazione  Prestazione        @relation(fields: [prestazioneId], references: [id], onDelete: Restrict)
-  referti      Referto[]
-  allegati     AllegatoVisita[]
-  valoriCampi  ValoreCampoVisita[]
-
-  @@index([tenantId, deletedAt])
-  @@index([pazienteId])
-  @@index([medicoId])
-  @@index([appuntamentoId])
-  @@index([prestazioneId])
-  @@index([dataOra])
-  @@index([stato])
-  @@index([tenantId, dataOra, stato])
-  @@map("visite")
-}
-
-// Referto - Medical report
-model Referto {
-  id              String       @id @default(uuid())
-  tenantId        String
-  visitaId        String
-  tipo            String       // Type of report (lab, imaging, etc.)
-  codice          String       // Report code
-  titolo          String
-  contenuto       String?      // Report content (may be encrypted)
-  conclusioni     String?      // Conclusions
-  valoriRiferimento String?    // Reference values (JSON)
-  stato           StatoReferto @default(BOZZA)
-  dataEmissione   DateTime?    @db.Timestamp(6)
-  // Digital signature
-  firmaMedico     String?
-  dataFirma       DateTime?    @db.Timestamp(6)
-  firmaValidata   Boolean      @default(false)
-  // Delivery
-  consegnatoIl    DateTime?    @db.Timestamp(6)
-  consegnatoA     String?      // Delivered to (patient name/email)
-  metodiConsegna  String?      // Delivery method (email, portal, print)
-  createdBy       String?
-  createdAt       DateTime     @default(now()) @db.Timestamp(6)
-  updatedAt       DateTime     @updatedAt @db.Timestamp(6)
-  deletedAt       DateTime?
-
-  // Relations
-  tenant   Tenant            @relation(fields: [tenantId], references: [id])
-  visita   Visita            @relation(fields: [visitaId], references: [id], onDelete: Cascade)
-  allegati AllegatoReferto[]
-  versioni VersioneReferto[]
-
-  @@unique([tenantId, codice])
-  @@index([tenantId, deletedAt])
-  @@index([visitaId])
-  @@index([stato])
-  @@index([dataEmissione])
-  @@map("referti")
-}
-
-// Allegato Visita - Visit attachment
-model AllegatoVisita {
-  id           String   @id @default(uuid())
-  visitaId     String
-  tipo         String   // image, document, lab_result, etc.
-  nome         String
-  descrizione  String?
-  filePath     String
-  mimeType     String
-  dimensione   Int      // bytes
-  uploadatoBy  String?
-  createdAt    DateTime @default(now()) @db.Timestamp(6)
-  deletedAt    DateTime?
-
-  // Relations
-  visita Visita @relation(fields: [visitaId], references: [id], onDelete: Cascade)
-
-  @@index([visitaId])
-  @@map("allegati_visita")
-}
-
-// Allegato Referto - Report attachment
-model AllegatoReferto {
-  id          String   @id @default(uuid())
-  refertoId   String
-  tipo        String   // pdf, image, dicom, etc.
-  nome        String
-  descrizione String?
-  filePath    String
-  mimeType    String
-  dimensione  Int      // bytes
-  uploadatoBy String?
-  createdAt   DateTime @default(now()) @db.Timestamp(6)
-  deletedAt   DateTime?
-
-  // Relations
-  referto Referto @relation(fields: [refertoId], references: [id], onDelete: Cascade)
-
-  @@index([refertoId])
-  @@map("allegati_referto")
-}
-
-// DisponibilitaMedico - Doctor availability for agenda
-model DisponibilitaMedico {
-  id             String    @id @default(uuid())
-  tenantId       String
-  medicoId       String
-  ambulatorioId  String?   // If null, generic availability
-  giornoSettimana Int      // 0=Sunday, 1=Monday, etc.
-  oraInizio      String    // HH:MM format
-  oraFine        String    // HH:MM format
-  validoDa       DateTime  @default(now()) @db.Date
-  validoA        DateTime? @db.Date
-  note           String?
-  isActive       Boolean   @default(true)
-  createdAt      DateTime  @default(now()) @db.Timestamp(6)
-  updatedAt      DateTime  @updatedAt @db.Timestamp(6)
-  deletedAt      DateTime?
-
-  // Relations
-  tenant Tenant @relation(fields: [tenantId], references: [id])
-  medico Person @relation("DisponibilitaMedico", fields: [medicoId], references: [id], onDelete: Cascade)
-
-  @@index([tenantId, deletedAt])
-  @@index([medicoId])
-  @@index([ambulatorioId])
-  @@index([giornoSettimana])
-  @@map("disponibilita_medico")
-}
-
-// FerieAssenza - Doctor vacation/absence
-model FerieAssenza {
-  id          String    @id @default(uuid())
-  tenantId    String
-  medicoId    String
-  dataInizio  DateTime  @db.Date
-  dataFine    DateTime  @db.Date
-  motivo      String?   // vacation, sick, training, etc.
-  note        String?
-  isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now()) @db.Timestamp(6)
-  updatedAt   DateTime  @updatedAt @db.Timestamp(6)
-  deletedAt   DateTime?
-
-  // Relations
-  tenant Tenant @relation(fields: [tenantId], references: [id])
-  medico Person @relation("FerieAssenzaMedico", fields: [medicoId], references: [id], onDelete: Cascade)
-
-  @@index([tenantId, deletedAt])
-  @@index([medicoId])
-  @@index([dataInizio, dataFine])
-  @@map("ferie_assenze")
-}
-
-// FatturaSanitaria - Medical invoice
-model FatturaSanitaria {
-  id               String    @id @default(uuid())
-  tenantId         String
-  numero           String    // Invoice number
-  dataEmissione    DateTime  @db.Date
-  pazienteId       String
-  visitaId         String?
-  imponibile       Decimal   @db.Decimal(10, 2)
-  aliquotaIva      Decimal   @default(0) @db.Decimal(5, 2)
-  importoIva       Decimal   @default(0) @db.Decimal(10, 2)
-  totale           Decimal   @db.Decimal(10, 2)
-  metodoPagamento  String?   // cash, card, transfer
-  dataPagamento    DateTime? @db.Date
-  stato            String    @default("emessa") // emessa, pagata, annullata
-  note             String?
-  // Sistema TS (Tessera Sanitaria)
-  inviatoTS        Boolean   @default(false)
-  dataInvioTS      DateTime? @db.Timestamp(6)
-  codiceDocumentoTS String?
-  createdBy        String?
-  createdAt        DateTime  @default(now()) @db.Timestamp(6)
-  updatedAt        DateTime  @updatedAt @db.Timestamp(6)
-  deletedAt        DateTime?
-
-  // Relations
-  tenant   Tenant @relation(fields: [tenantId], references: [id])
-  paziente Person @relation("FattureSanitariePaziente", fields: [pazienteId], references: [id], onDelete: Restrict)
-
-  @@unique([tenantId, numero])
-  @@index([tenantId, deletedAt])
-  @@index([pazienteId])
-  @@index([dataEmissione])
-  @@index([stato])
-  @@map("fatture_sanitarie")
-}
-
-// ============================================
-// MODELLI CLINICI AGGIUNTIVI - ElementMedica
-// ============================================
-
-// OrarioAmbulatorio - Operating hours for ambulatorio
 model OrarioAmbulatorio {
   id              String    @id @default(uuid())
-  tenantId        String
   ambulatorioId   String
-  giornoSettimana Int       // 0=Sunday, 1=Monday, etc.
-  oraInizio       String    // HH:MM format
-  oraFine         String    // HH:MM format
-  isActive        Boolean   @default(true)
-  createdAt       DateTime  @default(now()) @db.Timestamp(6)
-  updatedAt       DateTime  @updatedAt @db.Timestamp(6)
+  medicoId        String?
+  giornoSettimana Int
+  oraInizio       String
+  oraFine         String
+  durataSlot      Int       @default(30)
+  attivo          Boolean   @default(true)
+  validoDa        DateTime?
+  validoA         DateTime?
+  tenantId        String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
   deletedAt       DateTime?
 
-  // Relations
-  tenant      Tenant      @relation(fields: [tenantId], references: [id])
   ambulatorio Ambulatorio @relation(fields: [ambulatorioId], references: [id], onDelete: Cascade)
 
-  @@unique([ambulatorioId, giornoSettimana, oraInizio])
-  @@index([tenantId, deletedAt])
+  @@index([tenantId])
   @@index([ambulatorioId])
+  @@index([medicoId])
   @@index([giornoSettimana])
   @@map("orari_ambulatorio")
 }
 
-// ManutenzioneStrumento - Equipment maintenance records
-model ManutenzioneStrumento {
-  id            String    @id @default(uuid())
-  tenantId      String
-  strumentoId   String
-  tipo          String    // preventiva, correttiva, calibrazione
-  dataEsecuzione DateTime @db.Date
-  dataProssima  DateTime? @db.Date
-  esecutore     String?   // Who performed maintenance
-  costo         Decimal?  @db.Decimal(10, 2)
-  note          String?
-  esito         String?   // positivo, negativo, da_ripetere
-  certificato   String?   // Certificate path if any
-  createdBy     String?
-  createdAt     DateTime  @default(now()) @db.Timestamp(6)
-  updatedAt     DateTime  @updatedAt @db.Timestamp(6)
-  deletedAt     DateTime?
+model Prestazione {
+  id                     String          @id @default(uuid())
+  codice                 String
+  nome                   String
+  descrizione            String?
+  tipo                   TipoPrestazione
+  brancheSpecialistiche  String[]        @default([]) // Array di specialità (es. ["Cardiologia", "Medicina Interna"])
+  durataPrevista         Int             @default(30)
+  prezzoBase             Decimal         @db.Decimal(10, 2)
+  ivaAliquota            Decimal         @default(0) @db.Decimal(5, 2)
+  attivo                 Boolean         @default(true)
+  istruzioniPreparazione String?
+  richiedeStrumento      Boolean         @default(false)
+  strumentiRichiesti     String[]        @default([])
+  branchType             BranchType      @default(MEDICA) @map("branch_type") // Progetto 45
+  tenantId               String
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+  deletedAt              DateTime?
+  createdBy              String?
 
-  // Relations
-  tenant    Tenant    @relation(fields: [tenantId], references: [id])
-  strumento Strumento @relation(fields: [strumentoId], references: [id], onDelete: Cascade)
-
-  @@index([tenantId, deletedAt])
-  @@index([strumentoId])
-  @@index([dataEsecuzione])
-  @@index([dataProssima])
-  @@map("manutenzioni_strumento")
-}
-
-// Convenzione - Insurance/health plan agreements
-model Convenzione {
-  id                String    @id @default(uuid())
-  tenantId          String
-  codice            String    // Convention code
-  nome              String    // Insurance/plan name
-  tipo              String    // assicurazione, mutua, asl, altro
-  descrizione       String?
-  contatto          String?   // Contact person
-  telefono          String?
-  email             String?
-  indirizzo         String?
-  validoDa          DateTime  @db.Date
-  validoA           DateTime? @db.Date
-  percentualeSconto Decimal?  @db.Decimal(5, 2) // Default discount %
-  massimaleAnnuo    Decimal?  @db.Decimal(10, 2)
-  documentoPath     String?   // Agreement document path
-  note              String?
-  isActive          Boolean   @default(true)
-  createdAt         DateTime  @default(now()) @db.Timestamp(6)
-  updatedAt         DateTime  @updatedAt @db.Timestamp(6)
-  deletedAt         DateTime?
-
-  // Relations
-  tenant  Tenant             @relation(fields: [tenantId], references: [id])
-  listini ConvenzioneListino[]
+  ambulatori         AmbulatorioPrestazione[]
+  listiniPrezzo      ListinoPrezzo[]
+  mediciAbilitati    MedicoAbilitato[]
+  appuntamenti       Appuntamento[]
+  visite             Visita[]
+  strumentiNecessari PrestazioneStrumento[]
+  tipologieRichieste PrestazioneTipologiaStrumento[] @relation("PrestazioneTipologie") // Tipologie strumenti richieste
+  bundlePrestazioni  OffertaBundlePrestazione[] // Tariffario: bundle/offerte
+  riconoscimenti     RiconoscimentoConvenzione[] // Riconoscimenti convenzioni
+  vociTariffario     VoceTariffario[]            // Voci tariffario aziende
 
   @@unique([tenantId, codice])
-  @@index([tenantId, deletedAt])
+  @@index([tenantId])
+  @@index([tenantId, branchType]) // Progetto 45
   @@index([tipo])
-  @@index([validoDa, validoA])
+  @@index([attivo])
+  @@map("prestazioni")
+}
+
+model AmbulatorioPrestazione {
+  id            String    @id @default(uuid())
+  ambulatorioId String
+  prestazioneId String
+  attivo        Boolean   @default(true)
+  tenantId      String
+  createdAt     DateTime  @default(now())
+  deletedAt     DateTime?
+
+  ambulatorio Ambulatorio @relation(fields: [ambulatorioId], references: [id], onDelete: Cascade)
+  prestazione Prestazione @relation(fields: [prestazioneId], references: [id], onDelete: Cascade)
+
+  @@unique([ambulatorioId, prestazioneId])
+  @@index([tenantId])
+  @@map("ambulatorio_prestazioni")
+}
+
+model MedicoAbilitato {
+  id               String   @id @default(uuid())
+  medicoId         String
+  prestazioneId    String
+  attivo           Boolean  @default(true)
+  dataAbilitazione DateTime @default(now())
+
+  // Durata specifica per questo medico (override della durata prestazione)
+  durataMedico Int? // In minuti, null = usa durataPrevista della prestazione
+
+  // Compenso default per questo medico su questa prestazione
+  compensoTipo    TipoCompensoMedico @default(PERCENTUALE)
+  compensoValore  Decimal            @default(30) @db.Decimal(10, 2) // Default 30%
+  compensoMinimo  Decimal?           @db.Decimal(10, 2)
+  compensoMassimo Decimal?           @db.Decimal(10, 2)
+
+  note String?
+
+  tenantId  String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  prestazione Prestazione @relation(fields: [prestazioneId], references: [id], onDelete: Cascade)
+  medico      Person      @relation("MedicoAbilitazioni", fields: [medicoId], references: [id], onDelete: Cascade)
+
+  @@unique([medicoId, prestazioneId])
+  @@index([tenantId])
+  @@index([medicoId])
+  @@map("medici_abilitati")
+}
+
+model Strumento {
+  id                    String              @id @default(uuid())
+  codice                String
+  nome                  String
+  descrizione           String?
+  tipologia             TipologiaStrumento? // Categoria dello strumento (ECOGRAFO, ECG, LASER, etc.)
+  marca                 String?
+  modello               String?
+  numeroSerie           String?
+  ambulatorioId         String?
+  stato                 StatoStrumento      @default(ATTIVO)
+  dataAcquisto          DateTime?
+  costoAcquisto         Decimal?            @db.Decimal(10, 2)
+  dataFineAmmortamento  DateTime?
+  ultimaManutenzione    DateTime?
+  prossimaManutenzione  DateTime?
+  intervallManutenzione Int?
+  ultimaTaratura        DateTime?
+  prossimaTaratura      DateTime?
+  branchType            BranchType          @default(MEDICA) @map("branch_type") // Progetto 45
+  tenantId              String
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  deletedAt             DateTime?
+  createdBy             String?
+
+  ambulatorio          Ambulatorio?            @relation(fields: [ambulatorioId], references: [id])
+  ambulatoriAssegnati  StrumentoAmbulatorio[]
+  manutenzioni         ManutenzioneStrumento[]
+  prestazioniStrumento PrestazioneStrumento[]
+
+  @@unique([tenantId, codice])
+  @@index([tenantId])
+  @@index([tenantId, branchType]) // Progetto 45
+  @@index([ambulatorioId])
+  @@index([stato])
+  @@index([tipologia])
+  @@map("strumenti")
+}
+
+model StrumentoAmbulatorio {
+  id                   String    @id @default(uuid())
+  strumentoId          String
+  ambulatorioId        String
+  isPermanente         Boolean   @default(true)
+  dataAssegnazione     DateTime  @default(now())
+  dataFineAssegnazione DateTime?
+  note                 String?
+  tenantId             String
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  deletedAt            DateTime?
+
+  strumento   Strumento   @relation(fields: [strumentoId], references: [id], onDelete: Cascade)
+  ambulatorio Ambulatorio @relation(fields: [ambulatorioId], references: [id], onDelete: Cascade)
+
+  @@unique([strumentoId, ambulatorioId])
+  @@index([tenantId])
+  @@index([strumentoId])
+  @@index([ambulatorioId])
+  @@map("strumenti_ambulatori")
+}
+
+model ManutenzioneStrumento {
+  id                String            @id @default(uuid())
+  strumentoId       String
+  tipo              TipoManutenzione  @default(PROGRAMMATA)
+  descrizione       String
+  dataProgrammata   DateTime?
+  dataEsecuzione    DateTime?
+  durataOre         Float?
+  esecutore         String?
+  contattoEsecutore String?
+  costoManodopera   Decimal?          @db.Decimal(8, 2)
+  costoRicambi      Decimal?          @db.Decimal(8, 2)
+  costoTotale       Decimal?          @db.Decimal(10, 2)
+  numeroFattura     String?
+  stato             StatoManutenzione @default(PROGRAMMATA)
+  esitoNote         String?
+  prossimaScadenza  DateTime?
+  rapportoUrl       String?
+  tenantId          String
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  deletedAt         DateTime?
+  createdBy         String?
+
+  strumento Strumento @relation(fields: [strumentoId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([strumentoId])
+  @@index([stato])
+  @@index([dataProgrammata])
+  @@map("manutenzioni_strumenti")
+}
+
+model PrestazioneStrumento {
+  id             String    @id @default(uuid())
+  prestazioneId  String
+  strumentoId    String
+  isObbligatorio Boolean   @default(false)
+  note           String?
+  tenantId       String
+  createdAt      DateTime  @default(now())
+  deletedAt      DateTime?
+
+  prestazione Prestazione @relation(fields: [prestazioneId], references: [id], onDelete: Cascade)
+  strumento   Strumento   @relation(fields: [strumentoId], references: [id], onDelete: Cascade)
+
+  @@unique([prestazioneId, strumentoId])
+  @@index([tenantId])
+  @@map("prestazioni_strumenti")
+}
+
+// Requisiti tipologia strumento per prestazione
+// Collega una Prestazione a una TipologiaStrumento richiesta (non strumento specifico)
+model PrestazioneTipologiaStrumento {
+  id              String             @id @default(uuid())
+  prestazioneId   String
+  tipologia       TipologiaStrumento // Tipologia strumento richiesta (ECOGRAFO, ECG, etc.)
+  isObbligatorio  Boolean            @default(true) // Se la tipologia è obbligatoria per eseguire la prestazione
+  quantitaMinima  Int                @default(1) // Numero minimo di strumenti di questa tipologia
+  note            String?
+  tenantId        String
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  deletedAt       DateTime?
+
+  prestazione Prestazione @relation("PrestazioneTipologie", fields: [prestazioneId], references: [id], onDelete: Cascade)
+
+  @@unique([prestazioneId, tipologia])
+  @@index([tenantId])
+  @@index([tipologia])
+  @@map("prestazioni_tipologie_strumenti")
+}
+
+model ListinoPrezzo {
+  id                String  @id @default(uuid())
+  prestazioneId     String? // Opzionale: per listino per prestazione singola
+  bundleId          String? // Opzionale: per listino per bundle (Tariffario Avanzato)
+  poliambulatorioId String?
+  convenzioneId     String?
+  medicoId          String? // Prezzo specifico per medico (Tariffario Avanzato)
+
+  // Identificazione
+  codice      String? // Per riferimento rapido (es. "CONV-ACME-2025")
+  nome        String?
+  descrizione String? // Note aggiuntive
+
+  // Pricing
+  prezzo            Decimal  @db.Decimal(10, 2)
+  ivaAliquota       Decimal  @default(0) @db.Decimal(5, 2)
+  scontoPercentuale Decimal? @db.Decimal(5, 2) // Sconto sul prezzo base
+
+  // Durata specifica per questo medico (override della durata prestazione)
+  durataMedico Int? // In minuti, null = usa durataPrevista della prestazione
+
+  // Compenso medico (override per questo listino)
+  compensoMedicoTipo    TipoCompensoMedico?
+  compensoMedicoValore  Decimal?            @db.Decimal(10, 2)
+  compensoMedicoMinimo  Decimal?            @db.Decimal(10, 2)
+  compensoMedicoMassimo Decimal?            @db.Decimal(10, 2)
+
+  // Validità e priorità
+  attivo   Boolean   @default(true)
+  validoDa DateTime  @default(now())
+  validoA  DateTime?
+  priorita Int       @default(0) // Per risolvere conflitti (più alto = priorità maggiore)
+
+  tenantId  String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  createdBy String? // Audit
+
+  branchType BranchType @default(MEDICA) @map("branch_type") // Progetto 45
+
+  // Relations
+  prestazione     Prestazione?     @relation(fields: [prestazioneId], references: [id], onDelete: Cascade)
+  bundle          OffertaBundle?   @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  poliambulatorio Poliambulatorio? @relation(fields: [poliambulatorioId], references: [id])
+  convenzione     Convenzione?     @relation(fields: [convenzioneId], references: [id])
+  medico          Person?          @relation("ListinoMedico", fields: [medicoId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, branchType]) // Progetto 45
+  @@index([prestazioneId])
+  @@index([bundleId])
+  @@index([poliambulatorioId])
+  @@index([convenzioneId])
+  @@index([medicoId])
+  @@index([attivo])
+  @@index([tenantId, prestazioneId, medicoId])
+  @@index([tenantId, bundleId, medicoId])
+  @@index([tenantId, prestazioneId, convenzioneId])
+  @@map("listini_prezzo")
+}
+
+// Tariffario: Bundle/Offerte (Pacchetti di prestazioni)
+model OffertaBundle {
+  id          String  @id @default(uuid())
+  codice      String
+  nome        String
+  descrizione String?
+
+  // Pricing bundle
+  prezzoBundle      Decimal? @db.Decimal(10, 2) // Prezzo fisso bundle
+  scontoPercentuale Decimal? @db.Decimal(5, 2) // Alternativa: % sconto su somma
+  ivaAliquota       Decimal  @default(0) @db.Decimal(5, 2)
+
+  // Durata esecuzione bundle (in minuti)
+  durataBundle Int? // Durata totale esecuzione bundle, null = somma durate prestazioni
+
+  // Compenso medico per bundle (opzionale)
+  compensoMedicoTipo    TipoCompensoMedico?
+  compensoMedicoValore  Decimal?            @db.Decimal(10, 2)
+  compensoMedicoMinimo  Decimal?            @db.Decimal(10, 2)
+  compensoMedicoMassimo Decimal?            @db.Decimal(10, 2)
+
+  // Validità
+  attivo   Boolean   @default(true)
+  validoDa DateTime  @default(now())
+  validoA  DateTime?
+
+  // Applicabilità (Enhanced Progetto 44)
+  soloNuoviPazienti Boolean  @default(false)
+  maxUtilizzi       Int? // Limite globale
+  utilizziCorrente  Int      @default(0)
+  etaMinima         Int? // Età minima paziente
+  etaMassima        Int? // Età massima paziente
+  genereApplicabile Gender? // Solo per genere specifico
+  convenzioniIds    String[] @default([]) // Convenzioni compatibili
+
+  // Codici sconto applicabili al bundle
+  codiciScontoIds String[] @default([]) // CodiceSconto IDs applicabili
+
+  branchType BranchType @default(MEDICA) @map("branch_type") // Progetto 45
+  tenantId   String
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  deletedAt  DateTime?
+  createdBy  String?
+
+  prestazioni OffertaBundlePrestazione[]
+  listini     ListinoPrezzo[]            // Listini specifici per questo bundle
+  riconoscimenti RiconoscimentoConvenzione[] // Riconoscimenti per questo bundle
+
+  @@unique([tenantId, codice])
+  @@index([tenantId])
+  @@index([tenantId, branchType]) // Progetto 45
+  @@index([tenantId, attivo])
+  @@index([tenantId, validoDa, validoA])
+  @@map("offerte_bundle")
+}
+
+model OffertaBundlePrestazione {
+  id              String    @id @default(uuid())
+  offertaBundleId String
+  prestazioneId   String
+  quantita        Int       @default(1) // Quante volte questa prestazione nel bundle
+  obbligatoria    Boolean   @default(true) // false = opzionale
+  ordine          Int       @default(0) // Ordine di esecuzione consigliato
+  tenantId        String
+  createdAt       DateTime  @default(now())
+  deletedAt       DateTime?
+
+  offertaBundle OffertaBundle @relation(fields: [offertaBundleId], references: [id], onDelete: Cascade)
+  prestazione   Prestazione   @relation(fields: [prestazioneId], references: [id], onDelete: Cascade)
+
+  @@unique([offertaBundleId, prestazioneId])
+  @@index([tenantId])
+  @@index([prestazioneId])
+  @@map("offerte_bundle_prestazioni")
+}
+
+// Tariffario Medico: Configurazione compensi di default per medico
+// Usato per impostare i default quando si crea un ListinoPrezzo per questo medico
+model TariffarioMedico {
+  id       String @id @default(uuid())
+  medicoId String
+
+  // Compenso default per questo medico
+  compensoMedicoTipo    TipoCompensoMedico @default(PERCENTUALE)
+  compensoMedicoValore  Decimal            @db.Decimal(10, 2) // Es: 30 per 30%
+  compensoMedicoMinimo  Decimal?           @db.Decimal(10, 2) // Floor (opzionale)
+  compensoMedicoMassimo Decimal?           @db.Decimal(10, 2) // Ceiling (opzionale)
+
+  // Applicabilità
+  brancaSpecialistica String? // Se specificato, solo per questa branca
+  convenzioneId       String? // Se specificato, solo per questa convenzione
+
+  // Metadati
+  note     String?
+  attivo   Boolean   @default(true)
+  validoDa DateTime  @default(now())
+  validoA  DateTime?
+
+  branchType BranchType @default(MEDICA) @map("branch_type") // Progetto 45
+  tenantId   String
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  deletedAt  DateTime?
+  createdBy  String?
+
+  medico      Person       @relation("TariffarioMedico", fields: [medicoId], references: [id], onDelete: Cascade)
+  convenzione Convenzione? @relation(fields: [convenzioneId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, branchType]) // Progetto 45
+  @@index([medicoId])
+  @@index([tenantId, medicoId, attivo])
+  @@index([tenantId, brancaSpecialistica])
+  @@map("tariffari_medico")
+}
+
+model Convenzione {
+  id            String          @id @default(uuid())
+  codice        String
+  nome          String
+  descrizione   String?
+  tipo          TipoConvenzione
+  enteTerzo     String?
+  partitaIva    String?
+  codiceFiscale String?
+  telefono      String?
+  email         String?
+  referente     String?
+  dataInizio    DateTime
+  dataFine      DateTime?
+  attiva        Boolean         @default(true)
+  condizioni    Json?           @default("{}")
+  branchType    BranchType      @default(MEDICA) @map("branch_type") // Progetto 45
+  tenantId      String
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  deletedAt     DateTime?
+  createdBy     String?
+
+  poliambulatori     ConvenzionePoliambulatorio[]
+  listiniPrezzo      ListinoPrezzo[]
+  tariffariMedico    TariffarioMedico[]
+  aziende            ConvenzioneAzienda[]
+  tariffariAziendali TariffarioAziendale[]
+
+  @@unique([tenantId, codice])
+  @@index([tenantId])
+  @@index([tenantId, branchType]) // Progetto 45
+  @@index([tipo])
+  @@index([attiva])
   @@map("convenzioni")
 }
 
-// ConvenzioneListino - Links convention to price list
-model ConvenzioneListino {
-  id            String   @id @default(uuid())
-  convenzioneId String
-  listinoId     String   // References ListinoPrezzo.id
-  createdAt     DateTime @default(now()) @db.Timestamp(6)
-
-  // Relations
-  convenzione Convenzione   @relation(fields: [convenzioneId], references: [id], onDelete: Cascade)
-  listino     ListinoPrezzo @relation(fields: [listinoId], references: [id], onDelete: Cascade)
-
-  @@unique([convenzioneId, listinoId])
-  @@index([convenzioneId])
-  @@index([listinoId])
-  @@map("convenzione_listino")
-}
-
-// CodiceScontoClinico - Clinical discount codes (different from CodiceSconto for courses)
-model CodiceScontoClinico {
+model ConvenzionePoliambulatorio {
   id                String    @id @default(uuid())
+  convenzioneId     String
+  poliambulatorioId String
+  attiva            Boolean   @default(true)
   tenantId          String
-  codice            String    // Discount code
-  descrizione       String?
-  tipo              String    // percentuale, fisso
-  valore            Decimal   @db.Decimal(10, 2) // Discount value
-  validoDa          DateTime  @default(now()) @db.Date
-  validoA           DateTime? @db.Date
-  limiteUtilizzi    Int?      // Max uses
-  utilizziAttuali   Int       @default(0)
-  prestazioniIds    String?   // JSON array of prestazione IDs (if limited)
-  isActive          Boolean   @default(true)
-  createdAt         DateTime  @default(now()) @db.Timestamp(6)
-  updatedAt         DateTime  @updatedAt @db.Timestamp(6)
+  createdAt         DateTime  @default(now())
   deletedAt         DateTime?
 
-  // Relations
-  tenant Tenant @relation("CodiciScontoClinici", fields: [tenantId], references: [id])
+  convenzione     Convenzione     @relation(fields: [convenzioneId], references: [id], onDelete: Cascade)
+  poliambulatorio Poliambulatorio @relation(fields: [poliambulatorioId], references: [id], onDelete: Cascade)
 
-  @@unique([tenantId, codice])
-  @@index([tenantId, deletedAt])
-  @@index([codice])
-  @@index([validoDa, validoA])
-  @@map("codici_sconto_clinici")
+  @@unique([convenzioneId, poliambulatorioId])
+  @@index([tenantId])
+  @@map("convenzione_poliambulatori")
 }
 
-// TipoCampoVisita - Types for dynamic form fields
-enum TipoCampoVisita {
-  TESTO
-  TEXTAREA
-  NUMERO
-  DECIMALE
-  DATA
-  DATETIME
-  BOOLEAN
-  SELECT
-  MULTISELECT
-  FILE
+// Relazione many-to-many tra Convenzione e Azienda (Company)
+// Sostituisce il campo JSON condizioni.companyIds
+model ConvenzioneAzienda {
+  id            String   @id @default(uuid())
+  convenzioneId String
+  aziendaId     String
   
-  @@map("tipo_campo_visita")
+  // Opzioni specifiche per questa azienda in convenzione
+  referenteAziendale  String?   // Referente specifico per l'azienda
+  emailReferente      String?
+  telefonoReferente   String?
+  note                String?   // Note specifiche per questa azienda
+  dataAdesione        DateTime  @default(now()) // Quando l'azienda ha aderito
+  dataFineAdesione    DateTime? // Se l'adesione ha una scadenza specifica
+  attiva              Boolean   @default(true)
+  
+  tenantId  String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  createdBy String?
+
+  convenzione Convenzione @relation(fields: [convenzioneId], references: [id], onDelete: Cascade)
+  azienda     Company     @relation(fields: [aziendaId], references: [id], onDelete: Cascade)
+
+  riconoscimenti RiconoscimentoConvenzione[]
+
+  @@unique([convenzioneId, aziendaId])
+  @@index([tenantId])
+  @@index([convenzioneId])
+  @@index([aziendaId])
+  @@map("convenzione_aziende")
 }
 
-// TemplateCampoVisita - Dynamic form fields template for visits
-model TemplateCampoVisita {
-  id            String          @id @default(uuid())
+// Definizione dei riconoscimenti per bundle o prestazione
+// Un'azienda in convenzione può ricevere riconoscimenti/premi
+model RiconoscimentoConvenzione {
+  id                   String             @id @default(uuid())
+  convenzioneAziendaId String
+  
+  // Può essere associato a un bundle O a una prestazione (mutualmente esclusivi)
+  bundleId      String?
+  prestazioneId String?
+  
+  // Tipo e valore del riconoscimento
+  tipo           TipoRiconoscimento
+  valore         Decimal            @db.Decimal(10, 2) // Percentuale (0-100) o valore assoluto in euro
+  
+  // Limiti opzionali
+  valoreMinimo   Decimal?           @db.Decimal(10, 2) // Minimo riconoscimento (per percentuale)
+  valoreMassimo  Decimal?           @db.Decimal(10, 2) // Massimo riconoscimento (per percentuale)
+  
+  // Validità temporale
+  dataInizio     DateTime           @default(now())
+  dataFine       DateTime?
+  attivo         Boolean            @default(true)
+  
+  // Note e descrizione
+  descrizione    String?
+  note           String?
+  
+  tenantId  String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  createdBy String?
+
+  convenzioneAzienda  ConvenzioneAzienda  @relation(fields: [convenzioneAziendaId], references: [id], onDelete: Cascade)
+  bundle              OffertaBundle?      @relation(fields: [bundleId], references: [id], onDelete: SetNull)
+  prestazione         Prestazione?        @relation(fields: [prestazioneId], references: [id], onDelete: SetNull)
+
+  riconoscimentiErogati RiconoscimentoErogato[]
+
+  @@index([tenantId])
+  @@index([convenzioneAziendaId])
+  @@index([bundleId])
+  @@index([prestazioneId])
+  @@index([tenantId, attivo])
+  @@map("riconoscimenti_convenzione")
+}
+
+// Tracking dei riconoscimenti erogati per ogni paziente/prestazione
+model RiconoscimentoErogato {
+  id                        String              @id @default(uuid())
+  riconoscimentoConvenzioneId String
+  
+  // Riferimenti al paziente e alla prestazione/appuntamento
+  pazienteId    String                          // Person.id del paziente
+  appuntamentoId String?                        // Collegamento all'appuntamento se disponibile
+  
+  // Importo calcolato e stato
+  importoCalcolato Decimal            @db.Decimal(10, 2) // Importo effettivo del riconoscimento
+  importoBase      Decimal            @db.Decimal(10, 2) // Prezzo su cui è stato calcolato
+  stato            StatoRiconoscimento @default(DA_EROGARE)
+  
+  // Date di tracking
+  dataCalcolo   DateTime  @default(now()) // Quando è stato calcolato
+  dataErogazione DateTime? // Quando è stato effettivamente erogato
+  
+  // Note per audit
+  note          String?
+  
+  tenantId  String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  
+  riconoscimentoConvenzione RiconoscimentoConvenzione @relation(fields: [riconoscimentoConvenzioneId], references: [id], onDelete: Cascade)
+  paziente                  Person                    @relation("RiconoscimentiPaziente", fields: [pazienteId], references: [id])
+
+  @@index([tenantId])
+  @@index([riconoscimentoConvenzioneId])
+  @@index([pazienteId])
+  @@index([stato])
+  @@index([tenantId, stato, dataCalcolo])
+  @@map("riconoscimenti_erogati")
+}
+
+model SlotDisponibilita {
+  id            String    @id @default(uuid())
+  ambulatorioId String
+  medicoId      String
+  prestazioneId String?
+  data          DateTime  @db.Date
+  oraInizio     String
+  oraFine       String
+  disponibile   Boolean   @default(true)
+  motivoBlocco  String?
   tenantId      String
-  prestazioneId String
-  nome          String          // Field name (internal)
-  etichetta     String          // Display label
-  tipo          TipoCampoVisita @default(TESTO)
-  obbligatorio  Boolean         @default(false)
-  ordine        Int             @default(0) // Display order
-  opzioni       String?         // JSON array for SELECT/MULTISELECT
-  valoreDefault String?
-  validazione   String?         // JSON validation rules
-  placeholder   String?
-  helpText      String?
-  isActive      Boolean         @default(true)
-  createdAt     DateTime        @default(now()) @db.Timestamp(6)
-  updatedAt     DateTime        @updatedAt @db.Timestamp(6)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
   deletedAt     DateTime?
 
-  // Relations
-  tenant      Tenant        @relation(fields: [tenantId], references: [id])
-  prestazione Prestazione   @relation(fields: [prestazioneId], references: [id], onDelete: Cascade)
-  valori      ValoreCampoVisita[]
+  @@index([tenantId])
+  @@index([ambulatorioId])
+  @@index([medicoId])
+  @@index([data])
+  @@index([data, medicoId])
+  @@map("slot_disponibilita")
+}
 
-  @@unique([prestazioneId, nome])
-  @@index([tenantId, deletedAt])
-  @@index([prestazioneId])
-  @@index([ordine])
+model Appuntamento {
+  id                 String            @id @default(uuid())
+  numeroPrenotazione String
+  ambulatorioId      String
+  prestazioneId      String
+  pazienteId         String
+  medicoId           String
+  dataOra            DateTime
+  durataMinuti       Int               @default(30)
+  stato              StatoAppuntamento @default(PRENOTATO)
+  note               String?
+  noteInterne        String?
+  convenzioneId      String?
+  promemoriaSms      Boolean           @default(false)
+  promemoriaEmail    Boolean           @default(true)
+  promemoriaInviato  DateTime?
+  oraArrivo          DateTime?
+  oraChiamata        DateTime?
+  oraInizio          DateTime?
+  oraFine            DateTime?
+  tenantId           String
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  deletedAt          DateTime?
+  createdBy          String?
+
+  ambulatorio Ambulatorio @relation(fields: [ambulatorioId], references: [id])
+  prestazione Prestazione @relation(fields: [prestazioneId], references: [id])
+  visita      Visita?
+
+  @@unique([tenantId, numeroPrenotazione])
+  @@index([tenantId])
+  @@index([ambulatorioId])
+  @@index([pazienteId])
+  @@index([medicoId])
+  @@index([dataOra])
+  @@index([stato])
+  @@index([tenantId, dataOra])
+  @@index([medicoId, dataOra])
+  @@map("appuntamenti")
+}
+
+model Visita {
+  id                 String      @id @default(uuid())
+  appuntamentoId     String?     @unique
+  ambulatorioId      String
+  prestazioneId      String
+  pazienteId         String
+  medicoId           String
+  dataOra            DateTime
+  durataEffettiva    Int?
+  stato              StatoVisita @default(IN_CORSO)
+  anamnesi           String?
+  esamiObiettivo     String?
+  diagnosiPrincipale String?
+  diagnosiSecondarie String[]    @default([])
+  terapia            String?
+  noteClinico        String?
+  datiStrutturati    Json?       @default("{}")
+  templateUsato      String?
+  prescrizioni       String?
+  prossimoControllo  DateTime?
+  noteFollowup       String?
+  tenantId           String
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+  deletedAt          DateTime?
+  createdBy          String?
+
+  appuntamento       Appuntamento?      @relation(fields: [appuntamentoId], references: [id])
+  ambulatorio        Ambulatorio        @relation(fields: [ambulatorioId], references: [id])
+  prestazione        Prestazione        @relation(fields: [prestazioneId], references: [id])
+  paziente           Person             @relation("VisitaPaziente", fields: [pazienteId], references: [id])
+  medico             Person             @relation("VisitaMedico", fields: [medicoId], references: [id])
+  referti            Referto[]
+  documenti          DocumentoClinico[] // Legacy - deprecato, usare documentiUnificati
+  documentiUnificati PersonDocument[]   @relation("VisitaDocuments")
+  fatture            FatturaSanitaria[]
+
+  @@index([tenantId])
+  @@index([pazienteId])
+  @@index([medicoId])
+  @@index([dataOra])
+  @@index([stato])
+  @@index([ambulatorioId])
+  @@map("visite")
+}
+
+model Referto {
+  id               String       @id @default(uuid())
+  visitaId         String
+  numeroReferto    String
+  titolo           String
+  contenuto        String
+  conclusioni      String?
+  allegati         Json?        @default("[]")
+  stato            StatoReferto @default(BOZZA)
+  dataFirma        DateTime?
+  firmatoBy        String?
+  hashFirma        String?
+  dataConsegna     DateTime?
+  modalitaConsegna String?
+  tenantId         String
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  deletedAt        DateTime?
+  createdBy        String?
+
+  visita Visita @relation(fields: [visitaId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, numeroReferto])
+  @@index([tenantId])
+  @@index([visitaId])
+  @@index([stato])
+  @@map("referti")
+}
+
+model TemplateCampoVisita {
+  id               String           @id @default(uuid())
+  codice           String
+  nome             String
+  descrizione      String?
+  tipoPrestazione  TipoPrestazione?
+  specializzazione String?
+  schema           Json
+  attivo           Boolean          @default(true)
+  versione         Int              @default(1)
+  branchType       BranchType       @default(MEDICA) @map("branch_type") // Progetto 45
+  tenantId         String
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  deletedAt        DateTime?
+  createdBy        String?
+
+  @@unique([tenantId, codice, versione])
+  @@index([tenantId])
+  @@index([tenantId, branchType]) // Progetto 45
+  @@index([tipoPrestazione])
+  @@index([specializzazione])
   @@map("template_campi_visita")
 }
 
-// ValoreCampoVisita - Actual values for dynamic fields in a visit
-model ValoreCampoVisita {
-  id           String   @id @default(uuid())
-  visitaId     String
-  campoId      String   // References TemplateCampoVisita
-  valore       String?  // Stored as string, converted by type
-  valoreJson   String?  // For complex types (multiselect, file refs)
-  createdAt    DateTime @default(now()) @db.Timestamp(6)
-  updatedAt    DateTime @updatedAt @db.Timestamp(6)
+model DocumentoClinico {
+  id            String               @id @default(uuid())
+  visitaId      String?
+  pazienteId    String
+  tipo          TipoDocumentoClinico
+  titolo        String
+  descrizione   String?
+  fileName      String
+  fileUrl       String
+  fileSize      Int?
+  mimeType      String               @default("application/pdf")
+  dataDocumento DateTime             @default(now())
+  valido        Boolean              @default(true)
+  tenantId      String
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  deletedAt     DateTime?
+  createdBy     String?
 
-  // Relations
-  visita Visita              @relation(fields: [visitaId], references: [id], onDelete: Cascade)
-  campo  TemplateCampoVisita @relation(fields: [campoId], references: [id], onDelete: Cascade)
-
-  @@unique([visitaId, campoId])
-  @@index([visitaId])
-  @@index([campoId])
-  @@map("valori_campo_visita")
-}
-
-// VersioneReferto - Report versioning for event sourcing
-model VersioneReferto {
-  id           String   @id @default(uuid())
-  refertoId    String
-  versione     Int      // Version number (1, 2, 3...)
-  contenuto    String?  // Content at this version
-  conclusioni  String?
-  motivoModifica String? // Reason for modification
-  modificatoDa String   // Person ID who made the change
-  createdAt    DateTime @default(now()) @db.Timestamp(6)
-
-  // Relations
-  referto Referto @relation(fields: [refertoId], references: [id], onDelete: Cascade)
-
-  @@unique([refertoId, versione])
-  @@index([refertoId])
-  @@index([createdAt])
-  @@map("versioni_referto")
-}
-
-// FirmaDigitale - Digital signature records
-model FirmaDigitale {
-  id              String   @id @default(uuid())
-  tenantId        String
-  refertoId       String?  // Can be linked to referto
-  visitaId        String?  // Or to visita
-  firmatarioId    String   // Person who signed
-  tipoFirma       String   // semplice, avanzata, qualificata
-  hashDocumento   String   // Document hash at signing time
-  certificato     String?  // Certificate reference
-  timestampFirma  DateTime @db.Timestamp(6)
-  ipAddress       String?
-  userAgent       String?
-  validaFino      DateTime? @db.Timestamp(6)
-  revocata        Boolean  @default(false)
-  dataRevoca      DateTime? @db.Timestamp(6)
-  motivoRevoca    String?
-  createdAt       DateTime @default(now()) @db.Timestamp(6)
-
-  // Relations
-  tenant     Tenant @relation(fields: [tenantId], references: [id])
-  firmatario Person @relation("FirmeDigitali", fields: [firmatarioId], references: [id], onDelete: Restrict)
+  visita Visita? @relation(fields: [visitaId], references: [id])
 
   @@index([tenantId])
-  @@index([refertoId])
+  @@index([pazienteId])
   @@index([visitaId])
-  @@index([firmatarioId])
-  @@index([timestampFirma])
-  @@map("firme_digitali")
+  @@index([tipo])
+  @@map("documenti_clinici")
 }
 
-// SlotDisponibilita - Specific time slots for appointments
-model SlotDisponibilita {
-  id              String    @id @default(uuid())
-  tenantId        String
-  medicoId        String
-  ambulatorioId   String?
-  prestazioneId   String?   // If slot is for specific service
-  data            DateTime  @db.Date
-  oraInizio       String    // HH:MM
-  oraFine         String    // HH:MM
-  stato           String    @default("libero") // libero, prenotato, bloccato
-  appuntamentoId  String?   // If booked
-  note            String?
-  createdAt       DateTime  @default(now()) @db.Timestamp(6)
-  updatedAt       DateTime  @updatedAt @db.Timestamp(6)
-  deletedAt       DateTime?
+model FatturaSanitaria {
+  id                   String                @id @default(uuid())
+  visitaId             String?
+  pazienteId           String
+  numeroFattura        String
+  dataEmissione        DateTime              @default(now())
+  dataScadenza         DateTime?
+  imponibile           Decimal               @db.Decimal(10, 2)
+  aliquotaIva          Decimal               @default(0) @db.Decimal(5, 2)
+  importoIva           Decimal               @db.Decimal(10, 2)
+  totale               Decimal               @db.Decimal(10, 2)
+  scontoApplicato      Decimal               @default(0) @db.Decimal(10, 2)
+  scontoDescrizione    String?
+  stato                StatoFatturaSanitaria @default(BOZZA)
+  dataPagamento        DateTime?
+  metodoPagamento      String?
+  riferimentoPagamento String?
+  fileUrl              String?
+  inviataSDI           Boolean               @default(false)
+  dataInvioSDI         DateTime?
+  esitoSDI             String?
+  note                 String?
+  tenantId             String
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  deletedAt            DateTime?
+  createdBy            String?
 
-  // Relations
-  tenant Tenant @relation(fields: [tenantId], references: [id])
-  medico Person @relation("SlotsDisponibilita", fields: [medicoId], references: [id], onDelete: Cascade)
+  visita   Visita? @relation(fields: [visitaId], references: [id])
+  paziente Person  @relation("FatturaPaziente", fields: [pazienteId], references: [id])
 
-  @@unique([medicoId, data, oraInizio])
-  @@index([tenantId, deletedAt])
-  @@index([medicoId])
-  @@index([ambulatorioId])
-  @@index([data])
-  @@index([stato])
-  @@index([medicoId, data, stato])
-  @@map("slots_disponibilita")
-}
-
-// NumeroChiamata - Queue number for waiting room
-model NumeroChiamata {
-  id             String    @id @default(uuid())
-  tenantId       String
-  poliambulatorioId String
-  data           DateTime  @db.Date
-  numero         Int       // Progressive number for the day
-  appuntamentoId String?
-  pazienteId     String?
-  stato          String    @default("attesa") // attesa, chiamato, in_visita, completato, saltato
-  oraRitiro      DateTime? @db.Timestamp(6)
-  oraChiamata    DateTime? @db.Timestamp(6)
-  ambulatorioId  String?   // Called to which ambulatorio
-  note           String?
-  createdAt      DateTime  @default(now()) @db.Timestamp(6)
-  updatedAt      DateTime  @updatedAt @db.Timestamp(6)
-
-  // Relations
-  tenant          Tenant          @relation(fields: [tenantId], references: [id])
-  poliambulatorio Poliambulatorio @relation(fields: [poliambulatorioId], references: [id], onDelete: Cascade)
-
-  @@unique([poliambulatorioId, data, numero])
+  @@unique([tenantId, numeroFattura])
   @@index([tenantId])
-  @@index([poliambulatorioId])
-  @@index([data])
+  @@index([pazienteId])
+  @@index([visitaId])
   @@index([stato])
-  @@index([appuntamentoId])
-  @@map("numeri_chiamata")
+  @@index([dataEmissione])
+  @@map("fatture_sanitarie")
 }
 
-// TipoAzioneClinica - Types of clinical actions for audit
-enum TipoAzioneClinica {
-  VISUALIZZAZIONE
-  CREAZIONE
-  MODIFICA
-  ELIMINAZIONE
-  FIRMA
-  STAMPA
-  EXPORT
-  ACCESSO_DATI_SENSIBILI
-  
-  @@map("tipo_azione_clinica")
-}
-
-// AuditLogClinico - Clinical-specific audit trail
-model AuditLogClinico {
-  id             String            @id @default(uuid())
-  tenantId       String
-  personId       String            // Who performed the action
-  azione         TipoAzioneClinica
-  entita         String            // Entity type (visita, referto, etc.)
-  entitaId       String            // Entity ID
-  pazienteId     String?           // If action involves a patient
-  descrizione    String?
-  datiPrecedenti String?           // JSON of previous state
-  datiNuovi      String?           // JSON of new state
-  ipAddress      String?
-  userAgent      String?
-  createdAt      DateTime          @default(now()) @db.Timestamp(6)
-
-  // Relations
-  tenant  Tenant @relation(fields: [tenantId], references: [id])
-  person  Person @relation("AuditLogsClinici", fields: [personId], references: [id], onDelete: Restrict)
+model AuditClinico {
+  id        String   @id @default(uuid())
+  personId  String?
+  azione    String
+  risorsa   String
+  risorsaId String?
+  dettagli  Json?
+  ipAddress String?
+  userAgent String?
+  tenantId  String
+  createdAt DateTime @default(now())
 
   @@index([tenantId])
   @@index([personId])
-  @@index([pazienteId])
-  @@index([entita, entitaId])
+  @@index([risorsa, risorsaId])
   @@index([azione])
   @@index([createdAt])
-  @@map("audit_log_clinico")
+  @@map("audit_clinico")
+}
+
+// ============================================================================
+// PHASE 3: ENTITÀ AGENDA E DISPONIBILITÀ (SPEC_05)
+// ============================================================================
+
+enum TipoAssenza {
+  FERIE
+  MALATTIA
+  PERMESSO
+  CONGEDO_PARENTALE
+  FORMAZIONE
+  ALTRO
+
+  @@map("tipo_assenza")
+}
+
+enum StatoAssenza {
+  RICHIESTA
+  APPROVATA
+  RIFIUTATA
+  CANCELLATA
+
+  @@map("stato_assenza")
+}
+
+model DisponibilitaMedico {
+  id              String     @id @default(uuid())
+  medicoId        String
+  ambulatorioId   String?
+  prestazioneId   String?
+  giorno          Int // 0=Dom, 1=Lun...6=Sab
+  oraInizio       String // HH:mm
+  oraFine         String // HH:mm
+  durataSlot      Int        @default(30) // minuti
+  intervalloSlot  Int        @default(0) // pausa tra slot
+  maxAppuntamenti Int? // limite giornaliero
+  attivo          Boolean    @default(true)
+  validoDal       DateTime?
+  validoAl        DateTime?
+  note            String?
+  branchType      BranchType @default(MEDICA) @map("branch_type") // Progetto 45
+  tenantId        String
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  deletedAt       DateTime?
+  createdBy       String?
+
+  @@index([tenantId])
+  @@index([tenantId, branchType]) // Progetto 45
+  @@index([medicoId])
+  @@index([ambulatorioId])
+  @@index([giorno])
+  @@index([tenantId, deletedAt])
+  @@map("disponibilita_medici")
+}
+
+model FerieAssenza {
+  id               String       @id @default(uuid())
+  medicoId         String
+  tipo             TipoAssenza  @default(FERIE)
+  stato            StatoAssenza @default(RICHIESTA)
+  dataInizio       DateTime
+  dataFine         DateTime
+  orarioInizio     String? // per permessi parziali (HH:mm)
+  orarioFine       String? // per permessi parziali (HH:mm)
+  giornataIntera   Boolean      @default(true)
+  motivazione      String?
+  approvatoDa      String?
+  dataApprovazione DateTime?
+  note             String?
+  branchType       BranchType   @default(MEDICA) @map("branch_type") // Progetto 45
+  tenantId         String
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  deletedAt        DateTime?
+  createdBy        String?
+
+  @@index([tenantId])
+  @@index([tenantId, branchType]) // Progetto 45
+  @@index([medicoId])
+  @@index([tipo])
+  @@index([stato])
+  @@index([dataInizio, dataFine])
+  @@index([tenantId, deletedAt])
+  @@map("ferie_assenze")
+}
+
+// ============================================================================
+// PHASE 3: SISTEMA CHIAMATA PAZIENTI (SPEC_08)
+// ============================================================================
+
+enum PrioritaChiamata {
+  NORMALE
+  URGENTE
+  PRIORITARIO
+  EMERGENZA
+
+  @@map("priorita_chiamata")
+}
+
+enum StatoChiamata {
+  IN_ATTESA
+  CHIAMATO
+  IN_VISITA
+  COMPLETATO
+  NON_PRESENTATO
+  RIMANDATO
+
+  @@map("stato_chiamata")
+}
+
+model NumeroChiamata {
+  id                   String           @id @default(uuid())
+  numero               Int
+  pazienteId           String
+  appuntamentoId       String?
+  ambulatorioId        String?
+  medicoId             String?
+  priorita             PrioritaChiamata @default(NORMALE)
+  stato                StatoChiamata    @default(IN_ATTESA)
+  dataOraArrivo        DateTime         @default(now())
+  dataOraChiamata      DateTime?
+  dataOraFine          DateTime?
+  postioneInCoda       Int?
+  tempoAttesaStimato   Int? // minuti
+  tempoAttesaEffettivo Int? // minuti
+  note                 String?
+  tenantId             String
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+  deletedAt            DateTime?
+
+  @@unique([tenantId, numero, createdAt])
+  @@index([tenantId])
+  @@index([pazienteId])
+  @@index([stato])
+  @@index([ambulatorioId])
+  @@index([dataOraArrivo])
+  @@index([tenantId, deletedAt])
+  @@map("numeri_chiamata")
+}
+
+// ============================================================================
+// PHASE 3: GESTIONE VISITE AVANZATA (SPEC_09)
+// ============================================================================
+
+model ValoreCampoVisita {
+  id                  String    @id @default(uuid())
+  visitaId            String
+  templateCampoId     String?
+  codice              String // identificativo campo
+  etichetta           String // nome visualizzato
+  tipoCampo           String // text, number, select, checkbox, etc.
+  valore              String? // valore inserito
+  valoreJson          Json? // per campi complessi
+  ordine              Int       @default(0)
+  obbligatorio        Boolean   @default(false)
+  modificabileDopoPub Boolean   @default(false)
+  tenantId            String
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  deletedAt           DateTime?
+
+  @@index([tenantId])
+  @@index([visitaId])
+  @@index([templateCampoId])
+  @@index([codice])
+  @@index([tenantId, deletedAt])
+  @@map("valori_campi_visita")
+}
+
+model AllegatoVisita {
+  id              String    @id @default(uuid())
+  visitaId        String
+  tipo            String // immagine, pdf, dicom, etc.
+  nome            String
+  descrizione     String?
+  fileName        String
+  fileUrl         String
+  fileSize        Int?
+  mimeType        String
+  dataCaricamento DateTime  @default(now())
+  caricatoDa      String?
+  hashFile        String? // SHA-256 per integrità
+  tenantId        String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  @@index([tenantId])
+  @@index([visitaId])
+  @@index([tipo])
+  @@index([tenantId, deletedAt])
+  @@map("allegati_visite")
+}
+
+model PrestazioneAggiuntiva {
+  id             String    @id @default(uuid())
+  visitaId       String
+  prestazioneId  String? // prestazione dal catalogo (opz)
+  codice         String
+  descrizione    String
+  quantita       Int       @default(1)
+  prezzoUnitario Decimal   @db.Decimal(10, 2)
+  sconto         Decimal   @default(0) @db.Decimal(5, 2)
+  totale         Decimal   @db.Decimal(10, 2)
+  note           String?
+  tenantId       String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  @@index([tenantId])
+  @@index([visitaId])
+  @@index([prestazioneId])
+  @@index([tenantId, deletedAt])
+  @@map("prestazioni_aggiuntive")
+}
+
+// ============================================================================
+// PHASE 3: REFERTI AVANZATI (SPEC_10)
+// ============================================================================
+
+enum StatoFirma {
+  IN_ATTESA
+  FIRMATO
+  RIFIUTATO
+  SCADUTO
+
+  @@map("stato_firma")
+}
+
+model VersioneReferto {
+  id           String   @id @default(uuid())
+  refertoId    String
+  versione     Int      @default(1)
+  contenuto    String
+  conclusioni  String?
+  modifiche    String? // descrizione delle modifiche
+  modificatoDa String?
+  dataVersione DateTime @default(now())
+  tenantId     String
+  createdAt    DateTime @default(now())
+
+  @@unique([refertoId, versione])
+  @@index([tenantId])
+  @@index([refertoId])
+  @@map("versioni_referti")
+}
+
+model FirmaDigitale {
+  id            String     @id @default(uuid())
+  refertoId     String?
+  documentoId   String?
+  firmatarioId  String
+  stato         StatoFirma @default(IN_ATTESA)
+  hashDocumento String // SHA-256 del documento
+  hashFirma     String? // hash della firma applicata
+  certificato   String? // riferimento certificato
+  timestamp     DateTime? // timestamp di firma
+  provider      String? // provider firma (Aruba, InfoCert, etc.)
+  note          String?
+  tenantId      String
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  @@index([tenantId])
+  @@index([refertoId])
+  @@index([documentoId])
+  @@index([firmatarioId])
+  @@index([stato])
+  @@map("firme_digitali")
+}
+
+model AllegatoReferto {
+  id          String    @id @default(uuid())
+  refertoId   String
+  tipo        String // immagine, pdf, dicom, etc.
+  nome        String
+  descrizione String?
+  fileName    String
+  fileUrl     String
+  fileSize    Int?
+  mimeType    String
+  ordine      Int       @default(0)
+  hashFile    String? // SHA-256 per integrità
+  tenantId    String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  @@index([tenantId])
+  @@index([refertoId])
+  @@index([tipo])
+  @@index([tenantId, deletedAt])
+  @@map("allegati_referti")
+}
+
+// ===========================================
+// TARIFFARIO AZIENDE - MEDICINA DEL LAVORO
+// ===========================================
+
+// Tariffario Aziendale - gestisce sia template base che tariffari specifici per azienda
+model TariffarioAziendale {
+  id                  String              @id @default(uuid())
+  codice              String
+  nome                String
+  descrizione         String?
+  
+  // Tipologia: BASE = template, AZIENDALE = specifico per company
+  tipo                TipoTariffario      @default(BASE)
+  
+  // Company (obbligatorio solo per tipo AZIENDALE)
+  companyId           String?
+  company             Company?            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  // Tariffario origine (se questo è derivato/clonato da un base)
+  tariffarioOrigineId String?
+  tariffarioOrigine   TariffarioAziendale?  @relation("TariffarioDerivato", fields: [tariffarioOrigineId], references: [id], onDelete: SetNull)
+  tariffariDerivati   TariffarioAziendale[] @relation("TariffarioDerivato")
+  
+  // Convenzione associata (opzionale)
+  convenzioneId       String?
+  convenzione         Convenzione?        @relation(fields: [convenzioneId], references: [id], onDelete: SetNull)
+  
+  // Validità temporale
+  validoDa            DateTime            @default(now())
+  validoA             DateTime?
+  attivo              Boolean             @default(true)
+  
+  // Successore programmato (per tariffari che scadono e hanno un successore)
+  successoreId        String?             @unique
+  successore          TariffarioAziendale?  @relation("TariffarioSuccessore", fields: [successoreId], references: [id], onDelete: SetNull)
+  predecessore        TariffarioAziendale?  @relation("TariffarioSuccessore")
+  
+  // Voci del tariffario
+  voci                VoceTariffario[]
+  
+  // Note e metadati
+  note                String?
+  tenantId            String
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  deletedAt           DateTime?
+  createdBy           String?
+
+  @@unique([tenantId, codice])
+  @@index([tenantId])
+  @@index([tipo])
+  @@index([companyId])
+  @@index([convenzioneId])
+  @@index([attivo])
+  @@index([tenantId, tipo, attivo])
+  @@index([tenantId, companyId, attivo])
+  @@map("tariffari_aziendali")
+}
+
+// Voce singola del tariffario - può essere prestazione o spesa fissa/ricorrente
+model VoceTariffario {
+  id                    String              @id @default(uuid())
+  tariffarioAziendaleId String
+  tariffarioAziendale   TariffarioAziendale @relation(fields: [tariffarioAziendaleId], references: [id], onDelete: Cascade)
+  
+  // Tipo voce
+  tipo                  TipoVoceTariffario
+  
+  // Se tipo = PRESTAZIONE: collegamento a Prestazione esistente
+  prestazioneId         String?
+  prestazione           Prestazione?        @relation(fields: [prestazioneId], references: [id], onDelete: SetNull)
+  
+  // Se tipo = SPESA_FISSA o SPESA_RICORRENTE: nome e descrizione custom
+  nome                  String?             // Nome spesa (obbligatorio se non prestazione)
+  descrizione           String?
+  
+  // Pricing
+  prezzoBase            Decimal             @db.Decimal(10, 2)
+  ivaAliquota           Decimal             @default(22) @db.Decimal(5, 2)
+  
+  // Frequenza di applicazione
+  frequenza             FrequenzaTariffario @default(UNA_TANTUM)
+  
+  // Fasce dipendenti - se true, usa le fasce invece del prezzoBase
+  usaFasceDipendenti    Boolean             @default(false)
+  fasceDipendenti       FasciaDipendentiPrezzo[]
+  
+  // Ordinamento e stato
+  ordine                Int                 @default(0)
+  attivo                Boolean             @default(true)
+  note                  String?
+  
+  // Metadata
+  tenantId              String
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  deletedAt             DateTime?
+
+  @@index([tariffarioAziendaleId])
+  @@index([tenantId])
+  @@index([tipo])
+  @@index([prestazioneId])
+  @@index([tenantId, attivo])
+  @@map("voci_tariffario")
+}
+
+// Fasce prezzo basate sul numero di dipendenti dell'azienda
+model FasciaDipendentiPrezzo {
+  id                String          @id @default(uuid())
+  voceTariffarioId  String
+  voceTariffario    VoceTariffario  @relation(fields: [voceTariffarioId], references: [id], onDelete: Cascade)
+  
+  // Range dipendenti
+  minDipendenti     Int             // es. 0, 5, 11
+  maxDipendenti     Int?            // null = illimitato (es. 11+)
+  
+  // Prezzo per questa fascia
+  prezzo            Decimal         @db.Decimal(10, 2)
+  
+  // Descrizione fascia (opzionale, es. "Micro impresa", "PMI")
+  descrizione       String?
+  
+  tenantId          String
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  deletedAt         DateTime?
+
+  @@index([voceTariffarioId])
+  @@index([tenantId])
+  @@map("fasce_dipendenti_prezzo")
 }

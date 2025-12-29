@@ -28,14 +28,17 @@ export function CompanyList({
   onUpdateParticipants
 }: CompanyListProps) {
   return (
-    <div className="w-2/5 border-r bg-gray-50 overflow-y-auto">
-      <div className="p-4 border-b bg-white">
-        <h3 className="font-semibold text-gray-700 text-sm mb-1">Aziende Partecipanti</h3>
+    <div className="h-full flex flex-col">
+      <div className="p-4 bg-white flex-shrink-0">
+        <h3 className="font-semibold text-gray-700 text-sm mb-1 flex items-center gap-2">
+          <Building2 className="w-4 h-4" />
+          Aziende Partecipanti
+        </h3>
         <p className="text-xs text-gray-500">
           Configura il numero di partecipanti per ciascuna azienda
         </p>
       </div>
-      <div className="p-4 space-y-2">
+      <div className="flex-1 overflow-y-auto p-4 space-y-2">
         {selectedCompanies.map((company) => {
           const config = companiesConfig.get(company.id);
           const isSelected = selectedCompanyId === company.id;

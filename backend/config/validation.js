@@ -16,14 +16,14 @@ export const JOI_SCHEMAS = {
   password: Joi.string().min(8).pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/).required(),
   id: Joi.string().uuid().required(),
   objectId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).required(),
-  
+
   // Schemi per autenticazione
   login: Joi.object({
     identifier: Joi.string().required(),
     password: Joi.string().required(),
     rememberMe: Joi.boolean().optional()
   }),
-  
+
   register: Joi.object({
     email: Joi.string().email().required(),
     password: Joi.string().min(8).pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/).required(),
@@ -31,7 +31,7 @@ export const JOI_SCHEMAS = {
     lastName: Joi.string().min(2).max(50).required(),
     acceptTerms: Joi.boolean().valid(true).required()
   }),
-  
+
   // Schemi per utenti
   user: Joi.object({
     email: Joi.string().email().required(),
@@ -42,14 +42,14 @@ export const JOI_SCHEMAS = {
     phone: Joi.string().pattern(/^\+?[1-9]\d{1,14}$/).optional(),
     dateOfBirth: Joi.date().max('now').optional()
   }),
-  
+
   updateUser: Joi.object({
     firstName: Joi.string().min(2).max(50).optional(),
     lastName: Joi.string().min(2).max(50).optional(),
     phone: Joi.string().pattern(/^\+?[1-9]\d{1,14}$/).optional(),
     dateOfBirth: Joi.date().max('now').optional()
   }),
-  
+
   // Schemi per corsi
   course: Joi.object({
     title: Joi.string().min(3).max(200).required(),
@@ -60,7 +60,7 @@ export const JOI_SCHEMAS = {
     level: Joi.string().valid('beginner', 'intermediate', 'advanced').required(),
     isActive: Joi.boolean().optional()
   }),
-  
+
   // Schemi per aziende
   company: Joi.object({
     name: Joi.string().min(2).max(200).required(),
@@ -71,7 +71,7 @@ export const JOI_SCHEMAS = {
     vatNumber: Joi.string().min(8).max(20).optional(),
     industry: Joi.string().max(100).optional()
   }),
-  
+
   // Schemi per query parameters
   pagination: Joi.object({
     page: Joi.number().integer().min(1).default(1),
@@ -79,7 +79,7 @@ export const JOI_SCHEMAS = {
     sortBy: Joi.string().optional(),
     sortOrder: Joi.string().valid('asc', 'desc').default('asc')
   }),
-  
+
   search: Joi.object({
     q: Joi.string().min(1).max(200).required(),
     category: Joi.string().optional(),
@@ -95,29 +95,29 @@ export const ZOD_SCHEMAS = {
   email: z.string().email('Invalid email format'),
   password: z.string()
     .min(8, 'Password must be at least 8 characters')
-    .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/, 
-           'Password must contain uppercase, lowercase, number and special character'),
+    .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/,
+      'Password must contain uppercase, lowercase, number and special character'),
   id: z.string().uuid('Invalid UUID format'),
   objectId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid ObjectId format'),
-  
+
   // Schemi per autenticazione
   login: z.object({
     identifier: z.string().min(1, 'Identifier is required'),
     password: z.string().min(1, 'Password is required'),
     rememberMe: z.boolean().optional()
   }),
-  
+
   register: z.object({
     email: z.string().email('Invalid email format'),
     password: z.string()
       .min(8, 'Password must be at least 8 characters')
-      .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/, 
-             'Password must contain uppercase, lowercase, number and special character'),
+      .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/,
+        'Password must contain uppercase, lowercase, number and special character'),
     firstName: z.string().min(2, 'First name must be at least 2 characters').max(50),
     lastName: z.string().min(2, 'Last name must be at least 2 characters').max(50),
     acceptTerms: z.boolean().refine(val => val === true, 'Terms must be accepted')
   }),
-  
+
   // Schemi per utenti
   user: z.object({
     email: z.string().email('Invalid email format'),
@@ -128,14 +128,14 @@ export const ZOD_SCHEMAS = {
     phone: z.string().regex(/^\+?[1-9]\d{1,14}$/, 'Invalid phone format').optional(),
     dateOfBirth: z.date().max(new Date(), 'Date of birth cannot be in the future').optional()
   }),
-  
+
   updateUser: z.object({
     firstName: z.string().min(2).max(50).optional(),
     lastName: z.string().min(2).max(50).optional(),
     phone: z.string().regex(/^\+?[1-9]\d{1,14}$/, 'Invalid phone format').optional(),
     dateOfBirth: z.date().max(new Date(), 'Date of birth cannot be in the future').optional()
   }),
-  
+
   // Schemi per corsi
   course: z.object({
     title: z.string().min(3, 'Title must be at least 3 characters').max(200),
@@ -146,7 +146,7 @@ export const ZOD_SCHEMAS = {
     level: z.enum(['beginner', 'intermediate', 'advanced']),
     isActive: z.boolean().optional()
   }),
-  
+
   // Schemi per aziende
   company: z.object({
     name: z.string().min(2).max(200),
@@ -157,7 +157,7 @@ export const ZOD_SCHEMAS = {
     vatNumber: z.string().min(8).max(20).optional(),
     industry: z.string().max(100).optional()
   }),
-  
+
   // Schemi per query parameters
   pagination: z.object({
     page: z.number().int().min(1).default(1),
@@ -165,7 +165,7 @@ export const ZOD_SCHEMAS = {
     sortBy: z.string().optional(),
     sortOrder: z.enum(['asc', 'desc']).default('asc')
   }),
-  
+
   search: z.object({
     q: z.string().min(1).max(200),
     category: z.string().optional(),
@@ -182,23 +182,26 @@ export const VALIDATION_CONFIGS = {
     allowUnknown: true, // Permetti campi extra
     stripUnknown: false, // Non rimuovere campi extra
     skipFunctions: true,
-    skipInvalidProperties: false
+    skipInvalidProperties: false,
+    convert: true // Converti stringhe in tipi corretti (es: "true" -> true)
   },
-  
+
   production: {
     abortEarly: true, // Ferma al primo errore
     allowUnknown: false, // Non permettere campi extra
     stripUnknown: true, // Rimuovi campi extra
     skipFunctions: true,
-    skipInvalidProperties: true
+    skipInvalidProperties: true,
+    convert: true // Converti stringhe in tipi corretti
   },
-  
+
   test: {
     abortEarly: false,
     allowUnknown: true,
     stripUnknown: false,
     skipFunctions: true,
-    skipInvalidProperties: false
+    skipInvalidProperties: false,
+    convert: true // Converti stringhe in tipi corretti
   }
 };
 
@@ -208,31 +211,31 @@ export const VALIDATION_CONFIGS = {
 export const createJoiValidator = (schema, options = {}) => {
   const environment = process.env.NODE_ENV || 'development';
   const config = { ...VALIDATION_CONFIGS[environment], ...options };
-  
+
   return (req, res, next) => {
     const { error, value } = schema.validate(req.body, config);
-    
+
     if (error) {
       const errors = error.details.map(detail => ({
         field: detail.path.join('.'),
         message: detail.message,
         value: detail.context?.value
       }));
-      
+
       logger.warn('Joi validation failed', {
         service: 'validation',
         errors,
         path: req.path,
         method: req.method
       });
-      
+
       return res.status(400).json({
         error: 'Validation failed',
         message: 'The provided data is invalid',
         details: errors
       });
     }
-    
+
     // Sostituisci req.body con i dati validati
     req.body = value;
     next();
@@ -255,28 +258,28 @@ export const createZodValidator = (schema, options = {}) => {
           message: err.message,
           value: err.input
         }));
-        
+
         logger.warn('Zod validation failed', {
           service: 'validation',
           errors,
           path: req.path,
           method: req.method
         });
-        
+
         return res.status(400).json({
           error: 'Validation failed',
           message: 'The provided data is invalid',
           details: errors
         });
       }
-      
+
       logger.error('Unexpected validation error', {
         service: 'validation',
         error: error.message,
         path: req.path,
         method: req.method
       });
-      
+
       return res.status(500).json({
         error: 'Internal validation error',
         message: 'An unexpected error occurred during validation'
@@ -299,7 +302,7 @@ export const validateQuery = (schema, validator = 'joi') => {
             message: detail.message,
             value: detail.context?.value
           }));
-          
+
           return res.status(400).json({
             error: 'Query validation failed',
             details: errors
@@ -309,7 +312,7 @@ export const validateQuery = (schema, validator = 'joi') => {
       } else if (validator === 'zod') {
         req.query = schema.parse(req.query);
       }
-      
+
       next();
     } catch (error) {
       logger.warn('Query validation failed', {
@@ -318,7 +321,7 @@ export const validateQuery = (schema, validator = 'joi') => {
         query: req.query,
         path: req.path
       });
-      
+
       return res.status(400).json({
         error: 'Query validation failed',
         message: error.message
@@ -341,7 +344,7 @@ export const validateParams = (schema, validator = 'joi') => {
             message: detail.message,
             value: detail.context?.value
           }));
-          
+
           return res.status(400).json({
             error: 'Parameter validation failed',
             details: errors
@@ -351,7 +354,7 @@ export const validateParams = (schema, validator = 'joi') => {
       } else if (validator === 'zod') {
         req.params = schema.parse(req.params);
       }
-      
+
       next();
     } catch (error) {
       logger.warn('Parameter validation failed', {
@@ -360,7 +363,7 @@ export const validateParams = (schema, validator = 'joi') => {
         params: req.params,
         path: req.path
       });
-      
+
       return res.status(400).json({
         error: 'Parameter validation failed',
         message: error.message
@@ -385,7 +388,7 @@ export const validators = {
     search: validateQuery(JOI_SCHEMAS.search, 'joi'),
     id: validateParams(Joi.object({ id: JOI_SCHEMAS.id }), 'joi')
   },
-  
+
   // Zod validators
   zod: {
     login: createZodValidator(ZOD_SCHEMAS.login),
@@ -408,7 +411,7 @@ export const validate = {
     const config = { ...VALIDATION_CONFIGS[process.env.NODE_ENV || 'development'], ...options };
     return schema.validate(data, config);
   },
-  
+
   zod: (data, schema) => {
     try {
       return { value: schema.parse(data), error: null };

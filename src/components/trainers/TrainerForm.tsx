@@ -6,6 +6,8 @@ import EntityFormLayout from '../shared/form/EntityFormLayout';
 import EntityFormField from '../shared/form/EntityFormField';
 import EntityFormGrid, { EntityFormSection, EntityFormFullWidthField } from '../shared/form/EntityFormGrid';
 import { isValidCodiceFiscale } from '../../lib/utils';
+import { useAsyncValidation } from '../../hooks/useAsyncValidation';
+import { checkEmailAvailability, checkTaxCodeAvailability } from '../../services/validation';
 
 type Trainer = {
   id?: string;
@@ -66,6 +68,24 @@ export default function TrainerForm({ trainer, onSubmit, onCancel, roleType = 'T
     notes: '',
     status: 'ACTIVE',
     specialties: [],
+  });
+
+  // Validazione async per email (skip se in edit mode)
+  const emailValidation = useAsyncValidation({
+    value: formData.email || '',
+    validator: checkEmailAvailability,
+    errorMessage: 'Questa email è già utilizzata',
+    skip: !!trainer?.id, // Skip in edit mode
+    debounceMs: 800
+  });
+
+  // Validazione async per codice fiscale (skip se in edit mode)
+  const taxCodeValidation = useAsyncValidation({
+    value: formData.taxCode || '',
+    validator: checkTaxCodeAvailability,
+    errorMessage: 'Questo codice fiscale è già utilizzato',
+    skip: !!trainer?.id, // Skip in edit mode
+    debounceMs: 800
   });
 
   // Estrai la data di nascita dal codice fiscale (YYYY-MM-DD)
@@ -173,10 +193,19 @@ export default function TrainerForm({ trainer, onSubmit, onCancel, roleType = 'T
       ne.taxCode = 'Il Codice Fiscale è obbligatorio';
     } else if (!isValidCodiceFiscale(formData.taxCode)) {
       ne.taxCode = 'Formato Codice Fiscale non valido';
+    } else if (taxCodeValidation.error) {
+      ne.taxCode = taxCodeValidation.error;
     }
 
     if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       ne.email = 'Formato email non valido';
+    } else if (emailValidation.error) {
+      ne.email = emailValidation.error;
+    }
+
+    // Blocca submit se validazione async in corso
+    if (emailValidation.isValidating || taxCodeValidation.isValidating) {
+      ne._async = 'Validazione in corso...';
     }
 
     setErrors(ne);
@@ -247,7 +276,8 @@ export default function TrainerForm({ trainer, onSubmit, onCancel, roleType = 'T
             variant="pill"
             size="md"
             required
-            error={errors.taxCode}
+            error={errors.taxCode || taxCodeValidation.error}
+            helpText={taxCodeValidation.isValidating ? 'Verifica disponibilità...' : undefined}
           />
           <EntityFormField
             name="birthDate"
@@ -317,7 +347,8 @@ export default function TrainerForm({ trainer, onSubmit, onCancel, roleType = 'T
             required
             variant="pill"
             size="md"
-            error={errors.email}
+            error={errors.email || emailValidation.error}
+            helpText={emailValidation.isValidating ? 'Verifica disponibilità...' : undefined}
           />
           <EntityFormField
             name="phone"

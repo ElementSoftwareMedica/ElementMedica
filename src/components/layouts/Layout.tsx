@@ -1,40 +1,66 @@
 import React, { useState } from 'react';
 import Sidebar from './Sidebar';
 import Header from './Header';
-import Notifications from '../shared/Notifications';
 
-console.log('DEBUG: Layout.tsx rendered');
+// Import Formazione theme
+import '../../styles/formazione-theme.css';
 
 interface LayoutProps {
   children: React.ReactNode;
 }
 
+/**
+ * Layout Component - ElementSicurezza (Sicurezza e Formazione)
+ * Main layout wrapper with sidebar navigation (always visible on desktop)
+ * Sidebar collapse syncs with main content area width
+ */
 const Layout: React.FC<LayoutProps> = ({ children }) => {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  
-  // Debug logging per il sidebar
-  console.log('📱 Layout render - sidebarOpen:', sidebarOpen);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   return (
-    <div className="flex min-h-screen overflow-hidden bg-gray-50">
-      {/* Sidebar */}
-      <div className={`fixed inset-y-0 left-0 z-50 transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 lg:static lg:inset-0`}>
-        <Sidebar open={sidebarOpen} setOpen={setSidebarOpen} />
-      </div>
-      {/* Overlay for mobile */}
-      {sidebarOpen && (
-        <div 
-          className="fixed inset-0 z-40 bg-black bg-opacity-50 lg:hidden" 
-          onClick={() => setSidebarOpen(false)}
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800 formazione-theme">
+      {/* Sidebar - Fixed on desktop, toggleable on mobile */}
+      <aside
+        className={`
+          fixed inset-y-0 left-0 z-50 
+          transition-all duration-300
+          ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+        `}
+      >
+        <Sidebar
+          open={mobileMenuOpen}
+          setOpen={setMobileMenuOpen}
+          collapsed={sidebarCollapsed}
+          onCollapsedChange={setSidebarCollapsed}
+        />
+      </aside>
+
+      {/* Mobile overlay */}
+      {mobileMenuOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+          onClick={() => setMobileMenuOpen(false)}
         />
       )}
-      {/* Content area */}
-      <div className="relative flex flex-col flex-1 overflow-y-auto overflow-x-hidden lg:ml-0">
-        <Header sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
-        <Notifications />
-        <main className="flex-grow p-4 sm:p-6 overflow-y-auto">
+
+      {/* Main Content Area - adjusts based on sidebar width */}
+      <div className={`transition-all duration-300 ${sidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}>
+        {/* Header */}
+        <Header sidebarOpen={mobileMenuOpen} setSidebarOpen={setMobileMenuOpen} />
+
+        {/* Page Content */}
+        <main className="p-6">
           {children}
         </main>
+
+        {/* Footer */}
+        <footer className="px-6 py-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between text-sm text-gray-500">
+            <span>© 2025 ElementSicurezza - Sicurezza e Formazione</span>
+            <span>v1.0.0</span>
+          </div>
+        </footer>
       </div>
     </div>
   );

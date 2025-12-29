@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/rules-of-hooks */
 import type { Meta, StoryObj } from '@storybook/react';
 import { useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from './Tabs';
@@ -55,7 +56,7 @@ type Story = StoryObj<typeof meta>;
 // Template per le storie con stato
 const TabsTemplate = (args: any) => {
   const [activeTab, setActiveTab] = useState(args.value || 'tab1');
-  
+
   return (
     <Tabs {...args} value={activeTab} onValueChange={setActiveTab}>
       <TabsList>
@@ -71,17 +72,17 @@ const TabsTemplate = (args: any) => {
         <div className="mt-4 space-y-2">
           <div>
             <label className="block text-sm font-medium">Name</label>
-            <input 
-              type="text" 
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" 
+            <input
+              type="text"
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
               placeholder="Your name"
             />
           </div>
           <div>
             <label className="block text-sm font-medium">Email</label>
-            <input 
-              type="email" 
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" 
+            <input
+              type="email"
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
               placeholder="your.email@example.com"
             />
           </div>
@@ -95,15 +96,15 @@ const TabsTemplate = (args: any) => {
         <div className="mt-4 space-y-2">
           <div>
             <label className="block text-sm font-medium">Current Password</label>
-            <input 
-              type="password" 
+            <input
+              type="password"
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
             />
           </div>
           <div>
             <label className="block text-sm font-medium">New Password</label>
-            <input 
-              type="password" 
+            <input
+              type="password"
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
             />
           </div>
@@ -144,7 +145,7 @@ export const Default: Story = {
 // Con tab disabilitato
 const TabsWithDisabledTemplate = (args: any) => {
   const [activeTab, setActiveTab] = useState(args.value || 'tab1');
-  
+
   return (
     <Tabs {...args} value={activeTab} onValueChange={setActiveTab}>
       <TabsList>
@@ -175,7 +176,7 @@ export const WithDisabledTab: Story = {
 // Orientamento verticale
 const VerticalTabsTemplate = (args: any) => {
   const [activeTab, setActiveTab] = useState(args.value || 'overview');
-  
+
   return (
     <div className="w-full max-w-4xl">
       <Tabs {...args} value={activeTab} onValueChange={setActiveTab} orientation="vertical">
@@ -237,7 +238,7 @@ export const Vertical: Story = {
 // Molti tabs
 const ManyTabsTemplate = (args: any) => {
   const [activeTab, setActiveTab] = useState(args.value || 'tab1');
-  
+
   return (
     <Tabs {...args} value={activeTab} onValueChange={setActiveTab}>
       <TabsList>
@@ -270,24 +271,24 @@ export const ManyTabs: Story = {
 // Stili personalizzati
 const CustomStyledTemplate = (args: any) => {
   const [activeTab, setActiveTab] = useState(args.value || 'design');
-  
+
   return (
     <Tabs {...args} value={activeTab} onValueChange={setActiveTab}>
       <TabsList className="bg-purple-100">
-        <TabsTrigger 
-          value="design" 
+        <TabsTrigger
+          value="design"
           className="data-[state=active]:bg-purple-600 data-[state=active]:text-white"
         >
           Design
         </TabsTrigger>
-        <TabsTrigger 
-          value="development" 
+        <TabsTrigger
+          value="development"
           className="data-[state=active]:bg-purple-600 data-[state=active]:text-white"
         >
           Development
         </TabsTrigger>
-        <TabsTrigger 
-          value="testing" 
+        <TabsTrigger
+          value="testing"
           className="data-[state=active]:bg-purple-600 data-[state=active]:text-white"
         >
           Testing

@@ -32,6 +32,13 @@ export { default as PageHeader } from '../layouts/PageHeader';
 export { default as SelectionToolbar } from '../layouts/SelectionToolbar';
 export { default as TabNavigation } from './TabNavigation';
 
+// Tenant Components
+export { TenantSelector, default as TenantSelectorDefault } from './TenantSelector';
+
+// Branch Components (Project 45 - Tenant Restructuring)
+export { BranchSwitcher, BranchIndicator } from './BranchSwitcher';
+export { BranchFilter, BranchFilterChip, useBranchFilterState } from './BranchFilter';
+
 // Types
 // SelectionPillAction migrated to design-system/molecules/SelectionPills
 // Action type migrated to design-system/molecules/Dropdown as DropdownAction

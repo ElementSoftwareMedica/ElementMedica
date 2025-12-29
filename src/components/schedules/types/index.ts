@@ -14,6 +14,7 @@ export interface Training {
   minParticipants?: number;
   riskLevel?: RiskLevel | 'ALTO' | 'MEDIO' | 'BASSO' | 'A' | 'B' | 'C' | string; // Union of all possible values
   courseType?: CourseType | 'PRIMO_CORSO' | 'AGGIORNAMENTO' | string; // Union of all possible values
+  pricePerPerson?: number; // Price from Course model
   [key: string]: unknown; // Allow additional properties for API flexibility without using any
 }
 
@@ -24,6 +25,8 @@ export interface ScheduleDateEntry {
   end: string;
   trainerId: string | number;
   coTrainerId: string | number;
+  /** ID della CourseSession nel database (disponibile solo per schedule esistenti) */
+  sessionId?: string;
 }
 
 // Option type for dropdowns
@@ -38,6 +41,8 @@ export interface Trainer {
   firstName: string;
   lastName: string;
   certifications?: string[] | string;
+  email?: string;
+  hourlyRate?: number;
 }
 
 // Person interface
@@ -59,6 +64,7 @@ export interface ScheduleFormData {
   course_type?: string;
   location?: string;
   dates?: ScheduleDateEntry[];
+  isPublic?: boolean;
   [key: string]: unknown;
 }
 

@@ -423,7 +423,7 @@ export function GDPREntityFilters({
                   const newFilter: ActiveFilter = {
                     key: config.key,
                     label: config.label,
-                    value: config.defaultValue,
+                    value: (config.defaultValue || '') as FilterValue,
                     operator: 'equals',
                     type: config.type === 'dateRange' ? 'date' : (config.type as FilterType) || 'text'
                   };

@@ -2,6 +2,7 @@
  * Design System - Input Stories
  * Week 8 Implementation - Component Library
  */
+/* eslint-disable react-hooks/rules-of-hooks */
 
 import React from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
@@ -274,22 +275,22 @@ export const AllStates: Story = {
   render: () => (
     <div className="space-y-4 w-80">
       <Input label="Default" placeholder="Default state" />
-      <Input 
-        label="Error" 
-        placeholder="Error state" 
+      <Input
+        label="Error"
+        placeholder="Error state"
         value="invalid input"
-        errorMessage="This field has an error" 
+        errorMessage="This field has an error"
       />
-      <Input 
-        label="Success" 
-        placeholder="Success state" 
+      <Input
+        label="Success"
+        placeholder="Success state"
         value="valid input"
-        successMessage="This field is valid" 
+        successMessage="This field is valid"
       />
-      <Input 
-        label="Disabled" 
-        placeholder="Disabled state" 
-        disabled 
+      <Input
+        label="Disabled"
+        placeholder="Disabled state"
+        disabled
         value="Disabled input"
       />
     </div>
@@ -303,7 +304,7 @@ export const AllStates: Story = {
 export const InteractivePassword: Story = {
   render: () => {
     const [showPassword, setShowPassword] = React.useState(false);
-    
+
     return (
       <div className="w-80">
         <Input

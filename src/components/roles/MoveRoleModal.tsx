@@ -4,7 +4,7 @@ import { Button } from '../../design-system/atoms/Button/Button';
 import { Badge } from '../../design-system/atoms/Badge/Badge';
 import { Label } from '../../design-system/atoms/Label/Label';
 import { Alert, AlertDescription } from '../ui/alert';
-import { 
+import {
   AlertCircle,
   ChevronDown,
   ChevronRight,
@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { moveRoleInHierarchy } from '../../services/roles';
 import { Role } from '../../hooks/useRoles';
+import type { RoleEditData } from './RoleHierarchy/types';
 
 interface HierarchyLevel {
   level: number;
@@ -27,7 +28,7 @@ interface MoveRoleModalProps {
   isOpen: boolean;
   onClose: () => void;
   onMove: (targetLevel: number, parentRoleType?: string) => Promise<void>;
-  role: Role;
+  role: Role | RoleEditData | null;
   hierarchy: Record<string, HierarchyLevel>;
   currentLevel: number;
 }
@@ -46,6 +47,9 @@ const MoveRoleModal: React.FC<MoveRoleModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [expandedLevels, setExpandedLevels] = useState<Set<number>>(new Set());
 
+  // Type guard to check if role is Role type (has 'type' property) or RoleEditData (has 'roleType' property)
+  const roleIdentifier = role ? ('type' in role ? role.type : 'roleType' in role ? role.roleType : '') : '';
+
   // Reset lo stato quando si apre il modal
   useEffect(() => {
     if (isOpen) {
@@ -56,6 +60,9 @@ const MoveRoleModal: React.FC<MoveRoleModalProps> = ({
     }
   }, [isOpen]);
 
+  // Early return AFTER hooks
+  if (!role) return null;
+
   const handleMove = async () => {
     if (selectedLevel === null) {
       setError('Seleziona un livello di destinazione');
@@ -65,10 +72,10 @@ const MoveRoleModal: React.FC<MoveRoleModalProps> = ({
     try {
       setLoading(true);
       setError(null);
-      
+
       // Usa il nuovo servizio per spostare il ruolo
-      await moveRoleInHierarchy(role.type, selectedLevel, selectedParentRole || undefined);
-      
+      await moveRoleInHierarchy(roleIdentifier, selectedLevel, selectedParentRole || undefined);
+
       // Chiama anche la callback originale per compatibilità
       await onMove(selectedLevel, selectedParentRole || undefined);
       onClose();
@@ -106,8 +113,6 @@ const MoveRoleModal: React.FC<MoveRoleModalProps> = ({
     }
     setExpandedLevels(newExpanded);
   };
-
-  if (!role) return null;
 
   const modalFooter = (
     <>
@@ -170,7 +175,7 @@ const MoveRoleModal: React.FC<MoveRoleModalProps> = ({
 
             <div className="space-y-4">
               <Label className="text-base font-medium">Nuovo Livello Gerarchico</Label>
-              
+
               <div className="space-y-3 max-h-80 overflow-y-auto border rounded-lg p-4">
                 {availableLevels.length > 0 ? (
                   availableLevels.map((level) => {
@@ -178,11 +183,11 @@ const MoveRoleModal: React.FC<MoveRoleModalProps> = ({
                     const rolesAtLevel = Object.entries(hierarchy)
                       .filter(([_, roleData]) => roleData?.level === level)
                       .map(([roleType, roleData]) => ({ roleType, ...roleData }));
-                    
+
                     const isHigher = level < currentLevel;
                     const isExpanded = expandedLevels.has(level);
                     const availableParents = getAvailableParentRoles(level);
-                    
+
                     return (
                       <div key={level} className="space-y-3 border-b pb-3 last:border-b-0">
                         <div className="flex items-center space-x-3">
@@ -228,7 +233,7 @@ const MoveRoleModal: React.FC<MoveRoleModalProps> = ({
                             </Button>
                           )}
                         </div>
-                        
+
                         {selectedLevel === level && isExpanded && (
                           <div className="ml-6 space-y-3">
                             {/* Selezione del genitore */}
@@ -270,7 +275,7 @@ const MoveRoleModal: React.FC<MoveRoleModalProps> = ({
                                 </div>
                               </div>
                             )}
-                            
+
                             {/* Ruoli esistenti a questo livello */}
                             {rolesAtLevel.length > 0 && (
                               <div className="space-y-2">
@@ -279,9 +284,9 @@ const MoveRoleModal: React.FC<MoveRoleModalProps> = ({
                                 </Label>
                                 <div className="flex flex-wrap gap-2">
                                   {rolesAtLevel.map((roleData, index) => (
-                                    <Badge 
-                                      key={`${level}-${roleData.roleType || index}`} 
-                                      variant="outline" 
+                                    <Badge
+                                      key={`${level}-${roleData.roleType || index}`}
+                                      variant="outline"
                                       className="text-xs"
                                     >
                                       {roleData.name || roleData.roleType}
@@ -308,7 +313,7 @@ const MoveRoleModal: React.FC<MoveRoleModalProps> = ({
               <Alert>
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  <strong>Nota:</strong> Spostare il ruolo dal livello {currentLevel} al livello {selectedLevel} 
+                  <strong>Nota:</strong> Spostare il ruolo dal livello {currentLevel} al livello {selectedLevel}
                   {selectedLevel < currentLevel ? ' aumenterà' : ' diminuirà'} la sua autorità nella gerarchia.
                   {selectedParentRole && (
                     <span className="block mt-1">

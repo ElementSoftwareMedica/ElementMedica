@@ -23,7 +23,7 @@ const DashboardRefactored: React.FC = () => {
     calendarView,
     setCalendarView,
     futureCoursesCount
-  } = useCalendarEvents(data.schedules);
+  } = useCalendarEvents(data.schedules as any); // DashboardSchedule[] compatible with Schedule[]
 
   const {
     showForm,
@@ -121,7 +121,7 @@ const DashboardRefactored: React.FC = () => {
               events={calendarEvents}
               onSelectSlot={handleSelectSlot}
               view={calendarView}
-              onViewChange={setCalendarView}
+              onView={(view) => setCalendarView(view as 'month' | 'week' | 'day')}
             />
           </div>
         </div>

@@ -381,7 +381,7 @@ export function useScheduleContextState({
   // Validation
   const validateAll = useCallback(() => {
     const result = validateScheduleForm(
-      formData,
+      formData as unknown as import('../types').ScheduleFormData,
       dynamicRiskOptions,
       dynamicCourseTypeOptions,
       timeStringToMinutes,

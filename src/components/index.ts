@@ -24,7 +24,7 @@ export {
 export { Input } from '../design-system/atoms/Input';
 export { Label } from '../design-system/atoms/Label';
 export { Select } from '../design-system/atoms/Select';
-export { buttonVariants } from '../design-system/atoms/Button';
+export type { ButtonVariant } from '../design-system/atoms/Button';
 
 // Export business-specific shared UI components
 export {

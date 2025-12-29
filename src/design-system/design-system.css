@@ -35,6 +35,60 @@
   --color-secondary-900: #0f172a;
   --color-secondary-950: #020617;
 
+  /* === MEDICAL COLORS === */
+  /* Celeste Medico - Primary per Medicina del Lavoro */
+  --color-medical-50: #ecfeff;
+  --color-medical-100: #cffafe;
+  --color-medical-200: #a5f3fc;
+  --color-medical-300: #67e8f9;
+  --color-medical-400: #22d3ee;
+  --color-medical-500: #06b6d4;
+  --color-medical-600: #0891b2;
+  --color-medical-700: #0e7490;
+  --color-medical-800: #155e75;
+  --color-medical-900: #164e63;
+  
+  /* Verde Salute - Accenti wellness */
+  --color-health-50: #f0fdf4;
+  --color-health-100: #dcfce7;
+  --color-health-200: #bbf7d0;
+  --color-health-300: #86efac;
+  --color-health-400: #4ade80;
+  --color-health-500: #22c55e;
+  --color-health-600: #16a34a;
+  --color-health-700: #15803d;
+  --color-health-800: #166534;
+  --color-health-900: #14532d;
+  
+  /* === SAFETY COLORS (per Corsi) === */
+  /* Rosso Sicurezza - Alto Rischio */
+  --color-safety-high-50: #fef2f2;
+  --color-safety-high-100: #fee2e2;
+  --color-safety-high-500: #ef4444;
+  --color-safety-high-600: #dc2626;
+  --color-safety-high-700: #b91c1c;
+  
+  /* Arancione - Medio Rischio */
+  --color-safety-medium-50: #fff7ed;
+  --color-safety-medium-100: #ffedd5;
+  --color-safety-medium-500: #f97316;
+  --color-safety-medium-600: #ea580c;
+  --color-safety-medium-700: #c2410c;
+  
+  /* Verde - Basso Rischio */
+  --color-safety-low-50: #f0fdf4;
+  --color-safety-low-100: #dcfce7;
+  --color-safety-low-500: #22c55e;
+  --color-safety-low-600: #16a34a;
+  --color-safety-low-700: #15803d;
+  
+  /* === CATEGORY COLORS (per tipologie corsi) === */
+  --color-category-antincendio: #f59e0b;
+  --color-category-primo-soccorso: #ec4899;
+  --color-category-sicurezza: #3b82f6;
+  --color-category-lavori-quota: #8b5cf6;
+  --color-category-spazi-confinati: #64748b;
+
   /* Semantic Colors */
   --color-success: #22c55e;
   --color-warning: #f59e0b;

@@ -236,23 +236,23 @@ export const GDPRAuditPanel: React.FC<GDPRAuditPanelProps> = ({
                       </span>
                     </div>
                     
-                    {log.oldData && (
+                    {log.oldData ? (
                       <div className="md:col-span-2">
                         <span className="font-medium text-gray-700">Dati precedenti:</span>
                         <pre className="mt-1 p-2 bg-gray-100 rounded text-xs overflow-x-auto">
-                          {JSON.stringify(log.oldData, null, 2)}
+                          {String(JSON.stringify(log.oldData, null, 2))}
                         </pre>
                       </div>
-                    )}
+                    ) : null}
                     
-                    {log.newData && (
+                    {log.newData ? (
                       <div className="md:col-span-2">
                         <span className="font-medium text-gray-700">Nuovi dati:</span>
                         <pre className="mt-1 p-2 bg-gray-100 rounded text-xs overflow-x-auto">
-                          {JSON.stringify(log.newData, null, 2)}
+                          {String(JSON.stringify(log.newData, null, 2))}
                         </pre>
                       </div>
-                    )}
+                    ) : null}
                     
                     {log.metadata && (
                       <div className="md:col-span-2">

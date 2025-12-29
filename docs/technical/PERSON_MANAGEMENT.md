@@ -2,7 +2,9 @@
 
 ## Overview
 
-Il sistema di gestione delle persone è stato unificato per gestire in modo coerente dipendenti, formatori e utenti di sistema attraverso un'unica entità `Person` con ruoli multipli.
+Il sistema di gestione delle persone è stato unificato per gestire in modo coerente dipendenti, formatori e utenti di sistema attraverso un'unica entità `Person` con ruoli multipli tramite `PersonRole`.
+
+**IMPORTANTE**: Le entità `User`, `Employee` sono **OBSOLETE**. Usare sempre `Person` + `PersonRole`.
 
 ## Architettura
 
@@ -10,231 +12,322 @@ Il sistema di gestione delle persone è stato unificato per gestire in modo coer
 
 ```prisma
 model Person {
-  id              Int           @id @default(autoincrement())
-  nome            String
-  cognome         String
-  codice_fiscale  String        @unique
-  email           String?
-  telefono        String?
-  indirizzo       String?
-  data_nascita    DateTime?
-  companyId       Int
-  company         Company       @relation(fields: [companyId], references: [id])
-  personRoles     PersonRole[]
-  is_active       Boolean       @default(true)
-  created_at      DateTime      @default(now())
-  updated_at      DateTime      @updatedAt
-  deleted_at      DateTime?
-  deleted_by      Int?
+  id                String           @id @default(uuid())
+  firstName         String           @db.VarChar(100)
+  lastName          String           @db.VarChar(100)
+  email             String?          @unique @db.VarChar(255)
+  phone             String?          @db.VarChar(20)
+  birthDate         DateTime?        @db.Date
+  taxCode           String?          @unique @db.VarChar(16)
+  vatNumber         String?          @db.VarChar(11)
+  residenceAddress  String?          @db.VarChar(255)
+  residenceCity     String?          @db.VarChar(100)
+  postalCode        String?          @db.VarChar(10)
+  province          String?          @db.VarChar(2)
+  username          String?          @unique @db.VarChar(50)
+  password          String?          @db.VarChar(255)  // bcrypt hash, salt 12
+  status            PersonStatus     @default(ACTIVE)
+  title             String?          @db.VarChar(100)
+  hiredDate         DateTime?        @db.Date
+  hourlyRate        Decimal?         @db.Decimal(10, 2)
+  iban              String?          @db.VarChar(34)
+  registerCode      String?          @db.VarChar(50)
+  certifications    String[]
+  specialties       String[]
+  profileImage      String?          @db.VarChar(500)
+  notes             String?
+  lastLogin         DateTime?        @db.Timestamp(6)
+  failedAttempts    Int              @default(0) @db.SmallInt
+  lockedUntil       DateTime?        @db.Timestamp(6)
+  globalRole        String?          @db.VarChar(50)
+  tenantId          String           // Multi-tenancy OBBLIGATORIO
+  companyId         String?
+  siteId            String?
+  reparto           String?          @db.VarChar(100)
+  repartoId         String?
+  createdAt         DateTime         @default(now()) @db.Timestamp(6)
+  updatedAt         DateTime         @updatedAt @db.Timestamp(6)
+  deletedAt         DateTime?        @db.Timestamp(6)  // Soft delete GDPR
+  
+  // GDPR Fields
+  gdprConsentDate     DateTime?      @db.Timestamp(6)
+  gdprConsentVersion  String?        @db.VarChar(10)
+  dataRetentionUntil  DateTime?      @db.Date
+  preferences         Json?          @default("{}")
+
+  // Relations
+  tenant              Tenant         @relation(fields: [tenantId], references: [id])
+  company             Company?       @relation(fields: [companyId], references: [id])
+  personRoles         PersonRole[]   // I ruoli dell'utente
+  // ... altre relazioni
   
   @@map("persons")
 }
 
 model PersonRole {
-  id        Int      @id @default(autoincrement())
-  personId  Int
-  person    Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
-  roleType  RoleType
+  id                  String               @id @default(uuid())
+  personId            String
+  roleType            RoleType?
+  customRoleId        String?              // Per ruoli personalizzati
+  isActive            Boolean              @default(true)
+  isPrimary           Boolean              @default(false)
+  assignedAt          DateTime             @default(now()) @db.Timestamp(6)
+  assignedBy          String?
+  validFrom           DateTime             @default(now()) @db.Date
+  validUntil          DateTime?            @db.Date
+  companyId           String?
+  tenantId            String               // Multi-tenancy OBBLIGATORIO
+  departmentId        String?
+  level               Int                  @default(0)
+  parentRoleId        String?
+  path                String?
+  deletedAt           DateTime?            // Soft delete
+  createdAt           DateTime             @default(now()) @db.Timestamp(6)
+  updatedAt           DateTime             @updatedAt @db.Timestamp(6)
   
-  @@unique([personId, roleType])
+  // Relations
+  person              Person               @relation(fields: [personId], references: [id], onDelete: Cascade)
+  tenant              Tenant               @relation(fields: [tenantId], references: [id])
+  company             Company?             @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  customRole          CustomRole?          @relation(fields: [customRoleId], references: [id], onDelete: Cascade)
+  permissions         RolePermission[]
+  advancedPermissions AdvancedPermission[]
+  parentRole          PersonRole?          @relation("RoleHierarchy", fields: [parentRoleId], references: [id])
+  childRoles          PersonRole[]         @relation("RoleHierarchy")
+
+  @@unique([personId, roleType, customRoleId, companyId, tenantId])
+  @@index([personId, isActive])
+  @@index([roleType])
+  @@index([tenantId])
   @@map("person_roles")
 }
 
 enum RoleType {
-  EMPLOYEE
-  TRAINER
-  SYSTEM_USER
+  // Ruoli dipendente/utente
+  EMPLOYEE              // Dipendente base
+  MANAGER               // Manager
+  HR_MANAGER            // HR Manager
+  DEPARTMENT_HEAD       // Capo dipartimento
+  
+  // Ruoli formatore
+  TRAINER               // Formatore
+  SENIOR_TRAINER        // Formatore senior
+  TRAINER_COORDINATOR   // Coordinatore formatori
+  EXTERNAL_TRAINER      // Formatore esterno
+  
+  // Ruoli amministrativi
+  SUPER_ADMIN           // Super amministratore (tutti i tenant)
+  ADMIN                 // Amministratore tenant
+  COMPANY_ADMIN         // Amministratore azienda
+  TENANT_ADMIN          // Amministratore tenant
+  TRAINING_ADMIN        // Amministratore formazione
+  CLINIC_ADMIN          // Amministratore clinica
+  COMPANY_MANAGER       // Manager azienda
+  
+  // Ruoli limitati
+  VIEWER                // Solo visualizzazione
+  OPERATOR              // Operatore
+  COORDINATOR           // Coordinatore
+  SUPERVISOR            // Supervisore
+  GUEST                 // Ospite
+  CONSULTANT            // Consulente
+  AUDITOR               // Auditor
+}
+
+enum PersonStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING
 }
 ```
 
-### Controller Unificato
+### Sistema Permessi
 
-Il `PersonController` gestisce tutte le operazioni CRUD per le persone:
+I permessi sono gestiti a due livelli:
 
-- **getEmployees()**: Recupera tutti i dipendenti
-- **getTrainers()**: Recupera tutti i formatori
-- **getSystemUsers()**: Recupera tutti gli utenti di sistema
-- **getPersonById()**: Recupera una persona specifica
-- **createPerson()**: Crea una nuova persona con ruolo
-- **updatePerson()**: Aggiorna una persona esistente
-- **deletePerson()**: Soft delete di una persona
-- **addRole()**: Aggiunge un ruolo a una persona
-- **removeRole()**: Rimuove un ruolo da una persona
+1. **Default Permissions**: Ogni RoleType ha permessi predefiniti in `backend/services/enhancedRole/utils/RoleTypes.js`
+2. **Custom Permissions**: Salvati in `RolePermission` e `AdvancedPermission` per sovrascrivere i default
 
-### Route Unificate
+```prisma
+model RolePermission {
+  id           String      @id @default(uuid())
+  personRoleId String
+  permission   PersonPermission
+  isGranted    Boolean     @default(true)
+  grantedBy    String?
+  grantedAt    DateTime    @default(now())
+  
+  personRole   PersonRole  @relation(fields: [personRoleId], references: [id], onDelete: Cascade)
+  
+  @@unique([personRoleId, permission])
+}
 
-#### Nuove Route (`/api/persons`)
+enum PersonPermission {
+  // Companies
+  VIEW_COMPANIES
+  CREATE_COMPANIES
+  EDIT_COMPANIES
+  DELETE_COMPANIES
+  
+  // Persons
+  VIEW_PERSONS
+  CREATE_PERSONS
+  EDIT_PERSONS
+  DELETE_PERSONS
+  
+  // Courses
+  VIEW_COURSES
+  CREATE_COURSES
+  EDIT_COURSES
+  DELETE_COURSES
+  
+  // Schedules
+  VIEW_SCHEDULES
+  CREATE_SCHEDULES
+  EDIT_SCHEDULES
+  DELETE_SCHEDULES
+  
+  // Documents
+  VIEW_DOCUMENTS
+  CREATE_DOCUMENTS
+  EDIT_DOCUMENTS
+  DELETE_DOCUMENTS
+  DOWNLOAD_DOCUMENTS
+  
+  // Roles
+  ROLE_MANAGEMENT
+  VIEW_ROLES
+  CREATE_ROLES
+  EDIT_ROLES
+  DELETE_ROLES
+  ASSIGN_ROLES
+  REVOKE_ROLES
+  
+  // ... altri permessi
+}
+```
+
+## API Endpoints
+
+### Persone (`/api/v1/persons`)
 
 ```
-GET    /api/persons/employees     - Lista dipendenti
-GET    /api/persons/trainers      - Lista formatori
-GET    /api/persons/users         - Lista utenti di sistema
-GET    /api/persons/:id           - Dettagli persona
-POST   /api/persons               - Crea persona
-PUT    /api/persons/:id           - Aggiorna persona
-DELETE /api/persons/:id           - Elimina persona
-POST   /api/persons/:id/roles     - Aggiungi ruolo
-DELETE /api/persons/:id/roles     - Rimuovi ruolo
+GET    /api/v1/persons           - Lista persone (filtro per ruolo con ?roleType=)
+GET    /api/v1/persons/:id       - Dettagli persona
+POST   /api/v1/persons           - Crea persona
+PUT    /api/v1/persons/:id       - Aggiorna persona
+DELETE /api/v1/persons/:id       - Soft delete persona
 ```
 
-#### Route Retrocompatibili
+### Ruoli (`/api/v1/roles`)
 
-Le route esistenti continuano a funzionare per garantire la compatibilità:
+```
+GET    /api/v1/roles/:roleType/permissions      - Permessi del ruolo
+PUT    /api/v1/roles/:roleType/permissions      - Aggiorna permessi ruolo
+GET    /api/v1/roles/types                      - Lista tipi ruolo disponibili
+```
 
-- `/employees/*` - Reindirizzate al PersonController
-- `/users/*` - Reindirizzate al PersonController
+### Route Retrocompatibili
 
-## Compatibilità Frontend
+Le route legacy continuano a funzionare per compatibilità:
 
-### Trasformazione Dati
+- `/api/v1/employees/*` - Reindirizzate al PersonController (filtro roleType=EMPLOYEE)
+- `/api/v1/trainers/*` - Reindirizzate al PersonController (filtro roleType=TRAINER)
 
-Il sistema mantiene la compatibilità con il frontend esistente attraverso:
+## Multi-Tenancy
 
-1. **Snake Case ↔ Camel Case**: Conversione automatica dei nomi dei campi
-2. **Mapping Campi**: `companyId` ↔ `company_id`
-3. **Struttura Response**: Mantiene il formato atteso dal frontend
-
-### Esempio Trasformazione
+**CRITICO**: Ogni query DEVE includere `tenantId` per l'isolamento dati.
 
 ```javascript
-// Database (camelCase)
-{
-  id: 1,
-  nome: "Mario",
-  cognome: "Rossi",
-  codiceFiscale: "RSSMRA80A01H501Z",
-  companyId: 1
-}
+// Pattern corretto
+const persons = await prisma.person.findMany({
+  where: {
+    tenantId: req.user.tenantId,  // OBBLIGATORIO
+    deletedAt: null               // Soft delete
+  }
+});
 
-// Frontend (snake_case)
-{
-  id: 1,
-  nome: "Mario",
-  cognome: "Rossi",
-  codice_fiscale: "RSSMRA80A01H501Z",
-  company_id: 1
+// Per EMPLOYEE, filtrare anche per personId se necessario
+if (isEmployeeOnly) {
+  where.id = req.user.personId;
 }
 ```
 
-## Middleware e Sicurezza
+## GDPR Compliance
+
+### Soft Delete
+- Tutte le eliminazioni usano `deletedAt` invece di DELETE fisico
+- I dati rimangono per audit trail fino a `dataRetentionUntil`
+
+### Anonymization
+- Pattern per anonimizzazione: `deleted_{uuid}@anonymized.local`
+- Password NEVER in logs/exports
+
+### Consent Tracking
+- `gdprConsentDate`: Data ultimo consenso
+- `gdprConsentVersion`: Versione privacy policy accettata
+- `ConsentRecord` per tracciare tutti i consensi
+
+### Audit Trail
+- `GdprAuditLog` per tutte le modifiche a dati PII
+- Include: `personId`, `action`, `oldData`, `newData`, `performedBy`, `ipAddress`
+
+## Sicurezza
 
 ### Autenticazione
-- Tutte le route richiedono autenticazione JWT
-- Isolamento per compagnia automatico
+- JWT con refresh token
+- Password hash bcrypt salt 12
+- Rate limiting: 5 tentativi / 15 minuti
+- Account lockout dopo 5 tentativi falliti
 
 ### Autorizzazione
-- Controllo permessi basato sui ruoli utente
-- Validazione ownership delle risorse
+- Permission-based access control (PBAC)
+- Check middleware: `requirePermission('VIEW_PERSONS')`
+- EMPLOYEE può vedere solo propri dati
 
 ### Validazione
-- Validazione input con express-validator
-- Sanitizzazione dati automatica
-
-### Logging
-- Log dettagliati per audit trail
-- Monitoraggio performance
-
-## Gestione Errori
-
-### Errori Comuni
-
-- **400 Bad Request**: Dati di input non validi
-- **401 Unauthorized**: Token mancante o non valido
-- **403 Forbidden**: Permessi insufficienti
-- **404 Not Found**: Risorsa non trovata
-- **409 Conflict**: Conflitto dati (es. codice fiscale duplicato)
-- **500 Internal Server Error**: Errore server
-
-### Formato Errore
-
-```json
-{
-  "error": "Validation failed",
-  "details": [
-    {
-      "field": "codice_fiscale",
-      "message": "Codice fiscale già esistente"
-    }
-  ]
-}
-```
+- Input validation con Joi/express-validator
+- SQL injection protection tramite Prisma
+- XSS protection tramite sanitization
 
 ## Testing
 
-### Unit Tests
-
-I test sono disponibili in `/tests/personController.test.js` e coprono:
-
-- Tutti i metodi del controller
-- Trasformazione dati
-- Gestione errori
-- Validazione input
+### Test Account
+```
+Admin: admin@example.com / Admin123!
+Employee: mario.rossi@testcompany.com / Test123!
+```
 
 ### Esecuzione Test
-
 ```bash
-npm test personController
+npm test                    # Tutti i test
+npm test -- --grep "Person" # Solo test Person
 ```
 
-## Migrazione
+## Troubleshooting
 
-### Da Sistema Separato a Unificato
+### Errori Comuni
 
-1. **Backup Database**: Sempre prima di migrare
-2. **Esecuzione Migration**: Prisma gestisce la migrazione automaticamente
-3. **Verifica Dati**: Controllo integrità post-migrazione
-4. **Test Funzionalità**: Verifica che tutto funzioni correttamente
+| Errore | Causa | Soluzione |
+|--------|-------|-----------|
+| `P2025` | Record non trovato | Verifica ID e tenantId |
+| `403 Forbidden` | Permessi insufficienti | Verifica RolePermission |
+| `EMPLOYEE vede altri` | Filtro personId mancante | Aggiungere check isEmployeeOnly |
 
-### Script Migrazione
-
+### Debug
 ```bash
-# Genera migration
-npx prisma migrate dev --name unified_person_system
+# Log API server
+tail -f /tmp/api-server.log
 
-# Applica migration
-npx prisma migrate deploy
-
-# Verifica schema
-npx prisma db pull
+# Health check
+curl http://localhost:4001/health
 ```
 
-## Performance
+## Changelog
 
-### Ottimizzazioni
-
-- **Eager Loading**: Include relazioni necessarie
-- **Indexing**: Indici su campi frequentemente interrogati
-- **Caching**: Cache Redis per query frequenti
-- **Pagination**: Supporto paginazione per liste grandi
-
-### Monitoring
-
-- Metriche performance tramite middleware
-- Log query lente
-- Monitoraggio utilizzo memoria
-
-## Roadmap
-
-### Prossimi Sviluppi
-
-1. **Cache Layer**: Implementazione cache Redis
-2. **Bulk Operations**: Operazioni batch per performance
-3. **Advanced Search**: Ricerca full-text
-4. **Export/Import**: Funzionalità import/export CSV
-5. **Audit Trail**: Log dettagliato modifiche
-
-### Miglioramenti Futuri
-
-- GraphQL API per query flessibili
-- Real-time updates con WebSocket
-- Machine Learning per suggerimenti
-- Mobile API ottimizzata
-
-## Supporto
-
-Per domande o problemi:
-
-1. Controlla i log dell'applicazione
-2. Verifica la documentazione API
-3. Esegui i test per identificare regressioni
-4. Contatta il team di sviluppo
+- **2025-12**: 
+  - Fix permessi ruolo non salvati (GET ignorava permessi custom)
+  - Fix EMPLOYEE vedeva corsi in scadenza altri dipendenti
+- **2024-11**: Migrazione a sistema Person unificato
+- **2024-10**: Aggiunta multi-tenancy e GDPR compliance
