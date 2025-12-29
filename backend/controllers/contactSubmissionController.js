@@ -56,11 +56,11 @@ const createSubmission = async (req, res) => {
     logger.debug('Contact submission tenant resolution started', {
       component: 'contactSubmissionController',
       action: 'createSubmission',
-      reqTenantId: req.tenantId,
+      reqPersonTenantId: req.person?.tenantId,
       reqTenantExists: !!req.tenant
     });
 
-    let tenantId = req.tenantId || req.tenant?.id;
+    let tenantId = req.person?.tenantId || req.tenant?.id;
     logger.debug('Initial tenantId resolved', {
       component: 'contactSubmissionController',
       tenantId: tenantId || 'none'

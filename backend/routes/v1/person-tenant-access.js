@@ -235,7 +235,7 @@ router.post('/switch-tenant', authMiddleware, async (req, res) => {
       component: 'person-tenant-access-routes',
       action: 'switchTenant',
       personId,
-      fromTenantId: req.tenantId,
+      fromTenantId: req.person.tenantId,
       toTenantId: tenantId,
       tenantName: targetTenant.name
     }, 'Tenant switch successful');

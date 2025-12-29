@@ -11,16 +11,14 @@ import { logger } from '../utils/logger.js';
  */
 export class MiddlewareManager {
   constructor(app) {
-    console.log('🚀 [MIDDLEWARE MANAGER] Constructor called');
-    console.log('🚀 [MIDDLEWARE MANAGER] App instance:', !!app);
-    console.log('🚀 [MIDDLEWARE MANAGER] Environment:', process.env.NODE_ENV || 'development');
+    logger.debug({ appInstance: !!app, environment: process.env.NODE_ENV || 'development' }, '🚀 [MIDDLEWARE MANAGER] Constructor called');
     
     this.app = app;
     this.middlewares = new Map();
     this.appliedMiddlewares = new Set();
     this.environment = process.env.NODE_ENV || 'development';
     
-    console.log('🚀 [MIDDLEWARE MANAGER] Constructor completed');
+    logger.debug('🚀 [MIDDLEWARE MANAGER] Constructor completed');
   }
 
   /**
@@ -31,8 +29,7 @@ export class MiddlewareManager {
    * @returns {MiddlewareManager} Chainable instance
    */
   register(name, middleware, options = {}) {
-    console.log(`📝 [MIDDLEWARE MANAGER] Registering middleware '${name}'`);
-    console.log(`📝 [MIDDLEWARE MANAGER] Options:`, options);
+    logger.debug({ name, options }, `📝 [MIDDLEWARE MANAGER] Registering middleware '${name}'`);
     
     const defaultOptions = {
       enabled: true,
@@ -61,8 +58,7 @@ export class MiddlewareManager {
       registered: new Date().toISOString()
     });
 
-    console.log(`✅ [MIDDLEWARE MANAGER] Middleware '${name}' registered successfully`);
-    console.log(`📝 [MIDDLEWARE MANAGER] Total registered middlewares:`, this.middlewares.size);
+    logger.debug({ name, totalMiddlewares: this.middlewares.size }, `✅ [MIDDLEWARE MANAGER] Middleware '${name}' registered successfully`);
 
     logger.info(`Middleware '${name}' registered`, {
       priority: config.priority,
@@ -80,16 +76,14 @@ export class MiddlewareManager {
    * @returns {MiddlewareManager} Chainable instance
    */
   apply(middlewareNames = [], globalOptions = {}) {
-    console.log('🔧 [MIDDLEWARE MANAGER] Starting apply() method');
-    console.log('🔧 [MIDDLEWARE MANAGER] Environment:', this.environment);
-    console.log('🔧 [MIDDLEWARE MANAGER] Registered middlewares:', Array.from(this.middlewares.keys()));
+    logger.debug({ environment: this.environment, registeredMiddlewares: Array.from(this.middlewares.keys()) }, '🔧 [MIDDLEWARE MANAGER] Starting apply() method');
     
     // If no names provided, apply all registered middlewares
     if (middlewareNames.length === 0) {
       middlewareNames = Array.from(this.middlewares.keys());
     }
     
-    console.log('🔧 [MIDDLEWARE MANAGER] Middlewares to apply:', middlewareNames);
+    logger.debug({ middlewareNames }, '🔧 [MIDDLEWARE MANAGER] Middlewares to apply');
 
     // Get middlewares and sort by priority
     const middlewaresToApply = middlewareNames
@@ -104,25 +98,20 @@ export class MiddlewareManager {
       .filter(Boolean)
       .sort((a, b) => a.config.priority - b.config.priority);
 
-    console.log('🔧 [MIDDLEWARE MANAGER] Middlewares after sorting:', middlewaresToApply.map(m => ({ name: m.name, priority: m.config.priority, enabled: m.config.enabled })));
+    logger.debug({ middlewaresAfterSorting: middlewaresToApply.map(m => ({ name: m.name, priority: m.config.priority, enabled: m.config.enabled })) }, '🔧 [MIDDLEWARE MANAGER] Middlewares after sorting');
 
     // Apply middlewares
     middlewaresToApply.forEach(({ name, middleware, config }) => {
       const finalConfig = { ...config, ...globalOptions };
       
-      console.log(`🔧 [MIDDLEWARE MANAGER] Checking middleware '${name}':`, {
-        enabled: finalConfig.enabled,
-        environment: finalConfig.environment,
-        currentEnv: this.environment,
-        alreadyApplied: this.appliedMiddlewares.has(name)
-      });
+      logger.debug({ name, enabled: finalConfig.enabled, environment: finalConfig.environment, currentEnv: this.environment, alreadyApplied: this.appliedMiddlewares.has(name) }, `🔧 [MIDDLEWARE MANAGER] Checking middleware '${name}'`);
       
       if (this.shouldApplyMiddleware(name, finalConfig)) {
         try {
           this.app.use(middleware);
           this.appliedMiddlewares.add(name);
           
-          console.log(`✅ [MIDDLEWARE MANAGER] Middleware '${name}' applied successfully`);
+          logger.debug({ name }, `✅ [MIDDLEWARE MANAGER] Middleware '${name}' applied successfully`);
           logger.info(`Middleware '${name}' applied`, {
             priority: finalConfig.priority,
             environment: this.environment
@@ -138,12 +127,11 @@ export class MiddlewareManager {
           }
         }
       } else {
-        console.log(`⏭️ [MIDDLEWARE MANAGER] Middleware '${name}' skipped`);
+        logger.debug({ name }, `⏭️ [MIDDLEWARE MANAGER] Middleware '${name}' skipped`);
       }
     });
 
-    console.log('🔧 [MIDDLEWARE MANAGER] Apply() method completed');
-    console.log('🔧 [MIDDLEWARE MANAGER] Applied middlewares:', Array.from(this.appliedMiddlewares));
+    logger.debug({ appliedMiddlewares: Array.from(this.appliedMiddlewares) }, '🔧 [MIDDLEWARE MANAGER] Apply() method completed');
     return this;
   }
 

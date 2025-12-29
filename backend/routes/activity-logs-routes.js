@@ -28,7 +28,7 @@ function normalizeDetails(details) {
 async function resolvePersonId(req) {
   if (req.person?.id) return req.person.id;
 
-  const tenantId = req.tenant?.id || req.tenantId;
+  const tenantId = req.tenant?.id || req.person?.tenantId;
   if (!tenantId) return null;
 
   try {
@@ -83,7 +83,7 @@ router.post(
         });
       }
 
-      const tenantId = req.tenant?.id || req.tenantId;
+      const tenantId = req.tenant?.id || req.person?.tenantId;
       if (!tenantId) {
         return res.status(400).json({ success: false, error: 'Tenant non trovato o inattivo' });
       }

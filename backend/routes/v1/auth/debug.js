@@ -1,6 +1,9 @@
 /**
  * Debug and Test Routes
  * Development and debugging endpoints for authentication
+ * 
+ * ⚠️ SECURITY: Queste route sono disponibili SOLO in development
+ * In production, tutte le richieste restituiscono 404
  */
 
 import express from 'express';
@@ -10,6 +13,21 @@ import prisma from '../../../config/prisma-optimization.js';
 import authService from '../../../services/authService.js'
 
 const router = express.Router();
+
+// Middleware di protezione: blocca TUTTO in production
+const developmentOnly = (req, res, next) => {
+  if (process.env.NODE_ENV === 'production') {
+    logger.warn('[DEBUG ROUTES] Tentativo di accesso a debug routes in production', {
+      path: req.path,
+      ip: req.ip
+    });
+    return res.status(404).json({ error: 'Not found' });
+  }
+  next();
+};
+
+// Applica protezione a TUTTE le route di questo router
+router.use(developmentOnly);
 
 // Route di test temporanea per debug
 router.get('/test-debug', async (req, res) => {

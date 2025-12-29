@@ -144,7 +144,7 @@ router.get('/', authenticate, roleDataFilter, filterResponseFields, async (req, 
     const personRoles = await prisma.personRole.findMany({
       where: {
         personId: person.id,
-        tenantId: req.tenantId,
+        tenantId: req.person.tenantId,
         isActive: true,
         deletedAt: null
       },

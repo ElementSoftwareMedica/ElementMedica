@@ -359,10 +359,10 @@ class APIServer {
           // NUOVO: whitelist per verify/me che gestiscono auth a livello di route con authenticateTest
           '/api/v1/auth/verify',
           '/api/v1/auth/me',
-          // Debug endpoints (sviluppo)
-          '/api/v1/auth/test-debug',
-          '/api/v1/auth/debug',
-          '/api/v1/auth/debug/find-person',
+          // Debug endpoints - RIMOSSO: devono richiedere autenticazione in produzione
+          // '/api/v1/auth/test-debug',
+          // '/api/v1/auth/debug',
+          // '/api/v1/auth/debug/find-person',
           '/api/v2/auth/login',
           '/api/v2/auth/register',
           '/api/v2/auth/forgot-password',

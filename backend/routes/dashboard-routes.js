@@ -16,7 +16,7 @@ const router = express.Router();
 router.get('/stats', authenticate, tenantMiddleware, async (req, res) => {
   try {
     const person = req.person;
-    const tenantId = req.tenantId || person?.tenantId;
+    const tenantId = req.person.tenantId;
 
     logger.info('Getting dashboard stats', {
       personId: person?.id,
@@ -85,7 +85,7 @@ router.get('/stats', authenticate, tenantMiddleware, async (req, res) => {
 router.get('/companies', authenticate, tenantMiddleware, async (req, res) => {
   try {
     const person = req.person;
-    const tenantId = req.tenantId || person?.tenantId;
+    const tenantId = req.person.tenantId;
 
     logger.info('Getting companies for dashboard', {
       personId: person?.id,
@@ -139,7 +139,7 @@ router.get('/companies', authenticate, tenantMiddleware, async (req, res) => {
 router.get('/employees', authenticate, tenantMiddleware, async (req, res) => {
   try {
     const person = req.person;
-    const tenantId = req.tenantId || person?.tenantId;
+    const tenantId = req.person.tenantId;
 
     logger.info('Getting employees for dashboard', {
       personId: person?.id,

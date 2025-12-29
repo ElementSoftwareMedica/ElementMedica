@@ -107,8 +107,7 @@ const authenticate = async (req, res, next) => {
       companyId: person.companyId
     };
 
-    // Imposta anche req.tenantId per le query
-    req.tenantId = effectiveTenantId;
+    // NOTA: req.tenantId rimosso - usare req.person.tenantId per tutte le query
 
     next();
   } catch (error) {

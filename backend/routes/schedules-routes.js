@@ -39,7 +39,7 @@ router.get('/', authenticateToken(), requirePermission('schedules:read'), roleDa
     const personRoles = await prisma.personRole.findMany({
       where: {
         personId: person.id,
-        tenantId: req.tenantId,
+        tenantId: req.person.tenantId,
         isActive: true,
         deletedAt: null
       },
@@ -778,7 +778,7 @@ router.post('/',
       }
 
       // Get tenantId from authenticated person
-      const tenantId = req.person?.tenantId || req.tenant?.id || req.tenantId;
+      const tenantId = req.person.tenantId;
       if (!tenantId) {
         return res.status(400).json({
           error: 'Validation error',
@@ -1017,7 +1017,7 @@ router.put('/:id', authenticateToken(), requirePermission('schedules:update'), a
       // Delete existing sessions
       await prisma.courseSession.deleteMany({ where: { scheduleId: schedule.id } });
       // Create new sessions
-      const tenantId = req.person?.tenantId || req.tenant?.id || req.tenantId;
+      const tenantId = req.person.tenantId;
       for (const session of dates) {
         const sessionData = {
           schedule: {
@@ -1048,7 +1048,7 @@ router.put('/:id', authenticateToken(), requirePermission('schedules:update'), a
       // Delete existing associations
       await prisma.scheduleCompany.deleteMany({ where: { scheduleId: schedule.id } });
       // Create new associations
-      const tenantId = req.person?.tenantId || req.tenant?.id || req.tenantId;
+      const tenantId = req.person.tenantId;
       for (const companyId of companyIds) {
         await prisma.scheduleCompany.create({
           data: {
@@ -1062,7 +1062,7 @@ router.put('/:id', authenticateToken(), requirePermission('schedules:update'), a
 
     // 4. Update enrollments if provided
     if (Array.isArray(personIds)) {
-      const tenantId = req.person?.tenantId || req.tenant?.id || req.tenantId;
+      const tenantId = req.person.tenantId;
       const uniquePersonIds = [...new Set(personIds.map(id => (id || '').trim()))];
 
       // Delete enrollments not in the new list

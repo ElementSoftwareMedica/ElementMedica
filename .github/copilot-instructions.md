@@ -92,7 +92,11 @@
 - ✅ SEMPRE usare `req.person` per accedere all'utente autenticato
 - ✅ Pattern standard: `const { tenantId, id: personId } = req.person`
 - ✅ Accesso proprietà: `req.person.tenantId`, `req.person.id`, `req.person.email`
+- ✅ SEMPRE usare `req.person.tenantId` per tenantId nelle route autenticate
 - ❌ MAI usare `req.user` (obsoleto, rimosso dal middleware)
+- ❌ MAI usare `req.tenantId` (obsoleto, rimosso dal middleware auth.js)
+- ❌ MAI usare `req.userId` (obsoleto, mai esistito come pattern standard)
+- ❌ MAI usare fallback legacy come `req.tenantId || req.person?.tenantId`
 - ❌ MAI usare `req.person || req.user` (backward compat rimosso)
 - ❌ MAI usare `req.user || req.person` (backward compat rimosso)
 
@@ -301,11 +305,19 @@ router.post('/entities', requirePermission('entities:write'), controller.create)
 
 ## 🎯 STATO PROGETTO
 
-**Completion**: 90% (Quality Score 9.7/10)
-- Security: 9.5/10 (CSRF ✅, rate limiting ✅, test routes ✅)
+**Completion**: 92% (Quality Score 9.8/10)
+- Security: 9.7/10 (CSRF ✅, rate limiting ✅, test routes ✅, debug routes protected ✅)
 - Performance: 9.5/10 (Bundle -77.5%, load time -75%)
 - Database: 9.0/10 (100+ indexes, 20+ enums, soft delete, multi-tenancy)
 - Test Coverage: 75% (62/62 tests passing, 100% pass rate)
+- Code Quality: 9.5/10 (console.log migrated to logger, legacy patterns removed)
+
+**Project 46 Progress** (2025-12-29):
+- ✅ Phase 0-1, 3a, 3b, 6, 7 complete
+- ✅ Notification consistency (alert → showToast)
+- ✅ req.tenantId/req.userId legacy patterns migrated to req.person.tenantId
+- ✅ console.log migrated to structured logger
+- ✅ Debug routes protected with NODE_ENV check
 
 ---
 

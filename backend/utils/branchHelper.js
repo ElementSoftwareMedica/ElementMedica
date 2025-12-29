@@ -376,7 +376,7 @@ export function getBranchFilter(entityName, branchType) {
  * @returns {Object} - Where clause Prisma completa
  */
 export function buildWhereClause(req, entityName, additionalFilters = {}) {
-    const tenantId = req.person?.tenantId || req.tenantId;
+    const tenantId = req.person?.tenantId;
     const branchType = getBranchFromRequest(req);
     const branchFilter = getBranchFilter(entityName, branchType);
 

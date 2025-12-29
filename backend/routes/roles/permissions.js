@@ -471,7 +471,7 @@ router.put('/:roleType/permissions',
   (req, res, next) => {
     logger.info('🔍 BEFORE requirePermission middleware - req.person:', !!req.person);
     logger.info('🔍 BEFORE requirePermission middleware - req.person.id:', req.person?.id);
-    logger.info('🔍 BEFORE requirePermission middleware - req.tenantId:', req.tenantId);
+    logger.info('🔍 BEFORE requirePermission middleware - req.person.tenantId:', req.person?.tenantId);
     logger.info('🔍 BEFORE requirePermission middleware - req.tenant:', !!req.tenant);
     logger.info('🔍 BEFORE requirePermission middleware - roleType:', req.params.roleType);
     logger.info('🔍 BEFORE requirePermission middleware - method:', req.method);

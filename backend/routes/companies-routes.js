@@ -121,7 +121,7 @@ router.get('/',
       const personRoles = await prisma.personRole.findMany({
         where: {
           personId: person.id,
-          tenantId: req.tenantId,
+          tenantId: req.person.tenantId,
           isActive: true,
           deletedAt: null
         },
@@ -144,7 +144,7 @@ router.get('/',
       const companies = await prisma.company.findMany({
         where: {
           ...whereClause,
-          tenantId: req.tenantId, // Filtra per tenant
+          tenantId: req.person.tenantId, // Filtra per tenant
           deletedAt: null // Escludi i record eliminati (soft delete)
         },
         orderBy: { createdAt: 'desc' },

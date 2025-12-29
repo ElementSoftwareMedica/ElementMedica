@@ -41,7 +41,7 @@ router.get('/logs',
             const userGlobalRole = req.person?.globalRole;
             const isGlobalAdmin = userGlobalRole === 'SUPER_ADMIN' || userGlobalRole === 'ADMIN';
 
-            const tenantId = req.tenant?.id || req.tenantId;
+            const tenantId = req.person.tenantId;
 
             // Admin globali possono vedere tutti i log, altri utenti solo quelli del proprio tenant
             const where = {};
@@ -203,7 +203,7 @@ router.get('/settings/config',
     tenantMiddleware,
     async (req, res) => {
         try {
-            const tenantId = req.tenant?.id || req.tenantId;
+            const tenantId = req.person.tenantId;
 
             // Prova a caricare configurazioni personalizzate dal database
             let customConfig = {};
@@ -260,7 +260,7 @@ router.put('/settings/config',
     tenantMiddleware,
     async (req, res) => {
         try {
-            const tenantId = req.tenant?.id || req.tenantId;
+            const tenantId = req.person.tenantId;
             const updates = req.body;
 
             if (!updates || typeof updates !== 'object') {
@@ -332,7 +332,7 @@ router.post('/settings/config/reset',
     tenantMiddleware,
     async (req, res) => {
         try {
-            const tenantId = req.tenant?.id || req.tenantId;
+            const tenantId = req.person.tenantId;
 
             // Elimina tutte le configurazioni personalizzate
             try {

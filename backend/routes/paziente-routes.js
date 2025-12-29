@@ -47,7 +47,7 @@ router.get('/',
                 return res.status(400).json({ success: false, errors: errors.array() });
             }
 
-            const tenantId = req.tenantId || req.person?.tenantId;
+            const tenantId = req.person.tenantId;
             const result = await PazienteService.listPazienti({
                 page: parseInt(req.query.page) || 1,
                 pageSize: parseInt(req.query.pageSize) || 20,
@@ -83,7 +83,7 @@ router.get('/cerca-cf/:taxCode',
                 return res.status(400).json({ success: false, errors: errors.array() });
             }
 
-            const tenantId = req.tenantId || req.person?.tenantId;
+            const tenantId = req.person.tenantId;
             const person = await PazienteService.findByTaxCode(req.params.taxCode, tenantId);
 
             if (!person) {
@@ -151,7 +151,7 @@ router.post('/',
                 return res.status(400).json({ success: false, errors: errors.array() });
             }
 
-            const tenantId = req.tenantId || req.person?.tenantId;
+            const tenantId = req.person.tenantId;
             const result = await PazienteService.findOrCreatePaziente(
                 req.body,
                 tenantId,
@@ -196,7 +196,7 @@ router.get('/:id',
                 return res.status(400).json({ success: false, errors: errors.array() });
             }
 
-            const tenantId = req.tenantId || req.person?.tenantId;
+            const tenantId = req.person.tenantId;
             const paziente = await PazienteService.getPazienteById(req.params.id, tenantId);
 
             res.json({ success: true, data: paziente });
@@ -239,7 +239,7 @@ router.put('/:id',
                 return res.status(400).json({ success: false, errors: errors.array() });
             }
 
-            const tenantId = req.tenantId || req.person?.tenantId;
+            const tenantId = req.person.tenantId;
             const updated = await PazienteService.updatePaziente(
                 req.params.id,
                 req.body,
@@ -283,7 +283,7 @@ router.get('/:id/referti',
                 return res.status(400).json({ success: false, errors: errors.array() });
             }
 
-            const tenantId = req.tenantId || req.person?.tenantId;
+            const tenantId = req.person.tenantId;
             const referti = await PazienteService.getRefertiPaziente(req.params.id, tenantId);
 
             res.json({ success: true, data: referti });
@@ -340,7 +340,7 @@ router.get('/paziente/me',
     tenantMiddleware,
     async (req, res) => {
         try {
-            const tenantId = req.tenantId || req.person?.tenantId;
+            const tenantId = req.person.tenantId;
             const isPaziente = await PazienteService.isPaziente(req.person.id, tenantId);
 
             if (!isPaziente) {
@@ -369,7 +369,7 @@ router.get('/paziente/me/referti',
     tenantMiddleware,
     async (req, res) => {
         try {
-            const tenantId = req.tenantId || req.person?.tenantId;
+            const tenantId = req.person.tenantId;
             const isPaziente = await PazienteService.isPaziente(req.person.id, tenantId);
 
             if (!isPaziente) {

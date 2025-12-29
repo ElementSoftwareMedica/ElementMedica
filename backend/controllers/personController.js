@@ -75,7 +75,7 @@ class PersonController {
         'employees',
         'view',
         employees,
-        req.tenantId || tenantId
+        req.person?.tenantId || tenantId
       );
 
       logger.info('Retrieved employees successfully with BYPASS', {
@@ -103,7 +103,7 @@ class PersonController {
     try {
       const { companyId, search, ...filters } = req.query;
       const personId = req.person.id;
-      const tenantId = req.tenantId; // Usa il tenant dal middleware
+      const tenantId = req.person.tenantId;
 
       const queryFilters = {};
       if (companyId) queryFilters.companyId = companyId;
@@ -162,7 +162,7 @@ class PersonController {
     try {
       const { companyId, search, ...filters } = req.query;
       const personId = req.person.id;
-      const tenantId = req.tenantId; // Usa il tenant dal middleware
+      const tenantId = req.person.tenantId;
 
       const queryFilters = {};
       if (companyId) queryFilters.companyId = companyId;
@@ -432,12 +432,11 @@ class PersonController {
 
       // Controllo completo di req.person per debug se necessario
 
-      // Usa tenantId e companyId dell'utente autenticato se non forniti
-      const finalTenantId = tenantId
+      // Usa tenantId dell'utente autenticato come priorità, poi fallback
+      const finalTenantId = req.person?.tenantId
+        || tenantId
         || req.headers['x-tenant-id']
-        || req.tenantId
-        || (req.tenant && req.tenant.id)
-        || req.person?.tenantId;
+        || (req.tenant && req.tenant.id);
       const finalCompanyId = companyId || req.person?.companyId;
 
       // Verifica che tenantId sia presente
@@ -778,8 +777,8 @@ class PersonController {
         isActive
       } = req.query;
 
-      // Use tenantId from: 1) middleware req.tenantId, 2) person's tenantId, 3) query param
-      const effectiveTenantId = req.tenantId || req.person?.tenantId || queryTenantId;
+      // Use tenantId from authenticated user first, then query param
+      const effectiveTenantId = req.person?.tenantId || queryTenantId;
 
       const options = {
         roleType,

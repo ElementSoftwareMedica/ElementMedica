@@ -148,7 +148,7 @@ function removeFields(data, fieldsToRemove) {
 export const roleDataFilter = async (req, res, next) => {
     try {
         // Salta se non autenticato o manca info
-        if (!req.person || !req.tenantId) {
+        if (!req.person || !req.person.tenantId) {
             req.dataFilter = null;
             return next();
         }
@@ -164,7 +164,7 @@ export const roleDataFilter = async (req, res, next) => {
         // Risolvi permessi effettivi e verifica accesso
         const accessCheck = await permissionInheritanceService.canAccessResource(
             req.person.id,
-            req.tenantId,
+            req.person.tenantId,
             resource,
             action
         );
@@ -188,7 +188,7 @@ export const roleDataFilter = async (req, res, next) => {
         const permission = accessCheck.permission;
 
         // Costruisci filtro in base allo scope
-        req.dataFilter = await buildDataFilter(req.person.id, req.tenantId, permission);
+        req.dataFilter = await buildDataFilter(req.person.id, req.person.tenantId, permission);
         req.allowedFields = permission.allowedFields || null;
         req.deniedFields = permission.deniedFields || null;
 

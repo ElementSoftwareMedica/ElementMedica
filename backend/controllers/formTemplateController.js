@@ -135,7 +135,7 @@ export const submitPublicForm = async (req, res) => {
     }
 
     // 3. Ottieni tenant ID
-    let tenantId = req.tenantId || req.tenant?.id;
+    let tenantId = req.person?.tenantId || req.tenant?.id;
     
     if (!tenantId) {
       const defaultTenant = await prisma.tenant.findFirst({

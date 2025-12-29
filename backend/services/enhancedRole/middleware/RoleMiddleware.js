@@ -19,8 +19,8 @@ import { hasPermission } from '../permissions/PermissionChecker.js';
 export function requirePermission(requiredPermissions, options = {}) {
   return async (req, res, next) => {
     try {
-      const userId = req.person?.id || req.userId;
-      const tenantId = req.tenant?.id || req.tenantId;
+      const userId = req.person?.id;
+      const tenantId = req.person?.tenantId;
 
       if (!userId) {
         logger.warn('[ROLE_MIDDLEWARE] Missing user ID in request');
@@ -132,8 +132,8 @@ export function requirePermission(requiredPermissions, options = {}) {
 export function requireRole(requiredRoles, options = {}) {
   return async (req, res, next) => {
     try {
-      const userId = req.person?.id || req.userId;
-      const tenantId = req.tenant?.id || req.tenantId;
+      const userId = req.person?.id;
+      const tenantId = req.person?.tenantId;
 
       if (!userId) {
         return res.status(401).json({
@@ -209,8 +209,8 @@ export function requireSuperAdmin() {
 export function requireCompanyAccess(getCompanyId) {
   return async (req, res, next) => {
     try {
-      const userId = req.person?.id || req.userId;
-      const tenantId = req.tenant?.id || req.tenantId;
+      const userId = req.person?.id;
+      const tenantId = req.person?.tenantId;
       const companyId = getCompanyId ? getCompanyId(req) : req.params.companyId;
 
       if (!userId || !tenantId) {

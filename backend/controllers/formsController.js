@@ -158,7 +158,7 @@ export const createTemplate = async (req, res) => {
   try {
     const { tenantId, id: userId } = req.person;
     
-    console.log('📝 [CREATE TEMPLATE] Request body:', JSON.stringify(req.body, null, 2));
+    logger.debug({ body: req.body }, '[CREATE TEMPLATE] Request body');
     
     // Valida input
     const validated = createTemplateSchema.parse(req.body);
@@ -225,7 +225,7 @@ export const updateTemplate = async (req, res) => {
     const { id } = req.params;
     const { tenantId } = req.person;
     
-    console.log('📝 [UPDATE TEMPLATE] Request body:', JSON.stringify(req.body, null, 2));
+    logger.debug({ templateId: id, body: req.body }, '[UPDATE TEMPLATE] Request body');
     
     // Valida input
     const validated = updateTemplateSchema.parse(req.body);
