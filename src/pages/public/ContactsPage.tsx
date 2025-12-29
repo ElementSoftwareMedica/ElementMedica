@@ -1,9 +1,11 @@
 import React from 'react';
 import { PublicLayout } from '../../components/public/PublicLayout';
 import { ContactForm } from '../../components/public/ContactForm';
+import { useToast } from '../../hooks/useToast';
 import { PublicBadge } from '../../components/public/PublicBadge';
 
 const ContactsPage: React.FC = () => {
+  const { showToast } = useToast();
 
   return (
     <PublicLayout>
@@ -165,10 +167,10 @@ const ContactsPage: React.FC = () => {
                   try {
                     const { submitContactForm } = await import('../../services/contactSubmissions');
                     await submitContactForm(data);
-                    alert('Grazie per il tuo messaggio! Ti contatteremo presto.');
+                    showToast({ type: 'success', message: 'Grazie per il tuo messaggio! Ti contatteremo presto.' });
                   } catch (error) {
                     console.error('Errore nell\'invio del form:', error);
-                    alert('Si è verificato un errore nell\'invio del messaggio. Riprova più tardi.');
+                    showToast({ type: 'error', message: 'Si è verificato un errore nell\'invio del messaggio. Riprova più tardi.' });
                   }
                 }}
               />

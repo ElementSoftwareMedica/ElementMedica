@@ -19,7 +19,7 @@ router.get('/', authMiddleware, checkAdvancedPermission('trainers', 'read'), fil
     action: 'getAll',
     userId: req.person?.id
   });
-  
+
   // Delegate to dedicated controller method for trainers
   return personController.getTrainers(req, res);
 });
@@ -32,7 +32,7 @@ router.get('/:id', authMiddleware, checkAdvancedPermission('trainers', 'read'), 
     trainerId: req.params.id,
     userId: req.person?.id
   });
-  
+
   return personController.getPersonById(req, res);
 });
 
@@ -43,7 +43,7 @@ router.post('/', authMiddleware, checkAdvancedPermission('trainers', 'create'), 
     action: 'create',
     userId: req.person?.id
   });
-  
+
   // Ensure roleType is set to TRAINER
   req.body.roleType = 'TRAINER';
   return personController.createPerson(req, res);
@@ -57,7 +57,7 @@ router.put('/:id', authMiddleware, checkAdvancedPermission('trainers', 'update')
     trainerId: req.params.id,
     userId: req.person?.id
   });
-  
+
   return personController.updatePerson(req, res);
 });
 
@@ -69,7 +69,7 @@ router.delete('/:id', authMiddleware, checkAdvancedPermission('trainers', 'delet
     trainerId: req.params.id,
     userId: req.person?.id
   });
-  
+
   return personController.deletePerson(req, res);
 });
 

@@ -14,6 +14,7 @@ import {
 import { PublicButton } from '../../components/public/PublicButton';
 import { PublicHeader } from '../../components/public/PublicHeader';
 import { PublicFooter } from '../../components/public/PublicFooter';
+import { useToast } from '../../hooks/useToast';
 import { apiService } from '../../services/api';
 import {
   getRiskLevelLabel as getLabel,
@@ -61,6 +62,7 @@ interface UnifiedCourse {
 export const UnifiedCourseDetailPage: React.FC = () => {
   const { title } = useParams<{ title: string }>();
   const navigate = useNavigate();
+  const { showToast } = useToast();
   const [unifiedCourse, setUnifiedCourse] = useState<UnifiedCourse | null>(null);
   const [selectedVariant, setSelectedVariant] = useState<CourseVariant | null>(null);
   const [loading, setLoading] = useState(true);
@@ -158,17 +160,17 @@ export const UnifiedCourseDetailPage: React.FC = () => {
 
     // Validazione client-side
     if (!requestForm.name.trim()) {
-      alert('Il campo Nome e Cognome è obbligatorio');
+      showToast({ type: 'warning', message: 'Il campo Nome e Cognome è obbligatorio' });
       return;
     }
     if (!requestForm.email.trim()) {
-      alert('Il campo Email è obbligatorio');
+      showToast({ type: 'warning', message: 'Il campo Email è obbligatorio' });
       return;
     }
     // Validazione formato email
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(requestForm.email)) {
-      alert('Inserisci un indirizzo email valido');
+      showToast({ type: 'warning', message: 'Inserisci un indirizzo email valido' });
       return;
     }
 
@@ -179,7 +181,7 @@ export const UnifiedCourseDetailPage: React.FC = () => {
         courseVariant: selectedVariant?.slug
       });
 
-      alert('Richiesta inviata con successo!');
+      showToast({ type: 'success', message: 'Richiesta inviata con successo!' });
       setRequestForm({
         requestType: 'info',
         name: '',
@@ -190,7 +192,7 @@ export const UnifiedCourseDetailPage: React.FC = () => {
         selectedVariant: selectedVariant?.id || ''
       });
     } catch (error) {
-      alert('Errore nell\'invio della richiesta. Riprova più tardi.');
+      showToast({ type: 'error', message: 'Errore nell\'invio della richiesta. Riprova più tardi.' });
     }
   };
 

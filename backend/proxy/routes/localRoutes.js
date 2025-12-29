@@ -20,7 +20,7 @@ let prismaInitPromise = null;
 async function ensurePrisma() {
   if (prismaInstance) return prismaInstance;
   if (prismaInitPromise) {
-    try { await prismaInitPromise; } catch (_) {}
+    try { await prismaInitPromise; } catch (_) { }
     return prismaInstance;
   }
   prismaInitPromise = (async () => {
@@ -39,7 +39,7 @@ async function ensurePrisma() {
     }
   })();
 
-  try { await prismaInitPromise; } catch (_) {}
+  try { await prismaInitPromise; } catch (_) { }
   return prismaInstance;
 }
 
@@ -50,7 +50,7 @@ async function ensurePrisma() {
 export function setupCoursesRoutes(app) {
   const jsonParser = createJsonParser();
   const bulkParser = createBulkUploadParser();
-  
+
   // GET /courses - Lista corsi
   app.get('/courses', async (req, res) => {
     try {
@@ -60,7 +60,7 @@ export function setupCoursesRoutes(app) {
           ip: req.ip
         });
       }
-      
+
       const prisma = await ensurePrisma();
       if (!prisma) {
         return res.status(503).json({
@@ -68,10 +68,10 @@ export function setupCoursesRoutes(app) {
           code: 'PRISMA_NOT_INITIALIZED'
         });
       }
-      
+
       const { page = 1, limit = 10, search, category } = req.query;
       const skip = (parseInt(page) - 1) * parseInt(limit);
-      
+
       const where = {
         deletedAt: null,
         ...(search && {
@@ -82,7 +82,7 @@ export function setupCoursesRoutes(app) {
         }),
         ...(category && { category })
       };
-      
+
       const [courses, total] = await Promise.all([
         prisma.course.findMany({
           where,
@@ -97,7 +97,7 @@ export function setupCoursesRoutes(app) {
         }),
         prisma.course.count({ where })
       ]);
-      
+
       logger.info('Courses retrieved', {
         service: 'proxy-server',
         endpoint: 'GET /courses',
@@ -109,7 +109,7 @@ export function setupCoursesRoutes(app) {
         category,
         ip: req.ip
       });
-      
+
       res.json({
         courses,
         pagination: {
@@ -119,7 +119,7 @@ export function setupCoursesRoutes(app) {
           pages: Math.ceil(total / parseInt(limit))
         }
       });
-      
+
     } catch (error) {
       logger.error('Error retrieving courses', {
         service: 'proxy-server',
@@ -128,28 +128,28 @@ export function setupCoursesRoutes(app) {
         stack: error.stack,
         ip: req.ip
       });
-      
+
       res.status(500).json({
         error: 'Failed to retrieve courses',
         message: error.message
       });
     }
   });
-  
+
   // GET /courses/variants - Redirect to API v1 variants preserving query string
   app.get('/courses/variants', (req, res) => {
     try {
       const qsIndex = req.originalUrl.indexOf('?');
       const query = qsIndex !== -1 ? req.originalUrl.substring(qsIndex) : '';
       const target = `/api/v1/courses/variants${query}`;
-  
+
       logger.info('Redirecting to API variants', {
         service: 'proxy-server',
         endpoint: 'GET /courses/variants',
         target,
         ip: req.ip
       });
-  
+
       return res.redirect(307, target);
     } catch (error) {
       logger.error('Error redirecting to /api/v1/courses/variants', {
@@ -162,19 +162,19 @@ export function setupCoursesRoutes(app) {
       return res.status(500).json({ error: 'Failed to handle /courses/variants' });
     }
   });
-  
+
   // GET /courses/:id - Dettaglio singolo corso (fallback se id non UUID)
   app.get('/courses/:id', async (req, res, next) => {
     try {
       const courseId = req.params.id;
-      
+
       if (process.env.DEBUG_ROUTES || process.env.DEBUG_ALL) {
         debugRoutes('GET /courses/:id request:', {
           courseId,
           ip: req.ip
         });
       }
-      
+
       const prisma = await ensurePrisma();
       if (!prisma) {
         return res.status(503).json({
@@ -182,16 +182,16 @@ export function setupCoursesRoutes(app) {
           code: 'PRISMA_NOT_INITIALIZED'
         });
       }
-      
+
       // Validate UUID format
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
       if (!uuidRegex.test(courseId)) {
         // Allow other more specific routes like /courses/variants to handle
         return next();
       }
-      
+
       const course = await prisma.course.findUnique({
-        where: { 
+        where: {
           id: courseId,
           deletedAt: null
         },
@@ -205,11 +205,11 @@ export function setupCoursesRoutes(app) {
           }
         }
       });
-      
+
       if (!course) {
         return res.status(404).json({ error: 'Course not found' });
       }
-      
+
       logger.info('Course retrieved', {
         service: 'proxy-server',
         endpoint: 'GET /courses/:id',
@@ -218,9 +218,9 @@ export function setupCoursesRoutes(app) {
         schedulesCount: course.schedules.length,
         ip: req.ip
       });
-      
+
       res.json(course);
-      
+
     } catch (error) {
       logger.error('Error retrieving course', {
         service: 'proxy-server',
@@ -230,14 +230,14 @@ export function setupCoursesRoutes(app) {
         stack: error.stack,
         ip: req.ip
       });
-      
+
       res.status(500).json({
         error: 'Failed to retrieve course',
         message: error.message
       });
     }
   });
-  
+
   // POST /courses - Crea nuovo corso
   app.post('/courses', jsonParser, async (req, res) => {
     try {
@@ -247,7 +247,7 @@ export function setupCoursesRoutes(app) {
           ip: req.ip
         });
       }
-      
+
       const prisma = await ensurePrisma();
       if (!prisma) {
         return res.status(503).json({
@@ -255,9 +255,9 @@ export function setupCoursesRoutes(app) {
           code: 'PRISMA_NOT_INITIALIZED'
         });
       }
-      
+
       const { title, description, category, duration, price, isActive = true } = req.body;
-      
+
       // Validazione input
       if (!title || !description || !category) {
         return res.status(400).json({
@@ -265,7 +265,7 @@ export function setupCoursesRoutes(app) {
           required: ['title', 'description', 'category']
         });
       }
-      
+
       const course = await prisma.course.create({
         data: {
           title,
@@ -278,7 +278,7 @@ export function setupCoursesRoutes(app) {
           updatedAt: new Date()
         }
       });
-      
+
       logger.info('Course created', {
         service: 'proxy-server',
         endpoint: 'POST /courses',
@@ -287,9 +287,9 @@ export function setupCoursesRoutes(app) {
         category: course.category,
         ip: req.ip
       });
-      
+
       res.status(201).json(course);
-      
+
     } catch (error) {
       logger.error('Error creating course', {
         service: 'proxy-server',
@@ -299,25 +299,25 @@ export function setupCoursesRoutes(app) {
         body: req.body,
         ip: req.ip
       });
-      
+
       res.status(500).json({
         error: 'Failed to create course',
         message: error.message
       });
     }
   });
-  
+
   // PUT /courses/:id - Aggiorna corso
   app.put('/courses/:id', jsonParser, async (req, res) => {
     try {
       const courseId = req.params.id;
-      
+
       // Validate UUID format
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
       if (!uuidRegex.test(courseId)) {
         return res.status(400).json({ error: 'Invalid course ID format' });
       }
-      
+
       if (process.env.DEBUG_ROUTES || process.env.DEBUG_ALL) {
         debugRoutes('PUT /courses/:id request:', {
           courseId,
@@ -325,7 +325,7 @@ export function setupCoursesRoutes(app) {
           ip: req.ip
         });
       }
-      
+
       const prisma = await ensurePrisma();
       if (!prisma) {
         return res.status(503).json({
@@ -333,21 +333,21 @@ export function setupCoursesRoutes(app) {
           code: 'PRISMA_NOT_INITIALIZED'
         });
       }
-      
+
       const { title, description, category, duration, price, isActive } = req.body;
-      
+
       // Verifica esistenza corso
       const existingCourse = await prisma.course.findFirst({
         where: { id: courseId, deletedAt: null }
       });
-      
+
       if (!existingCourse) {
         return res.status(404).json({
           error: 'Course not found',
           courseId
         });
       }
-      
+
       const updatedCourse = await prisma.course.update({
         where: { id: courseId },
         data: {
@@ -360,7 +360,7 @@ export function setupCoursesRoutes(app) {
           updatedAt: new Date()
         }
       });
-      
+
       logger.info('Course updated', {
         service: 'proxy-server',
         endpoint: 'PUT /courses/:id',
@@ -368,9 +368,9 @@ export function setupCoursesRoutes(app) {
         changes: Object.keys(req.body),
         ip: req.ip
       });
-      
+
       res.json(updatedCourse);
-      
+
     } catch (error) {
       logger.error('Error updating course', {
         service: 'proxy-server',
@@ -381,32 +381,32 @@ export function setupCoursesRoutes(app) {
         body: req.body,
         ip: req.ip
       });
-      
+
       res.status(500).json({
         error: 'Failed to update course',
         message: error.message
       });
     }
   });
-  
+
   // DELETE /courses/:id - Soft delete corso
   app.delete('/courses/:id', async (req, res) => {
     try {
       const courseId = req.params.id;
-      
+
       // Validate UUID format
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
       if (!uuidRegex.test(courseId)) {
         return res.status(400).json({ error: 'Invalid course ID format' });
       }
-      
+
       if (process.env.DEBUG_ROUTES || process.env.DEBUG_ALL) {
         debugRoutes('DELETE /courses/:id request:', {
           courseId,
           ip: req.ip
         });
       }
-      
+
       const prisma = await ensurePrisma();
       if (!prisma) {
         return res.status(503).json({
@@ -414,19 +414,19 @@ export function setupCoursesRoutes(app) {
           code: 'PRISMA_NOT_INITIALIZED'
         });
       }
-      
+
       // Verifica esistenza corso
       const existingCourse = await prisma.course.findFirst({
         where: { id: courseId, deletedAt: null }
       });
-      
+
       if (!existingCourse) {
         return res.status(404).json({
           error: 'Course not found',
           courseId
         });
       }
-      
+
       // Soft delete (GDPR compliant)
       await prisma.course.update({
         where: { id: courseId },
@@ -435,7 +435,7 @@ export function setupCoursesRoutes(app) {
           updatedAt: new Date()
         }
       });
-      
+
       logger.info('Course soft deleted', {
         service: 'proxy-server',
         endpoint: 'DELETE /courses/:id',
@@ -443,13 +443,13 @@ export function setupCoursesRoutes(app) {
         title: existingCourse.title,
         ip: req.ip
       });
-      
+
       res.json({
         message: 'Course deleted successfully',
         courseId,
         deletedAt: new Date().toISOString()
       });
-      
+
     } catch (error) {
       logger.error('Error deleting course', {
         service: 'proxy-server',
@@ -459,14 +459,14 @@ export function setupCoursesRoutes(app) {
         stack: error.stack,
         ip: req.ip
       });
-      
+
       res.status(500).json({
         error: 'Failed to delete course',
         message: error.message
       });
     }
   });
-  
+
   // POST /courses/bulk-import - Importazione massiva
   app.post(
     '/courses/bulk-import',
@@ -481,7 +481,7 @@ export function setupCoursesRoutes(app) {
             ip: req.ip
           });
         }
-        
+
         const prisma = await ensurePrisma();
         if (!prisma) {
           return res.status(503).json({
@@ -489,7 +489,7 @@ export function setupCoursesRoutes(app) {
             code: 'PRISMA_NOT_INITIALIZED'
           });
         }
-        
+
         const authTenantId = req?.user?.tenantId || null;
         if (!authTenantId) {
           return res.status(403).json({
@@ -497,26 +497,26 @@ export function setupCoursesRoutes(app) {
             code: 'TENANT_NOT_AVAILABLE'
           });
         }
-        
+
         const { courses, overwriteIds = [] } = req.body;
-        
+
         if (!Array.isArray(courses) || courses.length === 0) {
           return res.status(400).json({
             error: 'Invalid courses data',
             message: 'Expected array of courses'
           });
         }
-        
+
         // Validazione base: titolo richiesto (tenant enforced via session)
         const validCourses = courses.filter(course => course && course.title);
-        
+
         if (validCourses.length === 0) {
           return res.status(400).json({
             error: 'No valid courses found',
             message: 'All courses missing required fields (title)'
           });
         }
-        
+
         // Helper locali di sanitizzazione per evitare NaN/valori non validi
         const toStrOrNull = (v) => {
           if (v === null || v === undefined) return null;
@@ -568,7 +568,7 @@ export function setupCoursesRoutes(app) {
         };
         // const RiskLevelSet = new Set(['ALTO', 'MEDIO', 'BASSO', 'A', 'B', 'C']); // rimosso
         // const CourseTypeSet = new Set(['PRIMO_CORSO', 'AGGIORNAMENTO']); // rimosso
-        
+
         // Mappatura dati con conversioni sicure e tenantId dalla sessione
         const data = validCourses.map((course) => {
           const normalizedCode = (() => {
@@ -604,7 +604,7 @@ export function setupCoursesRoutes(app) {
             slug: toStrOrNull(course.slug)
           };
         });
-        
+
         // === PRE-CHECK DUPLICATI (per codice corso) - limitati al tenant ===
         const normalized = validCourses.map((c, idx) => ({
           idx,
@@ -613,7 +613,7 @@ export function setupCoursesRoutes(app) {
           title: c.title,
           tenantId: authTenantId
         }));
-        
+
         // Duplicati nel payload (stesso code normalizzato, non null)
         const codeToIndices = new Map();
         for (const item of normalized) {
@@ -627,7 +627,7 @@ export function setupCoursesRoutes(app) {
             inPayload.push({ code, indices, count: indices.length });
           }
         }
-        
+
         // Duplicati in database (per code non null) nel tenant corrente
         const uniqueCodes = Array.from(codeToIndices.keys());
         let existingMatches = [];
@@ -648,7 +648,7 @@ export function setupCoursesRoutes(app) {
             matches
           }));
         }
-        
+
         const precheckReport = {
           totalSubmitted: courses.length,
           validCourses: validCourses.length,
@@ -658,7 +658,7 @@ export function setupCoursesRoutes(app) {
           },
           overwriteIds: Array.isArray(overwriteIds) ? overwriteIds : []
         };
-        
+
         // Reactivate (restore) soft-deleted courses that match by code within the same tenant
         const codeToPayload = new Map();
         for (const item of data) {
@@ -691,16 +691,16 @@ export function setupCoursesRoutes(app) {
             restoredCodesSet = new Set(softDeletedMatches.map(r => r.code));
           }
         }
-        
+
         // Filter out restored items from the createMany payload to avoid unique conflicts on code
         const toCreateData = data.filter(d => !d.code || !restoredCodesSet.has(d.code));
-        
+
         // Importazione in batch con skipDuplicates per rispetto unique
         const createdCourses = await prisma.course.createMany({
           data: toCreateData,
           skipDuplicates: true
         });
-        
+
         logger.info('Bulk courses import completed', {
           service: 'proxy-server',
           endpoint: 'POST /courses/bulk-import',
@@ -713,7 +713,7 @@ export function setupCoursesRoutes(app) {
           duplicatesInDatabase: existingMatches.length,
           tenantId: authTenantId
         });
-        
+
         res.status(201).json({
           message: 'Bulk import completed',
           totalSubmitted: courses.length,
@@ -723,7 +723,7 @@ export function setupCoursesRoutes(app) {
           skipped: Math.max(0, toCreateData.length - createdCourses.count),
           report: precheckReport
         });
-        
+
       } catch (error) {
         logger.error('Error in bulk courses import', {
           service: 'proxy-server',
@@ -739,7 +739,7 @@ export function setupCoursesRoutes(app) {
       }
     }
   );
-  
+
   if (process.env.DEBUG_ROUTES || process.env.DEBUG_ALL) {
     console.log('✅ Courses routes configured');
   }
@@ -759,7 +759,7 @@ export function setupSchedulesRoutes(app) {
           ip: req.ip
         });
       }
-      
+
       const prisma = await ensurePrisma();
       if (!prisma) {
         return res.status(503).json({
@@ -767,7 +767,7 @@ export function setupSchedulesRoutes(app) {
           code: 'PRISMA_NOT_INITIALIZED'
         });
       }
-      
+
       const schedules = await prisma.schedule.findMany({
         where: { deletedAt: null },
         include: {
@@ -780,7 +780,7 @@ export function setupSchedulesRoutes(app) {
         },
         orderBy: { createdAt: 'desc' }
       });
-      
+
       // Verifica presenza attestati per ogni schedule
       const schedulesWithAttestati = await Promise.all(
         schedules.map(async (schedule) => {
@@ -791,7 +791,7 @@ export function setupSchedulesRoutes(app) {
                 deletedAt: null
               }
             });
-            
+
             return {
               ...schedule,
               hasAttestato: !!attestato,
@@ -804,7 +804,7 @@ export function setupSchedulesRoutes(app) {
               scheduleId: schedule.id,
               error: error.message
             });
-            
+
             return {
               ...schedule,
               hasAttestato: false,
@@ -814,7 +814,7 @@ export function setupSchedulesRoutes(app) {
           }
         })
       );
-      
+
       logger.info('Schedules with attestati retrieved', {
         service: 'proxy-server',
         endpoint: 'GET /schedules-with-attestati',
@@ -822,7 +822,7 @@ export function setupSchedulesRoutes(app) {
         withAttestati: schedulesWithAttestati.filter(s => s.hasAttestato).length,
         ip: req.ip
       });
-      
+
       res.json({
         schedules: schedulesWithAttestati,
         summary: {
@@ -831,7 +831,7 @@ export function setupSchedulesRoutes(app) {
           withoutAttestati: schedulesWithAttestati.filter(s => !s.hasAttestato).length
         }
       });
-      
+
     } catch (error) {
       logger.error('Error retrieving schedules with attestati', {
         service: 'proxy-server',
@@ -840,14 +840,14 @@ export function setupSchedulesRoutes(app) {
         stack: error.stack,
         ip: req.ip
       });
-      
+
       res.status(500).json({
         error: 'Failed to retrieve schedules with attestati',
         message: error.message
       });
     }
   });
-  
+
   if (process.env.DEBUG_ROUTES || process.env.DEBUG_ALL) {
     console.log('✅ Schedules routes configured');
   }
@@ -859,7 +859,7 @@ export function setupSchedulesRoutes(app) {
  */
 export function setupDocumentRoutes(app) {
   const authLogger = createAuthLogger('documents');
-  
+
   // GET /templates - Lista templates (richiede autenticazione)
   app.get('/templates', authLogger, authenticate(), checkPermission('documents:read'), async (req, res) => {
     try {
@@ -869,7 +869,7 @@ export function setupDocumentRoutes(app) {
           ip: req.ip
         });
       }
-      
+
       const prisma = await ensurePrisma();
       if (!prisma) {
         return res.status(503).json({
@@ -877,12 +877,12 @@ export function setupDocumentRoutes(app) {
           code: 'PRISMA_NOT_INITIALIZED'
         });
       }
-      
+
       const templates = await prisma.template.findMany({
         where: { deletedAt: null },
         orderBy: { createdAt: 'desc' }
       });
-      
+
       logger.info('Templates retrieved', {
         service: 'proxy-server',
         endpoint: 'GET /templates',
@@ -890,9 +890,9 @@ export function setupDocumentRoutes(app) {
         userId: req.person?.id,
         ip: req.ip
       });
-      
+
       res.json(templates);
-      
+
     } catch (error) {
       logger.error('Error retrieving templates', {
         service: 'proxy-server',
@@ -901,14 +901,14 @@ export function setupDocumentRoutes(app) {
         userId: req.person?.id,
         ip: req.ip
       });
-      
+
       res.status(500).json({
         error: 'Failed to retrieve templates',
         message: error.message
       });
     }
   });
-  
+
   // GET /attestati - Lista attestati (richiede autenticazione)
   app.get('/attestati', authLogger, authenticate(), checkPermission('documents:read'), async (req, res) => {
     try {
@@ -919,7 +919,7 @@ export function setupDocumentRoutes(app) {
           ip: req.ip
         });
       }
-      
+
       const prisma = await ensurePrisma();
       if (!prisma) {
         return res.status(503).json({
@@ -927,15 +927,15 @@ export function setupDocumentRoutes(app) {
           code: 'PRISMA_NOT_INITIALIZED'
         });
       }
-      
+
       const { page = 1, limit = 10, scheduleId } = req.query;
       const skip = (parseInt(page) - 1) * parseInt(limit);
-      
+
       const where = {
         deletedAt: null,
         ...(scheduleId && { scheduleId: parseInt(scheduleId) })
       };
-      
+
       const [attestati, total] = await Promise.all([
         prisma.attestato.findMany({
           where,
@@ -953,7 +953,7 @@ export function setupDocumentRoutes(app) {
         }),
         prisma.attestato.count({ where })
       ]);
-      
+
       logger.info('Attestati retrieved', {
         service: 'proxy-server',
         endpoint: 'GET /attestati',
@@ -963,7 +963,7 @@ export function setupDocumentRoutes(app) {
         scheduleId,
         ip: req.ip
       });
-      
+
       res.json({
         attestati,
         pagination: {
@@ -973,7 +973,7 @@ export function setupDocumentRoutes(app) {
           pages: Math.ceil(total / parseInt(limit))
         }
       });
-      
+
     } catch (error) {
       logger.error('Error retrieving attestati', {
         service: 'proxy-server',
@@ -982,14 +982,14 @@ export function setupDocumentRoutes(app) {
         userId: req.person?.id,
         ip: req.ip
       });
-      
+
       res.status(500).json({
         error: 'Failed to retrieve attestati',
         message: error.message
       });
     }
   });
-  
+
   if (process.env.DEBUG_ROUTES || process.env.DEBUG_ALL) {
     console.log('✅ Document routes configured');
   }
@@ -1004,11 +1004,11 @@ export function setupSystemRoutes(app) {
   app.get('/health', healthHandler);
   app.get('/healthz', healthzHandler);
   app.get('/ready', readinessHandler);
-  
+
   // Status endpoint
   app.get('/status', (req, res) => {
     const shutdownStatus = getShutdownStatus();
-    
+
     res.json({
       service: 'proxy-server',
       status: 'running',
@@ -1023,7 +1023,7 @@ export function setupSystemRoutes(app) {
       }
     });
   });
-  
+
   // Test endpoints per debugging
   if (process.env.NODE_ENV === 'development') {
     app.get('/proxy-test-updated', (req, res) => {
@@ -1035,7 +1035,7 @@ export function setupSystemRoutes(app) {
         headers: req.headers
       });
     });
-    
+
     app.get('/test-roles-middleware', (req, res) => {
       res.json({
         message: 'Roles middleware test endpoint',
@@ -1045,7 +1045,7 @@ export function setupSystemRoutes(app) {
       });
     });
   }
-  
+
   // Route di debug per sviluppo
   app.get('/debug/routes', (req, res) => {
     const routes = [];
@@ -1063,7 +1063,7 @@ export function setupSystemRoutes(app) {
           name: middleware.name || 'middleware',
           type: 'middleware'
         });
-        
+
         if (middleware.handle && middleware.handle.stack) {
           middleware.handle.stack.forEach((handler) => {
             if (handler.route) {
@@ -1077,7 +1077,7 @@ export function setupSystemRoutes(app) {
         }
       }
     });
-    
+
     res.json({
       message: 'Registered routes and middleware',
       routes,
@@ -1085,7 +1085,7 @@ export function setupSystemRoutes(app) {
       timestamp: new Date().toISOString()
     });
   });
-  
+
   // Route temporanea per testare il login direttamente
   app.post('/test-login', async (req, res) => {
     try {
@@ -1097,7 +1097,7 @@ export function setupSystemRoutes(app) {
         },
         timeout: 10000
       });
-      
+
       res.status(response.status).json(response.data);
     } catch (error) {
       console.error('Test login error:', error.message);
@@ -1108,7 +1108,7 @@ export function setupSystemRoutes(app) {
       });
     }
   });
-  
+
   if (process.env.DEBUG_ROUTES || process.env.DEBUG_ALL) {
     console.log('✅ System routes configured');
   }
@@ -1123,11 +1123,11 @@ export function setupLocalRoutes(app) {
   setupSchedulesRoutes(app);
   setupDocumentRoutes(app);
   setupSystemRoutes(app);
-  
+
   if (process.env.DEBUG_ROUTES || process.env.DEBUG_ALL) {
     console.log('✅ All local routes configured');
   }
-  
+
   logger.info('Local routes setup completed', {
     service: 'proxy-server',
     component: 'local-routes',

@@ -51,9 +51,9 @@ router.post('/', publicSubmissionLimiter, createSubmission);
  * @desc Ottieni lista submissions
  * @access Private (submissions:read)
  */
-router.get('/', 
+router.get('/',
   privateSubmissionLimiter,
-  authenticateToken, 
+  authenticateToken,
   checkPermissions(['submissions:read', 'submissions:manage']),
   getSubmissions
 );

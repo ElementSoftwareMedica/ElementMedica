@@ -20,7 +20,7 @@ const checkAdvancedPermission = (resource, action, options = {}) => {
     return async (req, res, next) => {
         try {
             const person = req.person;
-            
+
             if (!person) {
                 return res.status(401).json({
                     error: 'Non autenticato',
@@ -82,11 +82,11 @@ const checkAdvancedPermission = (resource, action, options = {}) => {
 const filterDataByPermissions = () => {
     return (req, res, next) => {
         const originalSend = res.send;
-        
-        res.send = function(data) {
+
+        res.send = function (data) {
             try {
                 const permissionContext = req.permissionContext;
-                
+
                 if (!permissionContext || !data) {
                     return originalSend.call(this, data);
                 }
@@ -101,12 +101,12 @@ const filterDataByPermissions = () => {
 
                 // Filter data based on allowed fields
                 const filteredData = filterFields(parsedData, permissionContext.allowedFields);
-                
+
                 // Convert back to string if original was string
-                const responseData = typeof data === 'string' ? 
-                                   JSON.stringify(filteredData) : 
-                                   filteredData;
-                
+                const responseData = typeof data === 'string' ?
+                    JSON.stringify(filteredData) :
+                    filteredData;
+
                 return originalSend.call(this, responseData);
             } catch (error) {
                 logger.error('Error filtering data by permissions', {
@@ -116,7 +116,7 @@ const filterDataByPermissions = () => {
                 return originalSend.call(this, data);
             }
         };
-        
+
         next();
     };
 };
@@ -128,11 +128,11 @@ function filterFields(data, allowedFields) {
     if (!allowedFields || allowedFields.includes('*')) {
         return data;
     }
-    
+
     if (Array.isArray(data)) {
         return data.map(item => filterObjectFields(item, allowedFields));
     }
-    
+
     if (typeof data === 'object' && data !== null) {
         // Se è un oggetto con proprietà 'data' (tipico delle risposte API)
         if (data.data) {
@@ -141,10 +141,10 @@ function filterFields(data, allowedFields) {
                 data: filterFields(data.data, allowedFields)
             };
         }
-        
+
         return filterObjectFields(data, allowedFields);
     }
-    
+
     return data;
 }
 
@@ -155,19 +155,19 @@ function filterObjectFields(obj, allowedFields) {
     if (!obj || typeof obj !== 'object') {
         return obj;
     }
-    
+
     const filtered = {};
-    
+
     for (const field of allowedFields) {
         if (field === '*') {
             return obj;
         }
-        
+
         if (obj.hasOwnProperty(field)) {
             filtered[field] = obj[field];
         }
     }
-    
+
     return filtered;
 }
 
@@ -179,27 +179,27 @@ const requireOwnCompany = () => {
         try {
             const person = req.person;
             const targetCompanyId = req.params.companyId || req.params.id || req.body.companyId;
-            
+
             if (!person) {
                 return res.status(401).json({
                     error: 'Non autenticato',
                     code: 'UNAUTHORIZED'
                 });
             }
-            
+
             // Allow global admins to access any company
-            const isGlobalAdmin = person.globalRole === 'SUPER_ADMIN' || 
-                                 person.globalRole === 'ADMIN';
-            
+            const isGlobalAdmin = person.globalRole === 'SUPER_ADMIN' ||
+                person.globalRole === 'ADMIN';
+
             if (isGlobalAdmin) {
                 return next();
             }
-            
+
             // For regular users, check if they belong to the target company
             if (person.companyId && person.companyId === targetCompanyId) {
                 return next();
             }
-            
+
             return res.status(403).json({
                 error: 'Accesso negato: puoi accedere solo ai dati della tua compagnia',
                 code: 'COMPANY_ACCESS_DENIED'
@@ -209,7 +209,7 @@ const requireOwnCompany = () => {
                 component: 'advanced-permissions-middleware',
                 error: error.message
             });
-            
+
             return res.status(500).json({
                 error: 'Errore interno del server',
                 code: 'INTERNAL_ERROR'
@@ -225,22 +225,22 @@ const requireSelfAccess = (getTargetPersonId) => {
     return async (req, res, next) => {
         try {
             const person = req.person;
-            const targetPersonId = getTargetPersonId ? 
-                                 getTargetPersonId(req) : 
-                                 req.params.personId;
-            
+            const targetPersonId = getTargetPersonId ?
+                getTargetPersonId(req) :
+                req.params.personId;
+
             if (!person) {
                 return res.status(401).json({
                     error: 'Non autenticato',
                     code: 'UNAUTHORIZED'
                 });
             }
-            
+
             // SUPER_ADMIN e ADMIN possono accedere a tutto
             if (['SUPER_ADMIN', 'ADMIN'].includes(person.globalRole)) {
                 return next();
             }
-            
+
             // COMPANY_ADMIN può accedere ai dati della propria compagnia
             if (person.globalRole === 'COMPANY_ADMIN') {
                 // Verifica che la persona target appartenga alla stessa compagnia
@@ -248,7 +248,7 @@ const requireSelfAccess = (getTargetPersonId) => {
                     where: { id: targetPersonId },
                     select: { companyId: true, deletedAt: true }
                 });
-                
+
                 // Verifica che la persona non sia stata eliminata
                 if (targetPerson?.deletedAt) {
                     return res.status(404).json({
@@ -256,12 +256,12 @@ const requireSelfAccess = (getTargetPersonId) => {
                         code: 'PERSON_NOT_FOUND'
                     });
                 }
-                
+
                 if (targetPerson && targetPerson.companyId === person.companyId) {
                     return next();
                 }
             }
-            
+
             // Verifica accesso ai propri dati
             if (targetPersonId && person.id !== targetPersonId) {
                 return res.status(403).json({
@@ -269,14 +269,14 @@ const requireSelfAccess = (getTargetPersonId) => {
                     code: 'SELF_ACCESS_DENIED'
                 });
             }
-            
+
             next();
         } catch (error) {
             logger.error('Error in requireSelfAccess middleware', {
                 component: 'advanced-permissions-middleware',
                 error: error.message
             });
-            
+
             return res.status(500).json({
                 error: 'Errore interno del server',
                 code: 'INTERNAL_ERROR'

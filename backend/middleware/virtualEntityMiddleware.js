@@ -15,7 +15,7 @@ export function checkVirtualEntityPermission(virtualEntityName, action) {
     try {
       const personId = req.person?.id;
       const tenantId = req.person?.tenantId;
-      
+
       if (!personId || !tenantId) {
         return res.status(401).json({
           success: false,
@@ -25,9 +25,9 @@ export function checkVirtualEntityPermission(virtualEntityName, action) {
 
       // Verifica se l'utente ha il permesso sull'entità virtuale
       const hasPermission = await hasVirtualEntityPermission(
-        personId, 
-        virtualEntityName, 
-        action, 
+        personId,
+        virtualEntityName,
+        action,
         tenantId
       );
 
@@ -67,7 +67,7 @@ export function filterVirtualEntityResults(virtualEntityName) {
       const originalJson = res.json;
 
       // Override della funzione json per filtrare i risultati
-      res.json = function(data) {
+      res.json = function (data) {
         if (data && data.data && Array.isArray(data.data)) {
           // Filtra i risultati in base alla definizione dell'entità virtuale
           const virtualEntity = VIRTUAL_ENTITIES[virtualEntityName.toUpperCase()];
@@ -115,7 +115,7 @@ export function validateVirtualEntityMembership(virtualEntityName) {
   return async (req, res, next) => {
     try {
       const personId = req.params.id || req.body.id;
-      
+
       if (!personId) {
         return res.status(400).json({
           success: false,

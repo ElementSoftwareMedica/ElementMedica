@@ -23,13 +23,13 @@ const router = express.Router();
 router.get('/sitemap.xml', async (req, res) => {
   try {
     logger.info('[SITEMAP] Request received for sitemap.xml');
-    
+
     // In un ambiente multi-tenant, determina il tenant dal dominio o da un parametro
     // Per ora usiamo un tenant di default o dal query param
     const tenantId = req.query.tenantId || process.env.DEFAULT_TENANT_ID;
-    
+
     logger.info('[SITEMAP] Using tenant ID:', tenantId);
-    
+
     if (!tenantId) {
       logger.warn('[SITEMAP] No tenant ID provided');
       return res.status(400).send('Tenant ID required');
@@ -37,9 +37,9 @@ router.get('/sitemap.xml', async (req, res) => {
 
     const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
     logger.info('[SITEMAP] Generating sitemap with baseUrl:', baseUrl);
-    
+
     const xml = await sitemapService.generateSitemapXML(tenantId, baseUrl);
-    
+
     logger.info('[SITEMAP] XML generated successfully, length:', xml.length);
 
     res.set('Content-Type', 'application/xml');
@@ -58,7 +58,7 @@ router.get('/sitemap.xml', async (req, res) => {
 router.get('/robots.txt', async (req, res) => {
   try {
     const tenantId = req.query.tenantId || process.env.DEFAULT_TENANT_ID;
-    
+
     if (!tenantId) {
       return res.status(400).send('Tenant ID required');
     }

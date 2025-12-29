@@ -16,7 +16,7 @@ const prisma = new PrismaClient();
 router.get('/users', authenticateToken(), requirePermission(['users:read', 'system:manage']), async (req, res) => {
   try {
     const users = await prisma.person.findMany({
-      where: {tenantId: req.person.tenantId,},
+      where: { tenantId: req.person.tenantId, },
       select: {
         id: true,
         email: true,
@@ -47,7 +47,7 @@ router.get('/users', authenticateToken(), requirePermission(['users:read', 'syst
       lastName: user.lastName,
       isActive: user.isActive,
       roles: user.personRoles.map(pr => pr.roleType),
-      permissions: [...new Set(user.personRoles.flatMap(pr => 
+      permissions: [...new Set(user.personRoles.flatMap(pr =>
         pr.permissions.map(p => p.permission)
       ))]
     }));
@@ -82,7 +82,7 @@ router.get('/permissions', authenticateToken(), requirePermission(['system:manag
     // Raggruppa i permessi per categoria basandosi sul resource
     const categorizedPermissions = permissions.map(permission => {
       let category = 'General';
-      
+
       if (permission.resource === 'companies') {
         category = 'Companies';
       } else if (permission.resource === 'employees' || permission.resource === 'users') {
@@ -92,7 +92,7 @@ router.get('/permissions', authenticateToken(), requirePermission(['system:manag
       } else if (permission.resource === 'courses') {
         category = 'Courses';
       }
-      
+
       return {
         ...permission,
         category
@@ -115,7 +115,7 @@ router.get('/roles', authenticateToken(), requirePermission(['system:manage']), 
   try {
     // Get all role types from enum
     const roleTypes = ['ADMIN', 'SUPER_ADMIN', 'EMPLOYEE', 'MANAGER', 'TRAINER'];
-    
+
     const roles = await Promise.all(roleTypes.map(async (roleType) => {
       // Get PersonRoles of this type with their permissions
       const personRoles = await prisma.personRole.findMany({
@@ -135,7 +135,7 @@ router.get('/roles', authenticateToken(), requirePermission(['system:manage']), 
         },
         take: 1 // We just need one example to get the permissions structure
       });
-      
+
       // Get unique permissions for this role type
       const allPermissions = new Set();
       personRoles.forEach(role => {
@@ -143,7 +143,7 @@ router.get('/roles', authenticateToken(), requirePermission(['system:manage']), 
           allPermissions.add(p.permission);
         });
       });
-      
+
       return {
         id: roleType,
         name: roleType,
@@ -189,8 +189,8 @@ router.put('/users/:personId/permissions', authenticateToken(), requirePermissio
 
     // Per ora, aggiorniamo i permessi tramite i ruoli
     // In futuro si potrebbe implementare un sistema di permessi diretti per utente
-    
-    res.json({ 
+
+    res.json({
       message: 'User permissions updated successfully',
       personId: personId,
       permissions
@@ -240,7 +240,7 @@ router.put('/roles/:id', authenticateToken(), requirePermission(['system:manage'
       });
     }
 
-    res.json({ 
+    res.json({
       message: 'Role permissions updated successfully',
       roleType,
       permissions

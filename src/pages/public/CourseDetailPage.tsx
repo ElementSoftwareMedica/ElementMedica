@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { PublicLayout } from '../../components/public/PublicLayout';
 import { PublicButton } from '../../components/public/PublicButton';
+import { useToast } from '../../hooks/useToast';
 import { apiGet } from '../../services/api';
 
 interface Course {
@@ -27,6 +28,7 @@ interface Course {
 
 const CourseDetailPage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
+  const { showToast } = useToast();
   const [course, setCourse] = useState<Course | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -94,7 +96,7 @@ const CourseDetailPage: React.FC = () => {
     e.preventDefault();
     // TODO: Implementare invio richiesta
     console.log('Request data:', requestForm);
-    alert('Richiesta inviata con successo! Ti contatteremo presto.');
+    showToast({ type: 'success', message: 'Richiesta inviata con successo! Ti contatteremo presto.' });
   };
 
   // Mostra loading

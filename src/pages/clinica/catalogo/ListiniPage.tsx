@@ -39,6 +39,7 @@ import {
 } from '../../../services/clinicaApi';
 import { formatDate } from '../../../utils/dateUtils';
 import { useTenantFilter } from '../../../context/TenantFilterContext';
+import { useToast } from '../../../hooks/useToast';
 import '../../../styles/clinica-theme.css';
 
 // =====================================================
@@ -87,6 +88,7 @@ const DefaultBadge: React.FC = () => (
 export const ListiniPage: React.FC = () => {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
+    const { showToast } = useToast();
 
     // Tenant filter from global context
     const { getTenantFilterParams, isReady, tenantFilterKey } = useTenantFilter();
@@ -162,7 +164,7 @@ export const ListiniPage: React.FC = () => {
             const allListini = response?.data || [];
 
             if (allListini.length === 0) {
-                alert('Nessun listino da esportare');
+                showToast({ type: 'warning', message: 'Nessun listino da esportare' });
                 return;
             }
 
@@ -191,7 +193,7 @@ export const ListiniPage: React.FC = () => {
             URL.revokeObjectURL(link.href);
         } catch (error) {
             console.error('Export error:', error);
-            alert('Errore durante l\'esportazione');
+            showToast({ type: 'error', message: 'Errore durante l\'esportazione' });
         } finally {
             setIsExporting(false);
         }
@@ -212,7 +214,7 @@ export const ListiniPage: React.FC = () => {
                 const lines = text.split('\n').filter(l => l.trim());
 
                 if (lines.length < 2) {
-                    alert('File vuoto o formato non valido');
+                    showToast({ type: 'warning', message: 'File vuoto o formato non valido' });
                     return;
                 }
 
@@ -249,10 +251,10 @@ export const ListiniPage: React.FC = () => {
                     message += `\n\nErrori (${errors.length}):\n${errors.slice(0, 5).join('\n')}`;
                     if (errors.length > 5) message += `\n...e altri ${errors.length - 5}`;
                 }
-                alert(message);
+                showToast({ type: errors.length > 0 ? 'warning' : 'success', message });
             } catch (error) {
                 console.error('Import error:', error);
-                alert('Errore durante l\'importazione del file');
+                showToast({ type: 'error', message: 'Errore durante l\'importazione del file' });
             } finally {
                 setIsImporting(false);
             }

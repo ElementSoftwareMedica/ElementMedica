@@ -32,7 +32,7 @@ const auditClinico = (azione) => {
     return (req, res, next) => {
         const startTime = Date.now();
         const originalJson = res.json.bind(res);
-        
+
         res.json = (data) => {
             const duration = Date.now() - startTime;
             const success = res.statusCode >= 200 && res.statusCode < 300;

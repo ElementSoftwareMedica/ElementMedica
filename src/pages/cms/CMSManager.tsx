@@ -25,6 +25,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
+import { useToast } from '../../hooks/useToast';
 import {
   useCMSPages,
   useDeleteCMSPage,
@@ -44,6 +45,7 @@ interface CMSManagerProps {
 
 const CMSManager: React.FC<CMSManagerProps> = ({ className = '' }) => {
   const { confirmDelete } = useConfirmDialog();
+  const { showToast } = useToast();
 
   // State
   const [selectedBrand, setSelectedBrand] = useState<string>('all');
@@ -96,7 +98,7 @@ const CMSManager: React.FC<CMSManagerProps> = ({ className = '' }) => {
       setIsEditorOpen(true);
     } catch (error) {
       console.error('Error fetching full page:', error);
-      alert('Errore nel caricamento della pagina');
+      showToast({ type: 'error', message: 'Errore nel caricamento della pagina' });
     }
   };
 

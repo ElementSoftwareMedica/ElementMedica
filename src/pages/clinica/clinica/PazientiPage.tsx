@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../../context/AuthContext';
 import { useTenantFilter } from '../../../context/TenantFilterContext';
+import { useToast } from '../../../hooks/useToast';
 import { apiGet, apiPost, apiPut } from '../../../services/api';
 
 interface Paziente {
@@ -61,6 +62,7 @@ interface SearchResult {
 const PazientiPage: React.FC = () => {
     const navigate = useNavigate();
     const { user } = useAuth();
+    const { showToast } = useToast();
 
     // Tenant filter from global context
     const { getTenantFilterParams, tenantFilterKey } = useTenantFilter();
@@ -219,7 +221,7 @@ const PazientiPage: React.FC = () => {
 
                 // Mostra messaggio appropriato
                 if (response.wasLinked) {
-                    alert(`✓ ${response.message}\n\nIl paziente è stato collegato all'anagrafica esistente dalla formazione.`);
+                    showToast({ type: 'success', message: `${response.message} - Il paziente è stato collegato all'anagrafica esistente dalla formazione.` });
                 }
             }
         } catch (err) {

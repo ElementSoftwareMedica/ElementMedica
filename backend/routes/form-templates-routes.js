@@ -21,8 +21,8 @@ router.use(authenticate);
  * @desc Lista tutti i template di form per il tenant
  * @access Private (forms:read)
  */
-router.get('/', 
-  checkPermissions(['forms:read', 'forms:manage']), 
+router.get('/',
+  checkPermissions(['forms:read', 'forms:manage']),
   getFormTemplates
 );
 
@@ -31,8 +31,8 @@ router.get('/',
  * @desc Recupera un template specifico
  * @access Private (forms:read)
  */
-router.get('/:id', 
-  checkPermissions(['forms:read', 'forms:manage']), 
+router.get('/:id',
+  checkPermissions(['forms:read', 'forms:manage']),
   getFormTemplate
 );
 
@@ -41,8 +41,8 @@ router.get('/:id',
  * @desc Crea un nuovo template di form
  * @access Private (forms:create)
  */
-router.post('/', 
-  checkPermissions(['forms:create', 'forms:manage']), 
+router.post('/',
+  checkPermissions(['forms:create', 'forms:manage']),
   createFormTemplate
 );
 
@@ -51,8 +51,8 @@ router.post('/',
  * @desc Aggiorna un template esistente
  * @access Private (forms:update)
  */
-router.put('/:id', 
-  checkPermissions(['forms:update', 'forms:manage']), 
+router.put('/:id',
+  checkPermissions(['forms:update', 'forms:manage']),
   updateFormTemplate
 );
 
@@ -61,8 +61,8 @@ router.put('/:id',
  * @desc Elimina un template
  * @access Private (forms:delete)
  */
-router.delete('/:id', 
-  checkPermissions(['forms:delete', 'forms:manage']), 
+router.delete('/:id',
+  checkPermissions(['forms:delete', 'forms:manage']),
   deleteFormTemplate
 );
 
@@ -71,8 +71,8 @@ router.delete('/:id',
  * @desc Duplica un template esistente
  * @access Private (forms:create)
  */
-router.post('/:id/duplicate', 
-  checkPermissions(['forms:create', 'forms:manage']), 
+router.post('/:id/duplicate',
+  checkPermissions(['forms:create', 'forms:manage']),
   duplicateFormTemplate
 );
 

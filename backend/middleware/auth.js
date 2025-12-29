@@ -49,7 +49,7 @@ const authenticate = async (req, res, next) => {
     // 2. Altrimenti usa il tenantId della persona
     let effectiveTenantId = person.tenantId;
     const requestedTenantId = req.headers['x-tenant-id'];
-    
+
     if (requestedTenantId && requestedTenantId !== person.tenantId) {
       // Verifica che l'utente abbia accesso al tenant richiesto
       // Gli admin globali hanno accesso a tutti i tenant
@@ -73,7 +73,7 @@ const authenticate = async (req, res, next) => {
             deletedAt: null
           }
         });
-        
+
         if (tenantAccess) {
           effectiveTenantId = requestedTenantId;
           logger.info({

@@ -35,7 +35,7 @@ function setupApiVersions() {
       'Authentication and authorization'
     ]
   });
-  
+
   // Register API v2 (beta)
   routeManager.registerApiVersion('v2', {
     description: 'API Version 2.0 - Beta release with enhanced features',
@@ -49,7 +49,7 @@ function setupApiVersions() {
       'Authentication header format updated'
     ]
   });
-  
+
   // Register deprecated version
   routeManager.registerApiVersion('v0.9', {
     description: 'Legacy API version',
@@ -58,7 +58,7 @@ function setupApiVersions() {
     sunsetDate: '2024-06-01',
     migrationGuide: 'https://docs.example.com/migration/v0.9-to-v1'
   });
-  
+
   logger.info('API versions configured', {
     versions: ['v1', 'v2', 'v0.9'],
     component: 'example-usage'
@@ -79,7 +79,7 @@ function setupValidationSchemas() {
       dateOfBirth: { type: 'date', before: new Date() }
     }
   });
-  
+
   // Register validation for company creation
   routeManager.registerValidation('POST:/api/v1/companies', {
     body: {
@@ -89,7 +89,7 @@ function setupValidationSchemas() {
       website: { type: 'url' }
     }
   });
-  
+
   logger.info('Custom validation schemas registered', {
     schemas: ['POST:/api/v1/persons', 'POST:/api/v1/companies'],
     component: 'example-usage'
@@ -131,9 +131,9 @@ function setupCustomMiddleware() {
       next();
     }
   ];
-  
+
   routeManager.registerMiddlewareStack('admin-enhanced', adminMiddleware);
-  
+
   logger.info('Custom middleware stack registered', {
     stack: 'admin-enhanced',
     middlewareCount: adminMiddleware.length,
@@ -212,7 +212,7 @@ function setupCustomDocumentation() {
     },
     security: [{ bearerAuth: [] }]
   });
-  
+
   logger.info('Custom API documentation added', {
     endpoint: '/api/v1/analytics/dashboard',
     component: 'example-usage'
@@ -236,9 +236,9 @@ function setupSampleRoutes() {
         },
         orderBy: { createdAt: 'desc' }
       });
-      
+
       const persons = await req.queryOptimizer.executeQuery('person', 'findMany', query);
-      
+
       res.json({
         success: true,
         data: persons,
@@ -253,7 +253,7 @@ function setupSampleRoutes() {
         error: error.message,
         component: 'sample-routes'
       });
-      
+
       res.status(500).json({
         success: false,
         error: {
@@ -263,7 +263,7 @@ function setupSampleRoutes() {
       });
     }
   });
-  
+
   // Company analytics endpoint (v2 only)
   app.get('/api/v2/companies/analytics', (req, res) => {
     // This endpoint is only available in v2
@@ -276,7 +276,7 @@ function setupSampleRoutes() {
         }
       });
     }
-    
+
     res.json({
       success: true,
       data: {
@@ -291,7 +291,7 @@ function setupSampleRoutes() {
       }
     });
   });
-  
+
   logger.info('Sample routes configured', {
     routes: ['/api/v1/persons', '/api/v2/companies/analytics'],
     component: 'example-usage'
@@ -307,7 +307,7 @@ function setupPerformanceMonitoring() {
     const metrics = routeManager.getMetrics();
     const queryReport = routeManager.getQueryOptimizationReport();
     const versioningReport = routeManager.getVersioningReport();
-    
+
     logger.info('Performance Report', {
       timestamp: new Date().toISOString(),
       totalRequests: metrics.overview.totalRequests,
@@ -317,7 +317,7 @@ function setupPerformanceMonitoring() {
       activeVersions: versioningReport.enabled ? versioningReport.statistics.totalVersions : 0,
       component: 'performance-monitor'
     });
-    
+
     // Log performance recommendations
     const recommendations = routeManager.generatePerformanceRecommendations();
     if (recommendations.length > 0) {
@@ -328,7 +328,7 @@ function setupPerformanceMonitoring() {
       });
     }
   }, 60000); // Every minute
-  
+
   logger.info('Performance monitoring configured', {
     interval: '60 seconds',
     component: 'example-usage'
@@ -342,7 +342,7 @@ export async function initializeAdvancedRouting() {
   try {
     // Initialize the route manager
     await routeManager.initialize();
-    
+
     // Setup all features
     setupApiVersions();
     setupValidationSchemas();
@@ -350,7 +350,7 @@ export async function initializeAdvancedRouting() {
     setupCustomDocumentation();
     setupSampleRoutes();
     setupPerformanceMonitoring();
-    
+
     logger.info('Advanced routing system initialized successfully', {
       features: {
         versioning: true,
@@ -367,7 +367,7 @@ export async function initializeAdvancedRouting() {
       },
       component: 'example-usage'
     });
-    
+
     return routeManager;
   } catch (error) {
     logger.error('Failed to initialize advanced routing system', {
@@ -375,7 +375,7 @@ export async function initializeAdvancedRouting() {
       stack: error.stack,
       component: 'example-usage'
     });
-    
+
     throw error;
   }
 }
@@ -385,7 +385,7 @@ export async function initializeAdvancedRouting() {
  */
 export function exampleUsage() {
   const PORT = process.env.PORT || 3000;
-  
+
   initializeAdvancedRouting()
     .then((routeManager) => {
       app.listen(PORT, () => {
@@ -396,7 +396,7 @@ export function exampleUsage() {
           versions: `http://localhost:${PORT}/api/versions`,
           component: 'example-usage'
         });
-        
+
         // Log system status
         const status = routeManager.getHealthStatus();
         logger.info('System health check', status);
@@ -407,7 +407,7 @@ export function exampleUsage() {
         error: error.message,
         component: 'example-usage'
       });
-      
+
       process.exit(1);
     });
 }

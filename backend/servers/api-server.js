@@ -73,8 +73,10 @@ import googleAuthRoutes from '../routes/google-auth-routes.js';
 import documentRoutes from '../routes/document-routes.js';
 import lettereIncaricoRoutes from '../routes/lettere-incarico-routes.js';
 import registriPresenzeRoutes from '../routes/registri-presenze-routes.js';
-import attestatiRoutes from '../routes/attestati-routes.js';
-import preventiviRoutes from '../routes/preventivi-routes.js';
+// Project 46 - Modular attestati routes (5 sub-routers)
+import attestatiRoutes from '../routes/attestati/index.js';
+// Project 46 - Modular preventivi routes (5 sub-routers)
+import preventiviRoutes from '../routes/preventivi/index.js';
 import codiciScontoRoutes from '../routes/codici-sconto-routes.js';
 import importRoutes from '../routes/import-routes.js';
 import backupRoutes from '../routes/backup-routes.js';

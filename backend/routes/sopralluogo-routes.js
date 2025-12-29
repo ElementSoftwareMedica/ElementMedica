@@ -8,8 +8,8 @@ const router = express.Router();
 const { authenticate: authenticateToken } = middleware;
 
 // Get all sopralluoghi for a site
-router.get('/site/:siteId', 
-  authenticateToken(), 
+router.get('/site/:siteId',
+  authenticateToken(),
   checkAdvancedPermission('companies', 'read', {
     getSiteId: (req) => req.params.siteId
   }),
@@ -18,25 +18,25 @@ router.get('/site/:siteId',
     try {
       const { siteId } = req.params;
       const person = req.person;
-      
+
       // Verifica che la sede esista
       const site = await prisma.companySite.findUnique({
         where: { id: siteId },
         include: { company: true }
       });
-      
+
       if (!site) {
-        return res.status(404).json({ 
+        return res.status(404).json({
           error: 'Site not found',
           message: `Site with ID ${siteId} does not exist`
         });
       }
-      
+
       // I permessi sono già stati verificati dal middleware checkAdvancedPermission
       // che ora include la verifica dei permessi per sede
-      
+
       const sopralluoghi = await prisma.sopralluogo.findMany({
-        where: { 
+        where: {
           siteId,
           deletedAt: null
         },
@@ -65,7 +65,7 @@ router.get('/site/:siteId',
         },
         orderBy: { dataEsecuzione: 'desc' }
       });
-      
+
       res.json({ sopralluoghi });
     } catch (error) {
       logger.error('Failed to fetch sopralluoghi', {
@@ -75,7 +75,7 @@ router.get('/site/:siteId',
         stack: error.stack,
         siteId: req.params?.siteId
       });
-      res.status(500).json({ 
+      res.status(500).json({
         error: 'Internal server error',
         message: 'Failed to fetch sopralluoghi'
       });
@@ -84,8 +84,8 @@ router.get('/site/:siteId',
 );
 
 // Get sopralluogo by ID
-router.get('/:id', 
-  authenticateToken(), 
+router.get('/:id',
+  authenticateToken(),
   checkAdvancedPermission('companies', 'read', {
     getSiteId: async (req) => {
       const sopralluogo = await prisma.sopralluogo.findUnique({
@@ -100,9 +100,9 @@ router.get('/:id',
     try {
       const { id } = req.params;
       const person = req.person;
-      
-      const sopralluogo = await prisma.sopralluogo.findUnique({ 
-        where: { 
+
+      const sopralluogo = await prisma.sopralluogo.findUnique({
+        where: {
           id,
           deletedAt: null
         },
@@ -124,17 +124,17 @@ router.get('/:id',
           }
         }
       });
-      
+
       if (!sopralluogo) {
-        return res.status(404).json({ 
+        return res.status(404).json({
           error: 'Sopralluogo not found',
           message: `Sopralluogo with ID ${id} does not exist`
         });
       }
-      
+
       // I permessi sono già stati verificati dal middleware checkAdvancedPermission
       // che ora include la verifica dei permessi per sede
-      
+
       res.json(sopralluogo);
     } catch (error) {
       logger.error('Failed to fetch sopralluogo', {
@@ -144,7 +144,7 @@ router.get('/:id',
         stack: error.stack,
         sopralluogoId: req.params?.id
       });
-      res.status(500).json({ 
+      res.status(500).json({
         error: 'Internal server error',
         message: 'Failed to fetch sopralluogo'
       });
@@ -153,24 +153,24 @@ router.get('/:id',
 );
 
 // Create new sopralluogo
-router.post('/', 
-  authenticateToken(), 
+router.post('/',
+  authenticateToken(),
   checkAdvancedPermission('companies', 'create', {
     getSiteId: (req) => req.body.siteId
   }),
   async (req, res) => {
     try {
       const person = req.person;
-      const { 
-        siteId, 
-        esecutoreId, 
-        dataEsecuzione, 
-        dataProssimoSopralluogo, 
-        valutazione, 
-        esito, 
-        note 
+      const {
+        siteId,
+        esecutoreId,
+        dataEsecuzione,
+        dataProssimoSopralluogo,
+        valutazione,
+        esito,
+        note
       } = req.body;
-      
+
       // Validate required fields
       if (!siteId || !dataEsecuzione) {
         return res.status(400).json({
@@ -178,29 +178,29 @@ router.post('/',
           message: 'siteId and dataEsecuzione are required'
         });
       }
-      
+
       // Verifica che la sede esista
       const site = await prisma.companySite.findUnique({
         where: { id: siteId },
         include: { company: true }
       });
-      
+
       if (!site) {
         return res.status(404).json({
           error: 'Site not found',
           message: `Site with ID ${siteId} does not exist`
         });
       }
-      
+
       // I permessi sono già stati verificati dal middleware checkAdvancedPermission
       // che ora include la verifica dei permessi per sede
-      
+
       // Se è specificato un esecutore, verifica che esista
       if (esecutoreId) {
         const esecutore = await prisma.person.findUnique({
           where: { id: esecutoreId }
         });
-        
+
         if (!esecutore) {
           return res.status(404).json({
             error: 'Executor not found',
@@ -208,8 +208,8 @@ router.post('/',
           });
         }
       }
-      
-      const sopralluogo = await prisma.sopralluogo.create({ 
+
+      const sopralluogo = await prisma.sopralluogo.create({
         data: {
           siteId,
           esecutoreId,
@@ -244,7 +244,7 @@ router.post('/',
           }
         }
       });
-      
+
       res.status(201).json(sopralluogo);
     } catch (error) {
       logger.error('Failed to create sopralluogo', {
@@ -254,8 +254,8 @@ router.post('/',
         stack: error.stack,
         siteId: req.body?.siteId
       });
-      
-      res.status(500).json({ 
+
+      res.status(500).json({
         error: 'Internal server error',
         message: 'Failed to create sopralluogo'
       });
@@ -264,8 +264,8 @@ router.post('/',
 );
 
 // Update sopralluogo
-router.put('/:id', 
-  authenticateToken(), 
+router.put('/:id',
+  authenticateToken(),
   checkAdvancedPermission('companies', 'update', {
     getSiteId: async (req) => {
       const sopralluogo = await prisma.sopralluogo.findUnique({
@@ -280,7 +280,7 @@ router.put('/:id',
       const { id } = req.params;
       const person = req.person;
       const updateData = { ...req.body };
-      
+
       // Convert date strings to Date objects if present
       if (updateData.dataEsecuzione) {
         updateData.dataEsecuzione = new Date(updateData.dataEsecuzione);
@@ -288,10 +288,10 @@ router.put('/:id',
       if (updateData.dataProssimoSopralluogo) {
         updateData.dataProssimoSopralluogo = new Date(updateData.dataProssimoSopralluogo);
       }
-      
+
       // Check if sopralluogo exists
-      const existingSopralluogo = await prisma.sopralluogo.findUnique({ 
-        where: { 
+      const existingSopralluogo = await prisma.sopralluogo.findUnique({
+        where: {
           id,
           deletedAt: null
         },
@@ -303,23 +303,23 @@ router.put('/:id',
           }
         }
       });
-      
+
       if (!existingSopralluogo) {
-        return res.status(404).json({ 
+        return res.status(404).json({
           error: 'Sopralluogo not found',
           message: `Sopralluogo with ID ${id} does not exist`
         });
       }
-      
+
       // I permessi sono già stati verificati dal middleware checkAdvancedPermission
       // che ora include la verifica dei permessi per sede
-      
+
       // Se si sta cambiando l'esecutore, verifica che esista
       if (updateData.esecutoreId) {
         const esecutore = await prisma.person.findUnique({
           where: { id: updateData.esecutoreId }
         });
-        
+
         if (!esecutore) {
           return res.status(404).json({
             error: 'Executor not found',
@@ -327,9 +327,9 @@ router.put('/:id',
           });
         }
       }
-      
-      const sopralluogo = await prisma.sopralluogo.update({ 
-        where: { id }, 
+
+      const sopralluogo = await prisma.sopralluogo.update({
+        where: { id },
         data: updateData,
         include: {
           site: {
@@ -355,7 +355,7 @@ router.put('/:id',
           }
         }
       });
-      
+
       res.json(sopralluogo);
     } catch (error) {
       logger.error('Failed to update sopralluogo', {
@@ -365,8 +365,8 @@ router.put('/:id',
         stack: error.stack,
         sopralluogoId: req.params?.id
       });
-      
-      res.status(500).json({ 
+
+      res.status(500).json({
         error: 'Internal server error',
         message: 'Failed to update sopralluogo'
       });
@@ -375,8 +375,8 @@ router.put('/:id',
 );
 
 // Delete sopralluogo (soft delete)
-router.delete('/:id', 
-  authenticateToken(), 
+router.delete('/:id',
+  authenticateToken(),
   checkAdvancedPermission('companies', 'delete', {
     getSiteId: async (req) => {
       const sopralluogo = await prisma.sopralluogo.findUnique({
@@ -390,10 +390,10 @@ router.delete('/:id',
     try {
       const { id } = req.params;
       const person = req.person;
-      
+
       // Check if sopralluogo exists
-      const existingSopralluogo = await prisma.sopralluogo.findUnique({ 
-        where: { 
+      const existingSopralluogo = await prisma.sopralluogo.findUnique({
+        where: {
           id,
           deletedAt: null
         },
@@ -405,25 +405,25 @@ router.delete('/:id',
           }
         }
       });
-      
+
       if (!existingSopralluogo) {
-        return res.status(404).json({ 
+        return res.status(404).json({
           error: 'Sopralluogo not found',
           message: `Sopralluogo with ID ${id} does not exist`
         });
       }
-      
+
       // I permessi sono già stati verificati dal middleware checkAdvancedPermission
       // che ora include la verifica dei permessi per sede
-      
+
       // Soft delete
-      await prisma.sopralluogo.update({ 
-        where: { id }, 
-        data: { 
+      await prisma.sopralluogo.update({
+        where: { id },
+        data: {
           deletedAt: new Date()
         }
       });
-      
+
       res.status(204).send();
     } catch (error) {
       logger.error('Failed to delete sopralluogo', {
@@ -433,7 +433,7 @@ router.delete('/:id',
         stack: error.stack,
         sopralluogoId: req.params?.id
       });
-      res.status(500).json({ 
+      res.status(500).json({
         error: 'Internal server error',
         message: 'Failed to delete sopralluogo'
       });

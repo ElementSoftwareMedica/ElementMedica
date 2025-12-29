@@ -19,9 +19,9 @@ const router = express.Router();
  * @desc Lista submissions avanzate con filtri
  * @access Private (submissions:read)
  */
-router.get('/', 
+router.get('/',
   authenticate,
-  checkPermissions(['submissions:read', 'submissions:manage']), 
+  checkPermissions(['submissions:read', 'submissions:manage']),
   getAdvancedSubmissions
 );
 
@@ -30,9 +30,9 @@ router.get('/',
  * @desc Statistiche submissions avanzate
  * @access Private (submissions:read)
  */
-router.get('/stats', 
+router.get('/stats',
   authenticate,
-  checkPermissions(['submissions:read', 'submissions:manage']), 
+  checkPermissions(['submissions:read', 'submissions:manage']),
   getAdvancedSubmissionStats
 );
 
@@ -41,9 +41,9 @@ router.get('/stats',
  * @desc Recupera una submission specifica
  * @access Private (submissions:read)
  */
-router.get('/:id', 
+router.get('/:id',
   authenticate,
-  checkPermissions(['submissions:read', 'submissions:manage']), 
+  checkPermissions(['submissions:read', 'submissions:manage']),
   getAdvancedSubmission
 );
 
@@ -60,9 +60,9 @@ router.post('/', createAdvancedSubmission);
  * @desc Aggiorna una submission
  * @access Private (submissions:update)
  */
-router.put('/:id', 
+router.put('/:id',
   authenticate,
-  checkPermissions(['submissions:update', 'submissions:manage']), 
+  checkPermissions(['submissions:update', 'submissions:manage']),
   updateAdvancedSubmission
 );
 
@@ -71,9 +71,9 @@ router.put('/:id',
  * @desc Elimina una submission
  * @access Private (submissions:delete)
  */
-router.delete('/:id', 
+router.delete('/:id',
   authenticate,
-  checkPermissions(['submissions:delete', 'submissions:manage']), 
+  checkPermissions(['submissions:delete', 'submissions:manage']),
   deleteAdvancedSubmission
 );
 
@@ -82,9 +82,9 @@ router.delete('/:id',
  * @desc Azioni bulk su multiple submissions
  * @access Private (submissions:update)
  */
-router.post('/bulk-action', 
+router.post('/bulk-action',
   authenticate,
-  checkPermissions(['submissions:update', 'submissions:manage']), 
+  checkPermissions(['submissions:update', 'submissions:manage']),
   bulkActionSubmissions
 );
 

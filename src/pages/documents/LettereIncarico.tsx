@@ -24,7 +24,7 @@ interface LetteraIncarico {
   };
   trainer: {
     firstName: string;
-  lastName: string;
+    lastName: string;
     tariffa_oraria?: number;
   };
 }
@@ -49,7 +49,7 @@ const DropdownMenu: React.FC<{ children: (close: () => void) => React.ReactNode;
   }, [open]);
 
   // Portal rendering
-  const [menuPos, setMenuPos] = useState<{top: number, left: number} | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number, left: number } | null>(null);
   const triggerRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
@@ -63,7 +63,7 @@ const DropdownMenu: React.FC<{ children: (close: () => void) => React.ReactNode;
   }, [open]);
 
   return (
-    <div ref={ref} className="relative inline-block text-left" style={{overflow: 'visible'}}>
+    <div ref={ref} className="relative inline-block text-left" style={{ overflow: 'visible' }}>
       <span ref={triggerRef} onClick={() => setOpen(o => !o)}>{trigger}</span>
       {open && menuPos && ReactDOM.createPortal(
         <div ref={menuRef} style={{ position: 'absolute', zIndex: 99999, left: menuPos.left, top: menuPos.top, background: '#fffbe6', minWidth: '8rem', boxShadow: '0 8px 24px rgba(0,0,0,0.18)' }} className="w-32 bg-white border border-gray-200 rounded shadow-lg">
@@ -150,7 +150,7 @@ const LettereIncarico: React.FC<LettereIncaricoProps> = ({
       showToast({ type: 'error', title: 'Errore', message: 'Errore durante l\'eliminazione multipla' });
     }
   };
-  
+
   // Opzioni di filtro per le lettere
   const lettereFilterOptions = [
     {
@@ -181,7 +181,7 @@ const LettereIncarico: React.FC<LettereIncaricoProps> = ({
 
   // Configurazione colonne per tabella lettere
   const lettereColumns = [
-    { 
+    {
       key: 'actions',
       label: 'Azioni',
       width: 120,
@@ -201,31 +201,31 @@ const LettereIncarico: React.FC<LettereIncaricoProps> = ({
         </DropdownMenu>
       ),
     },
-    { 
+    {
       key: 'corso',
       label: 'Corso',
       width: 200,
       renderCell: (lettera: LetteraIncarico) => lettera.scheduledCourse.course.title
     },
-    { 
+    {
       key: 'azienda',
       label: 'Azienda',
       width: 180,
       renderCell: (lettera: LetteraIncarico) => lettera.scheduledCourse.companies?.[0]?.company?.ragioneSociale || '--'
     },
-    { 
+    {
       key: 'formatore',
       label: 'Formatore',
       width: 180,
       renderCell: (lettera: LetteraIncarico) => `${lettera.trainer.firstName} ${lettera.trainer.lastName}`
     },
-    { 
+    {
       key: 'tariffa',
       label: 'Tariffa Oraria',
       width: 120,
       renderCell: (lettera: LetteraIncarico) => lettera.trainer.tariffa_oraria?.toFixed(2) || '--'
     },
-    { 
+    {
       key: 'compenso',
       label: 'Compenso Totale',
       width: 150,
@@ -235,23 +235,23 @@ const LettereIncarico: React.FC<LettereIncaricoProps> = ({
         return tariffa !== '--' && oreTotali ? (parseFloat(tariffa) * parseFloat(oreTotali)).toFixed(2) : '--';
       }
     },
-    { 
+    {
       key: 'dataGenerazione',
       label: 'Data Generazione',
       width: 150,
       renderCell: (lettera: LetteraIncarico) => lettera.dataGenerazione ? new Date(lettera.dataGenerazione).toLocaleDateString('it-IT') : '--'
     },
-    { 
+    {
       key: 'numeroProgressivo',
       label: 'Numero Progressivo',
       width: 160,
       renderCell: (lettera: LetteraIncarico) => (lettera.numeroProgressivo != null && lettera.annoProgressivo != null) ? `${lettera.numeroProgressivo}/${lettera.annoProgressivo}` : '--'
     }
   ];
-  
+
   // Filtra le lettere in base alla ricerca
   let filteredLettere = lettere;
-  
+
   if (searchTerm) {
     const lowercaseSearchTerm = searchTerm.toLowerCase();
     filteredLettere = lettere.filter(
@@ -261,14 +261,14 @@ const LettereIncarico: React.FC<LettereIncaricoProps> = ({
         (lettera.scheduledCourse.companies?.[0]?.company?.ragioneSociale || '').toLowerCase().includes(lowercaseSearchTerm)
     );
   }
-  
+
   // Applica i filtri
   if (activeFilters.course) {
     filteredLettere = filteredLettere.filter(
       (lettera) => lettera.scheduledCourse.course.title === activeFilters.course
     );
   }
-  
+
   if (activeFilters.trainer) {
     filteredLettere = filteredLettere.filter(
       (lettera) => `${lettera.trainer.firstName} ${lettera.trainer.lastName}` === activeFilters.trainer
@@ -285,7 +285,7 @@ const LettereIncarico: React.FC<LettereIncaricoProps> = ({
           placeholder="Cerca lettere di incarico..."
         />
       </div>
-      
+
       <div className="flex items-center gap-2">
         <SearchBarControls
           onToggleSelectionMode={() => {
@@ -320,7 +320,7 @@ const LettereIncarico: React.FC<LettereIncaricoProps> = ({
   return (
     <div>
       <SearchFilterBar />
-      
+
       {loading ? (
         <div className="text-center py-8 text-gray-500">Caricamento...</div>
       ) : error ? (
@@ -340,13 +340,13 @@ const LettereIncarico: React.FC<LettereIncaricoProps> = ({
               onClick: (e: React.MouseEvent) => {
                 const target = e.target as HTMLElement;
                 if (target.closest('button,input,a')) return;
-                
+
                 const row = target.closest('tr');
                 if (!row) return;
-                
+
                 const index = parseInt(row.dataset.index || '0', 10);
                 const lettera = filteredLettere[index];
-                
+
                 if (lettera && lettera.url) {
                   window.open(`/api${lettera.url}`, '_blank');
                 }

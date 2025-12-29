@@ -35,6 +35,7 @@ import {
 import { formatDate } from '../../../utils/dateUtils';
 import { useTenantFilter } from '../../../context/TenantFilterContext';
 import { getDoctorTitle } from '../../../utils/codiceFiscale';
+import { useToast } from '../../../hooks/useToast';
 
 // ============================================
 // TYPES
@@ -323,6 +324,7 @@ const FerieCard: React.FC<{
 
 export const DisponibilitaPage: React.FC = () => {
     const queryClient = useQueryClient();
+    const { showToast } = useToast();
 
     // Tenant filter from global context
     const { getTenantFilterParams, isReady, tenantFilterKey } = useTenantFilter();
@@ -442,7 +444,7 @@ export const DisponibilitaPage: React.FC = () => {
     // Copy weekly pattern from one medico to another
     const handleCopyPattern = async () => {
         if (!copySource || !copyTarget || copySource === copyTarget) {
-            alert('Seleziona due medici diversi');
+            showToast({ type: 'warning', message: 'Seleziona due medici diversi' });
             return;
         }
 
@@ -452,7 +454,7 @@ export const DisponibilitaPage: React.FC = () => {
             const sourceDisponibilita = await disponibilitaApi.getByMedico(copySource);
 
             if (!sourceDisponibilita || sourceDisponibilita.length === 0) {
-                alert('Il medico sorgente non ha orari configurati');
+                showToast({ type: 'warning', message: 'Il medico sorgente non ha orari configurati' });
                 return;
             }
 
@@ -482,10 +484,10 @@ export const DisponibilitaPage: React.FC = () => {
             setCopySource('');
             setCopyTarget('');
 
-            alert(`Pattern copiato! ${copied} orari creati.${errors > 0 ? ` (${errors} errori)` : ''}`);
+            showToast({ type: 'success', message: `Pattern copiato! ${copied} orari creati.${errors > 0 ? ` (${errors} errori)` : ''}` });
         } catch (error) {
             console.error('Copy pattern error:', error);
-            alert('Errore durante la copia del pattern');
+            showToast({ type: 'error', message: 'Errore durante la copia del pattern' });
         } finally {
             setIsCopying(false);
         }

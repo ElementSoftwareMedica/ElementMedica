@@ -11,15 +11,15 @@ import prisma from '../config/prisma-optimization.js';
  */
 function extractToken(req) {
     const authHeader = req.headers.authorization;
-    
+
     if (authHeader && authHeader.startsWith('Bearer ')) {
         return authHeader.substring(7);
     }
-    
+
     if (req.cookies && req.cookies.accessToken) {
         return req.cookies.accessToken;
     }
-    
+
     return null;
 }
 
@@ -28,11 +28,11 @@ function extractToken(req) {
  */
 export function authenticateSimple(options = {}) {
     const { optional = false } = options;
-    
+
     return async (req, res, next) => {
         try {
             const token = extractToken(req);
-            
+
             if (!token) {
                 if (optional) {
                     req.person = null;
@@ -43,7 +43,7 @@ export function authenticateSimple(options = {}) {
                     code: 'AUTH_TOKEN_MISSING'
                 });
             }
-            
+
             // Verify JWT token esclusivamente via JWTService
             let decoded;
             try {
@@ -54,19 +54,19 @@ export function authenticateSimple(options = {}) {
                     code: 'AUTH_TOKEN_INVALID'
                 });
             }
-            
+
             // Simple person lookup
             const person = await prisma.person.findUnique({
                 where: { id: decoded.personId }
             });
-            
+
             if (!person || person.status !== 'ACTIVE' || person.deletedAt) {
                 return res.status(401).json({
                     error: 'Person not found or inactive',
                     code: 'AUTH_USER_INACTIVE'
                 });
             }
-            
+
             // Simple roles lookup
             const personRoles = await prisma.personRole.findMany({
                 where: {
@@ -74,15 +74,15 @@ export function authenticateSimple(options = {}) {
                     isActive: true
                 }
             });
-            
+
             const roles = personRoles.map(pr => pr.roleType);
-            
+
             // Basic permissions for admin
             let permissions = [];
             if (roles.includes('SUPER_ADMIN') || roles.includes('ADMIN')) {
                 permissions = ['ALL_PERMISSIONS'];
             }
-            
+
             // Attach minimal person info
             req.person = {
                 id: person.id,
@@ -93,9 +93,9 @@ export function authenticateSimple(options = {}) {
                 roles: roles,
                 permissions: permissions
             };
-            
+
             next();
-            
+
         } catch (error) {
             return res.status(401).json({
                 error: 'Authentication failed',

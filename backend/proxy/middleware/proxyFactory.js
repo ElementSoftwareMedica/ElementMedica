@@ -24,7 +24,7 @@ const PROXY_DEFAULTS = {
     xfwd: true,
     preserveHeaderKeyCase: true
   },
-  
+
   // Configurazione per servizi di documenti
   documents: {
     changeOrigin: true,
@@ -38,7 +38,7 @@ const PROXY_DEFAULTS = {
     xfwd: true,
     preserveHeaderKeyCase: true
   },
-  
+
   // Configurazione per servizi di autenticazione
   auth: {
     changeOrigin: true,
@@ -53,7 +53,7 @@ const PROXY_DEFAULTS = {
     xfwd: true,
     preserveHeaderKeyCase: true
   },
-  
+
   // Configurazione per health checks
   health: {
     changeOrigin: true,
@@ -90,14 +90,14 @@ function createErrorHandlers(serviceName, target) {
         userAgent: req.get('User-Agent'),
         timestamp: new Date().toISOString()
       };
-      
+
       // Log strutturato sempre attivo
       logger.error(`Proxy error for ${serviceName}`, errorInfo);
-      
+
       // Determina il tipo di errore e la risposta appropriata
       let statusCode = 502; // Bad Gateway default
       let errorMessage = 'Service temporarily unavailable';
-      
+
       switch (err.code) {
         case 'ECONNREFUSED':
           statusCode = 503; // Service Unavailable
@@ -120,7 +120,7 @@ function createErrorHandlers(serviceName, target) {
           statusCode = 502;
           errorMessage = `${serviceName} service error`;
       }
-      
+
       // Evita doppia risposta
       if (!res.headersSent) {
         res.status(statusCode).json({
@@ -131,7 +131,7 @@ function createErrorHandlers(serviceName, target) {
         });
       }
     },
-    
+
     onProxyReqError: (err, req, res) => {
       logger.error(`Proxy request error for ${serviceName}`, {
         service: 'proxy-server',
@@ -141,7 +141,7 @@ function createErrorHandlers(serviceName, target) {
         path: req.path,
         method: req.method
       });
-      
+
       if (!res.headersSent) {
         res.status(502).json({
           error: 'Proxy request failed',
@@ -150,7 +150,7 @@ function createErrorHandlers(serviceName, target) {
         });
       }
     },
-    
+
     onProxyResError: (err, req, res) => {
       logger.error(`Proxy response error for ${serviceName}`, {
         service: 'proxy-server',
@@ -160,7 +160,7 @@ function createErrorHandlers(serviceName, target) {
         path: req.path,
         method: req.method
       });
-      
+
       if (!res.headersSent) {
         res.status(502).json({
           error: 'Proxy response failed',
@@ -188,16 +188,16 @@ export function createCustomProxyMiddleware(serviceName, target, options = {}) {
     skipPaths = [],
     requireAuth = false
   } = options;
-  
+
   // Ottieni configurazione base per il tipo
   const baseConfig = PROXY_DEFAULTS[type] || PROXY_DEFAULTS.api;
-  
+
   // Crea logger per il proxy
   const proxyLogger = enableLogging ? createProxyLogger(target, serviceName) : {};
-  
+
   // Crea gestori di errore
   const errorHandlers = createErrorHandlers(serviceName, target);
-  
+
   // Configurazione finale del proxy
   const proxyConfig = {
     target,
@@ -206,23 +206,23 @@ export function createCustomProxyMiddleware(serviceName, target, options = {}) {
     ...customConfig,
     ...proxyLogger,
     ...errorHandlers,
-    
+
     // Router function per controlli aggiuntivi
     router: (req) => {
       // Skip paths specificati
       if (skipPaths.some(path => req.path.includes(path))) {
         return false;
       }
-      
+
       return target;
     },
-    
+
     // Modifica headers della richiesta
     onProxyReq: (proxyReq, req, res) => {
       // Aggiungi headers di identificazione
       proxyReq.setHeader('X-Forwarded-By', 'proxy-server');
       proxyReq.setHeader('X-Proxy-Service', serviceName);
-      
+
       // Mantieni IP originale
       if (req.ip) {
         proxyReq.setHeader('X-Forwarded-For', req.ip);
@@ -249,12 +249,12 @@ export function createCustomProxyMiddleware(serviceName, target, options = {}) {
           method: req.method
         });
       }
-      
+
       // Chiama logger se abilitato
       if (proxyLogger.onProxyReq) {
         proxyLogger.onProxyReq(proxyReq, req, res);
       }
-      
+
       // Log per audit GDPR
       logger.info(`Proxying to ${serviceName}`, {
         service: 'proxy-server',
@@ -307,23 +307,23 @@ export function createCustomProxyMiddleware(serviceName, target, options = {}) {
         });
       }
     },
-    
+
     // Modifica headers della risposta
     onProxyRes: (proxyRes, req, res) => {
       // Aggiungi headers di identificazione
       proxyRes.headers['X-Proxied-By'] = 'proxy-server';
       proxyRes.headers['X-Proxy-Service'] = serviceName;
-      
+
       // Chiama logger se abilitato
       if (proxyLogger.onProxyRes) {
         proxyLogger.onProxyRes(proxyRes, req, res);
       }
     }
   };
-  
+
   // Crea il middleware proxy
   const proxy = createProxyMiddleware(proxyConfig);
-  
+
   // Wrapper per controlli aggiuntivi
   return (req, res, next) => {
     // Debug logging per autenticazione
@@ -336,7 +336,7 @@ export function createCustomProxyMiddleware(serviceName, target, options = {}) {
         method: req.method
       });
     }
-    
+
     // Controllo autenticazione se richiesto
     if (requireAuth && !req.person && !req.headers.authorization) {
       console.log(`❌ [PROXY AUTH FAILED] Service: ${serviceName}`, {
@@ -346,18 +346,18 @@ export function createCustomProxyMiddleware(serviceName, target, options = {}) {
         path: req.path,
         method: req.method
       });
-      
+
       return res.status(401).json({
         error: 'Authentication required',
         service: serviceName
       });
     }
-    
+
     // Debug logging per proxy success
     if (process.env.DEBUG_AUTH || process.env.DEBUG_ALL) {
       console.log(`✅ [PROXY AUTH PASSED] Service: ${serviceName} - Forwarding to target`);
     }
-    
+
     // Applica il proxy
     proxy(req, res, next);
   };
@@ -375,7 +375,7 @@ export function createApiProxy(target, options = {}) {
     type: 'api',
     ...options
   };
-  
+
   return createCustomProxyMiddleware('api-server', target, finalOptions);
 }
 
@@ -417,7 +417,7 @@ export function createAuthProxy(target, options = {}) {
     '^/logout': '/api/auth/logout',
     '^/refresh': '/api/auth/refresh'
   };
-  
+
   const finalOptions = {
     type: 'auth',
     pathRewrite: {
@@ -426,7 +426,7 @@ export function createAuthProxy(target, options = {}) {
     },
     ...options
   };
-  
+
   return createCustomProxyMiddleware('auth-server', target, finalOptions);
 }
 
@@ -457,22 +457,22 @@ export function createHealthProxy(target, options = {}) {
  */
 export function createLoadBalancedProxy(serviceName, targets, options = {}) {
   let currentIndex = 0;
-  
+
   const getNextTarget = () => {
     const target = targets[currentIndex];
     currentIndex = (currentIndex + 1) % targets.length;
     return target;
   };
-  
+
   return createCustomProxyMiddleware(serviceName, null, {
     ...options,
     router: (req) => {
       const target = getNextTarget();
-      
+
       if (process.env.DEBUG_PROXY || process.env.DEBUG_ALL) {
         console.log(`🔄 [LOAD BALANCER] ${serviceName}: ${req.path} → ${target}`);
       }
-      
+
       return target;
     }
   });
@@ -491,11 +491,11 @@ export function createCircuitBreakerProxy(serviceName, target, options = {}) {
     resetTimeout = 60000,
     ...proxyOptions
   } = options;
-  
+
   let failures = 0;
   let lastFailureTime = 0;
   let isOpen = false;
-  
+
   const proxy = createCustomProxyMiddleware(serviceName, target, {
     ...proxyOptions,
     customConfig: {
@@ -503,7 +503,7 @@ export function createCircuitBreakerProxy(serviceName, target, options = {}) {
       onError: (err, req, res) => {
         failures++;
         lastFailureTime = Date.now();
-        
+
         if (failures >= failureThreshold) {
           isOpen = true;
           logger.warn(`Circuit breaker opened for ${serviceName}`, {
@@ -513,19 +513,19 @@ export function createCircuitBreakerProxy(serviceName, target, options = {}) {
             target
           });
         }
-        
+
         // Chiama handler di errore originale
         const errorHandlers = createErrorHandlers(serviceName, target);
         errorHandlers.onError(err, req, res);
       }
     }
   });
-  
+
   return (req, res, next) => {
     // Controlla se il circuit breaker è aperto
     if (isOpen) {
       const now = Date.now();
-      
+
       // Prova a resettare dopo il timeout
       if (now - lastFailureTime > resetTimeout) {
         isOpen = false;
@@ -544,7 +544,7 @@ export function createCircuitBreakerProxy(serviceName, target, options = {}) {
         });
       }
     }
-    
+
     proxy(req, res, next);
   };
 }

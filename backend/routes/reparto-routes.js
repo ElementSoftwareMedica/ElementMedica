@@ -8,8 +8,8 @@ const router = express.Router();
 const { authenticate: authenticateToken } = middleware;
 
 // Get all Reparti for a site
-router.get('/site/:siteId', 
-  authenticateToken(), 
+router.get('/site/:siteId',
+  authenticateToken(),
   checkAdvancedPermission('companies', 'read', {
     getSiteId: (req) => req.params.siteId
   }),
@@ -18,25 +18,25 @@ router.get('/site/:siteId',
     try {
       const { siteId } = req.params;
       const person = req.person;
-      
+
       // Verifica che la sede esista
       const site = await prisma.companySite.findUnique({
         where: { id: siteId },
         include: { company: true }
       });
-      
+
       if (!site) {
-        return res.status(404).json({ 
+        return res.status(404).json({
           error: 'Site not found',
           message: `Site with ID ${siteId} does not exist`
         });
       }
-      
+
       // I permessi sono già stati verificati dal middleware checkAdvancedPermission
       // che ora include la verifica dei permessi per sede
-      
+
       const reparti = await prisma.reparto.findMany({
-        where: { 
+        where: {
           siteId,
           deletedAt: null
         },
@@ -73,7 +73,7 @@ router.get('/site/:siteId',
         },
         orderBy: { nome: 'asc' }
       });
-      
+
       res.json({ reparti });
     } catch (error) {
       logger.error('Failed to fetch Reparti', {
@@ -83,7 +83,7 @@ router.get('/site/:siteId',
         stack: error.stack,
         siteId: req.params?.siteId
       });
-      res.status(500).json({ 
+      res.status(500).json({
         error: 'Internal server error',
         message: 'Failed to fetch departments'
       });
@@ -92,8 +92,8 @@ router.get('/site/:siteId',
 );
 
 // Get Reparto by ID
-router.get('/:id', 
-  authenticateToken(), 
+router.get('/:id',
+  authenticateToken(),
   checkAdvancedPermission('companies', 'read', {
     getSiteId: async (req) => {
       const reparto = await prisma.reparto.findUnique({
@@ -108,9 +108,9 @@ router.get('/:id',
     try {
       const { id } = req.params;
       const person = req.person;
-      
-      const reparto = await prisma.reparto.findUnique({ 
-        where: { 
+
+      const reparto = await prisma.reparto.findUnique({
+        where: {
           id,
           deletedAt: null
         },
@@ -140,17 +140,17 @@ router.get('/:id',
           }
         }
       });
-      
+
       if (!reparto) {
-        return res.status(404).json({ 
+        return res.status(404).json({
           error: 'Department not found',
           message: `Department with ID ${id} does not exist`
         });
       }
-      
+
       // I permessi sono già stati verificati dal middleware checkAdvancedPermission
       // che ora include la verifica dei permessi per sede
-      
+
       res.json(reparto);
     } catch (error) {
       logger.error('Failed to fetch Reparto', {
@@ -160,7 +160,7 @@ router.get('/:id',
         stack: error.stack,
         repartoId: req.params?.id
       });
-      res.status(500).json({ 
+      res.status(500).json({
         error: 'Internal server error',
         message: 'Failed to fetch department'
       });
@@ -169,8 +169,8 @@ router.get('/:id',
 );
 
 // Create new Reparto
-router.post('/', 
-  authenticateToken(), 
+router.post('/',
+  authenticateToken(),
   checkAdvancedPermission('companies', 'create', {
     getSiteId: (req) => req.body.siteId
   }),
@@ -178,7 +178,7 @@ router.post('/',
     try {
       const person = req.person;
       const { siteId, nome, descrizione, codice, responsabileId } = req.body;
-      
+
       // Validate required fields
       if (!siteId || !nome) {
         return res.status(400).json({
@@ -186,36 +186,36 @@ router.post('/',
           message: 'siteId and nome are required'
         });
       }
-      
+
       // Verifica che la sede esista
       const site = await prisma.companySite.findUnique({
         where: { id: siteId },
         include: { company: true }
       });
-      
+
       if (!site) {
         return res.status(404).json({
           error: 'Site not found',
           message: `Site with ID ${siteId} does not exist`
         });
       }
-      
+
       // I permessi sono già stati verificati dal middleware checkAdvancedPermission
       // che ora include la verifica dei permessi per sede
-      
+
       // Verifica che il responsabile esista se specificato
       if (responsabileId) {
         const responsabile = await prisma.person.findUnique({
           where: { id: responsabileId, deletedAt: null }
         });
-        
+
         if (!responsabile) {
           return res.status(404).json({
             error: 'Responsible person not found',
             message: `Person with ID ${responsabileId} does not exist`
           });
         }
-        
+
         // Verifica che il responsabile appartenga alla stessa company
         if (person.globalRole !== 'ADMIN' && responsabile.companyId !== site.companyId) {
           return res.status(403).json({
@@ -224,7 +224,7 @@ router.post('/',
           });
         }
       }
-      
+
       // Verifica che non esista già un reparto con lo stesso nome nella stessa sede
       const existingReparto = await prisma.reparto.findFirst({
         where: {
@@ -233,15 +233,15 @@ router.post('/',
           deletedAt: null
         }
       });
-      
+
       if (existingReparto) {
         return res.status(409).json({
           error: 'Conflict',
           message: `A department with name "${nome}" already exists in this site`
         });
       }
-      
-      const reparto = await prisma.reparto.create({ 
+
+      const reparto = await prisma.reparto.create({
         data: {
           siteId,
           nome,
@@ -273,7 +273,7 @@ router.post('/',
           }
         }
       });
-      
+
       res.status(201).json(reparto);
     } catch (error) {
       logger.error('Failed to create Reparto', {
@@ -283,7 +283,7 @@ router.post('/',
         stack: error.stack,
         body: req.body
       });
-      res.status(500).json({ 
+      res.status(500).json({
         error: 'Internal server error',
         message: 'Failed to create department'
       });
@@ -292,8 +292,8 @@ router.post('/',
 );
 
 // Update Reparto
-router.put('/:id', 
-  authenticateToken(), 
+router.put('/:id',
+  authenticateToken(),
   checkAdvancedPermission('companies', 'edit', {
     getSiteId: async (req) => {
       const reparto = await prisma.reparto.findUnique({
@@ -308,7 +308,7 @@ router.put('/:id',
       const { id } = req.params;
       const person = req.person;
       const { nome, descrizione, codice, responsabileId } = req.body;
-      
+
       // Verifica che il reparto esista
       const existingReparto = await prisma.reparto.findUnique({
         where: { id, deletedAt: null },
@@ -318,30 +318,30 @@ router.put('/:id',
           }
         }
       });
-      
+
       if (!existingReparto) {
         return res.status(404).json({
           error: 'Department not found',
           message: `Department with ID ${id} does not exist`
         });
       }
-      
+
       // I permessi sono già stati verificati dal middleware checkAdvancedPermission
       // che ora include la verifica dei permessi per sede
-      
+
       // Verifica che il responsabile esista se specificato
       if (responsabileId) {
         const responsabile = await prisma.person.findUnique({
           where: { id: responsabileId, deletedAt: null }
         });
-        
+
         if (!responsabile) {
           return res.status(404).json({
             error: 'Responsible person not found',
             message: `Person with ID ${responsabileId} does not exist`
           });
         }
-        
+
         // Verifica che il responsabile appartenga alla stessa company
         if (person.globalRole !== 'ADMIN' && responsabile.companyId !== existingReparto.site.companyId) {
           return res.status(403).json({
@@ -350,7 +350,7 @@ router.put('/:id',
           });
         }
       }
-      
+
       // Verifica che non esista già un reparto con lo stesso nome nella stessa sede (escludendo quello corrente)
       if (nome && nome !== existingReparto.nome) {
         const duplicateReparto = await prisma.reparto.findFirst({
@@ -361,7 +361,7 @@ router.put('/:id',
             id: { not: id }
           }
         });
-        
+
         if (duplicateReparto) {
           return res.status(409).json({
             error: 'Conflict',
@@ -369,7 +369,7 @@ router.put('/:id',
           });
         }
       }
-      
+
       const updatedReparto = await prisma.reparto.update({
         where: { id },
         data: {
@@ -410,7 +410,7 @@ router.put('/:id',
           }
         }
       });
-      
+
       res.json(updatedReparto);
     } catch (error) {
       logger.error('Failed to update Reparto', {
@@ -421,7 +421,7 @@ router.put('/:id',
         repartoId: req.params?.id,
         body: req.body
       });
-      res.status(500).json({ 
+      res.status(500).json({
         error: 'Internal server error',
         message: 'Failed to update department'
       });
@@ -430,8 +430,8 @@ router.put('/:id',
 );
 
 // Delete Reparto (soft delete)
-router.delete('/:id', 
-  authenticateToken(), 
+router.delete('/:id',
+  authenticateToken(),
   checkAdvancedPermission('companies', 'delete', {
     getSiteId: async (req) => {
       const reparto = await prisma.reparto.findUnique({
@@ -445,7 +445,7 @@ router.delete('/:id',
     try {
       const { id } = req.params;
       const person = req.person;
-      
+
       // Verifica che il reparto esista
       const reparto = await prisma.reparto.findUnique({
         where: { id, deletedAt: null },
@@ -458,17 +458,17 @@ router.delete('/:id',
           }
         }
       });
-      
+
       if (!reparto) {
         return res.status(404).json({
           error: 'Department not found',
           message: `Department with ID ${id} does not exist`
         });
       }
-      
+
       // I permessi sono già stati verificati dal middleware checkAdvancedPermission
       // che ora include la verifica dei permessi per sede
-      
+
       // Verifica che non ci siano dipendenti assegnati al reparto
       if (reparto.dipendenti.length > 0) {
         return res.status(409).json({
@@ -476,12 +476,12 @@ router.delete('/:id',
           message: 'Cannot delete department with assigned employees. Please reassign employees first.'
         });
       }
-      
+
       await prisma.reparto.update({
         where: { id },
         data: { deletedAt: new Date() }
       });
-      
+
       res.status(204).send();
     } catch (error) {
       logger.error('Failed to delete Reparto', {
@@ -491,7 +491,7 @@ router.delete('/:id',
         stack: error.stack,
         repartoId: req.params?.id
       });
-      res.status(500).json({ 
+      res.status(500).json({
         error: 'Internal server error',
         message: 'Failed to delete department'
       });
@@ -500,8 +500,8 @@ router.delete('/:id',
 );
 
 // Assign employee to department
-router.post('/:id/assign-employee', 
-  authenticateToken(), 
+router.post('/:id/assign-employee',
+  authenticateToken(),
   checkAdvancedPermission('companies', 'edit', {
     getSiteId: async (req) => {
       const reparto = await prisma.reparto.findUnique({
@@ -516,14 +516,14 @@ router.post('/:id/assign-employee',
       const { id } = req.params;
       const { personId } = req.body;
       const person = req.person;
-      
+
       if (!personId) {
         return res.status(400).json({
           error: 'Validation error',
           message: 'personId is required'
         });
       }
-      
+
       // Verifica che il reparto esista
       const reparto = await prisma.reparto.findUnique({
         where: { id, deletedAt: null },
@@ -533,29 +533,29 @@ router.post('/:id/assign-employee',
           }
         }
       });
-      
+
       if (!reparto) {
         return res.status(404).json({
           error: 'Department not found',
           message: `Department with ID ${id} does not exist`
         });
       }
-      
+
       // I permessi sono già stati verificati dal middleware checkAdvancedPermission
       // che ora include la verifica dei permessi per sede
-      
+
       // Verifica che la persona esista
       const employee = await prisma.person.findUnique({
         where: { id: personId, deletedAt: null }
       });
-      
+
       if (!employee) {
         return res.status(404).json({
           error: 'Employee not found',
           message: `Employee with ID ${personId} does not exist`
         });
       }
-      
+
       // Verifica che l'employee appartenga alla stessa company
       if (person.globalRole !== 'ADMIN' && employee.companyId !== reparto.site.companyId) {
         return res.status(403).json({
@@ -563,14 +563,14 @@ router.post('/:id/assign-employee',
           message: 'Employee must belong to the same company'
         });
       }
-      
+
       // Assegna l'employee al reparto
       await prisma.person.update({
         where: { id: personId },
         data: { repartoId: id }
       });
-      
-      res.json({ 
+
+      res.json({
         message: 'Employee assigned to department successfully',
         repartoId: id,
         personId
@@ -584,7 +584,7 @@ router.post('/:id/assign-employee',
         repartoId: req.params?.id,
         body: req.body
       });
-      res.status(500).json({ 
+      res.status(500).json({
         error: 'Internal server error',
         message: 'Failed to assign employee to department'
       });
@@ -593,8 +593,8 @@ router.post('/:id/assign-employee',
 );
 
 // Remove employee from department
-router.post('/:id/remove-employee', 
-  authenticateToken(), 
+router.post('/:id/remove-employee',
+  authenticateToken(),
   checkAdvancedPermission('companies', 'edit', {
     getSiteId: async (req) => {
       const reparto = await prisma.reparto.findUnique({
@@ -609,14 +609,14 @@ router.post('/:id/remove-employee',
       const { id } = req.params;
       const { personId } = req.body;
       const person = req.person;
-      
+
       if (!personId) {
         return res.status(400).json({
           error: 'Validation error',
           message: 'personId is required'
         });
       }
-      
+
       // Verifica che il reparto esista
       const reparto = await prisma.reparto.findUnique({
         where: { id, deletedAt: null },
@@ -626,43 +626,43 @@ router.post('/:id/remove-employee',
           }
         }
       });
-      
+
       if (!reparto) {
         return res.status(404).json({
           error: 'Department not found',
           message: `Department with ID ${id} does not exist`
         });
       }
-      
+
       // I permessi sono già stati verificati dal middleware checkAdvancedPermission
       // che ora include la verifica dei permessi per sede
-      
+
       // Verifica che la persona esista e sia assegnata al reparto
       const employee = await prisma.person.findUnique({
         where: { id: personId, deletedAt: null }
       });
-      
+
       if (!employee) {
         return res.status(404).json({
           error: 'Employee not found',
           message: `Employee with ID ${personId} does not exist`
         });
       }
-      
+
       if (employee.repartoId !== id) {
         return res.status(400).json({
           error: 'Validation error',
           message: 'Employee is not assigned to this department'
         });
       }
-      
+
       // Rimuovi l'employee dal reparto
       await prisma.person.update({
         where: { id: personId },
         data: { repartoId: null }
       });
-      
-      res.json({ 
+
+      res.json({
         message: 'Employee removed from department successfully',
         repartoId: id,
         personId
@@ -676,7 +676,7 @@ router.post('/:id/remove-employee',
         repartoId: req.params?.id,
         body: req.body
       });
-      res.status(500).json({ 
+      res.status(500).json({
         error: 'Internal server error',
         message: 'Failed to remove employee from department'
       });

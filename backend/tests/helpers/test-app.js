@@ -18,7 +18,8 @@ import authRoutes from '../../routes/auth.js';
 import { employeesRouter, trainersRouter, virtualEntitiesRouter } from '../../routes/virtualEntityRoutes.js';
 import personRoutes from '../../routes/person-routes.js';
 import codiciScontoRoutes from '../../routes/codici-sconto-routes.js';
-import preventiviRoutes from '../../routes/preventivi-routes.js';
+// Project 46 - Modular preventivi routes
+import preventiviRoutes from '../../routes/preventivi/index.js';
 
 let databaseService = null;
 

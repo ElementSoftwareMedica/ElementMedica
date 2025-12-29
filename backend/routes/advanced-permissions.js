@@ -885,9 +885,9 @@ router.post('/validate',
  * @access Public
  */
 router.get('/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
-    timestamp: new Date().toISOString() 
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -939,10 +939,10 @@ router.get('/roles/:roleId',
 
       // Verifica se il roleId è un RoleType valido
       const validRoleTypes = [
-        'EMPLOYEE', 'MANAGER', 'HR_MANAGER', 'DEPARTMENT_HEAD', 'TRAINER', 
-        'SENIOR_TRAINER', 'TRAINER_COORDINATOR', 'EXTERNAL_TRAINER', 
-        'SUPER_ADMIN', 'ADMIN', 'COMPANY_ADMIN', 'TENANT_ADMIN', 
-        'VIEWER', 'OPERATOR', 'COORDINATOR', 'SUPERVISOR', 'GUEST', 
+        'EMPLOYEE', 'MANAGER', 'HR_MANAGER', 'DEPARTMENT_HEAD', 'TRAINER',
+        'SENIOR_TRAINER', 'TRAINER_COORDINATOR', 'EXTERNAL_TRAINER',
+        'SUPER_ADMIN', 'ADMIN', 'COMPANY_ADMIN', 'TENANT_ADMIN',
+        'VIEWER', 'OPERATOR', 'COORDINATOR', 'SUPERVISOR', 'GUEST',
         'CONSULTANT', 'AUDITOR'
       ];
 
@@ -1010,16 +1010,16 @@ router.get('/roles/:roleId',
 
       // Raggruppa i permessi per categoria (ottimizzato)
       const groupedPermissions = {};
-      
+
       // Aggiungi permessi base
       rolePermissions.forEach(rp => {
         const permissionName = rp.permission;
         const category = permissionName.includes('.') ? permissionName.split('.')[0] : 'general';
-        
+
         if (!groupedPermissions[category]) {
           groupedPermissions[category] = [];
         }
-        
+
         groupedPermissions[category].push({
           id: rp.id,
           name: permissionName,
@@ -1036,11 +1036,11 @@ router.get('/roles/:roleId',
       // Aggiungi permessi avanzati
       advancedPermissions.forEach(ap => {
         const category = ap.resource;
-        
+
         if (!groupedPermissions[category]) {
           groupedPermissions[category] = [];
         }
-        
+
         groupedPermissions[category].push({
           id: ap.id,
           name: `${ap.resource}.${ap.action}`,

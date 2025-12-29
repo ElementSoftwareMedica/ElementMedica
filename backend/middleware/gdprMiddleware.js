@@ -13,7 +13,7 @@ import { logger } from '../utils/logger.js';
  */
 export function logGdprRequest(req, res, next) {
     const startTime = Date.now();
-    
+
     // Log the incoming GDPR request
     logger.info('GDPR request received', {
         component: 'gdpr-middleware',
@@ -29,9 +29,9 @@ export function logGdprRequest(req, res, next) {
 
     // Override res.json to log the response
     const originalJson = res.json;
-    res.json = function(body) {
+    res.json = function (body) {
         const duration = Date.now() - startTime;
-        
+
         logger.info('GDPR request completed', {
             component: 'gdpr-middleware',
             method: req.method,

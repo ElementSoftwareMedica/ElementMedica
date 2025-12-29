@@ -55,7 +55,7 @@ const DropdownMenu: React.FC<{ children: (close: () => void) => React.ReactNode;
   }, [open]);
 
   // Portal rendering
-  const [menuPos, setMenuPos] = useState<{top: number, left: number} | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number, left: number } | null>(null);
   const triggerRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
@@ -69,7 +69,7 @@ const DropdownMenu: React.FC<{ children: (close: () => void) => React.ReactNode;
   }, [open]);
 
   return (
-    <div ref={ref} className="relative inline-block text-left" style={{overflow: 'visible'}}>
+    <div ref={ref} className="relative inline-block text-left" style={{ overflow: 'visible' }}>
       <span ref={triggerRef} onClick={() => setOpen(o => !o)}>{trigger}</span>
       {open && menuPos && ReactDOM.createPortal(
         <div ref={menuRef} style={{ position: 'absolute', zIndex: 99999, left: menuPos.left, top: menuPos.top, background: '#fffbe6', minWidth: '8rem', boxShadow: '0 8px 24px rgba(0,0,0,0.18)' }} className="w-32 bg-white border border-gray-200 rounded shadow-lg">
@@ -159,7 +159,7 @@ const Attestati: React.FC<AttestatiProps> = ({
       showToast({ type: 'error', title: 'Errore', message: userMessage });
     }
   };
-  
+
   // Opzioni di filtro per gli attestati
   const attestatiFilterOptions = [
     {
@@ -190,7 +190,7 @@ const Attestati: React.FC<AttestatiProps> = ({
 
   // Configurazione colonne per tabella attestati
   const attestatiColumns = [
-    { 
+    {
       key: 'actions',
       label: 'Azioni',
       width: 120,
@@ -210,43 +210,43 @@ const Attestati: React.FC<AttestatiProps> = ({
         </DropdownMenu>
       ),
     },
-    { 
+    {
       key: 'corso',
       label: 'Corso',
       width: 200,
       renderCell: (attestato: Attestato) => attestato.scheduledCourse.course.title
     },
-    { 
+    {
       key: 'dipendente',
       label: 'Dipendente',
       width: 180,
       renderCell: (attestato: Attestato) => `${attestato.employee.firstName} ${attestato.employee.lastName}`
     },
-    { 
+    {
       key: 'codice_fiscale',
       label: 'Codice Fiscale',
       width: 150,
       renderCell: (attestato: Attestato) => attestato.employee.codice_fiscale
     },
-    { 
+    {
       key: 'azienda',
       label: 'Azienda',
       width: 180,
       renderCell: (attestato: Attestato) => attestato.employee.company?.ragioneSociale || '--'
     },
-    { 
+    {
       key: 'dataGenerazione',
       label: 'Data Generazione',
       width: 150,
       renderCell: (attestato: Attestato) => attestato.dataGenerazione ? new Date(attestato.dataGenerazione).toLocaleDateString('it-IT') : '--'
     },
-    { 
+    {
       key: 'numeroProgressivo',
       label: 'Numero Progressivo',
       width: 160,
       renderCell: (attestato: Attestato) => (attestato.numeroProgressivo && attestato.annoProgressivo) ? `${attestato.numeroProgressivo}/${attestato.annoProgressivo}` : '--'
     },
-    { 
+    {
       key: 'issued',
       label: 'Stato',
       width: 120,
@@ -257,10 +257,10 @@ const Attestati: React.FC<AttestatiProps> = ({
       )
     }
   ];
-  
+
   // Filtra gli attestati in base alla ricerca
   let filteredAttestati = attestati;
-  
+
   if (searchTerm) {
     const lowercaseSearchTerm = searchTerm.toLowerCase();
     filteredAttestati = attestati.filter(
@@ -271,14 +271,14 @@ const Attestati: React.FC<AttestatiProps> = ({
         (attestato.employee.company?.ragioneSociale || '').toLowerCase().includes(lowercaseSearchTerm)
     );
   }
-  
+
   // Applica i filtri
   if (activeFilters.course) {
     filteredAttestati = filteredAttestati.filter(
       (attestato) => attestato.scheduledCourse.course.title === activeFilters.course
     );
   }
-  
+
   if (activeFilters.company) {
     filteredAttestati = filteredAttestati.filter(
       (attestato) => attestato.employee.company?.ragioneSociale === activeFilters.company
@@ -295,7 +295,7 @@ const Attestati: React.FC<AttestatiProps> = ({
           placeholder="Cerca attestati..."
         />
       </div>
-      
+
       <div className="flex items-center gap-2">
         <SearchBarControls
           onToggleSelectionMode={() => {
@@ -330,7 +330,7 @@ const Attestati: React.FC<AttestatiProps> = ({
   return (
     <div>
       <SearchFilterBar />
-      
+
       {loading ? (
         <div className="text-center py-8 text-gray-500">Caricamento...</div>
       ) : error ? (
@@ -350,13 +350,13 @@ const Attestati: React.FC<AttestatiProps> = ({
               onClick: (e: React.MouseEvent) => {
                 const target = e.target as HTMLElement;
                 if (target.closest('button,input,a')) return;
-                
+
                 const row = target.closest('tr');
                 if (!row) return;
-                
+
                 const index = parseInt(row.dataset.index || '0', 10);
                 const attestato = filteredAttestati[index];
-                
+
                 if (attestato && attestato.url) {
                   window.open(`/api${attestato.url}`, '_blank');
                 }

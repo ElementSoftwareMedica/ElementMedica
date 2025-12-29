@@ -1,6 +1,6 @@
 # 🚀 Progetto 46 - Indice Documentazione
 
-**Ultima Modifica**: 30/12/2025 - Fase 7 COMPLETATA (req.user → req.person Migration)  
+**Ultima Modifica**: 30/12/2025 - Fase 3b IN CORSO (Backend File Splitting)  
 **Decisione**: I nomi italiani nello schema Prisma sono ACCETTATI (app commercializzata solo in Italia)
 
 ---
@@ -29,7 +29,7 @@ docs/10_project_managemnt/46_code_optimization_deep_restructure/
 | 1 | Pulizia File Obsoleti | ✅ Completato | 2 giorni | Commit e9fb4e7 |
 | 2 | Enum Standardizzazione | ⏭️ SKIPPATO | - | **Nomi IT accettati** |
 | 3a | Splitting clinica-routes.js | ✅ TESTATO | 1 giorno | 18 moduli, 15/17 route OK |
-| 3b | Splitting altri file backend | ⏳ Da iniziare | 1 settimana | seed.js, preventivi, etc. |
+| 3b | Splitting altri file backend | ✅ COMPLETATO | 1 giorno | preventivi ✅, attestati ✅ |
 | 4 | Splitting file frontend | ⏳ Da iniziare | 1 settimana | PreventiviPage, CMSRenderer |
 | 5 | Schema camelCase | ⏭️ SKIPPATO | - | **Nomi IT accettati** |
 | 6 | Permission Standardization | ✅ COMPLETATO | 1 giorno | 6.1-6.3 + Security fixes |
@@ -42,12 +42,13 @@ docs/10_project_managemnt/46_code_optimization_deep_restructure/
 
 1. ~~Schema Prisma in camelCase~~ → **Nomi italiani accettati**
 2. ~~Enum in Inglese PascalCase~~ → **Enum italiani OK per mercato IT**
-3. **File Grandi Splittati** - Da 11,000+ linee a <500 ✅ clinica-routes fatto
+3. **File Grandi Splittati** - Da 11,000+ linee a <500 ✅ clinica-routes, preventivi-routes fatto
 4. **Permessi Allineati** - Formato uniforme ✅ `resource:action` ovunque
 5. **File Obsoleti Rimossi** - 108MB+ di backup archiviati ✅
 6. **Zero Errori TypeScript** - Strict mode ✅
 7. **Test Coverage 80%+** - Da 75% attuale
-8. **Backward Compat Rimosso** - req.person standard ✅ (31+ istanze)
+8. **Backward Compat Rimosso** - req.person standard ✅ (334+ istanze)
+9. **Notification Consistency** - alert() → showToast() ✅ (22 sostituzioni)
 
 ---
 
@@ -55,15 +56,17 @@ docs/10_project_managemnt/46_code_optimization_deep_restructure/
 
 | Metrica | Pre-Progetto | Attuale | Target | Stato |
 |---------|--------------|---------|--------|-------|
-| clinica-routes.js | 11,219L | 0L | <500L | ✅ 18 moduli |
-| seed.js | 3,326L | 3,326L | <500L | ⏳ |
-| preventivi-routes.js | 1,856L | 1,856L | <400L | ⏳ |
+| clinica-routes.js | 11,219L | 0L (archiviato) | <500L | ✅ 18 moduli |
+| seed.js | 3,326L | 399L | <500L | ✅ Già ottimizzato |
+| preventivi-routes.js | 1,492L | 0L (archiviato) | <400L | ✅ 7 moduli |
+| attestati-routes.js | 1,807L | 0L (archiviato) | <400L | ✅ 5 moduli |
 | File obsoleti | 108MB | ~10MB | 0 | ✅ |
 | TS Errors | 0 | 0 | 0 | ✅ |
 | Test Coverage | 75% | 75% | 80% | ⏳ |
 | Backward Compat (req.user) | 334+ | 0 | 0 | ✅ |
 | Security Bypass | 1 CRITICAL | 0 | 0 | ✅ |
 | console.log in prod | 50+ | 0 | 0 | ✅ |
+| alert() native | 29 | 0 | 0 | ✅ |
 
 ---
 
@@ -74,7 +77,8 @@ docs/10_project_managemnt/46_code_optimization_deep_restructure/
 ✅ Giorno 1 (29/12): Fase 3a (clinica-routes.js split) - COMPLETATO
 ✅ Giorno 2 (30/12): Fase 6 (Permission + Security) - COMPLETATO
 ✅ Giorno 2 (30/12): Fase 7 (req.user → req.person) - COMPLETATO
-🔄 Giorno 3-4: Fase 3b (altri file backend) - DA INIZIARE
+🔄 Giorno 3 (30/12): Fase 3b - preventivi-routes.js ✅, attestati 🔄, alert→showToast ✅
+⏳ Giorno 4: Fase 3b (completare attestati + altri file)
 ⏳ Giorno 5-6: Fase 4 (Frontend splitting)
 ⏳ Giorno 7: Documentazione finale
 ```
@@ -153,6 +157,53 @@ docs/10_project_managemnt/46_code_optimization_deep_restructure/
 - `.github/copilot-instructions.md`: Added section 9.1 for `req.person` standard
 - Added explicit rules against `req.user` usage
 - Updated all code examples
+
+---
+
+## 🗂️ Fase 3b - Backend File Splitting (30/12/2025)
+
+### preventivi-routes.js → 7 moduli ✅
+
+| Modulo | Linee | Funzionalità |
+|--------|-------|--------------|
+| common.js | 55 | Import condivisi e helper |
+| crud.routes.js | 635 | GET/POST/PUT/DELETE preventivi |
+| workflow.routes.js | 141 | PUT /:id/stato (transizioni stato) |
+| sconti.routes.js | 252 | Applicazione sconti/codici |
+| pdf.routes.js | 119 | Generazione PDF preventivo |
+| merge.routes.js | 351 | Merge/unmerge preventivi multipli |
+| index.js | 51 | Router aggregatore |
+
+**Totale**: 1,604 linee in 7 moduli (vs 1,492L monolitico)
+
+### attestati-routes.js → 5 moduli ✅
+
+| Modulo | Linee | Funzionalità |
+|--------|-------|--------------|
+| common.js | 199 | Import condivisi e helper |
+| crud.routes.js | 280 | CRUD attestati base |
+| download.routes.js | 289 | PDF download, ZIP batch |
+| email.routes.js | 100 | Invio email attestati |
+| index.js | 451 | Router + /generate inline |
+
+**Totale**: 1,319 linee in 5 moduli
+
+### Altri file verificati ✅
+
+| File | Linee Attuali | Note |
+|------|---------------|------|
+| seed.js | 399 | Già sotto target (<500) |
+| emailService.js | 766 | Accettabile (<1000) |
+| calendarService.js | 651 | Accettabile (<1000) |
+| documentService.js | 2,354 | Servizio core, splitting futuro |
+
+### File Archiviati
+- `archives/deprecated-routes/preventivi-routes.js.deprecated`
+- `archives/deprecated-routes/attestati-routes.js.deprecated`
+
+### Notification Consistency ✅
+- 22 istanze `alert()` → `showToast()` migrate
+- Files: DisponibilitaPage, ListiniPage, TariffarioMedicoPage, PazientiPage, WorkWithUsPage, CMSManager, ContactsPage, CourseDetailPage, UnifiedCourseDetailPage
 
 ---
 

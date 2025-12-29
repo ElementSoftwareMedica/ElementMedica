@@ -12,15 +12,15 @@ class ApiResponse {
   constructor(success = true, data = null, message = null, meta = {}) {
     this.success = success;
     this.timestamp = new Date().toISOString();
-    
+
     if (data !== null) {
       this.data = data;
     }
-    
+
     if (message) {
       this.message = message;
     }
-    
+
     if (Object.keys(meta).length > 0) {
       this.meta = meta;
     }
@@ -57,7 +57,7 @@ class PaginationHelper {
     const totalPages = Math.ceil(total / limit);
     const hasNext = page < totalPages;
     const hasPrev = page > 1;
-    
+
     const meta = {
       pagination: {
         currentPage: page,
@@ -68,26 +68,26 @@ class PaginationHelper {
         hasPrev
       }
     };
-    
+
     // Add navigation links if baseUrl is provided
     if (baseUrl) {
       meta.pagination.links = {
         first: `${baseUrl}?page=1&limit=${limit}`,
         last: `${baseUrl}?page=${totalPages}&limit=${limit}`
       };
-      
+
       if (hasPrev) {
         meta.pagination.links.prev = `${baseUrl}?page=${page - 1}&limit=${limit}`;
       }
-      
+
       if (hasNext) {
         meta.pagination.links.next = `${baseUrl}?page=${page + 1}&limit=${limit}`;
       }
     }
-    
+
     return meta;
   }
-  
+
   /**
    * Calculate offset for database queries
    * @param {number} page - Page number
@@ -97,7 +97,7 @@ class PaginationHelper {
   static calculateOffset(page, limit) {
     return (page - 1) * limit;
   }
-  
+
   /**
    * Validate pagination parameters
    * @param {number} page - Page number
@@ -107,7 +107,7 @@ class PaginationHelper {
   static validateParams(page = 1, limit = 10) {
     const validatedPage = Math.max(1, parseInt(page) || 1);
     const validatedLimit = Math.min(100, Math.max(1, parseInt(limit) || 10));
-    
+
     return {
       page: validatedPage,
       limit: validatedLimit,
@@ -130,7 +130,7 @@ export class ResponseFormatter {
    */
   static success(res, data = null, message = null, statusCode = 200, meta = {}) {
     const response = new ApiResponse(true, data, message, meta);
-    
+
     // Set pagination headers if available
     if (meta.pagination) {
       res.set({
@@ -140,10 +140,10 @@ export class ResponseFormatter {
         'X-Per-Page': meta.pagination.itemsPerPage.toString()
       });
     }
-    
+
     return res.status(statusCode).json(response);
   }
-  
+
   /**
    * Send error response
    * @param {object} res - Express response object
@@ -156,7 +156,7 @@ export class ResponseFormatter {
     let message = 'Internal server error';
     let errorCode = code;
     let errorDetails = details;
-    
+
     if (error instanceof ApiError) {
       message = error.message;
       statusCode = error.statusCode;
@@ -167,7 +167,7 @@ export class ResponseFormatter {
     } else if (typeof error === 'string') {
       message = error;
     }
-    
+
     const response = {
       success: false,
       error: {
@@ -177,7 +177,7 @@ export class ResponseFormatter {
       },
       timestamp: new Date().toISOString()
     };
-    
+
     // Log error for debugging
     logger.error('API Error Response', {
       message,
@@ -187,10 +187,10 @@ export class ResponseFormatter {
       stack: error instanceof Error ? error.stack : undefined,
       component: 'response-handler'
     });
-    
+
     return res.status(statusCode).json(response);
   }
-  
+
   /**
    * Send paginated response
    * @param {object} res - Express response object
@@ -205,7 +205,7 @@ export class ResponseFormatter {
     const meta = PaginationHelper.createMeta(page, limit, total, baseUrl);
     return this.success(res, data, message, 200, meta);
   }
-  
+
   /**
    * Send created response (201)
    * @param {object} res - Express response object
@@ -217,10 +217,10 @@ export class ResponseFormatter {
     if (location) {
       res.set('Location', location);
     }
-    
+
     return this.success(res, data, message, 201);
   }
-  
+
   /**
    * Send no content response (204)
    * @param {object} res - Express response object
@@ -228,7 +228,7 @@ export class ResponseFormatter {
   static noContent(res) {
     return res.status(204).send();
   }
-  
+
   /**
    * Send not found response (404)
    * @param {object} res - Express response object
@@ -239,7 +239,7 @@ export class ResponseFormatter {
     const errorMessage = message || `${resource} not found`;
     return this.error(res, errorMessage, 404, 'NOT_FOUND');
   }
-  
+
   /**
    * Send unauthorized response (401)
    * @param {object} res - Express response object
@@ -248,7 +248,7 @@ export class ResponseFormatter {
   static unauthorized(res, message = 'Authentication required') {
     return this.error(res, message, 401, 'UNAUTHORIZED');
   }
-  
+
   /**
    * Send forbidden response (403)
    * @param {object} res - Express response object
@@ -257,7 +257,7 @@ export class ResponseFormatter {
   static forbidden(res, message = 'Access denied') {
     return this.error(res, message, 403, 'FORBIDDEN');
   }
-  
+
   /**
    * Send bad request response (400)
    * @param {object} res - Express response object
@@ -267,7 +267,7 @@ export class ResponseFormatter {
   static badRequest(res, message = 'Bad request', details = null) {
     return this.error(res, message, 400, 'BAD_REQUEST', details);
   }
-  
+
   /**
    * Send conflict response (409)
    * @param {object} res - Express response object
@@ -276,7 +276,7 @@ export class ResponseFormatter {
   static conflict(res, message = 'Resource conflict') {
     return this.error(res, message, 409, 'CONFLICT');
   }
-  
+
   /**
    * Send unprocessable entity response (422)
    * @param {object} res - Express response object
@@ -286,7 +286,7 @@ export class ResponseFormatter {
   static unprocessableEntity(res, message = 'Validation failed', details = null) {
     return this.error(res, message, 422, 'VALIDATION_ERROR', details);
   }
-  
+
   /**
    * Send too many requests response (429)
    * @param {object} res - Express response object
@@ -297,10 +297,10 @@ export class ResponseFormatter {
     if (retryAfter) {
       res.set('Retry-After', retryAfter.toString());
     }
-    
+
     return this.error(res, message, 429, 'RATE_LIMIT_EXCEEDED');
   }
-  
+
   /**
    * Send service unavailable response (503)
    * @param {object} res - Express response object
@@ -337,28 +337,28 @@ export const globalErrorHandler = (err, req, res, next) => {
     requestId: req.requestId,
     component: 'global-error-handler'
   });
-  
+
   // Handle specific error types
   if (err.name === 'ValidationError') {
     return ResponseFormatter.unprocessableEntity(res, 'Validation failed', err.details);
   }
-  
+
   if (err.name === 'CastError') {
     return ResponseFormatter.badRequest(res, 'Invalid ID format');
   }
-  
+
   if (err.code === 11000) { // MongoDB duplicate key error
     return ResponseFormatter.conflict(res, 'Resource already exists');
   }
-  
+
   if (err.name === 'JsonWebTokenError') {
     return ResponseFormatter.unauthorized(res, 'Invalid token');
   }
-  
+
   if (err.name === 'TokenExpiredError') {
     return ResponseFormatter.unauthorized(res, 'Token expired');
   }
-  
+
   if (err.name === 'MulterError') {
     if (err.code === 'LIMIT_FILE_SIZE') {
       return ResponseFormatter.badRequest(res, 'File too large');
@@ -368,30 +368,30 @@ export const globalErrorHandler = (err, req, res, next) => {
     }
     return ResponseFormatter.badRequest(res, 'File upload error');
   }
-  
+
   // Handle Prisma errors
   if (err.code === 'P2002') {
     return ResponseFormatter.conflict(res, 'Unique constraint violation');
   }
-  
+
   if (err.code === 'P2025') {
     return ResponseFormatter.notFound(res, 'Record not found');
   }
-  
+
   if (err.code?.startsWith('P')) {
     return ResponseFormatter.error(res, 'Database error', 500, 'DATABASE_ERROR');
   }
-  
+
   // Handle API errors
   if (err instanceof ApiError) {
     return ResponseFormatter.error(res, err.message, err.statusCode, err.code, err.details);
   }
-  
+
   // Default error response
   const isDevelopment = process.env.NODE_ENV === 'development';
   const message = isDevelopment ? err.message : 'Internal server error';
   const details = isDevelopment ? { stack: err.stack } : null;
-  
+
   return ResponseFormatter.error(res, message, 500, 'INTERNAL_ERROR', details);
 };
 
@@ -407,7 +407,7 @@ export const notFoundHandler = (req, res) => {
     userAgent: req.get('User-Agent'),
     component: 'not-found-handler'
   });
-  
+
   return ResponseFormatter.notFound(res, `Route ${req.method} ${req.path} not found`, 'Endpoint');
 };
 
@@ -417,8 +417,8 @@ export const notFoundHandler = (req, res) => {
 export const responseTransformer = (transformFn) => {
   return (req, res, next) => {
     const originalJson = res.json;
-    
-    res.json = function(data) {
+
+    res.json = function (data) {
       if (typeof transformFn === 'function') {
         try {
           data = transformFn(data, req);
@@ -430,10 +430,10 @@ export const responseTransformer = (transformFn) => {
           });
         }
       }
-      
+
       return originalJson.call(this, data);
     };
-    
+
     next();
   };
 };
@@ -447,23 +447,23 @@ export const dataSanitizer = (options = {}) => {
     maskFields = ['email', 'phone'],
     maskChar = '*'
   } = options;
-  
+
   const sanitizeObject = (obj) => {
     if (!obj || typeof obj !== 'object') {
       return obj;
     }
-    
+
     if (Array.isArray(obj)) {
       return obj.map(sanitizeObject);
     }
-    
+
     const sanitized = { ...obj };
-    
+
     // Remove sensitive fields
     removeFields.forEach(field => {
       delete sanitized[field];
     });
-    
+
     // Mask fields
     maskFields.forEach(field => {
       if (sanitized[field] && typeof sanitized[field] === 'string') {
@@ -478,17 +478,17 @@ export const dataSanitizer = (options = {}) => {
         }
       }
     });
-    
+
     // Recursively sanitize nested objects
     Object.keys(sanitized).forEach(key => {
       if (typeof sanitized[key] === 'object') {
         sanitized[key] = sanitizeObject(sanitized[key]);
       }
     });
-    
+
     return sanitized;
   };
-  
+
   return responseTransformer((data) => {
     if (data && typeof data === 'object') {
       if (data.data) {
@@ -507,10 +507,10 @@ export const dataSanitizer = (options = {}) => {
 export const responseCompressor = (threshold = 1024) => {
   return (req, res, next) => {
     const originalJson = res.json;
-    
-    res.json = function(data) {
+
+    res.json = function (data) {
       const jsonString = JSON.stringify(data);
-      
+
       if (jsonString.length > threshold) {
         res.set('Content-Encoding', 'gzip');
         logger.debug('Response compressed', {
@@ -519,10 +519,10 @@ export const responseCompressor = (threshold = 1024) => {
           component: 'response-compressor'
         });
       }
-      
+
       return originalJson.call(this, data);
     };
-    
+
     next();
   };
 };
@@ -532,13 +532,13 @@ export const responseCompressor = (threshold = 1024) => {
  */
 export const correlationMiddleware = () => {
   return (req, res, next) => {
-    const correlationId = req.get('X-Correlation-ID') || 
-                         req.get('X-Request-ID') || 
-                         `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    
+    const correlationId = req.get('X-Correlation-ID') ||
+      req.get('X-Request-ID') ||
+      `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
     req.correlationId = correlationId;
     res.set('X-Correlation-ID', correlationId);
-    
+
     next();
   };
 };

@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 
 import { useTenantFilter } from '../../../context/TenantFilterContext';
+import { useToast } from '../../../hooks/useToast';
 import {
     tariffarioMedicoApi,
     mediciApi,
@@ -151,6 +152,7 @@ const TariffarioFormModal: React.FC<TariffarioFormModalProps> = ({
     isLoading
 }) => {
     const { getTenantFilterParams } = useTenantFilter();
+    const { showToast } = useToast();
     const tenantParams = getTenantFilterParams();
 
     // Fetch medici and convenzioni for dropdowns
@@ -185,7 +187,7 @@ const TariffarioFormModal: React.FC<TariffarioFormModalProps> = ({
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!formData.medicoId) {
-            alert('Seleziona un medico');
+            showToast({ type: 'warning', message: 'Seleziona un medico' });
             return;
         }
         onSubmit(formData);

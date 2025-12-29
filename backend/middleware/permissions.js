@@ -50,7 +50,7 @@ export function checkPermissions(permissions) {
       for (const permission of permissions) {
         try {
           const permissionMiddleware = utilCheckPermission(permission);
-          
+
           // Simula la chiamata del middleware
           await new Promise((resolve, reject) => {
             permissionMiddleware(req, res, (error) => {
@@ -62,7 +62,7 @@ export function checkPermissions(permissions) {
               }
             });
           });
-          
+
           // Se abbiamo trovato un permesso valido, interrompi il ciclo
           if (hasAnyPermission) {
             break;

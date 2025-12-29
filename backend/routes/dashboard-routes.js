@@ -17,8 +17,8 @@ router.get('/stats', authenticate, tenantMiddleware, async (req, res) => {
   try {
     const person = req.person;
     const tenantId = req.tenantId || person?.tenantId;
-    
-    logger.info('Getting dashboard stats', { 
+
+    logger.info('Getting dashboard stats', {
       personId: person?.id,
       tenantId,
       globalRole: person?.globalRole
@@ -33,7 +33,7 @@ router.get('/stats', authenticate, tenantMiddleware, async (req, res) => {
           ...(tenantId && { tenantId })
         }
       }),
-      
+
       // Conteggio dipendenti (persone con ruoli di dipendente)
       prisma.person.count({
         where: {
@@ -42,7 +42,7 @@ router.get('/stats', authenticate, tenantMiddleware, async (req, res) => {
           ...(tenantId && { tenantId }),
           personRoles: {
             some: {
-              roleType: { 
+              roleType: {
                 in: ['EMPLOYEE', 'COMPANY_MANAGER', 'TRAINER']
               },
               isActive: true,
@@ -72,7 +72,7 @@ router.get('/stats', authenticate, tenantMiddleware, async (req, res) => {
       stack: error.stack,
       personId: req.person?.id
     });
-    
+
     res.status(500).json({
       success: false,
       error: 'Failed to retrieve dashboard stats',
@@ -86,10 +86,10 @@ router.get('/companies', authenticate, tenantMiddleware, async (req, res) => {
   try {
     const person = req.person;
     const tenantId = req.tenantId || person?.tenantId;
-    
-    logger.info('Getting companies for dashboard', { 
+
+    logger.info('Getting companies for dashboard', {
       personId: person?.id,
-      tenantId 
+      tenantId
     });
 
     const companies = await prisma.company.findMany({
@@ -114,8 +114,8 @@ router.get('/companies', authenticate, tenantMiddleware, async (req, res) => {
       ragioneSociale: company.ragioneSociale || ''
     }));
 
-    logger.info('Companies retrieved successfully for dashboard', { 
-      count: transformedCompanies.length 
+    logger.info('Companies retrieved successfully for dashboard', {
+      count: transformedCompanies.length
     });
 
     res.json(transformedCompanies);
@@ -126,7 +126,7 @@ router.get('/companies', authenticate, tenantMiddleware, async (req, res) => {
       stack: error.stack,
       personId: req.person?.id
     });
-    
+
     res.status(500).json({
       success: false,
       error: 'Failed to retrieve companies',
@@ -140,10 +140,10 @@ router.get('/employees', authenticate, tenantMiddleware, async (req, res) => {
   try {
     const person = req.person;
     const tenantId = req.tenantId || person?.tenantId;
-    
-    logger.info('Getting employees for dashboard', { 
+
+    logger.info('Getting employees for dashboard', {
       personId: person?.id,
-      tenantId 
+      tenantId
     });
 
     const employees = await prisma.person.findMany({
@@ -153,11 +153,11 @@ router.get('/employees', authenticate, tenantMiddleware, async (req, res) => {
         ...(tenantId && { tenantId }),
         personRoles: {
           some: {
-            roleType: { 
+            roleType: {
               in: [
-                'COMPANY_ADMIN', 'HR_MANAGER', 'MANAGER', 'TRAINER_COORDINATOR', 
-                'SENIOR_TRAINER', 'TRAINER', 'EXTERNAL_TRAINER', 'EMPLOYEE', 
-                'COMPANY_MANAGER', 'TRAINING_ADMIN', 'CLINIC_ADMIN', 'VIEWER', 
+                'COMPANY_ADMIN', 'HR_MANAGER', 'MANAGER', 'TRAINER_COORDINATOR',
+                'SENIOR_TRAINER', 'TRAINER', 'EXTERNAL_TRAINER', 'EMPLOYEE',
+                'COMPANY_MANAGER', 'TRAINING_ADMIN', 'CLINIC_ADMIN', 'VIEWER',
                 'OPERATOR', 'COORDINATOR', 'SUPERVISOR', 'GUEST', 'CONSULTANT', 'AUDITOR'
               ]
             },
@@ -184,8 +184,8 @@ router.get('/employees', authenticate, tenantMiddleware, async (req, res) => {
       ]
     });
 
-    logger.info('Employees retrieved successfully for dashboard', { 
-      count: employees.length 
+    logger.info('Employees retrieved successfully for dashboard', {
+      count: employees.length
     });
 
     res.json(employees);
@@ -196,7 +196,7 @@ router.get('/employees', authenticate, tenantMiddleware, async (req, res) => {
       stack: error.stack,
       personId: req.person?.id
     });
-    
+
     res.status(500).json({
       success: false,
       error: 'Failed to retrieve employees',

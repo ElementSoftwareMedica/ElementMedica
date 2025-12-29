@@ -1,6 +1,7 @@
 import React from 'react';
 import { PublicLayout } from '../../components/public/PublicLayout';
 import { ContactForm } from '../../components/public/ContactForm';
+import { useToast } from '../../hooks/useToast';
 import { PublicButton } from '../../components/public/PublicButton';
 import { 
   Award, 
@@ -19,6 +20,8 @@ import {
  * Pagina "Lavora con Noi" - Opportunità di carriera e candidature
  */
 const WorkWithUsPage: React.FC = () => {
+  const { showToast } = useToast();
+
   const benefits = [
     {
       icon: TrendingUp,
@@ -346,7 +349,7 @@ const WorkWithUsPage: React.FC = () => {
                 ]}
                 onSubmit={(data) => {
                   console.log('Candidatura data:', data);
-                  alert('Grazie per la tua candidatura! Ti contatteremo presto per valutare il tuo profilo.');
+                  showToast({ type: 'success', message: 'Grazie per la tua candidatura! Ti contatteremo presto per valutare il tuo profilo.' });
                 }}
               />
             </div>

@@ -127,7 +127,7 @@ router.post('/config',
 
       // Aggiorna anche il sitemap se l'entità è pubblica
       const baseUrl = process.env.FRONTEND_URL || req.get('origin') || 'http://localhost:5173';
-      
+
       if (data.entityType === 'page') {
         const page = await prisma.cMSPage.findUnique({ where: { id: data.entityId } });
         if (page && page.isPublished) {
@@ -191,7 +191,7 @@ router.delete('/config/:seoConfigId',
       }
 
       const { seoConfigId } = req.params;
-      
+
       // Verifica che la config appartenga al tenant
       const seoConfig = await prisma.sEOConfig.findFirst({
         where: {

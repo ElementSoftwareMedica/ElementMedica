@@ -29,7 +29,7 @@ const prisma = new PrismaClient();
  */
 async function seedTenants() {
   console.log('🏢 Seeding tenants...');
-  
+
   // Tenant 1: Element Formazione (default)
   let defaultTenant = await prisma.tenant.findUnique({
     where: { slug: 'default-company' }
@@ -92,7 +92,7 @@ async function seedTenants() {
  */
 async function seedAdminUser(tenantId) {
   console.log('👤 Seeding admin user...');
-  
+
   const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD;
   if (!ADMIN_PASSWORD) {
     console.error('❌ SEED_ADMIN_PASSWORD non configurata!');
@@ -358,16 +358,16 @@ async function main() {
   try {
     // 1. Tenants
     const { defaultTenant, medicaTenant } = await seedTenants();
-    
+
     // 2. Admin User
     const adminUser = await seedAdminUser(defaultTenant.id);
-    
+
     // 3. Admin Permissions
     await seedAdminPermissions(adminUser);
-    
+
     // 4. Cross-Tenant Access
     await seedPersonTenantAccess(adminUser, [defaultTenant, medicaTenant]);
-    
+
     // 5. Test Data
     await seedTestData(defaultTenant.id);
 
@@ -378,7 +378,7 @@ async function main() {
     console.log('╚══════════════════════════════════════════════════════════════╝');
     console.log(`⏱️  Tempo: ${duration}s`);
     console.log(`📅 Data: ${new Date().toLocaleString('it-IT')}\n`);
-    
+
     console.log('ℹ️  Per importare i template CMS/Form/Document:');
     console.log('   npm run seed:templates\n');
 

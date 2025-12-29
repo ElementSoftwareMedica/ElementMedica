@@ -34,10 +34,10 @@ router.get('/stats',
     checkAdvancedPermission('prestazioni', 'read'),
     auditClinico('stats_prestazioni'),
     async (req, res) => {
-        const prisma = (await import('@prisma/client')).PrismaClient ? 
-            new (await import('@prisma/client')).PrismaClient() : 
+        const prisma = (await import('@prisma/client')).PrismaClient ?
+            new (await import('@prisma/client')).PrismaClient() :
             (await import('../../config/prisma.js')).default;
-        
+
         try {
             const tenantId = getEffectiveTenantId(req);
 

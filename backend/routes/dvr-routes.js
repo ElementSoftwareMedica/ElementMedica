@@ -8,8 +8,8 @@ const router = express.Router();
 const { authenticate: authenticateToken } = middleware;
 
 // Get all DVRs for a site
-router.get('/site/:siteId', 
-  authenticateToken(), 
+router.get('/site/:siteId',
+  authenticateToken(),
   checkAdvancedPermission('companies', 'read', {
     getSiteId: (req) => req.params.siteId
   }),
@@ -18,25 +18,25 @@ router.get('/site/:siteId',
     try {
       const { siteId } = req.params;
       const person = req.person;
-      
+
       // Verifica che la sede esista
       const site = await prisma.companySite.findUnique({
         where: { id: siteId },
         include: { company: true }
       });
-      
+
       if (!site) {
-        return res.status(404).json({ 
+        return res.status(404).json({
           error: 'Site not found',
           message: `Site with ID ${siteId} does not exist`
         });
       }
-      
+
       // I permessi sono già stati verificati dal middleware checkAdvancedPermission
       // che ora include la verifica dei permessi per sede
-      
+
       const dvrs = await prisma.dVR.findMany({
-        where: { 
+        where: {
           siteId,
           deletedAt: null
         },
@@ -56,7 +56,7 @@ router.get('/site/:siteId',
         },
         orderBy: { dataScadenza: 'asc' }
       });
-      
+
       res.json({ dvrs });
     } catch (error) {
       logger.error('Failed to fetch DVRs', {
@@ -66,7 +66,7 @@ router.get('/site/:siteId',
         stack: error.stack,
         siteId: req.params?.siteId
       });
-      res.status(500).json({ 
+      res.status(500).json({
         error: 'Internal server error',
         message: 'Failed to fetch DVRs'
       });
@@ -75,8 +75,8 @@ router.get('/site/:siteId',
 );
 
 // Get DVR by ID
-router.get('/:id', 
-  authenticateToken(), 
+router.get('/:id',
+  authenticateToken(),
   checkAdvancedPermission('companies', 'read', {
     getSiteId: async (req) => {
       const dvr = await prisma.dVR.findUnique({
@@ -91,9 +91,9 @@ router.get('/:id',
     try {
       const { id } = req.params;
       const person = req.person;
-      
-      const dvr = await prisma.dVR.findUnique({ 
-        where: { 
+
+      const dvr = await prisma.dVR.findUnique({
+        where: {
           id,
           deletedAt: null
         },
@@ -105,17 +105,17 @@ router.get('/:id',
           }
         }
       });
-      
+
       if (!dvr) {
-        return res.status(404).json({ 
+        return res.status(404).json({
           error: 'DVR not found',
           message: `DVR with ID ${id} does not exist`
         });
       }
-      
+
       // I permessi sono già stati verificati dal middleware checkAdvancedPermission
       // che ora include la verifica dei permessi per sede
-      
+
       res.json(dvr);
     } catch (error) {
       logger.error('Failed to fetch DVR', {
@@ -125,7 +125,7 @@ router.get('/:id',
         stack: error.stack,
         dvrId: req.params?.id
       });
-      res.status(500).json({ 
+      res.status(500).json({
         error: 'Internal server error',
         message: 'Failed to fetch DVR'
       });
@@ -134,8 +134,8 @@ router.get('/:id',
 );
 
 // Create new DVR
-router.post('/', 
-  authenticateToken(), 
+router.post('/',
+  authenticateToken(),
   checkAdvancedPermission('companies', 'create', {
     getSiteId: (req) => req.body.siteId
   }),
@@ -143,7 +143,7 @@ router.post('/',
     try {
       const person = req.person;
       const { siteId, effettuatoDa, dataEsecuzione, dataScadenza, rischiRilevati, note } = req.body;
-      
+
       // Validate required fields
       if (!siteId || !effettuatoDa || !dataEsecuzione || !dataScadenza) {
         return res.status(400).json({
@@ -151,24 +151,24 @@ router.post('/',
           message: 'siteId, effettuatoDa, dataEsecuzione, and dataScadenza are required'
         });
       }
-      
+
       // Verifica che la sede esista
       const site = await prisma.companySite.findUnique({
         where: { id: siteId },
         include: { company: true }
       });
-      
+
       if (!site) {
         return res.status(404).json({
           error: 'Site not found',
           message: `Site with ID ${siteId} does not exist`
         });
       }
-      
+
       // I permessi sono già stati verificati dal middleware checkAdvancedPermission
       // che ora include la verifica dei permessi per sede
-      
-      const dvr = await prisma.dVR.create({ 
+
+      const dvr = await prisma.dVR.create({
         data: {
           siteId,
           effettuatoDa,
@@ -193,7 +193,7 @@ router.post('/',
           }
         }
       });
-      
+
       res.status(201).json(dvr);
     } catch (error) {
       logger.error('Failed to create DVR', {
@@ -203,8 +203,8 @@ router.post('/',
         stack: error.stack,
         siteId: req.body?.siteId
       });
-      
-      res.status(500).json({ 
+
+      res.status(500).json({
         error: 'Internal server error',
         message: 'Failed to create DVR'
       });
@@ -213,8 +213,8 @@ router.post('/',
 );
 
 // Update DVR
-router.put('/:id', 
-  authenticateToken(), 
+router.put('/:id',
+  authenticateToken(),
   checkAdvancedPermission('companies', 'update', {
     getSiteId: async (req) => {
       const dvr = await prisma.dVR.findUnique({
@@ -229,7 +229,7 @@ router.put('/:id',
       const { id } = req.params;
       const person = req.person;
       const updateData = { ...req.body };
-      
+
       // Convert date strings to Date objects if present
       if (updateData.dataEsecuzione) {
         updateData.dataEsecuzione = new Date(updateData.dataEsecuzione);
@@ -237,10 +237,10 @@ router.put('/:id',
       if (updateData.dataScadenza) {
         updateData.dataScadenza = new Date(updateData.dataScadenza);
       }
-      
+
       // Check if DVR exists
-      const existingDVR = await prisma.dVR.findUnique({ 
-        where: { 
+      const existingDVR = await prisma.dVR.findUnique({
+        where: {
           id,
           deletedAt: null
         },
@@ -252,19 +252,19 @@ router.put('/:id',
           }
         }
       });
-      
+
       if (!existingDVR) {
-        return res.status(404).json({ 
+        return res.status(404).json({
           error: 'DVR not found',
           message: `DVR with ID ${id} does not exist`
         });
       }
-      
+
       // I permessi sono già stati verificati dal middleware checkAdvancedPermission
       // che ora include la verifica dei permessi per sede
-      
-      const dvr = await prisma.dVR.update({ 
-        where: { id }, 
+
+      const dvr = await prisma.dVR.update({
+        where: { id },
         data: updateData,
         include: {
           site: {
@@ -281,7 +281,7 @@ router.put('/:id',
           }
         }
       });
-      
+
       res.json(dvr);
     } catch (error) {
       logger.error('Failed to update DVR', {
@@ -291,8 +291,8 @@ router.put('/:id',
         stack: error.stack,
         dvrId: req.params?.id
       });
-      
-      res.status(500).json({ 
+
+      res.status(500).json({
         error: 'Internal server error',
         message: 'Failed to update DVR'
       });
@@ -301,8 +301,8 @@ router.put('/:id',
 );
 
 // Delete DVR (soft delete)
-router.delete('/:id', 
-  authenticateToken(), 
+router.delete('/:id',
+  authenticateToken(),
   checkAdvancedPermission('companies', 'delete', {
     getSiteId: async (req) => {
       const dvr = await prisma.dVR.findUnique({
@@ -316,10 +316,10 @@ router.delete('/:id',
     try {
       const { id } = req.params;
       const person = req.person;
-      
+
       // Check if DVR exists
-      const existingDVR = await prisma.dVR.findUnique({ 
-        where: { 
+      const existingDVR = await prisma.dVR.findUnique({
+        where: {
           id,
           deletedAt: null
         },
@@ -331,25 +331,25 @@ router.delete('/:id',
           }
         }
       });
-      
+
       if (!existingDVR) {
-        return res.status(404).json({ 
+        return res.status(404).json({
           error: 'DVR not found',
           message: `DVR with ID ${id} does not exist`
         });
       }
-      
+
       // I permessi sono già stati verificati dal middleware checkAdvancedPermission
       // che ora include la verifica dei permessi per sede
-      
+
       // Soft delete
-      await prisma.dVR.update({ 
-        where: { id }, 
-        data: { 
+      await prisma.dVR.update({
+        where: { id },
+        data: {
           deletedAt: new Date()
         }
       });
-      
+
       res.status(204).send();
     } catch (error) {
       logger.error('Failed to delete DVR', {
@@ -359,7 +359,7 @@ router.delete('/:id',
         stack: error.stack,
         dvrId: req.params?.id
       });
-      res.status(500).json({ 
+      res.status(500).json({
         error: 'Internal server error',
         message: 'Failed to delete DVR'
       });
