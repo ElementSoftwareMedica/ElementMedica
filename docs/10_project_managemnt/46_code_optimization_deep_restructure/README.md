@@ -1,6 +1,6 @@
 # 🚀 Progetto 46 - Indice Documentazione
 
-**Ultima Modifica**: 30/12/2025 - Fase 6 COMPLETATA (Permission + Backward Compat)  
+**Ultima Modifica**: 30/12/2025 - Fase 7 COMPLETATA (req.user → req.person Migration)  
 **Decisione**: I nomi italiani nello schema Prisma sono ACCETTATI (app commercializzata solo in Italia)
 
 ---
@@ -33,7 +33,8 @@ docs/10_project_managemnt/46_code_optimization_deep_restructure/
 | 4 | Splitting file frontend | ⏳ Da iniziare | 1 settimana | PreventiviPage, CMSRenderer |
 | 5 | Schema camelCase | ⏭️ SKIPPATO | - | **Nomi IT accettati** |
 | 6 | Permission Standardization | ✅ COMPLETATO | 1 giorno | 6.1-6.3 + Security fixes |
-| 7 | Documentazione | ⏳ Da iniziare | 1 giorno | Aggiornare docs |
+| 7 | req.user → req.person | ✅ COMPLETATO | 0.5 giorni | 334+ occorrences, 46 files |
+| 8 | Documentazione | ⏳ In corso | 1 giorno | Aggiornare docs |
 
 ---
 
@@ -60,8 +61,9 @@ docs/10_project_managemnt/46_code_optimization_deep_restructure/
 | File obsoleti | 108MB | ~10MB | 0 | ✅ |
 | TS Errors | 0 | 0 | 0 | ✅ |
 | Test Coverage | 75% | 75% | 80% | ⏳ |
-| Backward Compat | 31+ | 0 | 0 | ✅ |
+| Backward Compat (req.user) | 334+ | 0 | 0 | ✅ |
 | Security Bypass | 1 CRITICAL | 0 | 0 | ✅ |
+| console.log in prod | 50+ | 0 | 0 | ✅ |
 
 ---
 
@@ -70,9 +72,10 @@ docs/10_project_managemnt/46_code_optimization_deep_restructure/
 ```
 ✅ Giorno 1 (29/12): Fase 0-1 (Setup + Pulizia) - COMPLETATO
 ✅ Giorno 1 (29/12): Fase 3a (clinica-routes.js split) - COMPLETATO
-🔄 Giorno 2-3: Fase 3b (altri file backend) - IN CORSO
-⏳ Giorno 4-5: Fase 4 (Frontend splitting)
 ✅ Giorno 2 (30/12): Fase 6 (Permission + Security) - COMPLETATO
+✅ Giorno 2 (30/12): Fase 7 (req.user → req.person) - COMPLETATO
+🔄 Giorno 3-4: Fase 3b (altri file backend) - DA INIZIARE
+⏳ Giorno 5-6: Fase 4 (Frontend splitting)
 ⏳ Giorno 7: Documentazione finale
 ```
 
@@ -112,6 +115,44 @@ docs/10_project_managemnt/46_code_optimization_deep_restructure/
 - **Console.log Cleanup**: Rimossi 34 console.log/error da production code
 - **Frontend Notifications**: 10 alert() → showToast() per UX consistente
 - **All TS Errors**: 0
+
+---
+
+## 🔄 Fase 7 - Complete req.user → req.person Migration (30/12/2025)
+
+### BREAKING CHANGE: Removed ALL Backward Compatibility
+- **Problema**: `req.user = req.person` alias in auth.js creava confusione
+- **Soluzione**: Migrato TUTTO il codebase a usare solo `req.person`
+- **Commit**: 295abdf
+
+### Migration Statistics
+| Categoria | Files | Occorrenze |
+|-----------|-------|------------|
+| Routes | 28 | ~280 |
+| Clinica modular routes | 3 | 3 |
+| Middleware | 2 | 8 |
+| Auth | 3 | 3 |
+| Services | 1 | 9 |
+| Utils | 1 | 5 |
+| Controllers | 2 | 2 |
+| Proxy | 2 | 10 |
+| **TOTALE** | **46** | **334+** |
+
+### Logging Improvements (console.log → logger)
+| File | Statements Migrated |
+|------|---------------------|
+| routes/tenants.js | 16 |
+| routes/attestati-routes.js | 2 |
+| routes/template-routes.js | 10 |
+| routes/template-routes-enhanced.js | 8 |
+| routes/preventivi-routes.js | 10 |
+| routes/public-contact-submissions-routes.js | 1 |
+| **TOTALE** | **47** |
+
+### Documentation Updated
+- `.github/copilot-instructions.md`: Added section 9.1 for `req.person` standard
+- Added explicit rules against `req.user` usage
+- Updated all code examples
 
 ---
 
