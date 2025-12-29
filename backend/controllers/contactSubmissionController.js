@@ -115,7 +115,7 @@ const createSubmission = async (req, res) => {
     let templateName = null;
     let formTemplateId = null;
     try {
-      const contactTemplate = await prisma.form_templates.findFirst({
+      const contactTemplate = await prisma.formTemplate.findFirst({
         where: {
           tenantId,
           type: 'CONTACT',

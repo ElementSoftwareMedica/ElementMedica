@@ -1043,14 +1043,14 @@ async function seedFormTemplates() {
   let updated = 0;
 
   for (const templateData of templates) {
-    const existing = await prisma.form_templates.findFirst({
+    const existing = await prisma.formTemplate.findFirst({
       where: { name: templateData.name, tenantId: tenant.id },
-      include: { form_fields: true }
+      include: { formFields: true }
     });
 
     if (!existing) {
       // Crea nuovo template
-      const template = await prisma.form_templates.create({
+      const template = await prisma.formTemplate.create({
         data: {
           id: templateData.id || crypto.randomUUID(),
           name: templateData.name,
@@ -1067,7 +1067,7 @@ async function seedFormTemplates() {
       });
 
       for (const fieldData of templateData.fields) {
-        await prisma.form_fields.create({
+        await prisma.formField.create({
           data: {
             id: fieldData.id || crypto.randomUUID(),
             templateId: template.id,
@@ -1089,16 +1089,16 @@ async function seedFormTemplates() {
 
       console.log(`✅ Creato template: ${template.name} con ${templateData.fields.length} campi`);
       created++;
-    } else if (existing.form_fields.length === 0) {
+    } else if (existing.formFields.length === 0) {
       // Template esiste ma non ha campi - aggiungili
       // Aggiorna anche le settings con le sezioni
-      await prisma.form_templates.update({
+      await prisma.formTemplate.update({
         where: { id: existing.id },
         data: { settings: templateData.settings || null }
       });
 
       for (const fieldData of templateData.fields) {
-        await prisma.form_fields.create({
+        await prisma.formField.create({
           data: {
             id: fieldData.id || crypto.randomUUID(),
             templateId: existing.id,
@@ -1121,7 +1121,7 @@ async function seedFormTemplates() {
       console.log(`🔄 Aggiornato template: ${existing.name} - aggiunti ${templateData.fields.length} campi`);
       updated++;
     } else {
-      console.log(`⏭️  Template esistente con campi: ${templateData.name} (${existing.form_fields.length} campi)`);
+      console.log(`⏭️  Template esistente con campi: ${templateData.name} (${existing.formFields.length} campi)`);
     }
   }
 

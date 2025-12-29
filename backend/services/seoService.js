@@ -70,7 +70,7 @@ class SEOService {
       }
 
       // Verifica se esiste già una config SEO per questa entità
-      const existingConfig = await prisma.seo_configs.findFirst({
+      const existingConfig = await prisma.seoConfig.findFirst({
         where: {
           OR: [
             { pageId: entityType === 'page' ? entityId : undefined },
@@ -83,14 +83,14 @@ class SEOService {
       let seoConfig;
       if (existingConfig) {
         // Update
-        seoConfig = await prisma.seo_configs.update({
+        seoConfig = await prisma.seoConfig.update({
           where: { id: existingConfig.id },
           data: seoConfigData
         });
         logger.info(`SEO config updated for ${entityType}:${entityId}`);
       } else {
         // Create
-        seoConfig = await prisma.seo_configs.create({
+        seoConfig = await prisma.seoConfig.create({
           data: seoConfigData
         });
         logger.info(`SEO config created for ${entityType}:${entityId}`);
@@ -123,7 +123,7 @@ class SEOService {
         throw new Error(`Invalid entity type: ${entityType}`);
       }
 
-      const seoConfig = await prisma.seo_configs.findFirst({
+      const seoConfig = await prisma.seoConfig.findFirst({
         where: whereClause,
         include: {
           page: entityType === 'page',
@@ -144,7 +144,7 @@ class SEOService {
    */
   async deleteSEOConfig(seoConfigId) {
     try {
-      await prisma.seo_configs.delete({
+      await prisma.seoConfig.delete({
         where: { id: seoConfigId }
       });
       logger.info(`SEO config deleted: ${seoConfigId}`);

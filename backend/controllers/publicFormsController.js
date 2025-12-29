@@ -31,14 +31,14 @@ const getPublicFormTemplate = async (req, res) => {
     const { id } = req.params;
 
     // Trova il template attivo
-    const template = await prisma.form_templates.findFirst({
+    const template = await prisma.formTemplate.findFirst({
       where: {
         id,
         isActive: true,
         deletedAt: null
       },
       include: {
-        form_fields: {
+        formFields: {
           where: { isActive: true },
           orderBy: { order: 'asc' }
         }
@@ -62,7 +62,7 @@ const getPublicFormTemplate = async (req, res) => {
       isPublic: template.isPublic || false,
       allowAnonymous: template.allowAnonymous || false,
       settings: template.settings, // Include settings with sections
-      fields: template.form_fields.map(field => ({
+      fields: template.formFields.map(field => ({
         name: field.name,
         label: field.label,
         type: field.type.toLowerCase(), // Normalize to lowercase for HTML input types
@@ -110,14 +110,14 @@ const submitPublicForm = async (req, res) => {
     const { formData, visitedSectionIds, source, userAgent, ipAddress, referrer } = validatedData;
 
     // Verifica esistenza e validità del template
-    const template = await prisma.form_templates.findFirst({
+    const template = await prisma.formTemplate.findFirst({
       where: {
         id: formTemplateId,
         isActive: true,
         deletedAt: null
       },
       include: {
-        form_fields: {
+        formFields: {
           where: { isActive: true }
         }
       }
@@ -147,7 +147,7 @@ const submitPublicForm = async (req, res) => {
     }
 
     // Validazione campi richiesti (solo sezioni visitate)
-    let requiredFields = template.form_fields.filter(field => field.required);
+    let requiredFields = template.formFields.filter(field => field.required);
 
     // Se sono state passate le sezioni visitate, valida solo quei campi
     if (visitedSectionIds && Array.isArray(visitedSectionIds) && visitedSectionIds.length > 0) {
@@ -288,7 +288,7 @@ const submitPublicForm = async (req, res) => {
  */
 const getPublicFormTemplates = async (req, res) => {
   try {
-    const templates = await prisma.form_templates.findMany({
+    const templates = await prisma.formTemplate.findMany({
       where: {
         isActive: true,
         deletedAt: null

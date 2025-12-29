@@ -86,7 +86,7 @@ export const getCourseTestAssignment = async (id, tenantId) => {
                         type: true,
                         schema: true,
                         isActive: true,
-                        form_fields: {
+                        formFields: {
                             where: { isActive: true },
                             orderBy: { order: 'asc' }
                         }
@@ -194,7 +194,7 @@ export const getTestsForCourse = async (tenantId, courseId, riskLevel, courseTyp
                         type: true,
                         schema: true,
                         isActive: true,
-                        form_fields: {
+                        formFields: {
                             where: { isActive: true },
                             orderBy: { order: 'asc' }
                         }
@@ -256,7 +256,7 @@ export const getTestsForCourse = async (tenantId, courseId, riskLevel, courseTyp
 export const createCourseTestAssignment = async (data, tenantId) => {
     try {
         // Verifica che il form template esista e sia di tipo test
-        const template = await prisma.form_templates.findFirst({
+        const template = await prisma.formTemplate.findFirst({
             where: {
                 id: data.formTemplateId,
                 tenantId,
@@ -671,7 +671,7 @@ export const getTestResultForPerson = async (assignmentId, scheduleId, personId,
                                 id: true,
                                 name: true,
                                 schema: true,
-                                form_fields: {
+                                formFields: {
                                     where: { isActive: true },
                                     orderBy: { order: 'asc' }
                                 }

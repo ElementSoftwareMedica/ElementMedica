@@ -24,7 +24,7 @@ export const getPublicForm = async (req, res) => {
         deletedAt: null
       },
       include: {
-        form_fields: {
+        formFields: {
           where: { isActive: true },
           orderBy: { order: 'asc' }
         }
@@ -47,7 +47,7 @@ export const getPublicForm = async (req, res) => {
       isActive: template.isActive,
       isPublic: template.isPublic,
       allowAnonymous: template.allowAnonymous,
-      fields: template.form_fields.map(field => ({
+      fields: template.formFields.map(field => ({
         id: field.id,
         name: field.name,
         type: field.type.toLowerCase(),
@@ -102,7 +102,7 @@ export const submitPublicForm = async (req, res) => {
         deletedAt: null
       },
       include: {
-        form_fields: {
+        formFields: {
           where: { isActive: true }
         }
       }
@@ -116,7 +116,7 @@ export const submitPublicForm = async (req, res) => {
     }
 
     // 2. Validazione campi required
-    const requiredFields = template.form_fields.filter(f => f.required);
+    const requiredFields = template.formFields.filter(f => f.required);
     const missingFields = [];
 
     for (const field of requiredFields) {

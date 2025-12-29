@@ -48,10 +48,10 @@ export const getTemplatesList = async ({ tenantId, filters = {}, pagination = {}
   const skip = (parseInt(page) - 1) * parseInt(limit);
 
   const [templates, total] = await Promise.all([
-    prisma.form_templates.findMany({
+    prisma.formTemplate.findMany({
       where,
       include: {
-        form_fields: {
+        formFields: {
           where: { isActive: true },
           orderBy: { order: 'asc' }
         },
@@ -63,7 +63,7 @@ export const getTemplatesList = async ({ tenantId, filters = {}, pagination = {}
       skip,
       take: parseInt(limit)
     }),
-    prisma.form_templates.count({ where })
+    prisma.formTemplate.count({ where })
   ]);
 
   // Count submissions for each template (by templateName or formTemplateId in metadata)
@@ -105,14 +105,14 @@ export const getTemplatesList = async ({ tenantId, filters = {}, pagination = {}
  * Recupera singolo template per ID
  */
 export const getTemplateById = async ({ tenantId, templateId }) => {
-  const template = await prisma.form_templates.findFirst({
+  const template = await prisma.formTemplate.findFirst({
     where: {
       id: templateId,
       tenantId,
       deletedAt: null
     },
     include: {
-      form_fields: {
+      formFields: {
         where: { isActive: true },
         orderBy: { order: 'asc' }
       },
@@ -129,7 +129,7 @@ export const getTemplateById = async ({ tenantId, templateId }) => {
  * Recupera template pubblico (senza auth)
  */
 export const getPublicTemplate = async ({ templateId }) => {
-  const template = await prisma.form_templates.findFirst({
+  const template = await prisma.formTemplate.findFirst({
     where: {
       id: templateId,
       isActive: true,
@@ -137,7 +137,7 @@ export const getPublicTemplate = async ({ templateId }) => {
       // Non controllare tenantId per form pubblici
     },
     include: {
-      form_fields: {
+      formFields: {
         where: { isActive: true },
         orderBy: { order: 'asc' }
       }
@@ -151,8 +151,8 @@ export const getPublicTemplate = async ({ templateId }) => {
   // Trasforma form_fields in fields per compatibilità frontend
   return {
     ...template,
-    fields: template.form_fields,
-    form_fields: undefined // Rimuovi campo snake_case
+    fields: template.formFields,
+    formFields: undefined // Rimuovi campo snake_case
   };
 };
 
@@ -170,7 +170,7 @@ export const checkTemplateNameUniqueness = async ({ tenantId, name, excludeId = 
     where.id = { not: excludeId };
   }
 
-  const existing = await prisma.form_templates.findFirst({ where });
+  const existing = await prisma.formTemplate.findFirst({ where });
   return existing === null; // true se nome è disponibile
 };
 
@@ -254,7 +254,7 @@ export const createTemplate = async ({ tenantId, userId, templateData, fields = 
         };
       });
 
-      await tx.form_fields.createMany({
+      await tx.formFields.createMany({
         data: fieldsData
       });
     }
@@ -301,7 +301,7 @@ export const updateTemplate = async ({ tenantId, templateId, templateData, field
     // Se forniti, aggiorna campi
     if (fields !== null) {
       // Get existing field IDs
-      const existingFields = await tx.form_fields.findMany({
+      const existingFields = await tx.formFields.findMany({
         where: { templateId },
         select: { id: true, name: true }
       });
@@ -312,7 +312,7 @@ export const updateTemplate = async ({ tenantId, templateId, templateData, field
       // Delete fields that are not in the incoming list
       const fieldsToDelete = existingFields.filter(f => !incomingFieldIds.has(f.id));
       if (fieldsToDelete.length > 0) {
-        await tx.form_fields.deleteMany({
+        await tx.formFields.deleteMany({
           where: {
             id: { in: fieldsToDelete.map(f => f.id) }
           }
@@ -361,13 +361,13 @@ export const updateTemplate = async ({ tenantId, templateId, templateData, field
 
           if (field.id && existingFieldIds.has(field.id)) {
             // Update existing field
-            await tx.form_fields.update({
+            await tx.formFields.update({
               where: { id: field.id },
               data: fieldData
             });
           } else {
             // Create new field
-            await tx.form_fields.create({
+            await tx.formFields.create({
               data: {
                 id: field.id || crypto.randomUUID(),
                 ...fieldData
@@ -394,7 +394,7 @@ export const updateTemplate = async ({ tenantId, templateId, templateData, field
  * Soft delete di un template
  */
 export const deleteTemplate = async ({ tenantId, templateId }) => {
-  await prisma.form_templates.update({
+  await prisma.formTemplate.update({
     where: { id: templateId },
     data: {
       deletedAt: new Date(),
@@ -433,7 +433,7 @@ export const duplicateTemplate = async ({ tenantId, userId, templateId, newName 
   };
 
   // Copia campi
-  const duplicateFields = original.form_fields.map(field => ({
+  const duplicateFields = original.formFields.map(field => ({
     name: field.name,
     label: field.label,
     type: field.type,
@@ -595,9 +595,9 @@ export const createSubmission = async ({
   userAgent = null
 }) => {
   // Recupera template per validazione
-  const template = await prisma.form_templates.findUnique({
+  const template = await prisma.formTemplate.findUnique({
     where: { id: submissionData.templateId },
-    include: { form_fields: true }
+    include: { formFields: true }
   });
 
   if (!template) {
@@ -636,13 +636,13 @@ export const createSubmission = async ({
   logger.info('Validating form submission', {
     templateId: submissionData.templateId,
     sectionsCount: sections.length,
-    fieldsCount: template.form_fields.length,
+    fieldsCount: template.formFields.length,
     formDataKeys: Object.keys(submissionData.data || {}),
     firstSectionId: sections.length > 0 ? sections[0].id : 'none'
   });
 
   // Valida i dati contro le regole del template (considerando conditional logic)
-  const validation = validateFormData(submissionData.data || submissionData, template.form_fields, sections);
+  const validation = validateFormData(submissionData.data || submissionData, template.formFields, sections);
 
   if (!validation.isValid) {
     const error = new Error('Dati del form non validi');
@@ -695,8 +695,8 @@ export const createSubmission = async ({
       company: formDataObject.company || formDataObject.companyName || submissionData.company || null,
       templateId: submissionData.templateId || null,
       formData: isTemplateBased ? formDataObject : (submissionData.formData || null),
-      formSchema: template ? { fields: template.form_fields.map(f => ({ name: f.name, type: f.type, label: f.label })) } : null,
-      validationRules: template ? { fields: template.form_fields.filter(f => f.validation).map(f => ({ name: f.name, validation: f.validation })) } : null,
+      formSchema: template ? { fields: template.formFields.map(f => ({ name: f.name, type: f.type, label: f.label })) } : null,
+      validationRules: template ? { fields: template.formFields.filter(f => f.validation).map(f => ({ name: f.name, validation: f.validation })) } : null,
       autoCreatePerson,
       formVersion: submissionData.formVersion || 1,
       relatedPersonId,
@@ -913,14 +913,14 @@ export const bulkActionSubmissions = async ({ tenantId, submissionIds, action, d
 export const checkOptionCapacity = async ({ tenantId, templateId, fieldName, optionValue }) => {
   try {
     // 1. Recupera il template con i campi
-    const template = await prisma.form_templates.findFirst({
+    const template = await prisma.formTemplate.findFirst({
       where: {
         id: templateId,
         tenantId,
         deletedAt: null
       },
       include: {
-        form_fields: {
+        formFields: {
           where: {
             name: fieldName,
             isActive: true
@@ -929,14 +929,14 @@ export const checkOptionCapacity = async ({ tenantId, templateId, fieldName, opt
       }
     });
 
-    if (!template || template.form_fields.length === 0) {
+    if (!template || template.formFields.length === 0) {
       return {
         available: true,
         reason: 'Field not found or capacity not enabled'
       };
     }
 
-    const field = template.form_fields[0];
+    const field = template.formFields[0];
 
     // 2. Verifica se il campo ha enableCapacityLimit
     if (!field.enableCapacityLimit || !field.options) {
@@ -1005,14 +1005,14 @@ export const validateCapacityLimits = async ({ tenantId, templateId, formData })
 
   try {
     // Recupera template con campi che hanno enableCapacityLimit
-    const template = await prisma.form_templates.findFirst({
+    const template = await prisma.formTemplate.findFirst({
       where: {
         id: templateId,
         tenantId,
         deletedAt: null
       },
       include: {
-        form_fields: {
+        formFields: {
           where: {
             isActive: true,
             enableCapacityLimit: true
@@ -1021,12 +1021,12 @@ export const validateCapacityLimits = async ({ tenantId, templateId, formData })
       }
     });
 
-    if (!template || template.form_fields.length === 0) {
+    if (!template || template.formFields.length === 0) {
       return { isValid: true, errors: [] };
     }
 
     // Controlla capacità per ogni campo con limite
-    for (const field of template.form_fields) {
+    for (const field of template.formFields) {
       const fieldValue = formData[field.name];
 
       if (!fieldValue) continue; // Skip se campo vuoto

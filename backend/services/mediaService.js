@@ -397,7 +397,7 @@ class MediaService {
     }
 
     try {
-      const folders = await prisma.cms_media_folders.findMany({
+      const folders = await prisma.cmsMediaFolder.findMany({
         where: {
           tenant_id: tenantId,
           parent_id: parentId,

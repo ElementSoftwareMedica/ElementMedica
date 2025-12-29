@@ -15,7 +15,7 @@ class SitemapService {
       const { url, entityType, entityId, tenantId, changefreq = 'weekly', priority = 0.5, isPublic = true } = data;
 
       // Verifica se esiste già
-      const existingEntry = await prisma.sitemaps.findFirst({
+      const existingEntry = await prisma.sitemap.findFirst({
         where: {
           entityType,
           entityId,
@@ -26,7 +26,7 @@ class SitemapService {
       let sitemapEntry;
       if (existingEntry) {
         // Update
-        sitemapEntry = await prisma.sitemaps.update({
+        sitemapEntry = await prisma.sitemap.update({
           where: { id: existingEntry.id },
           data: {
             url,
@@ -39,7 +39,7 @@ class SitemapService {
         logger.info(`Sitemap entry updated for ${entityType}:${entityId}`);
       } else {
         // Create
-        sitemapEntry = await prisma.sitemaps.create({
+        sitemapEntry = await prisma.sitemap.create({
           data: {
             url,
             entityType,
@@ -69,7 +69,7 @@ class SitemapService {
    */
   async deleteSitemapEntry(entityType, entityId, tenantId) {
     try {
-      await prisma.sitemaps.deleteMany({
+      await prisma.sitemap.deleteMany({
         where: {
           entityType,
           entityId,
@@ -92,7 +92,7 @@ class SitemapService {
   async generateSitemapXML(tenantId, baseUrl) {
     try {
       // Recupera tutte le entries pubbliche
-      const entries = await prisma.sitemaps.findMany({
+      const entries = await prisma.sitemap.findMany({
         where: {
           tenantId,
           isPublic: true
@@ -289,15 +289,15 @@ class SitemapService {
   async getSitemapStats(tenantId) {
     try {
       const [total, byEntityType, lastUpdate] = await Promise.all([
-        prisma.sitemaps.count({
+        prisma.sitemap.count({
           where: { tenantId, isPublic: true }
         }),
-        prisma.sitemaps.groupBy({
+        prisma.sitemap.groupBy({
           by: ['entityType'],
           where: { tenantId, isPublic: true },
           _count: true
         }),
-        prisma.sitemaps.findFirst({
+        prisma.sitemap.findFirst({
           where: { tenantId },
           orderBy: { lastmod: 'desc' },
           select: { lastmod: true }

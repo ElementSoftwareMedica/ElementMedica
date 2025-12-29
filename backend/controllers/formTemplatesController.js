@@ -59,10 +59,10 @@ const getFormTemplates = async (req, res) => {
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const [templates, total] = await Promise.all([
-      prisma.form_templates.findMany({
+      prisma.formTemplate.findMany({
         where,
         include: {
-          form_fields: {
+          formFields: {
             where: { isActive: true },
             orderBy: { order: 'asc' }
           },
@@ -74,7 +74,7 @@ const getFormTemplates = async (req, res) => {
         skip,
         take: parseInt(limit)
       }),
-      prisma.form_templates.count({ where })
+      prisma.formTemplate.count({ where })
     ]);
 
     // Count submissions for each template (by templateName or formTemplateId in metadata)
@@ -135,14 +135,14 @@ const getFormTemplate = async (req, res) => {
     const { id } = req.params;
     const { tenantId } = req.person;
 
-    const template = await prisma.form_templates.findFirst({
+    const template = await prisma.formTemplate.findFirst({
       where: {
         id,
         tenantId,
         deletedAt: null
       },
       include: {
-        form_fields: {
+        formFields: {
           where: { isActive: true },
           orderBy: { order: 'asc' }
         },
@@ -192,7 +192,7 @@ const createFormTemplate = async (req, res) => {
     const { fields = [] } = req.body;
 
     // Verifica unicità nome template per tenant
-    const existingTemplate = await prisma.form_templates.findFirst({
+    const existingTemplate = await prisma.formTemplate.findFirst({
       where: {
         tenantId,
         name: validatedData.name,
@@ -210,7 +210,7 @@ const createFormTemplate = async (req, res) => {
     // Crea template con campi in transazione
     const result = await prisma.$transaction(async (tx) => {
       // Crea template
-      const template = await tx.form_templates.create({
+      const template = await tx.formTemplate.create({
         data: {
           ...validatedData,
           tenantId,
@@ -242,7 +242,7 @@ const createFormTemplate = async (req, res) => {
           };
         });
 
-        await tx.form_fields.createMany({
+        await tx.formField.createMany({
           data: fieldsToCreate
         });
       }
@@ -251,10 +251,10 @@ const createFormTemplate = async (req, res) => {
     });
 
     // Recupera template completo
-    const completeTemplate = await prisma.form_templates.findUnique({
+    const completeTemplate = await prisma.formTemplate.findUnique({
       where: { id: result.id },
       include: {
-        form_fields: {
+        formFields: {
           where: { isActive: true },
           orderBy: { order: 'asc' }
         },
@@ -306,7 +306,7 @@ const updateFormTemplate = async (req, res) => {
     const { fields } = req.body;
 
     // Verifica esistenza template
-    const existingTemplate = await prisma.form_templates.findFirst({
+    const existingTemplate = await prisma.formTemplate.findFirst({
       where: {
         id,
         tenantId,
@@ -323,7 +323,7 @@ const updateFormTemplate = async (req, res) => {
 
     // Verifica unicità nome se cambiato
     if (validatedData.name && validatedData.name !== existingTemplate.name) {
-      const nameExists = await prisma.form_templates.findFirst({
+      const nameExists = await prisma.formTemplate.findFirst({
         where: {
           tenantId,
           name: validatedData.name,
@@ -343,7 +343,7 @@ const updateFormTemplate = async (req, res) => {
     // Aggiorna template e campi in transazione
     const result = await prisma.$transaction(async (tx) => {
       // Aggiorna template
-      const template = await tx.form_templates.update({
+      const template = await tx.formTemplate.update({
         where: { id },
         data: {
           ...validatedData,
@@ -355,7 +355,7 @@ const updateFormTemplate = async (req, res) => {
       // Aggiorna campi se presenti
       if (fields) {
         // Disattiva campi esistenti
-        await tx.form_fields.updateMany({
+        await tx.formField.updateMany({
           where: { templateId: id },
           data: { isActive: false }
         });
@@ -369,7 +369,7 @@ const updateFormTemplate = async (req, res) => {
             order: field.order || index
           }));
 
-          await tx.form_fields.createMany({
+          await tx.formField.createMany({
             data: validatedFields
           });
         }
@@ -379,10 +379,10 @@ const updateFormTemplate = async (req, res) => {
     });
 
     // Recupera template completo
-    const completeTemplate = await prisma.form_templates.findUnique({
+    const completeTemplate = await prisma.formTemplate.findUnique({
       where: { id },
       include: {
-        form_fields: {
+        formFields: {
           where: { isActive: true },
           orderBy: { order: 'asc' }
         },
@@ -431,7 +431,7 @@ const deleteFormTemplate = async (req, res) => {
     const { tenantId } = req.person;
 
     // Verifica esistenza template
-    const template = await prisma.form_templates.findFirst({
+    const template = await prisma.formTemplate.findFirst({
       where: {
         id,
         tenantId,
@@ -447,7 +447,7 @@ const deleteFormTemplate = async (req, res) => {
     }
 
     // Soft delete
-    await prisma.form_templates.update({
+    await prisma.formTemplate.update({
       where: { id },
       data: {
         deletedAt: new Date(),
@@ -493,14 +493,14 @@ const duplicateFormTemplate = async (req, res) => {
     }
 
     // Verifica esistenza template originale
-    const originalTemplate = await prisma.form_templates.findFirst({
+    const originalTemplate = await prisma.formTemplate.findFirst({
       where: {
         id,
         tenantId,
         deletedAt: null
       },
       include: {
-        form_fields: {
+        formFields: {
           where: { isActive: true },
           orderBy: { order: 'asc' }
         }
@@ -515,7 +515,7 @@ const duplicateFormTemplate = async (req, res) => {
     }
 
     // Verifica unicità nome
-    const nameExists = await prisma.form_templates.findFirst({
+    const nameExists = await prisma.formTemplate.findFirst({
       where: {
         tenantId,
         name,
@@ -533,7 +533,7 @@ const duplicateFormTemplate = async (req, res) => {
     // Duplica template con campi
     const result = await prisma.$transaction(async (tx) => {
       // Crea nuovo template
-      const newTemplate = await tx.form_templates.create({
+      const newTemplate = await tx.formTemplate.create({
         data: {
           id: crypto.randomUUID(),
           name,
@@ -549,8 +549,8 @@ const duplicateFormTemplate = async (req, res) => {
       });
 
       // Duplica campi
-      if (originalTemplate.form_fields.length > 0) {
-        const newFields = originalTemplate.form_fields.map(field => ({
+      if (originalTemplate.formFields.length > 0) {
+        const newFields = originalTemplate.formFields.map(field => ({
           id: crypto.randomUUID(),
           templateId: newTemplate.id,
           name: field.name,
@@ -565,7 +565,7 @@ const duplicateFormTemplate = async (req, res) => {
           order: field.order
         }));
 
-        await tx.form_fields.createMany({
+        await tx.formField.createMany({
           data: newFields
         });
       }
@@ -574,10 +574,10 @@ const duplicateFormTemplate = async (req, res) => {
     });
 
     // Recupera template completo
-    const completeTemplate = await prisma.form_templates.findUnique({
+    const completeTemplate = await prisma.formTemplate.findUnique({
       where: { id: result.id },
       include: {
-        form_fields: {
+        formFields: {
           where: { isActive: true },
           orderBy: { order: 'asc' }
         },

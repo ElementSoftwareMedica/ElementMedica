@@ -960,7 +960,7 @@ model Person {
   persons_contact_submissions_relatedPersonIdTopersons ContactSubmission[]            @relation("contact_submissions_relatedPersonIdTopersons")
   courseEnrollments                                    CourseEnrollment[]             @relation("CourseEnrollment_Person")
   createdCustomRoles                                   CustomRole[]                   @relation("CustomRole_CreatedBy")
-  formTemplates                                        FormTemplate[]
+  form_templates                                       form_templates[]
   lettereIncarico                                      LetteraIncarico[]              @relation("LetteraIncaricoTrainer")
   assignedRoles                                        PersonRole[]                   @relation("AssignedRoles")
   personRoles                                          PersonRole[]
@@ -1261,7 +1261,7 @@ model Tenant {
   customRoles                  CustomRole[]
   fatturaAziende               FatturaAzienda[]
   fatture                      Fattura[]
-  formTemplates                FormTemplate[]
+  form_templates               form_templates[]
   lettereIncarico              LetteraIncarico[]
   personRoles                  PersonRole[]
   personSessions               PersonSession[]
@@ -1608,17 +1608,17 @@ model CMSMedia {
   variants     Json?
   title        String?   @db.VarChar(255)
   description  String?
-  folderId     String?   @map("folder_id")
+  folder_id    String?
   tags         String[]  @default([])
   metadata     Json?
-  createdBy    String?   @map("created_by")
-  updatedAt    DateTime? @default(now()) @map("updated_at")
+  created_by   String?
+  updated_at   DateTime? @default(now())
   tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@index([filename])
-  @@index([createdBy], map: "idx_cms_media_created_by")
-  @@index([folderId], map: "idx_cms_media_folder")
+  @@index([created_by], map: "idx_cms_media_created_by")
+  @@index([folder_id], map: "idx_cms_media_folder")
   @@index([mimeType], map: "idx_cms_media_mime_type")
   @@index([tags], map: "idx_cms_media_tags", type: Gin)
   @@index([tenantId, deletedAt], map: "idx_cms_media_tenant_deleted")
@@ -1681,35 +1681,34 @@ model ContactSubmission {
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model FormField {
-  id           String       @id
-  templateId   String
-  name         String
-  label        String
-  type         String
-  required     Boolean      @default(false)
-  placeholder  String?
-  helpText     String?
-  options      Json?
-  validation   Json?
-  conditional  Json?
-  order        Int          @default(0)
-  isActive     Boolean      @default(true)
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @default(now())
-  scoring      Json?
-  sectionId    String?
-  formTemplate FormTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+model form_fields {
+  id             String         @id
+  templateId     String
+  name           String
+  label          String
+  type           String
+  required       Boolean        @default(false)
+  placeholder    String?
+  helpText       String?
+  options        Json?
+  validation     Json?
+  conditional    Json?
+  order          Int            @default(0)
+  isActive       Boolean        @default(true)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @default(now())
+  scoring        Json?
+  sectionId      String?
+  form_templates form_templates @relation(fields: [templateId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([templateId, name])
   @@index([isActive])
   @@index([order])
   @@index([templateId])
-  @@map("form_fields")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model FormTemplate {
+model form_templates {
   id                    String                 @id
   name                  String
   description           String?
@@ -1727,7 +1726,7 @@ model FormTemplate {
   allowAnonymous        Boolean                @default(false)
   isPublic              Boolean                @default(false)
   settings              Json?
-  formFields            FormField[]
+  form_fields           form_fields[]
   persons               Person?                @relation(fields: [createdById], references: [id], onUpdate: NoAction)
   tenants               Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   courseTestAssignments CourseTestAssignment[]
@@ -1737,7 +1736,6 @@ model FormTemplate {
   @@index([name])
   @@index([tenantId])
   @@index([type])
-  @@map("form_templates")
 }
 
 /// Associazione tra form templates (test) e corsi
@@ -1759,7 +1757,7 @@ model CourseTestAssignment {
   updatedAt      DateTime    @updatedAt
   deletedAt      DateTime?
 
-  formTemplate FormTemplate       @relation(fields: [formTemplateId], references: [id], onDelete: Cascade)
+  formTemplate form_templates     @relation(fields: [formTemplateId], references: [id], onDelete: Cascade)
   course       Course?            @relation(fields: [courseId], references: [id], onDelete: Cascade)
   tenant       Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   results      CourseTestResult[]
@@ -1808,18 +1806,17 @@ model CourseTestResult {
 }
 
 /// CMS Media Folders - Usato in mediaService.js
-model CmsMediaFolder {
-  id        String    @id @default(dbgenerated("(gen_random_uuid())::text"))
-  name      String    @db.VarChar(255)
-  parentId  String?   @map("parent_id")
-  tenantId  String    @map("tenant_id")
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @default(now()) @map("updated_at")
-  deletedAt DateTime? @map("deleted_at")
+model cms_media_folders {
+  id         String    @id @default(dbgenerated("(gen_random_uuid())::text"))
+  name       String    @db.VarChar(255)
+  parent_id  String?
+  tenant_id  String
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
 
-  @@index([parentId], map: "idx_cms_media_folders_parent")
-  @@index([tenantId, deletedAt], map: "idx_cms_media_folders_tenant")
-  @@map("cms_media_folders")
+  @@index([parent_id], map: "idx_cms_media_folders_parent")
+  @@index([tenant_id, deleted_at], map: "idx_cms_media_folders_tenant")
 }
 
 // DEPRECATED: Le seguenti tabelle cms_* e preventivo_* non sono più utilizzate.
@@ -1829,7 +1826,7 @@ model CmsMediaFolder {
 // preventivo_partecipanti → Dati gestiti direttamente in Preventivo (JSON o relazioni)
 // Migrazione completata il 01/12/2025
 
-model SeoConfig {
+model seo_configs {
   id             String   @id
   pageId         String?  @unique
   courseId       String?  @unique
@@ -1857,10 +1854,9 @@ model SeoConfig {
   @@index([courseId])
   @@index([pageId])
   @@index([tenantId])
-  @@map("seo_configs")
 }
 
-model Sitemap {
+model sitemaps {
   id         String   @id
   url        String
   changefreq String
@@ -1877,7 +1873,6 @@ model Sitemap {
   @@index([entityType, entityId])
   @@index([lastmod])
   @@index([tenantId, isPublic])
-  @@map("sitemaps")
 }
 
 enum CourseStatus {
