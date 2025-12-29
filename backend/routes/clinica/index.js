@@ -27,13 +27,14 @@ import convenzioniRouter from './convenzioni.routes.js';
 import manutenzioniRouter from './manutenzioni.routes.js';
 import slotsRouter from './slots.routes.js';
 import listiniRouter from './listini.routes.js';
+import tariffarioMedicoRouter from './tariffario-medico.routes.js';
+import orariAmbulatorioRouter from './orari-ambulatorio.routes.js';
+import templateCampiRouter from './template-campi.routes.js';
+import documentiClinici from './documenti-clinici.routes.js';
+import fattureRouter from './fatture.routes.js';
 // Future imports - will be added as files are created:
 // import appuntamentiRouter from './appuntamenti.routes.js';
 // import scontiRouter from './sconti.routes.js';
-// import orariRouter from './orari.routes.js';
-// import templateCampiRouter from './template-campi.routes.js';
-// import documentiRouter from './documenti.routes.js';
-// import fattureRouter from './fatture.routes.js';
 
 const router = express.Router();
 const { authenticate: authenticateToken } = middleware;
@@ -79,14 +80,15 @@ router.use('/convenzioni', convenzioniRouter);
 router.use('/manutenzioni', manutenzioniRouter);
 router.use('/slots', slotsRouter);
 router.use('/listini', listiniRouter);
+router.use('/tariffario-medico', tariffarioMedicoRouter);
+router.use('/orari-ambulatorio', orariAmbulatorioRouter);
+router.use('/template-campi', templateCampiRouter);
+router.use('/documenti', documentiClinici);
+router.use('/fatture', fattureRouter);
 
 // Future mounts - will be enabled as files are created:
 // router.use('/appuntamenti', appuntamentiRouter);
 // router.use('/sconti', scontiRouter);
-// router.use('/orari-ambulatorio', orariRouter);
-// router.use('/template-campi', templateCampiRouter);
-// router.use('/documenti', documentiRouter);
-// router.use('/fatture', fattureRouter);
 
 // ============================================
 // ERROR HANDLER
