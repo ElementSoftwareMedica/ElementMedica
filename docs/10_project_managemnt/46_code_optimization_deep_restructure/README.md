@@ -1,6 +1,6 @@
 # 🚀 Progetto 46 - Indice Documentazione
 
-**Ultima Modifica**: 30/12/2025 - Fase 3b IN CORSO (Backend File Splitting)  
+**Ultima Modifica**: 30/12/2025 - Fase 3b COMPLETATO + Prisma errors fixed  
 **Decisione**: I nomi italiani nello schema Prisma sono ACCETTATI (app commercializzata solo in Italia)
 
 ---
@@ -28,8 +28,8 @@ docs/10_project_managemnt/46_code_optimization_deep_restructure/
 | 0 | Setup & Backup | ✅ Completato | 0.5 giorni | Tag v1.0.0-pre-optimization |
 | 1 | Pulizia File Obsoleti | ✅ Completato | 2 giorni | Commit e9fb4e7 |
 | 2 | Enum Standardizzazione | ⏭️ SKIPPATO | - | **Nomi IT accettati** |
-| 3a | Splitting clinica-routes.js | ✅ TESTATO | 1 giorno | 18 moduli, 15/17 route OK |
-| 3b | Splitting altri file backend | ✅ COMPLETATO | 1 giorno | preventivi ✅, attestati ✅ |
+| 3a | Splitting clinica-routes.js | ✅ TESTATO | 1 giorno | 18 moduli, 17/17 route OK |
+| 3b | Splitting altri file backend | ✅ COMPLETATO | 1 giorno | preventivi ✅, attestati ✅, Prisma fixes ✅ |
 | 4 | Splitting file frontend | ⏳ Da iniziare | 1 settimana | PreventiviPage, CMSRenderer |
 | 5 | Schema camelCase | ⏭️ SKIPPATO | - | **Nomi IT accettati** |
 | 6 | Permission Standardization | ✅ COMPLETATO | 1 giorno | 6.1-6.3 + Security fixes |
@@ -240,7 +240,7 @@ docs/10_project_managemnt/46_code_optimization_deep_restructure/
 
 ## ✅ Test Fase 3a - Risultati (29/12/2025)
 
-**Route Funzionanti (15/17)**:
+**Route Funzionanti (17/17)** - All Fixed!:
 | Route | Status | Note |
 |-------|--------|------|
 | /clinica/poliambulatori | ✅ OK | |
@@ -258,14 +258,23 @@ docs/10_project_managemnt/46_code_optimization_deep_restructure/
 | /clinica/orari-ambulatorio | ✅ OK | |
 | /clinica/fatture | ✅ OK | |
 | /clinica/documenti/storage-stats | ✅ OK | No GET root (by design) |
-| /clinica/slots | ⚠️ Servizio | Errore Prisma pre-esistente (campo 'stato') |
-| /clinica/bundle | ⚠️ Servizio | Errore Prisma pre-esistente |
-| /clinica/template-campi | ⚠️ Servizio | Errore Prisma pre-esistente |
+| /clinica/slots | ✅ OK | Fixed: StatoSlot enum + relations |
+| /clinica/bundle | ✅ OK | Fixed: personTenantAccessService import |
+| /clinica/template-campi | ✅ OK | Fixed: model schema alignment |
 
 **Commit**: 
 - `1d8873a` - Fix all import paths in modular clinica routes
 - `7574bf6` - Archive old clinica-routes.js
 - `4a41443` - First batch import fixes
+- `1170b59` - Fix pre-existing Prisma errors in clinical module
+- `31243ec` - Extend TemplateCampoVisita model and fix service
+
+### Prisma Fixes (30/12/2025)
+| Fix | Descrizione |
+|-----|-------------|
+| SlotDisponibilita | Added `StatoSlot` enum (LIBERO, PRENOTATO, BLOCCATO), added relations to Ambulatorio/Medico/Prestazione |
+| Bundle import | Fixed `personTenantAccessService` to use named export |
+| TemplateCampoVisita | Extended model with form fields (etichetta, tipo, obbligatorio, opzioni), added optional `prestazioneId` FK |
 
 ---
 
