@@ -5,6 +5,10 @@
  * @module pages/finance/preventivi
  */
 
+// Main Page Component
+export { default as PreventiviPage } from './PreventiviPage';
+export { default } from './PreventiviPage';
+
 // Types & Configuration
 export * from './types';
 
