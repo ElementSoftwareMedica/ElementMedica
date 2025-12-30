@@ -34,6 +34,14 @@ export interface Person {
   deletedAt?: string;
   createdAt: string;
   updatedAt: string;
+  // Campi opzionali estesi per la UI
+  title?: string;
+  birthDate?: string;
+  site?: { id: string; name: string };
+  hiredDate?: string;
+  certifications?: Array<{ id: string; name: string; expiresAt?: string }>;
+  residenceCity?: string;
+  hourlyRate?: number;
 }
 
 export interface FilterConfig {

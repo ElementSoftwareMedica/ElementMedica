@@ -300,7 +300,9 @@ export const PrestazioniPage: React.FC = () => {
                             </div>
                             <div>
                                 <p className="text-sm text-gray-500 dark:text-gray-400">Visite</p>
-                                <p className="text-xl font-semibold text-gray-900 dark:text-white">{stats.byTipo?.VISITA || 0}</p>
+                                <p className="text-xl font-semibold text-gray-900 dark:text-white">
+                                    {(stats.byTipo?.VISITA_SPECIALISTICA || 0) + (stats.byTipo?.VISITA_MEDICINA_LAVORO || 0)}
+                                </p>
                             </div>
                         </div>
                     </div>
@@ -311,7 +313,9 @@ export const PrestazioniPage: React.FC = () => {
                             </div>
                             <div>
                                 <p className="text-sm text-gray-500 dark:text-gray-400">Esami</p>
-                                <p className="text-xl font-semibold text-gray-900 dark:text-white">{stats.byTipo?.ESAME || 0}</p>
+                                <p className="text-xl font-semibold text-gray-900 dark:text-white">
+                                    {(stats.byTipo?.ESAME_STRUMENTALE || 0) + (stats.byTipo?.ESAME_LABORATORIO || 0)}
+                                </p>
                             </div>
                         </div>
                     </div>
@@ -523,7 +527,7 @@ export const PrestazioniPage: React.FC = () => {
                                             </span>
                                         </td>
                                         <td className="px-4 py-3">
-                                            <StatusIndicator isActive={prestazione.isActive} />
+                                            <StatusIndicator isActive={prestazione.attivo} />
                                         </td>
                                         <td className="px-4 py-3 text-right">
                                             <div className="flex items-center justify-end gap-2">
@@ -587,20 +591,14 @@ export const PrestazioniPage: React.FC = () => {
                                     <Clock className="w-4 h-4" />
                                     {formatDuration(prestazione.durataPrevista)}
                                 </span>
-                                <StatusIndicator isActive={prestazione.isActive} />
+                                <StatusIndicator isActive={prestazione.attivo} />
                             </div>
 
                             <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400 mb-4 border-t border-gray-200 dark:border-gray-700 pt-4">
-                                {prestazione.richiedeReferto && (
+                                {prestazione.richiedeStrumento && (
                                     <span className="flex items-center gap-1">
                                         <FileText className="w-3 h-3" />
-                                        Referto
-                                    </span>
-                                )}
-                                {prestazione.richiedeConsenso && (
-                                    <span className="flex items-center gap-1">
-                                        <CheckCircle className="w-3 h-3" />
-                                        Consenso
+                                        Strumento
                                     </span>
                                 )}
                             </div>

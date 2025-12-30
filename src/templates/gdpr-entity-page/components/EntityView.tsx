@@ -11,7 +11,7 @@ import {
 import { Card, CardContent } from '../../../design-system/molecules/Card';
 import { Grid, List, Eye, Edit, Trash2, Download } from 'lucide-react';
 import { cn } from '../../../design-system/utils';
-import { ColumnConfig } from '../hooks/useTableColumns';
+import { ColumnConfig } from '../types';
 import { GDPRPermissions } from '../hooks/useGDPRPermissions';
 
 export type ViewMode = 'table' | 'grid';

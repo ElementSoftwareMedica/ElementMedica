@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
-import ReactDOM from 'react-dom';
+import React, { useState, useEffect } from 'react';
 import { apiGet, apiDelete } from '../../services/api';
-import { Button } from '../../design-system/atoms/Button';
 import { useToast } from '../../hooks/useToast';
 import { SearchBar } from '../../design-system/molecules';
 import { SearchBarControls } from '../../design-system/molecules/SearchBarControls';
 import ResizableTable from '../../components/shared/ResizableTable';
 import { Company } from '../../types';
+import { ActionButton } from '../../components/ui';
+import { Download, Trash2 } from 'lucide-react';
 
 interface LetteraIncarico {
   id: string;
@@ -28,52 +28,6 @@ interface LetteraIncarico {
     tariffa_oraria?: number;
   };
 }
-
-// DropdownMenu component
-const DropdownMenu: React.FC<{ children: (close: () => void) => React.ReactNode; trigger: React.ReactNode }> = ({ children, trigger }) => {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      if (
-        ref.current && !ref.current.contains(e.target as Node) &&
-        menuRef.current && !menuRef.current.contains(e.target as Node)
-      ) {
-        setOpen(false);
-      }
-    };
-    if (open) document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [open]);
-
-  // Portal rendering
-  const [menuPos, setMenuPos] = useState<{ top: number, left: number } | null>(null);
-  const triggerRef = useRef<HTMLSpanElement>(null);
-
-  useEffect(() => {
-    if (open && triggerRef.current) {
-      const rect = triggerRef.current.getBoundingClientRect();
-      setMenuPos({
-        top: rect.bottom + window.scrollY,
-        left: rect.left + window.scrollX
-      });
-    }
-  }, [open]);
-
-  return (
-    <div ref={ref} className="relative inline-block text-left" style={{ overflow: 'visible' }}>
-      <span ref={triggerRef} onClick={() => setOpen(o => !o)}>{trigger}</span>
-      {open && menuPos && ReactDOM.createPortal(
-        <div ref={menuRef} style={{ position: 'absolute', zIndex: 99999, left: menuPos.left, top: menuPos.top, background: '#fffbe6', minWidth: '8rem', boxShadow: '0 8px 24px rgba(0,0,0,0.18)' }} className="w-32 bg-white border border-gray-200 rounded shadow-lg">
-          {children(() => setOpen(false))}
-        </div>,
-        document.body
-      )}
-    </div>
-  );
-};
 
 interface LettereIncaricoProps {
   searchTerm: string;
@@ -126,11 +80,11 @@ const LettereIncarico: React.FC<LettereIncaricoProps> = ({
     }
   };
 
-  const handleDeleteLettera = async (id: string, close?: () => void) => {
+  const handleDeleteLettera = async (id: string) => {
     try {
       await apiDelete(`/api/lettere-incarico/${id}`);
       setLettere(lettere.filter(l => l.id !== id));
-      if (close) setTimeout(close, 100);
+      showToast({ type: 'success', message: 'Lettera eliminata con successo' });
     } catch (err: any) {
       showToast({ type: 'error', title: 'Errore', message: 'Errore durante l\'eliminazione: ' + (err?.message || err) });
     }
@@ -186,19 +140,22 @@ const LettereIncarico: React.FC<LettereIncaricoProps> = ({
       label: 'Azioni',
       width: 120,
       renderCell: (lettera: LetteraIncarico) => (
-        <DropdownMenu
-          trigger={
-            <button type="button" className="inline-flex items-center px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm hover:bg-blue-200 transition-colors">
-              Azioni
-              <svg className="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
-            </button>
-          }
-        >
-          {(close) => <>
-            <a href={`/api${lettera.url}`} target="_blank" rel="noopener noreferrer" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Download</a>
-            <button type="button" onClick={e => { e.stopPropagation(); handleDeleteLettera(lettera.id, close); }} className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100">Elimina</button>
-          </>}
-        </DropdownMenu>
+        <ActionButton
+          theme="blue"
+          actions={[
+            {
+              label: 'Download',
+              icon: <Download className="w-4 h-4" />,
+              onClick: () => window.open(`/api${lettera.url}`, '_blank'),
+            },
+            {
+              label: 'Elimina',
+              icon: <Trash2 className="w-4 h-4" />,
+              onClick: () => handleDeleteLettera(lettera.id),
+              variant: 'danger',
+            },
+          ]}
+        />
       ),
     },
     {
@@ -332,25 +289,16 @@ const LettereIncarico: React.FC<LettereIncaricoProps> = ({
           <ResizableTable
             columns={lettereColumns}
             data={filteredLettere}
+            onRowClick={(lettera) => {
+              if (lettera.url) {
+                window.open(`/api${lettera.url}`, '_blank');
+              }
+            }}
             tableProps={{
               className: "min-w-full divide-y divide-gray-200"
             }}
             tbodyProps={{
-              className: "bg-white divide-y divide-gray-200",
-              onClick: (e: React.MouseEvent) => {
-                const target = e.target as HTMLElement;
-                if (target.closest('button,input,a')) return;
-
-                const row = target.closest('tr');
-                if (!row) return;
-
-                const index = parseInt(row.dataset.index || '0', 10);
-                const lettera = filteredLettere[index];
-
-                if (lettera && lettera.url) {
-                  window.open(`/api${lettera.url}`, '_blank');
-                }
-              }
+              className: "bg-white divide-y divide-gray-200"
             }}
           />
         </div>

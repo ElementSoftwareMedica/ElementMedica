@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Button } from '../../design-system/atoms/Button';
 import { Plus, Trash2, GripVertical, ChevronDown, ChevronUp, Settings } from 'lucide-react';
 import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
+import { useToast } from '../../hooks/useToast';
 
 export interface FormSection {
   id: string;
@@ -33,6 +34,7 @@ export const SectionsEditor: React.FC<SectionsEditorProps> = ({
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const [editingConditional, setEditingConditional] = useState<string | null>(null);
   const { confirmDelete } = useConfirmDialog();
+  const { showToast } = useToast();
 
   const addSection = () => {
     const newSection: FormSection = {
@@ -298,7 +300,7 @@ export const SectionsEditor: React.FC<SectionsEditorProps> = ({
                             if (field && value) {
                               saveConditional(section.id, field, operator, value);
                             } else {
-                              alert('Seleziona campo e inserisci valore');
+                              showToast({ message: 'Seleziona campo e inserisci valore', type: 'warning' });
                             }
                           }}
                         >

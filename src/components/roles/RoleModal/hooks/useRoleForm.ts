@@ -50,8 +50,9 @@ export const useRoleForm = (
           permissions: {} // Will be loaded separately
         });
         // Load role permissions from backend
-        if (role.type) {
-          loadRolePermissions(role.type);
+        const roleType = (role as any).type || (role as any).roleType;
+        if (roleType) {
+          loadRolePermissions(roleType);
         }
       } else {
         setFormData({

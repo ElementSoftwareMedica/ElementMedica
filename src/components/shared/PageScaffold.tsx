@@ -6,12 +6,10 @@ import {
   Upload
 } from 'lucide-react';
 import EntityListLayout from '../layouts/EntityListLayout';
-import {
-  SearchBar,
-  ViewModeToggle,
-  AddEntityDropdown,
-  ColumnSelector
-} from './ui';
+import { SearchBar } from '../../design-system/molecules/SearchBar';
+import { ViewModeToggle } from '../../design-system/molecules/ViewModeToggle';
+import AddEntityDropdown from '../ui/AddEntityDropdown';
+import ColumnSelector from '../ui/ColumnSelector';
 import { FilterPanel } from '../../design-system/organisms/FilterPanel';
 import { Dropdown } from '../../design-system/molecules/Dropdown';
 
@@ -114,7 +112,7 @@ const PageScaffold: React.FC<PageScaffoldProps> = ({
       icon: <FileText className="h-4 w-4" />,
       onClick: onDownloadTemplate
     }
-  ].filter(Boolean);
+  ].filter((option): option is NonNullable<typeof option> => Boolean(option));
   
   return (
     <EntityListLayout
@@ -152,8 +150,8 @@ const PageScaffold: React.FC<PageScaffoldProps> = ({
               value={searchValue}
               onChange={onSearchChange}
               placeholder={`Cerca ${entityName}...`}
-              onFilterClick={onFilterClick}
-              filtersActive={filtersActive}
+              {...(onFilterClick && { onFilterClick })}
+              {...(filtersActive !== undefined && { filtersActive })}
             />
           </div>
           

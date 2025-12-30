@@ -11,7 +11,7 @@ export const darkTheme = {
     primary: colors.neutral[900],
     secondary: colors.neutral[800],
     tertiary: colors.neutral[700],
-    elevated: colors.neutral[850],
+    elevated: colors.neutral[800],
     overlay: 'rgba(0, 0, 0, 0.8)',
   },
 
@@ -98,7 +98,7 @@ export const darkThemeCSSVars = {
   '--color-bg-primary': colors.neutral[900],
   '--color-bg-secondary': colors.neutral[800],
   '--color-bg-tertiary': colors.neutral[700],
-  '--color-bg-elevated': colors.neutral[850],
+  '--color-bg-elevated': colors.neutral[800],
   '--color-bg-overlay': 'rgba(0, 0, 0, 0.8)',
 
   // Text

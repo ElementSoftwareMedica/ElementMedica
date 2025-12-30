@@ -52,9 +52,10 @@ export const DoctorName: React.FC<DoctorNameProps> = ({
     variant = 'full'
 }) => {
     // Determine gender from explicit prop or tax code
-    let derivedGender: 'MALE' | 'FEMALE' | null = null;
+    // Supporta tutti i valori del tipo Gender, ma per il titolo usiamo solo MALE/FEMALE
+    let derivedGender: 'MALE' | 'FEMALE' | 'OTHER' | 'NOT_SPECIFIED' | null = null;
 
-    if (gender === 'MALE' || gender === 'FEMALE') {
+    if (gender === 'MALE' || gender === 'FEMALE' || gender === 'OTHER' || gender === 'NOT_SPECIFIED') {
         derivedGender = gender;
     } else if (taxCode) {
         derivedGender = extractGenderFromTaxCode(taxCode);
@@ -65,7 +66,7 @@ export const DoctorName: React.FC<DoctorNameProps> = ({
         if (!showTitle) return '';
         if (derivedGender === 'FEMALE') return 'Dott.ssa';
         if (derivedGender === 'MALE') return 'Dott.';
-        return 'Dott.'; // Default to masculine if unknown
+        return 'Dott.'; // Default to masculine if unknown or OTHER/NOT_SPECIFIED
     };
 
     // Format the full name
@@ -104,10 +105,10 @@ export const useDoctorName = (props: Omit<DoctorNameProps, 'className'>) => {
         variant = 'full'
     } = props;
 
-    // Determine gender
-    let derivedGender: 'MALE' | 'FEMALE' | null = null;
+    // Determine gender - supporta tutti i valori del tipo Gender
+    let derivedGender: 'MALE' | 'FEMALE' | 'OTHER' | 'NOT_SPECIFIED' | null = null;
 
-    if (gender === 'MALE' || gender === 'FEMALE') {
+    if (gender === 'MALE' || gender === 'FEMALE' || gender === 'OTHER' || gender === 'NOT_SPECIFIED') {
         derivedGender = gender;
     } else if (taxCode) {
         derivedGender = extractGenderFromTaxCode(taxCode);

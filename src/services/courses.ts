@@ -3,6 +3,9 @@ import type { Course, CourseSchedule, CourseEnrollment } from '../types/courses'
 import { apiGet, apiPost, apiPut, apiUpload } from './api';
 import { ImportWithTemplateResponse } from '../types';
 
+// Re-export types per compatibilità con le importazioni esistenti
+export type { Course, CourseSchedule, CourseEnrollment };
+
 // Definizione dei tipi per il pattern factory
 export type CourseCreate = Omit<Course, 'id' | 'createdAt' | 'updatedAt'>;
 export type CourseUpdate = Partial<Course>;

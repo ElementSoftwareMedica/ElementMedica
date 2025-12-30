@@ -40,26 +40,26 @@ const MedicinaDelLavoroPage: React.FC = () => {
             label: 'Visite/anno',
             icon: <Stethoscope className="w-5 h-5" />,
             highlight: true,
-            color: 'teal-100'
+            color: 'medical'
           },
           { 
             value: '80+', 
             label: 'Aziende assistite',
             icon: <Users className="w-5 h-5" />,
-            color: 'white'
+            color: 'default'
           },
           { 
             value: '100%', 
             label: 'Conformità',
             icon: <Shield className="w-5 h-5" />,
             highlight: true,
-            color: 'health-300'
+            color: 'health'
           },
           { 
             value: '15+', 
             label: 'Anni esperienza',
             icon: <Award className="w-5 h-5" />,
-            color: 'white'
+            color: 'default'
           }
         ]}
         showTrustBadges={true}

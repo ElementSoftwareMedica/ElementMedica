@@ -155,10 +155,11 @@ export function permissionToString(permission: EntityPermission): string {
     'delete': 'Eliminare'
   };
   
-  const scopeMap = {
+  const scopeMap: Record<string, string> = {
     'all': 'tutti',
     'tenant': 'del tenant',
-    'own': 'propri'
+    'own': 'propri',
+    'relational': 'relazionali'
   };
   
   const action = actionMap[permission.action] || permission.action;

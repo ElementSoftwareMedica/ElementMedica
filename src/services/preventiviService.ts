@@ -177,7 +177,7 @@ class PreventiviService {
       console.log('📄 PDF response received:', {
         status: response.status,
         contentType: response.headers['content-type'],
-        dataSize: response.data?.size || 0
+        dataSize: (response.data as Blob)?.size || 0
       });
 
       const url = window.URL.createObjectURL(new Blob([response.data as BlobPart]));

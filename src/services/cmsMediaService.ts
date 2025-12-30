@@ -10,6 +10,18 @@
 
 import api, { invalidateCache } from './api';
 
+// Tipi per risposte API
+interface ApiResponse<T> {
+  success: boolean;
+  data: T;
+  pagination?: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+}
+
 export interface MediaFile {
   id: string;
   filename: string;
@@ -135,7 +147,7 @@ class CMSMediaService {
       formData.append('tags', JSON.stringify(options.tags));
     }
 
-    const response = await api.post(`${this.baseUrl}/upload`, formData, {
+    const response = await api.post<ApiResponse<MediaFile[]>>(`${this.baseUrl}/upload`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
@@ -168,15 +180,21 @@ class CMSMediaService {
     if (params.page) queryParams.append('page', params.page.toString());
     if (params.limit) queryParams.append('limit', params.limit.toString());
 
-    const response = await api.get(
+    const response = await api.get<ApiResponse<MediaFile[]>>(
       `${this.baseUrl}?${queryParams.toString()}`
     );
 
     // Backend returns { success, data: MediaFile[], pagination }
     // Transform to { media, pagination } for frontend compatibility
+    const pag = response.data.pagination;
     return {
       media: response.data.data,
-      pagination: response.data.pagination
+      pagination: pag ? {
+        page: pag.page,
+        limit: pag.limit,
+        total: pag.total,
+        pages: pag.totalPages
+      } : undefined
     };
   }
 
@@ -184,7 +202,7 @@ class CMSMediaService {
    * Ottieni dettaglio singolo media
    */
   async getMedia(id: string): Promise<MediaFile> {
-    const response = await api.get(`${this.baseUrl}/${id}`);
+    const response = await api.get<ApiResponse<MediaFile>>(`${this.baseUrl}/${id}`);
     return response.data.data;
   }
 
@@ -192,7 +210,7 @@ class CMSMediaService {
    * Aggiorna metadati media
    */
   async updateMedia(id: string, data: MediaUpdateData): Promise<MediaFile> {
-    const response = await api.patch(`${this.baseUrl}/${id}`, data);
+    const response = await api.patch<ApiResponse<MediaFile>>(`${this.baseUrl}/${id}`, data);
 
     // Invalida cache API
     invalidateCache('/cms/media');
@@ -218,7 +236,7 @@ class CMSMediaService {
       ? `?parentId=${parentId}`
       : '';
 
-    const response = await api.get(
+    const response = await api.get<ApiResponse<MediaFolder[]>>(
       `${this.baseUrl}/folders/list${queryParams}`
     );
 
@@ -229,7 +247,7 @@ class CMSMediaService {
    * Crea nuova cartella
    */
   async createFolder(data: FolderCreateData): Promise<MediaFolder> {
-    const response = await api.post(`${this.baseUrl}/folders`, data);
+    const response = await api.post<ApiResponse<MediaFolder>>(`${this.baseUrl}/folders`, data);
     return response.data.data;
   }
 

@@ -347,16 +347,16 @@ const AmbulatoriPage: React.FC = () => {
                                 )}
 
                                 <div className="flex items-center gap-4 text-sm text-gray-600">
-                                    {amb.stanza && (
+                                    {(amb as any).stanza && (
                                         <div className="flex items-center gap-1.5">
                                             <DoorOpen className="h-4 w-4 text-gray-400" />
-                                            <span>Stanza {amb.stanza}</span>
+                                            <span>Stanza {(amb as any).stanza}</span>
                                         </div>
                                     )}
-                                    {amb.capienzaMax && (
+                                    {(amb.capacita || (amb as any).capienzaMax) && (
                                         <div className="flex items-center gap-1.5">
                                             <Users className="h-4 w-4 text-gray-400" />
-                                            <span>Max {amb.capienzaMax}</span>
+                                            <span>Max {amb.capacita || (amb as any).capienzaMax}</span>
                                         </div>
                                     )}
                                 </div>

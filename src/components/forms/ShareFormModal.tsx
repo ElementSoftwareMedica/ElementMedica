@@ -22,6 +22,7 @@ import {
 import type { FormTemplate } from '../../services/formTemplates';
 import { formTemplatesService } from '../../services/formTemplates';
 import QRCodeStyling from 'qr-code-styling';
+import { useToast } from '../../hooks/useToast';
 
 interface ShareFormModalProps {
   isOpen: boolean;
@@ -42,6 +43,7 @@ export const ShareFormModal: React.FC<ShareFormModalProps> = ({
   onClose,
   template
 }) => {
+  const { showToast } = useToast();
   const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState<ShareSettings>({
@@ -212,7 +214,7 @@ export const ShareFormModal: React.FC<ShareFormModalProps> = ({
       onClose();
     } catch (error) {
       console.error('❌ Error saving share settings:', error);
-      alert('Errore nel salvataggio delle impostazioni. Riprova.');
+      showToast({ message: 'Errore nel salvataggio delle impostazioni. Riprova.', type: 'error' });
     } finally {
       setSaving(false);
     }

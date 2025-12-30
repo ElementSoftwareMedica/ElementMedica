@@ -6,6 +6,16 @@ interface ApiResponse<T = any> {
   success: boolean;
   data: T;
   message?: string;
+  pagination?: {
+    page?: number;
+    currentPage?: number;
+    totalPages?: number;
+    total?: number;
+    limit?: number;
+  };
+  // Additional response fields for specific endpoints
+  mergedPreventivi?: Array<{ id: string; numero: string; stato: string }>;
+  restoredPreventivi?: Array<{ id: string; numero: string }>;
 }
 
 export interface Preventivo {
@@ -421,10 +431,7 @@ export const usePreventivi = (): UsePreventiviReturn => {
     setError(null);
 
     try {
-      const response = await apiPost<ApiResponse<{
-        data: Preventivo;
-        mergedPreventivi: Array<{ id: string; numero: string; stato: string }>;
-      }>>(
+      const response = await apiPost<ApiResponse<Preventivo>>(
         '/api/v1/preventivi/merge',
         { preventiviIds }
       );
@@ -438,7 +445,7 @@ export const usePreventivi = (): UsePreventiviReturn => {
 
         return {
           preventivo: response.data,
-          mergedPreventivi: (response as any).mergedPreventivi || []
+          mergedPreventivi: response.mergedPreventivi || []
         };
       } else {
         throw new Error((response as any).error || 'Errore nell\'unione dei preventivi');
@@ -463,9 +470,7 @@ export const usePreventivi = (): UsePreventiviReturn => {
     setError(null);
 
     try {
-      const response = await apiPost<ApiResponse<{
-        restoredPreventivi: Array<{ id: string; numero: string }>;
-      }>>(
+      const response = await apiPost<ApiResponse<unknown>>(
         `/api/v1/preventivi/${id}/unmerge`,
         {}
       );
@@ -476,7 +481,7 @@ export const usePreventivi = (): UsePreventiviReturn => {
         setPreventivi(prev => prev.filter(p => p.id !== id));
 
         return {
-          restoredPreventivi: response.restoredPreventivi || (response as any).data?.restoredPreventivi || []
+          restoredPreventivi: response.restoredPreventivi || []
         };
       } else {
         throw new Error((response as any).error || 'Errore nella separazione del preventivo');

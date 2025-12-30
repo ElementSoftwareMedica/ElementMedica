@@ -13,7 +13,6 @@ import {
   GDPRApiResponse
 } from '../types/gdpr';
 import { useAuth } from '../context/AuthContext';
-import { toast } from 'react-hot-toast';
 
 export const useDataExport = (): UseDataExportReturn => {
   const [exportRequests, setExportRequests] = useState<DataExportRequest[]>([]);
@@ -80,7 +79,7 @@ export const useDataExport = (): UseDataExportReturn => {
         // Add to local state
         setExportRequests(prev => [newRequest, ...prev]);
 
-        toast.success('Data export requested successfully');
+        // Toast handled by calling component
 
         // Start polling for completion
         pollExportStatus(newRequest.id);
@@ -91,7 +90,7 @@ export const useDataExport = (): UseDataExportReturn => {
       const errorMessage = err instanceof Error ? err.message : 'Failed to request data export';
       setError(errorMessage);
       console.error('Error requesting data export:', err);
-      toast.error('Failed to request data export');
+      // Toast handled by calling component
       throw err;
     } finally {
       setLoading(false);
@@ -140,11 +139,11 @@ export const useDataExport = (): UseDataExportReturn => {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
 
-      toast.success('Export downloaded successfully');
+      // Toast handled by calling component
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to download export';
       console.error('Error downloading export:', err);
-      toast.error(errorMessage);
+      // Toast handled by calling component
       throw err;
     } finally {
       setLoading(false);
@@ -165,14 +164,14 @@ export const useDataExport = (): UseDataExportReturn => {
       if (response.data.success) {
         // Remove from local state
         setExportRequests(prev => prev.filter(req => req.id !== requestId));
-        toast.success('Export request cancelled');
+        // Toast handled by calling component
       } else {
         throw new Error(response.data.error || 'Failed to cancel export');
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to cancel export';
       console.error('Error cancelling export:', err);
-      toast.error(errorMessage);
+      // Toast handled by calling component
       throw err;
     } finally {
       setLoading(false);
@@ -203,10 +202,10 @@ export const useDataExport = (): UseDataExportReturn => {
 
           // Check if completed or failed
           if (updatedRequest.status === 'completed') {
-            toast.success('Data export completed and ready for download');
+            // Toast handled by calling component - export is ready for download
             return;
           } else if (updatedRequest.status === 'failed') {
-            toast.error(`Export failed: ${updatedRequest.error || 'Unknown error'}`);
+            // Toast handled by calling component - error state is set
             return;
           }
 
@@ -215,7 +214,7 @@ export const useDataExport = (): UseDataExportReturn => {
             pollCount++;
             setTimeout(poll, pollInterval);
           } else if (pollCount >= maxPolls) {
-            toast.error('Export is taking longer than expected. Please check back later.');
+            // Toast handled by calling component
           }
         }
       } catch (err) {

@@ -42,8 +42,8 @@ const TenantModal: React.FC<TenantModalProps> = ({
         name: tenant.name || '',
         slug: tenant.slug || '',
         domain: tenant.domain || '', // Ensure never null (controlled input)
-        subscription_plan: tenant.subscription_plan || 'FREE',
-        is_active: tenant.is_active ?? true, // Handle null/undefined
+        subscription_plan: tenant.subscriptionPlan || 'FREE',
+        is_active: tenant.isActive ?? true, // Handle null/undefined
         enabledBranches: (tenant as any).enabledBranches || ['MEDICA', 'FORMAZIONE'],
         primaryBranch: (tenant as any).primaryBranch || 'MEDICA',
         settings: tenant.settings || {}
@@ -187,7 +187,7 @@ const TenantModal: React.FC<TenantModalProps> = ({
     setIsLoading(true);
 
     try {
-      const submitData = { ...formData };
+      const submitData: Record<string, any> = { ...formData };
 
       // Remove empty domain
       if (!submitData.domain) {

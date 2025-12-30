@@ -36,6 +36,7 @@ interface Template {
   source?: 'server' | 'local';
   createdAt?: string;
   updatedAt?: string;
+  markers?: string[];
 }
 
 const TEMPLATE_TYPES = [

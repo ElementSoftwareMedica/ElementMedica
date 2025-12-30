@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Company } from '../../types';
 import { apiPut, apiPost } from '../../services/api';
+import { useToast } from '../../hooks/useToast';
 
 interface CompanyFormProps {
   company?: Company;
@@ -51,6 +52,7 @@ export const CompanyForm: React.FC<CompanyFormProps> = ({ company, onSubmit, onC
   }, [company]);
 
   const navigate = useNavigate();
+  const { showToast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,14 +61,14 @@ export const CompanyForm: React.FC<CompanyFormProps> = ({ company, onSubmit, onC
         ...formData,
       };
       if (company) {
-        await apiPut(`/companies/${company.id}`, payload);
+        await apiPut(`/api/v1/companies/${company.id}`, payload);
       } else {
-        await apiPost('/companies', payload);
+        await apiPost('/api/v1/companies', payload);
       }
       onSubmit();
       navigate('/companies');
     } catch (error) {
-      alert('Error saving company: ' + error);
+      showToast({ message: 'Errore nel salvataggio dell\'azienda: ' + error, type: 'error' });
       console.error('Error saving company:', error);
     }
   };

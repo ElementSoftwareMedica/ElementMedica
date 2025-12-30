@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../../hooks/auth/useAuth';
 import { apiGet, apiPut } from '../../../services/api';
+import { useToast } from '../../../hooks/useToast';
 
 // Permission resources
 const RESOURCES = [
@@ -173,6 +174,7 @@ interface PermissionMatrixPageProps {
 
 const PermissionMatrixPage: React.FC<PermissionMatrixPageProps> = ({ className = '' }) => {
     const { user: currentUser } = useAuth();
+    const { showToast } = useToast();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -234,7 +236,7 @@ const PermissionMatrixPage: React.FC<PermissionMatrixPageProps> = ({ className =
             // Simulate save
             await new Promise(resolve => setTimeout(resolve, 1000));
             setHasChanges(false);
-            alert('Permessi salvati con successo!');
+            showToast({ message: 'Permessi salvati con successo!', type: 'success' });
         } catch (err: any) {
             console.error('Error saving permissions:', err);
             setError(err.message || 'Errore nel salvataggio permessi');

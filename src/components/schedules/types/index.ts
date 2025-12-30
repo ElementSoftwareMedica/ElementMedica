@@ -60,9 +60,14 @@ export interface Person {
 // Form data interface
 export interface ScheduleFormData {
   training_id?: string | number;
+  trainer_id?: string | number;
+  co_trainer_id?: string | number;
   risk_level?: string;
   course_type?: string;
   location?: string;
+  max_participants?: number;
+  notes?: string;
+  delivery_mode?: string;
   dates?: ScheduleDateEntry[];
   isPublic?: boolean;
   [key: string]: unknown;

@@ -7,7 +7,7 @@
 import React from 'react';
 import HierarchyTreeView from '../../HierarchyTreeView';
 import { createRole, UserRoleHierarchy } from '../../../../services/roles';
-import { toast } from 'react-hot-toast';
+import { useToast } from '../../../../hooks/useToast';
 import type { RoleHierarchyType } from '../types';
 
 interface TreeViewWrapperProps {
@@ -27,6 +27,8 @@ export const TreeViewWrapper: React.FC<TreeViewWrapperProps> = ({
   onRoleMove,
   onDataChange
 }) => {
+  const { showToast } = useToast();
+
   const handleRoleCreate = async (parentId: string | null, roleData: any) => {
     try {
       // Prepara i dati per il backend come custom role
@@ -39,12 +41,12 @@ export const TreeViewWrapper: React.FC<TreeViewWrapperProps> = ({
       console.log('Creating custom role with data:', roleDataForBackend);
       await createRole(roleDataForBackend);
       
-      toast.success("Il nuovo ruolo è stato creato con successo.");
+      showToast({ message: "Il nuovo ruolo è stato creato con successo.", type: 'success' });
       
       await onDataChange();
     } catch (error: unknown) {
       console.error('Error creating role:', error);
-      toast.error((error as Error).message || "Si è verificato un errore durante la creazione del ruolo.");
+      showToast({ message: (error as Error).message || "Si è verificato un errore durante la creazione del ruolo.", type: 'error' });
     }
   };
 

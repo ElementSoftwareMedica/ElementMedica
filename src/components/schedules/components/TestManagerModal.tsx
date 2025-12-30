@@ -21,6 +21,7 @@ import {
     X
 } from 'lucide-react';
 import { Button } from '../../../design-system/atoms/Button';
+import { useToast } from '../../../hooks/useToast';
 import {
     getTestsForCourse,
     getTestResultsForSchedule,
@@ -75,6 +76,7 @@ export const TestManagerModal: React.FC<TestManagerModalProps> = ({
     const [tests, setTests] = useState<TestWithResults[]>([]);
     const [stats, setStats] = useState<TestStats[]>([]);
     const [expandedTests, setExpandedTests] = useState<Set<string>>(new Set());
+    const { showToast } = useToast();
 
     // Carica test e risultati
     const loadTestsAndResults = useCallback(async () => {
@@ -383,7 +385,7 @@ export const TestManagerModal: React.FC<TestManagerModalProps> = ({
                                                                         onClick={(e) => {
                                                                             e.stopPropagation();
                                                                             // TODO: Open test send modal
-                                                                            alert(`Inviare test a ${person.firstName} ${person.lastName}`);
+                                                                            showToast({ message: `Inviare test a ${person.firstName} ${person.lastName}`, type: 'info' });
                                                                         }}
                                                                     >
                                                                         <Send className="h-3 w-3 mr-1" />

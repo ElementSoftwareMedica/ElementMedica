@@ -13,7 +13,6 @@ import {
   DeletionRequestFormData
 } from '../types/gdpr';
 import { useAuth } from '../context/AuthContext';
-import { toast } from 'react-hot-toast';
 
 export const useDeletionRequest = (): UseDeletionRequestReturn => {
   const [deletionRequests, setDeletionRequests] = useState<DeletionRequest[]>([]);
@@ -94,7 +93,7 @@ export const useDeletionRequest = (): UseDeletionRequestReturn => {
         // Add to local state
         setDeletionRequests(prev => [newRequest, ...prev]);
 
-        toast.success('Deletion request submitted successfully. You will receive an email confirmation.');
+        // Toast handled by calling component
 
         return newRequest;
       } else {
@@ -104,7 +103,7 @@ export const useDeletionRequest = (): UseDeletionRequestReturn => {
       const errorMessage = err instanceof Error ? err.message : 'Failed to submit deletion request';
       setError(errorMessage);
       console.error('Error submitting deletion request:', err);
-      toast.error(errorMessage);
+      // Toast handled by calling component
       throw err;
     } finally {
       setLoading(false);
@@ -141,14 +140,14 @@ export const useDeletionRequest = (): UseDeletionRequestReturn => {
           )
         );
 
-        toast.success('Deletion request cancelled successfully');
+        // Toast handled by calling component
       } else {
         throw new Error(response.data.error || 'Failed to cancel deletion request');
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to cancel deletion request';
       console.error('Error cancelling deletion request:', err);
-      toast.error(errorMessage);
+      // Toast handled by calling component
       throw err;
     } finally {
       setLoading(false);

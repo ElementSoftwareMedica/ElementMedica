@@ -332,7 +332,7 @@ const CMSHub: React.FC<CMSHubProps> = ({ className = '', initialView = 'analytic
               <button
                 type="button"
                 onClick={() => setActiveView('analytics')}
-                className={`px-4 py-1 text-base font-semibold rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-300 ${activeView === 'analytics'
+                className={`px-4 py-1 text-base font-semibold rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-300 ${(activeView as CMSView) === 'analytics'
                     ? 'bg-blue-600 text-white shadow'
                     : 'bg-transparent text-gray-700 hover:bg-blue-100'
                   }`}
@@ -342,7 +342,7 @@ const CMSHub: React.FC<CMSHubProps> = ({ className = '', initialView = 'analytic
               <button
                 type="button"
                 onClick={() => setActiveView('pages')}
-                className={`px-4 py-1 text-base font-semibold rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-300 ${activeView === 'pages'
+                className={`px-4 py-1 text-base font-semibold rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-300 ${(activeView as CMSView) === 'pages'
                     ? 'bg-blue-600 text-white shadow'
                     : 'bg-transparent text-gray-700 hover:bg-blue-100'
                   }`}
@@ -383,7 +383,7 @@ const CMSHub: React.FC<CMSHubProps> = ({ className = '', initialView = 'analytic
             <button
               type="button"
               onClick={() => setActiveView('analytics')}
-              className={`px-4 py-1 text-base font-semibold rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-300 ${activeView === 'analytics'
+              className={`px-4 py-1 text-base font-semibold rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-300 ${(activeView as CMSView) === 'analytics'
                   ? 'bg-blue-600 text-white shadow'
                   : 'bg-transparent text-gray-700 hover:bg-blue-100'
                 }`}
@@ -393,7 +393,7 @@ const CMSHub: React.FC<CMSHubProps> = ({ className = '', initialView = 'analytic
             <button
               type="button"
               onClick={() => setActiveView('pages')}
-              className={`px-4 py-1 text-base font-semibold rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-300 ${activeView === 'pages'
+              className={`px-4 py-1 text-base font-semibold rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-300 ${(activeView as CMSView) === 'pages'
                   ? 'bg-blue-600 text-white shadow'
                   : 'bg-transparent text-gray-700 hover:bg-blue-100'
                 }`}

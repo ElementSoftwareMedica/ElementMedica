@@ -100,7 +100,7 @@ export const GDPRDeletionRequestModal: React.FC<GDPRDeletionRequestModalProps> =
         reason: selectedReason,
         customReason: selectedReason === 'OTHER' ? customReason.trim() : undefined,
         requestedAt: new Date()
-      });
+      } as any);
       
       onClose();
     } catch (error) {

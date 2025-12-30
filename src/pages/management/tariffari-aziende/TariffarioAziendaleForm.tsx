@@ -29,7 +29,7 @@ import { Badge } from '../../../design-system/atoms/Badge';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../../design-system/molecules/Card';
 import { Select } from '../../../design-system/atoms/Select';
 import { Switch } from '../../../components/ui/switch';
-import { toast } from 'react-hot-toast';
+import { useToast } from '../../../hooks/useToast';
 import {
   tariffariAziendaliApi,
   TariffarioAziendale,
@@ -64,6 +64,7 @@ const TariffarioAziendaleForm: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const isEditing = !!id && id !== 'nuovo';
+  const { showToast } = useToast();
 
   // Form state
   const [loading, setLoading] = useState(false);
@@ -141,7 +142,7 @@ const TariffarioAziendaleForm: React.FC = () => {
         }
       } catch (error) {
         console.error('Error loading data:', error);
-        toast.error('Errore nel caricamento dei dati');
+        showToast({ message: 'Errore nel caricamento dei dati', type: 'error' });
       } finally {
         setLoading(false);
       }
@@ -171,17 +172,17 @@ const TariffarioAziendaleForm: React.FC = () => {
   // Add new voce
   const handleAddVoce = async () => {
     if (!isEditing) {
-      toast.error('Salva prima il tariffario per aggiungere voci');
+      showToast({ message: 'Salva prima il tariffario per aggiungere voci', type: 'error' });
       return;
     }
 
     if (newVoce.tipo === 'PRESTAZIONE' && !newVoce.prestazioneId) {
-      toast.error('Seleziona una prestazione');
+      showToast({ message: 'Seleziona una prestazione', type: 'error' });
       return;
     }
 
     if (newVoce.tipo !== 'PRESTAZIONE' && !newVoce.nome) {
-      toast.error('Inserisci il nome della voce');
+      showToast({ message: 'Inserisci il nome della voce', type: 'error' });
       return;
     }
 
@@ -201,11 +202,11 @@ const TariffarioAziendaleForm: React.FC = () => {
           frequenza: 'PER_VISITA',
           usaFasceDipendenti: false
         });
-        toast.success('Voce aggiunta con successo');
+        showToast({ message: 'Voce aggiunta con successo', type: 'success' });
       }
     } catch (error) {
       console.error('Error adding voce:', error);
-      toast.error('Errore nell\'aggiunta della voce');
+      showToast({ message: 'Errore nell\'aggiunta della voce', type: 'error' });
     } finally {
       setSaving(false);
     }
@@ -218,10 +219,10 @@ const TariffarioAziendaleForm: React.FC = () => {
     try {
       await tariffariAziendaliApi.deleteVoce(id!, voceId);
       setVoci(prev => prev.filter(v => v.id !== voceId));
-      toast.success('Voce eliminata');
+      showToast({ message: 'Voce eliminata', type: 'success' });
     } catch (error) {
       console.error('Error deleting voce:', error);
-      toast.error('Errore nell\'eliminazione della voce');
+      showToast({ message: 'Errore nell\'eliminazione della voce', type: 'error' });
     }
   };
 
@@ -229,15 +230,15 @@ const TariffarioAziendaleForm: React.FC = () => {
   const handleSave = async () => {
     // Validation
     if (!formData.codice.trim()) {
-      toast.error('Il codice è obbligatorio');
+      showToast({ message: 'Il codice è obbligatorio', type: 'error' });
       return;
     }
     if (!formData.nome.trim()) {
-      toast.error('Il nome è obbligatorio');
+      showToast({ message: 'Il nome è obbligatorio', type: 'error' });
       return;
     }
     if (formData.tipo === 'AZIENDALE' && !formData.companyId) {
-      toast.error('Seleziona un\'azienda per un tariffario aziendale');
+      showToast({ message: 'Seleziona un\'azienda per un tariffario aziendale', type: 'error' });
       return;
     }
 
@@ -259,7 +260,7 @@ const TariffarioAziendaleForm: React.FC = () => {
       }
 
       if (response.success) {
-        toast.success(isEditing ? 'Tariffario aggiornato' : 'Tariffario creato');
+        showToast({ message: isEditing ? 'Tariffario aggiornato' : 'Tariffario creato', type: 'success' });
         if (!isEditing) {
           // Navigate to edit mode after create
           navigate(`/management/tariffari-aziende/${response.data.id}`);
@@ -268,7 +269,7 @@ const TariffarioAziendaleForm: React.FC = () => {
     } catch (error: unknown) {
       console.error('Error saving tariffario:', error);
       const errorMessage = error instanceof Error ? error.message : 'Errore nel salvataggio';
-      toast.error(errorMessage);
+      showToast({ message: errorMessage, type: 'error' });
     } finally {
       setSaving(false);
     }

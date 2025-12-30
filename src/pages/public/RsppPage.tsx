@@ -24,9 +24,9 @@ const RsppPage: React.FC = () => {
         primaryButton={{ text: 'Richiedi Preventivo', href: '/contatti' }}
         secondaryButton={{ text: 'Scopri i Corsi', href: '/corsi' }}
         stats={[
-          { number: '15+', label: 'Anni di esperienza' },
-          { number: '500+', label: 'Aziende seguite' },
-          { number: '98%', label: 'Clienti soddisfatti' },
+          { value: '15+', label: 'Anni di esperienza' },
+          { value: '500+', label: 'Aziende seguite' },
+          { value: '98%', label: 'Clienti soddisfatti' },
         ]}
         showContactForm={false}
       />

@@ -1,7 +1,6 @@
 import { useMutation as useReactQueryMutation, UseMutationOptions, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../../services/apiClient';
 import { sanitizeErrorMessage } from '../../utils/errorUtils';
-import { toast } from 'react-hot-toast';
 
 interface MutationOptions {
   onSuccess?: (data: unknown) => void;
@@ -43,9 +42,7 @@ export function useCreate<T = unknown, TData = unknown>(
       }
     },
     onError: (error: Error, variables: TData, context: unknown) => {
-      // Sanitizza e mostra errore all'utente
-      const userMessage = sanitizeErrorMessage(error, 'Errore durante la creazione');
-      toast.error(userMessage);
+      // Toast handled by calling component - error is available via onError callback
       
       // Call custom onError handler if provided
       if (onError) {
@@ -101,9 +98,7 @@ export function useUpdate<T = unknown, TData = unknown>(
       }
     },
     onError: (error: Error, variables: TData, context: unknown) => {
-      // Sanitizza e mostra errore all'utente
-      const userMessage = sanitizeErrorMessage(error, 'Errore durante l\'aggiornamento');
-      toast.error(userMessage);
+      // Toast handled by calling component - error is available via onError callback
       
       // Call custom onError handler if provided
       if (onError) {
@@ -152,9 +147,7 @@ export function useDelete<T = unknown>(
       }
     },
     onError: (error: Error, variables: string | number, context: unknown) => {
-      // Sanitizza e mostra errore all'utente
-      const userMessage = sanitizeErrorMessage(error, 'Errore durante l\'eliminazione');
-      toast.error(userMessage);
+      // Toast handled by calling component - error is available via onError callback
       
       // Call custom onError handler if provided
       if (onError) {

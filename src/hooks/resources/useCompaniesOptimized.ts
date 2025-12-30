@@ -145,12 +145,14 @@ export const useCompaniesStats = () => {
     if (!companies.length) return null;
     
     const byProvince = companies.reduce((acc, company) => {
-      acc[company.provincia] = (acc[company.provincia] || 0) + 1;
+      const prov = company.provincia || 'N/D';
+      acc[prov] = (acc[prov] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
     
     const byCity = companies.reduce((acc, company) => {
-      acc[company.citta] = (acc[company.citta] || 0) + 1;
+      const city = company.citta || 'N/D';
+      acc[city] = (acc[city] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
     

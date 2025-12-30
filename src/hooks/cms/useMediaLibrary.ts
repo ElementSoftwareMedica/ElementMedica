@@ -10,7 +10,6 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
 import cmsMediaService, {
   MediaFile,
   MediaFolder,
@@ -80,16 +79,11 @@ export function useUploadMedia() {
       // Invalida cache lista media
       queryClient.invalidateQueries({ queryKey: ['cms-media'] });
 
-      // Toast success
-      const count = data.length;
-      toast.success(
-        `${count} ${count === 1 ? 'file caricato' : 'file caricati'} con successo`
-      );
+      // Toast handled by calling component
     },
     onError: (error: any) => {
-      toast.error(
-        error.response?.data?.error || 'Errore durante il caricamento'
-      );
+      // Toast handled by calling component
+      console.error('Error uploading media:', error);
     },
   });
 }
@@ -130,9 +124,8 @@ export function useUpdateMedia() {
           context.previousMedia
         );
       }
-      toast.error(
-        error.response?.data?.error || 'Errore durante l\'aggiornamento'
-      );
+      // Toast handled by calling component
+      console.error('Error updating media:', error);
     },
     onSuccess: (data, variables) => {
       // Invalida cache
@@ -141,7 +134,7 @@ export function useUpdateMedia() {
         queryKey: QUERY_KEYS.mediaDetail(variables.id),
       });
 
-      toast.success('Media aggiornato con successo');
+      // Toast handled by calling component
     },
   });
 }
@@ -157,12 +150,11 @@ export function useDeleteMedia() {
     onSuccess: () => {
       // Invalida cache
       queryClient.invalidateQueries({ queryKey: ['cms-media'] });
-      toast.success('Media eliminato con successo');
+      // Toast handled by calling component
     },
     onError: (error: any) => {
-      toast.error(
-        error.response?.data?.error || 'Errore durante l\'eliminazione'
-      );
+      // Toast handled by calling component
+      console.error('Error deleting media:', error);
     },
   });
 }
@@ -189,12 +181,11 @@ export function useCreateFolder() {
     onSuccess: (data) => {
       // Invalida cache folders
       queryClient.invalidateQueries({ queryKey: ['cms-folders'] });
-      toast.success(`Cartella "${data.name}" creata con successo`);
+      // Toast handled by calling component
     },
     onError: (error: any) => {
-      toast.error(
-        error.response?.data?.error || 'Errore durante la creazione della cartella'
-      );
+      // Toast handled by calling component
+      console.error('Error creating folder:', error);
     },
   });
 }
@@ -210,12 +201,11 @@ export function useDeleteFolder() {
     onSuccess: () => {
       // Invalida cache
       queryClient.invalidateQueries({ queryKey: ['cms-folders'] });
-      toast.success('Cartella eliminata con successo');
+      // Toast handled by calling component
     },
     onError: (error: any) => {
-      toast.error(
-        error.response?.data?.error || 'Errore durante l\'eliminazione della cartella'
-      );
+      // Toast handled by calling component
+      console.error('Error deleting folder:', error);
     },
   });
 }

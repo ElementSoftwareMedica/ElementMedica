@@ -3,7 +3,7 @@
  * @description TypeScript type definitions for GenericImport component
  */
 
-import { ImportPreviewColumn } from '../ImportModal';
+import { ImportPreviewColumn } from '../ImportPreviewTable';
 
 /**
  * Configuration props for GenericImport component

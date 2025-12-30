@@ -26,7 +26,9 @@ export const OptimizedHooksDemo: React.FC = () => {
   const { canManageCompanies, isAdmin, canViewReports } = usePermissions();
   
   // Hook di stato globale
-  const { language, theme } = useAppState();
+  const appState = useAppState();
+  const language = appState.state.language;
+  const theme = appState.state.theme;
   const { setLanguage } = useLanguage();
   const { toggleTheme, isDarkMode } = useTheme();
   const { isExpanded, toggleSidebar } = useSidebar();
@@ -35,7 +37,10 @@ export const OptimizedHooksDemo: React.FC = () => {
   const toast = useToast();
   
   // Hook di navigazione
-  const { goToCompanies, goToSettings, currentPath, isOnCompanies } = useNavigation();
+  const navigation = useNavigation();
+  const { goToCompanies, goToSettings } = navigation;
+  const currentPath = navigation.location.currentPath;
+  const isOnCompanies = navigation.location.isOnCompanies();
   
   // Hook di protezione route
   const { isAuthorized, isLoading: routeLoading } = useRouteGuard({
@@ -72,7 +77,7 @@ export const OptimizedHooksDemo: React.FC = () => {
         cap: '20100',
         vatNumber: 'IT12345678901',
         fiscalCode: 'TESTCMP123',
-        legalRepresentative: 'Test Representative'
+        contactPerson: 'Test Representative'
       });
       toast.saveSuccess('Azienda');
     } catch (error) {
@@ -216,7 +221,7 @@ export const OptimizedHooksDemo: React.FC = () => {
           <div className="p-4 border rounded-lg">
             <h3 className="font-semibold mb-2">Stato Corrente</h3>
             <p><strong>Path:</strong> {currentPath}</p>
-            <p><strong>Su Aziende:</strong> {isOnCompanies() ? '✅' : '❌'}</p>
+            <p><strong>Su Aziende:</strong> {isOnCompanies ? '✅' : '❌'}</p>
           </div>
           
           <div className="p-4 border rounded-lg">

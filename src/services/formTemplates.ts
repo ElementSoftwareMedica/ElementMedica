@@ -3,6 +3,7 @@ import type {
   FormTemplate as FormTemplateType,
   FormField as FormFieldType,
   FormSubmission as FormSubmissionType,
+  FormSection,
   ConditionalLogic,
   EntityMapping,
   ScoringConfig,
@@ -245,7 +246,8 @@ class FormTemplatesService {
 
   // Public forms submission (alias for submitPublicForm)
   async submitForm(formTemplateId: string, data: Record<string, unknown>): Promise<{ success: boolean; message: string }> {
-    return this.submitPublicForm(formTemplateId, data);
+    await this.submitPublicForm(formTemplateId, data);
+    return { success: true, message: 'Form submitted successfully' };
   }
 
   async submitPublicForm(templateId: string, formData: Record<string, any>, visitedSectionIds?: string[]): Promise<void> {

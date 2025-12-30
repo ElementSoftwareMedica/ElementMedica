@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '../design-system/molecules/Card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../design-system/molecules/Card';
 import { Button } from '../design-system/atoms/Button';
 import { Badge } from '../design-system/atoms/Badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../design-system/molecules/Tabs';

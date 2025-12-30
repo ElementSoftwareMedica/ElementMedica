@@ -7,6 +7,8 @@ import { ToastContext, ToastType } from '../context/ToastContext';
 export interface ToastOptions {
   /** Messaggio da mostrare nella notifica */
   message: string;
+  /** Titolo opzionale della notifica */
+  title?: string;
   /** Tipo di notifica (success, error, warning, info) */
   type?: ToastType;
   /** Durata in millisecondi (default: 5000) */

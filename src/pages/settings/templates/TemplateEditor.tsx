@@ -9,9 +9,11 @@ import TiptapEditor from './components/editor/TiptapEditor';
 import { useTemplateEditor } from './hooks/useTemplateEditor';
 import { GoogleIntegrationPanel } from './components/google';
 import { Save, AlertCircle, CheckCircle } from 'lucide-react';
+import { useToast } from '../../../hooks/useToast';
 
 const TemplateEditor: React.FC = () => {
   const { id } = useParams<{ id: string }>();
+  const { showToast } = useToast();
   const {
     template,
     state,
@@ -127,7 +129,7 @@ const TemplateEditor: React.FC = () => {
               onTemplateImported={(templateData) => {
                 // Update editor content with imported data
                 updateContent(templateData.content);
-                alert(`Template "${templateData.name}" importato con successo!`);
+                showToast({ message: `Template "${templateData.name}" importato con successo!`, type: 'success' });
               }}
             />
 

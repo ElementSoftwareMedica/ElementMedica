@@ -5,7 +5,7 @@ import { Input } from '../../design-system/atoms/Input';
 import { Label } from '../../design-system/atoms/Label';
 import { Badge } from '../../design-system/atoms/Badge';
 import { apiGet, apiDelete, apiPost, apiPut } from '../../services/api';
-import { toast } from 'react-hot-toast';
+import { useToast } from '../../hooks/useToast';
 import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
 
 interface Reparto {
@@ -49,6 +49,7 @@ const RepartoManager: React.FC<RepartoManagerProps> = ({ siteId, siteName }) => 
     responsabileId: ''
   });
   const { confirmDelete } = useConfirmDialog();
+  const { showToast } = useToast();
 
   useEffect(() => {
     loadReparti();
@@ -61,7 +62,7 @@ const RepartoManager: React.FC<RepartoManagerProps> = ({ siteId, siteName }) => 
       setReparti(response.reparti || []);
     } catch (error) {
       console.error('Error loading reparti:', error);
-      toast.error('Errore nel caricamento dei reparti');
+      showToast({ message: 'Errore nel caricamento dei reparti', type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -74,18 +75,18 @@ const RepartoManager: React.FC<RepartoManagerProps> = ({ siteId, siteName }) => 
       if (editingReparto) {
         // Update existing reparto
         await apiPut(`/api/v1/reparto/${editingReparto.id}`, formData);
-        toast.success('Reparto aggiornato con successo');
+        showToast({ message: 'Reparto aggiornato con successo', type: 'success' });
       } else {
         // Create new reparto
         await apiPost(`/api/v1/reparto/site/${siteId}`, formData);
-        toast.success('Reparto creato con successo');
+        showToast({ message: 'Reparto creato con successo', type: 'success' });
       }
 
       resetForm();
       loadReparti();
     } catch (error) {
       console.error('Error saving reparto:', error);
-      toast.error('Errore nel salvataggio del reparto');
+      showToast({ message: 'Errore nel salvataggio del reparto', type: 'error' });
     }
   };
 
@@ -106,11 +107,11 @@ const RepartoManager: React.FC<RepartoManagerProps> = ({ siteId, siteName }) => 
 
     try {
       await apiDelete(`/api/v1/reparto/${repartoId}`);
-      toast.success('Reparto eliminato con successo');
+      showToast({ message: 'Reparto eliminato con successo', type: 'success' });
       loadReparti();
     } catch (error) {
       console.error('Error deleting reparto:', error);
-      toast.error('Errore nell\'eliminazione del reparto');
+      showToast({ message: 'Errore nell\'eliminazione del reparto', type: 'error' });
     }
   };
 

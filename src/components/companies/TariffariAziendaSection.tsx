@@ -29,7 +29,7 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger
 } from '../../design-system';
-import { toast } from 'react-hot-toast';
+import { useToast } from '../../hooks/useToast';
 import {
     tariffariAziendaliApi,
     TariffarioAziendaleListItem,
@@ -46,6 +46,7 @@ const TariffariAziendaSection: React.FC<TariffariAziendaSectionProps> = ({
     companyName
 }) => {
     const navigate = useNavigate();
+    const { showToast } = useToast();
     const [loading, setLoading] = useState(true);
     const [tariffari, setTariffari] = useState<TariffarioAziendaleListItem[]>([]);
     const [tariffariBase, setTariffariBase] = useState<TariffarioAziendaleSimple[]>([]);
@@ -69,7 +70,7 @@ const TariffariAziendaSection: React.FC<TariffariAziendaSectionProps> = ({
                 }
             } catch (error) {
                 console.error('Error loading tariffari:', error);
-                toast.error('Errore nel caricamento dei tariffari');
+                showToast({ message: 'Errore nel caricamento dei tariffari', type: 'error' });
             } finally {
                 setLoading(false);
             }

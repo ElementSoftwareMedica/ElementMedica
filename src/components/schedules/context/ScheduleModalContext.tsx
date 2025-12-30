@@ -118,6 +118,8 @@ interface ScheduleModalContextType {
     deselectAllPersons: () => void;
     setAttendance: (dateIdx: number, personIds: (string | number)[]) => void;
     setCurrentStep: (step: number) => void;
+    addVisitedStep: (step: number) => void;
+    canNavigateToStep: (step: number) => boolean;
     setLoading: (loading: boolean) => void;
     setError: (error: string | null) => void;
     setCourseSearch: (search: string) => void;

@@ -515,7 +515,7 @@ const DocumentListPage: React.FC = () => {
           <ResizableTable
             data={tableData}
             columns={columns}
-            onRowClick={(row) => { }}
+            onRowClick={(row) => handleDownload(row.id)}
           />
         )}
 

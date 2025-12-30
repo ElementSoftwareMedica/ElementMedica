@@ -418,11 +418,11 @@ export const FormTemplateEditOptimized: React.FC = () => {
           
           // Aggiungi solo campi valorizzati (tranne options che deve sempre essere presente per alcuni tipi)
           if (f.placeholder) field.placeholder = f.placeholder;
-          if (f.helpText) field.helpText = f.helpText;
+          if ((f as any).helpText) (field as any).helpText = (f as any).helpText;
           if (f.sectionId) field.sectionId = f.sectionId;
           if (f.validation) field.validation = f.validation;
           if (f.conditional) field.conditional = f.conditional;
-          if (f.entityMapping) field.entityMapping = f.entityMapping;
+          if ((f as any).entityMapping) (field as any).entityMapping = (f as any).entityMapping;
           if (f.enableCapacityLimit !== undefined) field.enableCapacityLimit = f.enableCapacityLimit;
           if (f.enableQuizMode !== undefined) field.enableQuizMode = f.enableQuizMode;
           

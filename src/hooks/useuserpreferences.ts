@@ -9,7 +9,6 @@
 import { useCallback } from 'react';
 import { usePreferences } from '../context/PreferencesContext';
 import { UserPreferences } from '../types/preferences';
-import { toast } from 'react-hot-toast';
 
 export interface UseUserPreferencesReturn {
   preferences: UserPreferences | null;
@@ -49,10 +48,10 @@ export const useUserPreferences = (): UseUserPreferencesReturn => {
   const updatePreferences = useCallback(async (updates: Partial<UserPreferences>) => {
     try {
       await contextUpdatePreferences(updates);
-      toast.success('Preferenze aggiornate con successo');
+      // Toast handled by calling component
     } catch (error) {
       console.error('Error updating preferences:', error);
-      toast.error('Errore nell\'aggiornamento delle preferenze');
+      // Toast handled by calling component
       throw error;
     }
   }, [contextUpdatePreferences]);
@@ -63,10 +62,10 @@ export const useUserPreferences = (): UseUserPreferencesReturn => {
   const resetPreferences = useCallback(async () => {
     try {
       await contextResetPreferences();
-      toast.success('Preferenze ripristinate ai valori predefiniti');
+      // Toast handled by calling component
     } catch (error) {
       console.error('Error resetting preferences:', error);
-      toast.error('Errore nel ripristino delle preferenze');
+      // Toast handled by calling component
       throw error;
     }
   }, [contextResetPreferences]);
@@ -76,7 +75,7 @@ export const useUserPreferences = (): UseUserPreferencesReturn => {
    */
   const exportPreferences = useCallback(() => {
     if (!preferences) {
-      toast.error('Nessuna preferenza da esportare');
+      console.error('Nessuna preferenza da esportare');
       return;
     }
 
@@ -91,10 +90,10 @@ export const useUserPreferences = (): UseUserPreferencesReturn => {
       linkElement.setAttribute('download', exportFileDefaultName);
       linkElement.click();
       
-      toast.success('Preferenze esportate con successo');
+      // Toast handled by calling component
     } catch (error) {
       console.error('Error exporting preferences:', error);
-      toast.error('Errore nell\'esportazione delle preferenze');
+      // Toast handled by calling component
     }
   }, [preferences]);
 
@@ -139,10 +138,10 @@ export const useUserPreferences = (): UseUserPreferencesReturn => {
       if (dashboard) updates.dashboard = dashboard;
 
       await contextUpdatePreferences(updates);
-      toast.success('Preferenze importate con successo');
+      // Toast handled by calling component
     } catch (error) {
       console.error('Error importing preferences:', error);
-      toast.error('Errore nell\'importazione delle preferenze: ' + (error as Error).message);
+      // Toast handled by calling component
       throw error;
     }
   }, [contextUpdatePreferences]);

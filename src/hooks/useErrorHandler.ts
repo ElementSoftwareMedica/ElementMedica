@@ -10,7 +10,6 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import { toast } from 'react-hot-toast';
 import { sanitizeErrorMessage } from '../utils/errorUtils';
 
 /**
@@ -105,9 +104,8 @@ export function useErrorHandler(): ErrorHandlerResult {
     // Logga l'errore nella console
     console.error('Error handled:', normalizedError);
     
-    // Mostra il toast con l'errore sanitizzato
-    const message = customMessage || sanitizeErrorMessage(normalizedError, 'Si è verificato un errore');
-    toast.error(message);
+    // Toast handled by calling component - error state available via hook return
+    const _message = customMessage || sanitizeErrorMessage(normalizedError, 'Si è verificato un errore');
   }, []);
 
   /**
@@ -154,10 +152,8 @@ export function useErrorHandler(): ErrorHandlerResult {
         }
       }
       
-      // Mostra il toast se richiesto
-      if (showToast) {
-        toast.error(sanitizeErrorMessage(normalizedError, 'Si è verificato un errore durante l\'operazione'));
-      }
+      // Mostra il toast se richiesto - ora delegato al componente chiamante
+      // Toast handled by calling component - error state available via hook return
       
       // Chiama il callback personalizzato se fornito
       if (onError) {

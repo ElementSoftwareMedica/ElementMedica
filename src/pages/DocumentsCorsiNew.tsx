@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useToast } from '../hooks/useToast';
 import {
   FileText,
   Award,
@@ -87,6 +88,7 @@ interface Stats {
 const DocumentsCorsiNew: React.FC = () => {
   const [searchParams] = useSearchParams();
   const { confirmDelete } = useConfirmDialog();
+  const { showToast } = useToast();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -262,7 +264,7 @@ const DocumentsCorsiNew: React.FC = () => {
       }));
     } catch (error) {
       console.error('Error deleting document:', error);
-      alert('Errore durante l\'eliminazione del documento');
+      showToast({ message: 'Errore durante l\'eliminazione del documento', type: 'error' });
     }
   };
 

@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Upload, Search, Image as ImageIcon, Check, Loader2, FolderOpen, AlertCircle } from 'lucide-react';
 import { useMediaList, useUploadMedia } from '../../../../../hooks/cms/useMediaLibrary';
+import { useToast } from '../../../../../hooks/useToast';
 
 interface MediaPickerModalProps {
     isOpen: boolean;
@@ -26,6 +27,7 @@ const MediaPickerModal: React.FC<MediaPickerModalProps> = ({
     const [search, setSearch] = useState('');
     const [uploadFile, setUploadFile] = useState<File | null>(null);
     const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
+    const { showToast } = useToast();
 
     // Filter for images only
     const { data: mediaList, isLoading, error, refetch } = useMediaList({
@@ -52,7 +54,7 @@ const MediaPickerModal: React.FC<MediaPickerModalProps> = ({
 
         const file = files[0];
         if (!allowedTypes.some(type => file.type.startsWith(type.split('/')[0]))) {
-            alert('Tipo file non supportato. Usa immagini PNG, JPEG, GIF, WebP o SVG.');
+            showToast({ message: 'Tipo file non supportato. Usa immagini PNG, JPEG, GIF, WebP o SVG.', type: 'error' });
             return;
         }
 

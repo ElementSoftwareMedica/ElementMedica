@@ -12,7 +12,6 @@ import {
   AuditTrailResponse
 } from '../types/gdpr';
 import { useAuth } from '../context/AuthContext';
-import { toast } from 'react-hot-toast';
 
 export const useAuditTrail = (initialFilters?: AuditTrailFilters): UseAuditTrailReturn => {
   const [auditTrail, setAuditTrail] = useState<AuditLogEntry[]>([]);
@@ -208,10 +207,10 @@ export const useAuditTrail = (initialFilters?: AuditTrailFilters): UseAuditTrail
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
 
-      toast.success('Audit trail exported successfully');
+      // Toast handled by calling component
     } catch (err) {
       console.error('Error exporting audit trail:', err);
-      toast.error('Failed to export audit trail');
+      // Toast handled by calling component
     } finally {
       setLoading(false);
     }
@@ -341,7 +340,7 @@ export const useAdminAuditTrail = (companyId?: string) => {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch admin audit trail';
       setError(errorMessage);
       console.error('Error fetching admin audit trail:', err);
-      toast.error('Failed to load admin audit trail');
+      // Toast handled by calling component
     } finally {
       setLoading(false);
     }

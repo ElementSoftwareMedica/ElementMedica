@@ -1119,13 +1119,15 @@ export function setupSystemRoutes(app) {
  * @param {Object} app - Express app instance
  */
 export function setupLocalRoutes(app) {
-  setupCoursesRoutes(app);
-  setupSchedulesRoutes(app);
+  // NOTE: setupCoursesRoutes and setupSchedulesRoutes removed - all clients now use /api/v1/ endpoints
+  // See: Project 46 E2E optimization (2025-01-14)
+  // These were duplicate implementations that should be handled by the API server
+  
   setupDocumentRoutes(app);
   setupSystemRoutes(app);
 
   if (process.env.DEBUG_ROUTES || process.env.DEBUG_ALL) {
-    console.log('✅ All local routes configured');
+    console.log('✅ All local routes configured (legacy courses/schedules routes removed)');
   }
 
   logger.info('Local routes setup completed', {

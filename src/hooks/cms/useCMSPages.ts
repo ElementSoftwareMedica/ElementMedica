@@ -19,7 +19,6 @@ import cmsPagesService, {
   CreateCMSPageData,
   UpdateCMSPageData,
 } from '../../services/cmsPagesService';
-import { toast } from 'react-toastify';
 
 // Query Keys
 export const cmsPageKeys = {
@@ -93,11 +92,11 @@ export function useCreateCMSPage() {
       // Invalida lista pagine per ricaricare
       queryClient.invalidateQueries({ queryKey: cmsPageKeys.lists() });
       
-      toast.success(`Pagina "${newPage.title}" creata con successo`);
+      // Toast handled by calling component
     },
     onError: (error) => {
       console.error('Error creating CMS page:', error);
-      toast.error(error.message || 'Errore durante la creazione della pagina');
+      // Toast handled by calling component
     },
   });
 }
@@ -133,7 +132,7 @@ export function useUpdateCMSPage() {
       queryClient.invalidateQueries({ queryKey: cmsPageKeys.lists() });
       queryClient.setQueryData(cmsPageKeys.detail(updatedPage.id), updatedPage);
       
-      toast.success(`Pagina "${updatedPage.title}" aggiornata con successo`);
+      // Toast handled by calling component
     },
     onError: (error, { id }, context) => {
       // Rollback su errore
@@ -142,7 +141,7 @@ export function useUpdateCMSPage() {
       }
       
       console.error('Error updating CMS page:', error);
-      toast.error(error.message || 'Errore durante l\'aggiornamento della pagina');
+      // Toast handled by calling component
     },
   });
 }
@@ -160,11 +159,11 @@ export function usePublishCMSPage() {
       queryClient.invalidateQueries({ queryKey: cmsPageKeys.lists() });
       queryClient.setQueryData(cmsPageKeys.detail(publishedPage.id), publishedPage);
       
-      toast.success(`Pagina "${publishedPage.title}" pubblicata con successo`);
+      // Toast handled by calling component
     },
     onError: (error) => {
       console.error('Error publishing CMS page:', error);
-      toast.error(error.message || 'Errore durante la pubblicazione della pagina');
+      // Toast handled by calling component
     },
   });
 }
@@ -182,11 +181,11 @@ export function useUnpublishCMSPage() {
       queryClient.invalidateQueries({ queryKey: cmsPageKeys.lists() });
       queryClient.setQueryData(cmsPageKeys.detail(unpublishedPage.id), unpublishedPage);
       
-      toast.success(`Pagina "${unpublishedPage.title}" rimossa dalla pubblicazione`);
+      // Toast handled by calling component
     },
     onError: (error) => {
       console.error('Error unpublishing CMS page:', error);
-      toast.error(error.message || 'Errore durante la rimozione della pubblicazione');
+      // Toast handled by calling component
     },
   });
 }
@@ -230,7 +229,7 @@ export function useDeleteCMSPage() {
       // Rimuovi dal cache del dettaglio
       queryClient.removeQueries({ queryKey: cmsPageKeys.detail(deletedPage.id) });
       
-      toast.success(`Pagina "${deletedPage.title}" eliminata con successo`);
+      // Toast handled by calling component
     },
     onError: (error, id, context) => {
       // Rollback su errore
@@ -241,7 +240,7 @@ export function useDeleteCMSPage() {
       }
       
       console.error('Error deleting CMS page:', error);
-      toast.error(error.message || 'Errore durante l\'eliminazione della pagina');
+      // Toast handled by calling component
     },
   });
 }
@@ -258,11 +257,11 @@ export function useDuplicateCMSPage() {
       // Invalida lista per ricaricare con nuova pagina
       queryClient.invalidateQueries({ queryKey: cmsPageKeys.lists() });
       
-      toast.success(`Pagina duplicata con successo: "${duplicatedPage.title}"`);
+      // Toast handled by calling component
     },
     onError: (error) => {
       console.error('Error duplicating CMS page:', error);
-      toast.error(error.message || 'Errore durante la duplicazione della pagina');
+      // Toast handled by calling component
     },
   });
 }

@@ -71,6 +71,18 @@ export type GDPRDeletionStatus =
   | 'REJECTED';
 
 /**
+ * Motivazioni per richiesta cancellazione GDPR (Art. 17 GDPR)
+ */
+export type GDPRDeletionReason = 
+  | 'NO_LONGER_NECESSARY'      // Dati non più necessari
+  | 'CONSENT_WITHDRAWN'        // Consenso revocato
+  | 'WITHDRAW_CONSENT'         // Alias per retrocompatibilità
+  | 'UNLAWFUL_PROCESSING'      // Trattamento illecito
+  | 'LEGAL_OBLIGATION'         // Obbligo legale di cancellazione
+  | 'DATA_SUBJECT_MINOR'       // Dati raccolti quando minorenne
+  | 'OTHER';                   // Altra motivazione
+
+/**
  * Livelli di audit GDPR
  */
 export type GDPRAuditLevel = 'minimal' | 'standard' | 'comprehensive';
@@ -91,7 +103,9 @@ export type GDPRAuditAction =
   | 'BULK_DELETE'
   | 'BULK_UPDATE'
   | 'ANONYMIZE'
-  | 'RESTORE';
+  | 'RESTORE'
+  | 'CONSENT_GIVEN'
+  | 'CONSENT_REVOKED';
 
 /**
  * Tipi di consenso GDPR
@@ -309,10 +323,13 @@ export interface GDPRRightToBeForgottenConfig {
 export interface GDPRDeletionRequest {
   id: string;
   personId: string;
+  entityId: string;
+  entityType: string;
   requestedBy: string;
   requestedAt: Date;
-  reason: string;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'COMPLETED';
+  reason: GDPRDeletionReason;
+  customReason?: string;
+  status: GDPRDeletionStatus;
   approvedBy?: string;
   approvedAt?: Date;
   completedAt?: Date;

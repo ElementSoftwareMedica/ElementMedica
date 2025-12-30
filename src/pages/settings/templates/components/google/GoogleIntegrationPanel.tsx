@@ -9,6 +9,7 @@ import { GoogleConnectionButton } from './GoogleConnectionButton';
 import { GoogleImportDialog } from './GoogleImportDialog';
 import { AlertCircle, Download } from 'lucide-react';
 import { useConfirmDialog } from '../../../../../contexts/ConfirmDialogContext';
+import { useToast } from '../../../../../hooks/useToast';
 
 interface GoogleIntegrationPanelProps {
   onTemplateImported?: (templateData: any) => void;
@@ -30,6 +31,7 @@ export const GoogleIntegrationPanel: React.FC<GoogleIntegrationPanelProps> = ({
 
   const [showImportDialog, setShowImportDialog] = useState(false);
   const { confirm } = useConfirmDialog();
+  const { showToast } = useToast();
 
   const handleConnect = async () => {
     clearError();
@@ -51,7 +53,7 @@ export const GoogleIntegrationPanel: React.FC<GoogleIntegrationPanelProps> = ({
 
   const handleImportClick = () => {
     if (!connectionStatus.connected) {
-      alert('Connetti prima il tuo account Google');
+      showToast({ message: 'Connetti prima il tuo account Google', type: 'warning' });
       return;
     }
     setShowImportDialog(true);
@@ -66,7 +68,7 @@ export const GoogleIntegrationPanel: React.FC<GoogleIntegrationPanelProps> = ({
     }
 
     // Show success message
-    alert(`Template "${result.name}" importato con successo!`);
+    showToast({ message: `Template "${result.name}" importato con successo!`, type: 'success' });
   };
 
   return (

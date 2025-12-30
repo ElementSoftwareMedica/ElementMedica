@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { toast } from 'react-hot-toast';
+import { useToast } from '../../../hooks/useToast';
 import { Role } from '../../../hooks/useRoles';
 import { Tenant } from '../../../hooks/useTenants';
 import { EntityDefinition, EntityPermission, advancedPermissionsService } from '../../../services/advancedPermissions';
@@ -36,6 +36,7 @@ const OptimizedPermissionManagerRefactored: React.FC<OptimizedPermissionManagerR
   tenants,
   onBack
 }) => {
+  const { showToast } = useToast();
   // Stati principali
   const [entities, setEntities] = useState<EntityDefinition[]>([]);
   const [permissions, setPermissions] = useState<EntityPermission[]>([]);
@@ -77,7 +78,7 @@ const OptimizedPermissionManagerRefactored: React.FC<OptimizedPermissionManagerR
     } catch (err) {
       console.error('Errore nel caricamento dei dati:', err);
       setError('Errore nel caricamento dei dati');
-      toast.error('Errore nel caricamento dei dati');
+      showToast({ message: 'Errore nel caricamento dei dati', type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -209,10 +210,10 @@ const OptimizedPermissionManagerRefactored: React.FC<OptimizedPermissionManagerR
       // Usa role.type (roleType) invece di role.name per l'API
       const roleIdentifier = role.type || role.name;
       await advancedPermissionsService.updateRolePermissions(roleIdentifier, permissions);
-      toast.success('Permessi aggiornati con successo');
+      showToast({ message: 'Permessi aggiornati con successo', type: 'success' });
     } catch (err) {
       console.error('Errore nel salvataggio:', err);
-      toast.error('Errore nel salvataggio dei permessi');
+      showToast({ message: 'Errore nel salvataggio dei permessi', type: 'error' });
     } finally {
       setSaving(false);
     }

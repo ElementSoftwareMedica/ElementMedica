@@ -5,7 +5,6 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { toast } from 'react-toastify';
 import type {
   Template,
   CreateTemplateData,
@@ -122,7 +121,7 @@ export function useTemplateEditor(
     } catch (err: any) {
       const errorMessage = err.response?.data?.message || 'Errore nel caricamento del template';
       setError(errorMessage);
-      toast.error(errorMessage);
+      // Toast handled by calling component
     } finally {
       if (isMountedRef.current) {
         setIsLoading(false);
@@ -179,7 +178,7 @@ export function useTemplateEditor(
           isSaving: false,
           lastSaved: new Date(),
         }));
-        toast.success('Template salvato', { autoClose: 2000 });
+        // Toast handled by calling component
       }
     } catch (err: any) {
       const errorMessage = err.response?.data?.message || 'Errore nel salvataggio';
@@ -188,7 +187,7 @@ export function useTemplateEditor(
         isSaving: false,
         error: errorMessage,
       }));
-      toast.error(errorMessage);
+      // Toast handled by calling component
       throw err;
     } finally {
       setIsSaving(false);
@@ -212,7 +211,7 @@ export function useTemplateEditor(
           isDirty: false,
           lastSaved: new Date(),
         }));
-        toast.success('Template creato con successo');
+        // Toast handled by calling component
         
         // Navigate to editor
         navigate(`/settings/templates/${newTemplate.id}`);
@@ -222,7 +221,7 @@ export function useTemplateEditor(
     } catch (err: any) {
       const errorMessage = err.response?.data?.message || 'Errore nella creazione del template';
       setError(errorMessage);
-      toast.error(errorMessage);
+      // Toast handled by calling component
       return null;
     } finally {
       setIsSaving(false);
@@ -242,7 +241,7 @@ export function useTemplateEditor(
       
       if (isMountedRef.current) {
         setTemplate(updatedTemplate);
-        toast.success('Template aggiornato');
+        // Toast handled by calling component
       }
     } catch (err: any) {
       const errorMessage = err.response?.data?.message || 'Errore nell\'aggiornamento';
@@ -250,7 +249,7 @@ export function useTemplateEditor(
         ...prev,
         error: errorMessage,
       }));
-      toast.error(errorMessage);
+      // Toast handled by calling component
       throw err;
     } finally {
       setIsSaving(false);

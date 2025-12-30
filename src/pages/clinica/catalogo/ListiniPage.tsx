@@ -180,7 +180,7 @@ export const ListiniPage: React.FC = () => {
                     l.attivo ? 'SI' : 'NO',
                     l.validoDa || '',
                     l.validoA || '',
-                    `"${(l.note || '').replace(/"/g, '""')}"`
+                    `"${(l.descrizione || '').replace(/"/g, '""')}"`
                 ].join(';'))
             ].join('\n');
 
@@ -236,8 +236,8 @@ export const ListiniPage: React.FC = () => {
                             attivo: attivo?.toUpperCase() === 'SI',
                             validoDa: validoDa || undefined,
                             validoA: validoA || undefined,
-                            note: note || undefined
-                        });
+                            descrizione: note || undefined
+                        } as any);
                         imported.push(i);
                     } catch (err) {
                         errors.push(`Riga ${i + 1}: ${err instanceof Error ? err.message : 'Errore'}`);
@@ -434,9 +434,9 @@ export const ListiniPage: React.FC = () => {
                                     </Link>
                                     <button
                                         onClick={() => handleDelete(listino.id)}
-                                        disabled={listino.isDefault}
+                                        disabled={(listino as any).isDefault}
                                         className="p-2 text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                        title={listino.isDefault ? 'Non puoi eliminare il listino default' : 'Elimina'}
+                                        title={(listino as any).isDefault ? 'Non puoi eliminare il listino default' : 'Elimina'}
                                     >
                                         <Trash2 className="w-4 h-4" />
                                     </button>

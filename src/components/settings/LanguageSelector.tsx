@@ -92,20 +92,9 @@ const LanguageSelector: React.FC<LanguageSelectorProps> = ({
         <Select
           value={currentLanguage}
           onValueChange={(value) => { void handleLanguageChange(value as LanguageCode); }}
-          disabled={loading}
         >
           <SelectTrigger id="language-select">
-            <SelectValue>
-              {currentLanguageOption && (
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">{currentLanguageOption.flag}</span>
-                  <span>{currentLanguageOption.nativeName}</span>
-                  <Badge variant="secondary" className="text-xs">
-                    {currentLanguageOption.region}
-                  </Badge>
-                </div>
-              )}
-            </SelectValue>
+            <SelectValue placeholder="Seleziona lingua" />
           </SelectTrigger>
           <SelectContent>
             {LANGUAGE_OPTIONS.map((language) => (

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { PublicButton } from './PublicButton';
+import { useToast } from '../../hooks/useToast';
 
 interface ContactFormData {
   name: string;
@@ -56,6 +57,7 @@ export const ContactForm: React.FC<ContactFormProps> = ({
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { showToast } = useToast();
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
@@ -78,7 +80,7 @@ export const ContactForm: React.FC<ContactFormProps> = ({
         // Default behavior - use backend service
         const { submitContactForm } = await import('../../services/contactSubmissions');
         await submitContactForm(formData);
-        alert('Grazie per il tuo messaggio! Ti contatteremo presto.');
+        showToast({ message: 'Grazie per il tuo messaggio! Ti contatteremo presto.', type: 'success' });
       }
 
       // Reset form after successful submission
@@ -94,7 +96,7 @@ export const ContactForm: React.FC<ContactFormProps> = ({
       });
     } catch (error) {
       console.error('Errore nell\'invio del form:', error);
-      alert('Si è verificato un errore nell\'invio del messaggio. Riprova più tardi.');
+      showToast({ message: 'Si è verificato un errore nell\'invio del messaggio. Riprova più tardi.', type: 'error' });
     } finally {
       setIsSubmitting(false);
     }
@@ -223,7 +225,7 @@ export const ContactForm: React.FC<ContactFormProps> = ({
                   value={formData.company}
                   onChange={handleInputChange}
                   className={getInputClasses()}
-                  placeholder={variant === 'inline' ? 'Azienda' : 'Nome della tua azienda'}
+                  placeholder="Nome della tua azienda"
                   disabled={isSubmitting}
                 />
               </div>

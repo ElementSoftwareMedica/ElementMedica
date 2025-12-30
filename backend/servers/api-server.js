@@ -782,25 +782,9 @@ class APIServer {
       this.app.use('/api/public', publicVerifyRoutes);
       logger.info('Public verify routes registered successfully');
 
-      logger.info('Setting up legacy compatibility routes...');
-      // Route di compatibilità (legacy) - RIMOSSO: v1Router è già montato dall'APIVersionManager su /api/v1
-      // this.app.use('/api', v1Router); // CONFLITTO: questo crea duplicazione con APIVersionManager
-
-      // Route legacy per backward compatibility (senza prefisso /api)
-      logger.info('Registering legacy courses routes...');
-      this.app.use('/courses', courseRoutes);
-      logger.info('Legacy courses routes registered successfully');
-      logger.info('Registering legacy employees routes...');
-      this.app.use('/employees', employeesRouter);
-      logger.info('Legacy employees routes registered successfully');
-      logger.info('Registering legacy trainers routes...');
-      this.app.use('/trainers', trainersRouter);
-      logger.info('Legacy trainers routes registered successfully');
-      logger.info('Registering legacy virtual entities routes...');
-      this.app.use('/virtual-entities', virtualEntitiesRouter);
-      logger.info('Legacy virtual entities routes registered successfully');
-
-      logger.info('Legacy compatibility routes configured successfully');
+      // NOTE: Legacy routes removed - all clients now use /api/v1/ endpoints directly
+      // See: Project 46 E2E optimization (2025-01-14)
+      // Removed: /courses, /employees, /trainers, /virtual-entities
 
       logger.info('Setting up rate limiting...');
       // Rate limiting automatico per route specifiche

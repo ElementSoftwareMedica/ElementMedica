@@ -50,7 +50,7 @@ const FormTemplateView: React.FC = () => {
     try {
       setLoading(true);
       const templateData = await formTemplatesService.getFormTemplate(id);
-      setTemplate(templateData);
+      setTemplate(templateData as unknown as FormTemplate);
     } catch (error) {
       console.error('Errore nel caricamento del template:', error);
       showToast({ message: 'Errore nel caricamento del template', type: 'error' });

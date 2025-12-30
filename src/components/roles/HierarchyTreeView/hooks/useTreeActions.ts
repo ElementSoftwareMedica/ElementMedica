@@ -53,7 +53,7 @@ export const useTreeActions = ({
     }
 
     // Fallback: se l'utente ha globalRole ADMIN, permettiamo modifiche
-    const userPersonInfo = currentUserHierarchy.personRoles?.[0]?.person || currentUserHierarchy;
+    const userPersonInfo = (currentUserHierarchy as any).personRoles?.[0]?.person || currentUserHierarchy;
     if (userPersonInfo?.globalRole === 'ADMIN' || userPersonInfo?.globalRole === 'SUPER_ADMIN') {
       return true;
     }
@@ -83,8 +83,8 @@ export const useTreeActions = ({
     }
 
     // Fallback: se l'utente ha globalRole ADMIN, permettiamo tutto
-    const userPersonInfo = currentUserHierarchy.personRoles?.[0]?.person || currentUserHierarchy;
-    if (userPersonInfo?.globalRole === 'ADMIN' || userPersonInfo?.globalRole === 'SUPER_ADMIN') {
+    const userPersonInfo2 = (currentUserHierarchy as any).personRoles?.[0]?.person || currentUserHierarchy;
+    if (userPersonInfo2?.globalRole === 'ADMIN' || userPersonInfo2?.globalRole === 'SUPER_ADMIN') {
       console.log('✅ User has globalRole ADMIN/SUPER_ADMIN, granting permission');
       return true;
     }

@@ -170,7 +170,7 @@ export const useDashboardData = () => {
       
       // Fetch all data including companies and persons like SchedulesPage does
       const [coursesData, trainersData, schedulesData, companiesData, personsData] = await Promise.allSettled([
-        apiGet('/courses').catch(() => []),
+        apiGet('/api/v1/courses').catch(() => []),
         getTrainers().catch(() => []),
         apiGet('/api/v1/schedules').catch(() => []),
         getCompanies().catch(() => []),

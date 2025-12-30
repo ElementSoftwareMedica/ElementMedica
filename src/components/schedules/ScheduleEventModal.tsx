@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Button } from "../../design-system/atoms/Button";
 // Removed unused imports: create, update, toast
-import 'react-toastify/dist/ReactToastify.css';
 import type { ScheduleEventModalProps } from './ScheduleEventModal.lazy';
 // import { Label } from "../../design-system/atoms/Label";
 import Modal from "../../design-system/molecules/Modal/Modal";
@@ -40,6 +39,7 @@ import { useScheduleSteps } from './hooks/useScheduleSteps';
 import { useCourseVariants } from './hooks/useCourseVariants';
 import { useScheduleSave } from './hooks/useScheduleSave';
 import { useFormValidation } from './hooks/useFormValidation';
+import type { FormData as ValidationFormData } from './hooks/useFormData';
 import { useNavigationHandlers } from './hooks/useNavigationHandlers';
 import { useDateTimeHandlers } from './hooks/useDateTimeHandlers';
 // import { useAdvancedMemoization } from './hooks/useAdvancedMemoization'; // non usato qui
@@ -548,7 +548,7 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
     validateCurrentStep,
     validateField
   } = useFormValidation({
-    formData,
+    formData: formData as unknown as ValidationFormData,
     dynamicRiskOptions,
     dynamicCourseTypeOptions,
     currentStep,
@@ -623,7 +623,7 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
       case 0:
         return (
           <StepCourseDetails
-            formData={formData}
+            formData={formData as unknown as ValidationFormData}
             onFormDataChange={handleFormDataChange}
             setFormData={setFormData}
             selectedCourse={effectiveSelectedCourse}
@@ -714,7 +714,7 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
             }
             persons={persons.map(p => ({
               ...p,
-              aziendaId: p.aziendaId || p.companyId
+              companyId: p.companyId
             }))}
             selectedCourse={effectiveSelectedCourse}
             companies={companies}

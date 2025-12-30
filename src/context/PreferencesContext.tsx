@@ -4,7 +4,6 @@
  */
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { toast } from 'react-hot-toast';
 import { useAuth } from './AuthContext';
 import {
   UserPreferences,
@@ -129,7 +128,7 @@ export const PreferencesProvider: React.FC<PreferencesProviderProps> = ({ childr
     const token = getToken();
     if (!token) {
       console.log('🚫 PreferencesContext: No token available, skipping preferences update');
-      toast.error('Errore di autenticazione. Effettua nuovamente il login.');
+      setError('Errore di autenticazione. Effettua nuovamente il login.');
       return;
     }
 
@@ -149,12 +148,12 @@ export const PreferencesProvider: React.FC<PreferencesProviderProps> = ({ childr
       );
 
       setPreferences(updatedPrefs);
-      toast.success('Preferenze aggiornate con successo');
+      // Toast gestito dal componente che chiama updatePreferences
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to update preferences';
       setError(errorMessage);
       console.error('Error updating preferences:', err);
-      toast.error('Errore nell\'aggiornamento delle preferenze');
+      // Toast gestito dal componente che chiama updatePreferences
     } finally {
       setLoading(false);
     }
@@ -170,7 +169,7 @@ export const PreferencesProvider: React.FC<PreferencesProviderProps> = ({ childr
     const token = getToken();
     if (!token) {
       console.log('🚫 PreferencesContext: No token available, skipping preferences reset');
-      toast.error('Errore di autenticazione. Effettua nuovamente il login.');
+      setError('Errore di autenticazione. Effettua nuovamente il login.');
       return;
     }
 
@@ -183,12 +182,12 @@ export const PreferencesProvider: React.FC<PreferencesProviderProps> = ({ childr
       );
 
       setPreferences(resetPrefs);
-      toast.success('Preferenze ripristinate ai valori predefiniti');
+      // Toast gestito dal componente che chiama resetPreferences
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to reset preferences';
       setError(errorMessage);
       console.error('Error resetting preferences:', err);
-      toast.error('Errore nel ripristino delle preferenze');
+      // Toast gestito dal componente che chiama resetPreferences
     } finally {
       setLoading(false);
     }
@@ -269,7 +268,7 @@ export const PreferencesProvider: React.FC<PreferencesProviderProps> = ({ childr
    */
   const exportPreferences = useCallback(() => {
     if (!preferences) {
-      toast.error('Nessuna preferenza da esportare');
+      console.error('Nessuna preferenza da esportare');
       return;
     }
 
@@ -286,10 +285,10 @@ export const PreferencesProvider: React.FC<PreferencesProviderProps> = ({ childr
       document.body.removeChild(link);
       
       URL.revokeObjectURL(url);
-      toast.success('Preferenze esportate con successo');
+      // Toast gestito dal componente che chiama exportPreferences
     } catch (err) {
       console.error('Error exporting preferences:', err);
-      toast.error('Errore nell\'esportazione delle preferenze');
+      // Toast gestito dal componente che chiama exportPreferences
     }
   }, [preferences]);
 
@@ -317,10 +316,10 @@ export const PreferencesProvider: React.FC<PreferencesProviderProps> = ({ childr
       };
 
       await updatePreferences(updatedPrefs);
-      toast.success('Preferenze importate con successo');
+      // Toast gestito dal componente che chiama importPreferences
     } catch (err) {
       console.error('Error importing preferences:', err);
-      toast.error('Errore nell\'importazione delle preferenze');
+      // Toast gestito dal componente che chiama importPreferences
     }
   }, [user?.id, preferences?.id, updatePreferences]);
 

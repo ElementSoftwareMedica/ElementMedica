@@ -476,7 +476,7 @@ const Step4Conferma: React.FC<{
         ? new Date(`${formData.data}T${formData.oraInizio}`)
         : null;
 
-    const prezzoBase = prestazione?.prezzo || 0;
+    const prezzoBase = prestazione?.prezzoBase || 0;
 
     return (
         <div className="space-y-6">
@@ -558,9 +558,9 @@ const Step4Conferma: React.FC<{
                         € {prezzoBase.toFixed(2)}
                     </span>
                 </div>
-                {prestazione?.durata && (
+                {prestazione?.durataPrevista && (
                     <p className="text-sm text-teal-600 mt-1">
-                        Durata stimata: {prestazione.durata} minuti
+                        Durata stimata: {prestazione.durataPrevista} minuti
                     </p>
                 )}
             </div>
@@ -713,7 +713,10 @@ export const AppuntamentoForm: React.FC = () => {
                 oraInizio: `${dataOra.getHours().toString().padStart(2, '0')}:${dataOra.getMinutes().toString().padStart(2, '0')}`,
                 durataPrevista: existingAppuntamento.durataPrevista,
                 note: existingAppuntamento.note || '',
-                promemoria: existingAppuntamento.promemoria
+                promemoria: existingAppuntamento.promemoria,
+                pagamentoAnticipato: (existingAppuntamento as any).pagamentoAnticipato || false,
+                metodoPagamento: (existingAppuntamento as any).metodoPagamento || '',
+                importoPagato: (existingAppuntamento as any).importoPagato || 0
             });
         }
     }, [existingAppuntamento]);

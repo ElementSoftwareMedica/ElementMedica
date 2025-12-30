@@ -5,7 +5,7 @@ import { Input } from '../../design-system/atoms/Input';
 import { Label } from '../../design-system/atoms/Label';
 import { Badge } from '../../design-system/atoms/Badge';
 import { apiGet, apiDelete, apiPost, apiPut } from '../../services/api';
-import { toast } from 'react-hot-toast';
+import { useToast } from '../../hooks/useToast';
 import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
 
 interface Sopralluogo {
@@ -52,6 +52,7 @@ const SopralluogoManager: React.FC<SopralluogoManagerProps> = ({ siteId, siteNam
     note: ''
   });
   const { confirmDelete } = useConfirmDialog();
+  const { showToast } = useToast();
 
   useEffect(() => {
     loadSopralluoghi();
@@ -64,7 +65,7 @@ const SopralluogoManager: React.FC<SopralluogoManagerProps> = ({ siteId, siteNam
       setSopralluoghi(response.sopralluoghi || []);
     } catch (error) {
       console.error('Error loading sopralluoghi:', error);
-      toast.error('Errore nel caricamento dei sopralluoghi');
+      showToast({ message: 'Errore nel caricamento dei sopralluoghi', type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -77,18 +78,18 @@ const SopralluogoManager: React.FC<SopralluogoManagerProps> = ({ siteId, siteNam
       if (editingSopralluogo) {
         // Update existing sopralluogo
         await apiPut(`/api/v1/sopralluogo/${editingSopralluogo.id}`, formData);
-        toast.success('Sopralluogo aggiornato con successo');
+        showToast({ message: 'Sopralluogo aggiornato con successo', type: 'success' });
       } else {
         // Create new sopralluogo
         await apiPost(`/api/v1/sopralluogo/site/${siteId}`, formData);
-        toast.success('Sopralluogo creato con successo');
+        showToast({ message: 'Sopralluogo creato con successo', type: 'success' });
       }
 
       resetForm();
       loadSopralluoghi();
     } catch (error) {
       console.error('Error saving sopralluogo:', error);
-      toast.error('Errore nel salvataggio del sopralluogo');
+      showToast({ message: 'Errore nel salvataggio del sopralluogo', type: 'error' });
     }
   };
 
@@ -110,11 +111,11 @@ const SopralluogoManager: React.FC<SopralluogoManagerProps> = ({ siteId, siteNam
 
     try {
       await apiDelete(`/api/v1/sopralluogo/${sopralluogoId}`);
-      toast.success('Sopralluogo eliminato con successo');
+      showToast({ message: 'Sopralluogo eliminato con successo', type: 'success' });
       loadSopralluoghi();
     } catch (error) {
       console.error('Error deleting sopralluogo:', error);
-      toast.error('Errore nell\'eliminazione del sopralluogo');
+      showToast({ message: 'Errore nell\'eliminazione del sopralluogo', type: 'error' });
     }
   };
 

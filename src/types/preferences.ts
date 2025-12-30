@@ -36,6 +36,7 @@ export interface NotificationPreferences {
     enabled: boolean;
     sound: boolean;
     desktop: boolean;
+    position?: 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left';
   };
 }
 
@@ -176,6 +177,9 @@ export interface UseThemeReturn {
   setThemeColor: (color: ThemeColor) => void;
   toggleTheme: () => void;
   applyTheme: (theme: ThemeMode) => void;
+  systemTheme?: 'light' | 'dark';
+  getThemeVariables?: () => Record<string, string>;
+  applyCSSVariables?: (variables: Record<string, string>) => void;
 }
 
 export interface UseLanguageReturn {
@@ -289,7 +293,8 @@ export const DEFAULT_USER_PREFERENCES: Omit<UserPreferences, 'id' | 'userId' | '
     inApp: {
       enabled: true,
       sound: true,
-      desktop: true
+      desktop: true,
+      position: 'top-right'
     }
   },
   dashboard: {

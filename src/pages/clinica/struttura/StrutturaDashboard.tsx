@@ -179,7 +179,7 @@ const StrutturaDashboard: React.FC = () => {
     const ambulatoriList = ambulatori?.data || [];
     const strumentiList = strumenti?.data || [];
 
-    const activePoliambulatori = poliambulatoriList.filter((p: Poliambulatorio) => p.attivo).length;
+    const activePoliambulatori = poliambulatoriList.filter((p: Poliambulatorio) => p.stato === 'ATTIVO').length;
     const activeAmbulatori = ambulatoriList.filter((a: Ambulatorio) => a.stato === 'ATTIVO').length;
     const activeStrumenti = strumentiList.filter((s: Strumento) => s.stato === 'ATTIVO').length;
 
@@ -337,9 +337,9 @@ const StrutturaDashboard: React.FC = () => {
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-4">
-                                        <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${poli.attivo ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'
+                                        <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${poli.stato === 'ATTIVO' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'
                                             }`}>
-                                            {poli.attivo ? 'Attivo' : 'Inattivo'}
+                                            {poli.stato === 'ATTIVO' ? 'Attivo' : 'Inattivo'}
                                         </span>
                                         <ArrowRight className="h-4 w-4 text-gray-400" />
                                     </div>

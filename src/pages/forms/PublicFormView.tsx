@@ -15,11 +15,13 @@ import type { FormTemplate, FormField, FormSection } from '../../types/forms';
 import { evaluateCondition, isSectionVisible, getVisibleSections } from '../../utils/conditionalLogic';
 import { validateForm, getFieldError, hasFieldError, type ValidationError } from '../../utils/formValidation';
 import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../hooks/useToast';
 
 export function PublicFormView() {
   const { slug } = useParams<{ slug: string }>();
   const [searchParams] = useSearchParams();
   const { user, isAuthenticated } = useAuth();
+  const { showToast } = useToast();
   const [template, setTemplate] = useState<FormTemplate | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -479,7 +481,7 @@ export function PublicFormView() {
     });
 
     if (missingFields.length > 0) {
-      alert(`Per favore completa tutti i campi richiesti: ${missingFields.map(f => f.label).join(', ')}`);
+      showToast({ message: `Per favore completa tutti i campi richiesti: ${missingFields.map(f => f.label).join(', ')}`, type: 'warning' });
       return;
     }
 

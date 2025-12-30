@@ -23,7 +23,7 @@ import { Label } from '../../../design-system/atoms/Label';
 import { Badge } from '../../../design-system/atoms/Badge';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../../design-system/molecules/Card';
 import { Select } from '../../../design-system/atoms/Select';
-import { toast } from 'react-hot-toast';
+import { useToast } from '../../../hooks/useToast';
 import {
   tariffariAziendaliApi,
   TariffarioAziendale,
@@ -39,6 +39,7 @@ interface CompanyOption {
 const CloneTariffarioPage: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
+  const { showToast } = useToast();
 
   const [loading, setLoading] = useState(true);
   const [cloning, setCloning] = useState(false);
@@ -58,7 +59,7 @@ const CloneTariffarioPage: React.FC = () => {
   useEffect(() => {
     const loadData = async () => {
       if (!id) {
-        toast.error('ID tariffario mancante');
+        showToast({ message: 'ID tariffario mancante', type: 'error' });
         navigate('/management/tariffari-aziende');
         return;
       }
@@ -78,7 +79,7 @@ const CloneTariffarioPage: React.FC = () => {
             nuovoNome: `${tariffarioRes.data.nome} - Copia`
           }));
         } else {
-          toast.error('Tariffario non trovato');
+          showToast({ message: 'Tariffario non trovato', type: 'error' });
           navigate('/management/tariffari-aziende');
           return;
         }
@@ -86,7 +87,7 @@ const CloneTariffarioPage: React.FC = () => {
         setCompanies(Array.isArray(companiesRes) ? companiesRes : []);
       } catch (error) {
         console.error('Error loading data:', error);
-        toast.error('Errore nel caricamento');
+        showToast({ message: 'Errore nel caricamento', type: 'error' });
       } finally {
         setLoading(false);
       }
@@ -112,7 +113,7 @@ const CloneTariffarioPage: React.FC = () => {
 
   const handleClone = async () => {
     if (!formData.companyId) {
-      toast.error('Seleziona un\'azienda');
+      showToast({ message: 'Seleziona un\'azienda', type: 'error' });
       return;
     }
 
@@ -127,13 +128,13 @@ const CloneTariffarioPage: React.FC = () => {
       });
 
       if (response.success) {
-        toast.success('Tariffario clonato con successo');
+        showToast({ message: 'Tariffario clonato con successo', type: 'success' });
         navigate(`/management/tariffari-aziende/${response.data.id}`);
       }
     } catch (error: unknown) {
       console.error('Error cloning tariffario:', error);
       const errorMessage = error instanceof Error ? error.message : 'Errore nella clonazione';
-      toast.error(errorMessage);
+      showToast({ message: errorMessage, type: 'error' });
     } finally {
       setCloning(false);
     }

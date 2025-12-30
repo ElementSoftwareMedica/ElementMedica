@@ -262,7 +262,7 @@ export default function CoursesPage(): JSX.Element {
     let mounted = true;
     (async () => {
       try {
-        const res = await apiGet<Course[]>('/courses');
+        const res = await apiGet<Course[]>('/api/v1/courses');
         if (mounted && Array.isArray(res)) {
           setCourses(res);
         }
@@ -294,7 +294,7 @@ export default function CoursesPage(): JSX.Element {
       }));
 
       // Invia i dati al backend
-      const response: any = await apiPost('/courses/bulk-import', {
+      const response: any = await apiPost('/api/v1/courses/bulk-import', {
         tenantId, // anche top-level per massima compatibilità
         courses: payloadCourses,
         overwriteIds: overwriteIds || []

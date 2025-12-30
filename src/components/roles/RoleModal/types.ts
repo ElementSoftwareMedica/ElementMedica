@@ -94,7 +94,7 @@ export interface RoleFormData {
 export interface RoleModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (roleData: RoleFormData) => Promise<void>;
+  onSave: (roleData: Role) => Promise<void>;
   role?: Role | RoleEditData | null;
   mode: 'create' | 'edit';
   hierarchy?: Record<string, HierarchyLevel>;

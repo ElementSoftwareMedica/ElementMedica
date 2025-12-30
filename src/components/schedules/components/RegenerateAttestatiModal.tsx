@@ -7,6 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { X, AlertTriangle, CheckCircle } from 'lucide-react';
 import { Button } from '../../../design-system/atoms/Button';
 import { useConfirmDialog } from '../../../contexts/ConfirmDialogContext';
+import { useToast } from '../../../hooks/useToast';
 
 interface Person {
   id: string;
@@ -36,6 +37,7 @@ export const RegenerateAttestatiModal: React.FC<RegenerateAttestatiModalProps> =
   const [selectAll, setSelectAll] = useState(false);
   const [regenerateExisting, setRegenerateExisting] = useState(false);
   const { confirm } = useConfirmDialog();
+  const { showToast } = useToast();
 
   // Identifica persone con attestati esistenti
   const personsWithAttestati = new Set(existingAttestati.map(a => a.personId));
@@ -75,7 +77,7 @@ export const RegenerateAttestatiModal: React.FC<RegenerateAttestatiModalProps> =
 
   const handleConfirm = async () => {
     if (selectedPersons.size === 0) {
-      alert('⚠️ Seleziona almeno un partecipante');
+      showToast({ message: '⚠️ Seleziona almeno un partecipante', type: 'warning' });
       return;
     }
 

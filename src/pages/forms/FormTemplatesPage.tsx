@@ -4,7 +4,7 @@ import {
   AlertCircle,
   Archive,
   CheckCircle,
-  Checkbox as CheckboxIcon,
+  CheckSquare as CheckboxIcon,
   Copy,
   Edit,
   Eye,
@@ -556,7 +556,7 @@ export default function FormTemplatesPage({ hideHeader = false }: FormTemplatesP
                         )}
                       </div>
                       {template.isPublic && (
-                        <Globe className="h-4 w-4 text-blue-500 flex-shrink-0" title="Pubblico" />
+                        <Globe className="h-4 w-4 text-blue-500 flex-shrink-0" />
                       )}
                     </div>
                   </TableCell>
@@ -569,7 +569,7 @@ export default function FormTemplatesPage({ hideHeader = false }: FormTemplatesP
 
                   <TableCell className="text-center">
                     <span className="text-sm font-medium text-gray-900">
-                      {template.fields.length}
+                      {template.fields?.length || 0}
                     </span>
                   </TableCell>
 
@@ -587,7 +587,7 @@ export default function FormTemplatesPage({ hideHeader = false }: FormTemplatesP
 
                   <TableCell>
                     <span className="text-sm text-gray-600">
-                      {formatDate(template.updatedAt || template.createdAt)}
+                      {formatDate(String(template.updatedAt || template.createdAt || ''))}
                     </span>
                   </TableCell>
                 </TableRow>

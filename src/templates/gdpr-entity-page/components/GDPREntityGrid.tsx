@@ -107,7 +107,8 @@ export function GDPREntityGrid<T extends BaseEntity = BaseEntity>({
     const value = (entity as Record<string, unknown>)[field.key];
     
     if (field.formatter) {
-      return field.formatter(value, entity);
+      const result = field.formatter(value, entity as BaseEntity);
+      return result;
     }
     
     // Formattazione di default per tipi comuni
@@ -139,7 +140,9 @@ export function GDPREntityGrid<T extends BaseEntity = BaseEntity>({
       );
     }
     
-    return <span className="text-sm">{String(value)}</span>;
+    // Assicurati che il valore sia sempre renderizzabile
+    const stringValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
+    return <span className="text-sm">{stringValue}</span>;
   };
   
   // Classi CSS per il grid
@@ -240,11 +243,11 @@ export function GDPREntityGrid<T extends BaseEntity = BaseEntity>({
               {/* Contenuto principale */}
               <div className="px-4 pb-4 space-y-3">
                 {/* Campi principali */}
-                {fields.slice(0, 3).map((field) => {
+                {fields.slice(0, 3).map((field: EntityField) => {
                   const value = (entity as Record<string, unknown>)[field.key];
                   if (value === null || value === undefined || value === '') return null;
                   
-                  const renderedValue: React.ReactNode = renderFieldValue(field, entity);
+                  const renderedValue = renderFieldValue(field, entity);
                   
                   return (
                     <div key={field.key} className="space-y-1">
@@ -258,10 +261,9 @@ export function GDPREntityGrid<T extends BaseEntity = BaseEntity>({
                   );
                 })}
                 
-                {/* Campi aggiuntivi (compatti) */}
-                {additionalFields.length > 0 && (
+                {(additionalFields.length > 0 ? (
                   <div className="pt-2 border-t space-y-2">
-                    {additionalFields.slice(0, 4).map((field) => {
+                    {additionalFields.slice(0, 4).map((field: EntityField) => {
                       const value = (entity as Record<string, unknown>)[field.key];
                       if (value === null || value === undefined || value === '') return null;
                       
@@ -279,7 +281,7 @@ export function GDPREntityGrid<T extends BaseEntity = BaseEntity>({
                       );
                     })}
                   </div>
-                )}
+                ) : null) as any}
                 
                 {/* Badge di stato (se presente) */}
                 {(entity as Record<string, unknown>).status && (

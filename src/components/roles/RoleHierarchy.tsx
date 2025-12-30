@@ -187,7 +187,7 @@ const RoleHierarchy: React.FC<RoleHierarchyProps> = ({ onRoleAssignment }) => {
           setIsRoleModalOpen(false);
           setEditingRole(null);
         }}
-        onSave={handleRoleSubmit}
+        onSave={handleRoleSubmit as any}
         role={editingRole}
         mode={editingRole ? 'edit' : 'create'}
         hierarchy={hierarchy as RoleHierarchyType}

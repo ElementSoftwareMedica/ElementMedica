@@ -6,7 +6,7 @@
 import React from 'react';
 import { cn } from '../../utils';
 
-export type BadgeVariant = 'default' | 'secondary' | 'outline' | 'destructive';
+export type BadgeVariant = 'default' | 'secondary' | 'outline' | 'destructive' | 'success' | 'warning' | 'info' | 'error';
 export type BadgeSize = 'sm' | 'md' | 'lg';
 
 export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
@@ -24,7 +24,11 @@ const badgeVariants: Record<BadgeVariant, string> = {
   default: 'bg-primary-600 text-white',
   secondary: 'bg-gray-100 text-gray-800',
   outline: 'border border-gray-300 bg-transparent text-gray-700',
-  destructive: 'bg-red-600 text-white'
+  destructive: 'bg-red-600 text-white',
+  success: 'bg-green-600 text-white',
+  warning: 'bg-yellow-500 text-white',
+  info: 'bg-blue-600 text-white',
+  error: 'bg-red-600 text-white'
 };
 
 const badgeSizes: Record<BadgeSize, string> = {

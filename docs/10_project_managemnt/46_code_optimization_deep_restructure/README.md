@@ -1,6 +1,6 @@
 # 🚀 Progetto 46 - Indice Documentazione
 
-**Ultima Modifica**: 31/12/2025 - PROGETTO 46 COMPLETATO ✅  
+**Ultima Modifica**: 14/01/2025 - E2E OPTIMIZATION COMPLETE ✅  
 **Decisione**: I nomi italiani nello schema Prisma sono ACCETTATI (app commercializzata solo in Italia)
 
 ---
@@ -45,10 +45,12 @@ docs/10_project_managemnt/46_code_optimization_deep_restructure/
 3. **File Grandi Splittati** - Da 11,000+ linee a <500 ✅ clinica-routes, preventivi-routes fatto
 4. **Permessi Allineati** - Formato uniforme ✅ `resource:action` ovunque
 5. **File Obsoleti Rimossi** - 108MB+ di backup archiviati ✅
-6. **Zero Errori TypeScript** - Strict mode ✅
+6. **Zero Errori TypeScript** - Strict mode ✅ **181 → 0 errors!**
 7. **Test Coverage 80%+** - Da 75% attuale
 8. **Backward Compat Rimosso** - req.person standard ✅ (334+ istanze)
 9. **Notification Consistency** - alert() → showToast() ✅ (22 sostituzioni)
+10. **ActionButton Standard** - Dropdown unificato ✅ (3 file migrati)
+11. **Clickable Rows** - onRowClick pattern ✅ (5 file aggiornati)
 
 ---
 
@@ -62,13 +64,23 @@ docs/10_project_managemnt/46_code_optimization_deep_restructure/
 | attestati-routes.js | 1,807L | 0L (archiviato) | <400L | ✅ 5 moduli |
 | PreventiviPage.tsx | 3,382L | 1,161L | <1,200L | ✅ 11 moduli |
 | CMSPageRenderer.tsx | 3,321L | 276L | <1,000L | ✅ 7 moduli |
+| CustomContentRenderer.tsx | 2,926L | 150L | <500L | ✅ 13 moduli |
+| api.ts legacy rewriting | 100+ lines | 0 | 0 | ✅ |
 | File obsoleti | 108MB | ~10MB | 0 | ✅ |
-| TS Errors | 0 | 0 | 0 | ✅ |
+| TS Errors (VS Code) | 0 | 0 | 0 | ✅ |
+| TS Errors (tsc --noEmit) | 181 | **0** | 0 | ✅ **DONE!** |
 | Test Coverage | 75% | 75% | 80% | ⏳ |
 | Backward Compat (req.user) | 334+ | 0 | 0 | ✅ |
 | Security Bypass | 1 CRITICAL | 0 | 0 | ✅ |
 | console.log in prod | 50+ | 0 | 0 | ✅ |
-| alert() native | 29 | 0 | 0 | ✅ |
+| alert() native | 50+ | 0 | 0 | ✅ |
+| Legacy URL rewriting (api.ts) | 100+ lines | 0 | 0 | ✅ |
+| Legacy routes (api-server) | 4 routes | 0 | 0 | ✅ |
+| Legacy CORS (proxyRoutes) | 8 configs | 0 | 0 | ✅ |
+| Legacy proxy routes (localRoutes) | 2 functions | 0 | 0 | ✅ |
+| TypeScript Types Fixed | - | 181 | - | ✅ |
+| ActionButton Standardized | 3 custom | 0 custom | 0 | ✅ |
+| Clickable Rows | 2 workarounds | 0 | 0 | ✅ |
 
 ---
 
@@ -83,9 +95,11 @@ docs/10_project_managemnt/46_code_optimization_deep_restructure/
 ✅ Giorno 4 (31/12): Fase 4 - PreventiviPage splitting ✅ (3,382L → 11 moduli)
 ✅ Giorno 4 (31/12): Fase 4 - CMSPageRenderer splitting ✅ (3,321L → 7 moduli)
 ✅ Giorno 4 (31/12): Fase 8 - Documentazione finale ✅
+✅ Giorno 5 (30/12): TypeScript Errors - 181 → 0 ✅ (100% fixed!)
+✅ Giorno 5 (30/12): ActionButton + Clickable Rows - Standardizzato ✅
 ```
 
-**Durata Totale Reale**: 4 giorni (vs 8 settimane originali - 93% riduzione!)
+**Durata Totale Reale**: 5 giorni (vs 8 settimane originali - 91% riduzione!)
 
 > **NOTA**: Le fasi 2 e 5 (enum inglesi + schema camelCase) sono state SKIPPATE
 > perché l'app sarà commercializzata SOLO in Italia. I nomi italiani sono accettati.
@@ -405,4 +419,86 @@ npm run tsc -- --noEmit
 
 ---
 
-*Progetto 46 - Code Optimization & Deep Restructuring - 29/12/2025*
+## 🚀 E2E Optimization - Legacy Code Removal (14/01/2025)
+
+### CustomContentRenderer.tsx Split ✅
+
+**Problema**: File monolitico di 2,926 linee con 30+ sezioni inline
+
+**Soluzione**: Hooks Composition Pattern con moduli separati
+
+| File | Linee | Funzionalità |
+|------|-------|--------------|
+| custom-content-renderer/CustomContentRenderer.tsx | ~150 | Main component orchestration |
+| custom-content-renderer/types.ts | 85 | TypeScript types |
+| custom-content-renderer/IntroductionSections.tsx | 278 | Hero, Mission, WhyChooseUs |
+| custom-content-renderer/MedicalSections.tsx | 189 | MedicalEquipment, MedicalServices |
+| custom-content-renderer/AboutSections.tsx | 315 | About, Team, Certifications |
+| custom-content-renderer/ContactSections.tsx | 287 | Contact, Locations, Hours |
+| custom-content-renderer/CommonSections.tsx | 339 | Highlights, HowItWorks, FAQ |
+| custom-content-renderer/SpecialtySections.tsx | 398 | Specialties, ExamCategories |
+| custom-content-renderer/CourseSections.tsx | 256 | CourseCategories, CoursesList |
+| custom-content-renderer/BookingSections.tsx | 235 | QuickBooking, Testimonials |
+| custom-content-renderer/CareersSections.tsx | 236 | Careers, JobRequirements |
+| custom-content-renderer/MiscSections.tsx | 271 | Stats, Partners, ProcessSteps |
+| custom-content-renderer/index.ts | 25 | Re-exports |
+
+**Benefici**:
+- ✅ Moduli separati per domain (Medical, About, Contact, etc.)
+- ✅ Type safety migliorato
+- ✅ Manutenibilità aumentata
+- ✅ Build passa
+
+### Alert → showToast Migration ✅
+
+**Problema**: 50+ istanze di `alert()` nativo nel frontend (UX inconsistente)
+
+**Soluzione**: Migrazione a `showToast()` da `useToast` hook
+
+| File | Conversions |
+|------|-------------|
+| useDocumentActions.ts | 14 |
+| useDocumentGeneration.ts | 12 |
+| ContactForm.tsx | 2 |
+| 18 altri file | 24 |
+| **TOTALE** | **52** |
+
+**Pattern Standard**:
+```typescript
+import { useToast } from '../../hooks/useToast';
+const { showToast } = useToast();
+
+// Prima: alert('Messaggio')
+// Dopo:
+showToast({ message: 'Messaggio', type: 'success' });
+showToast({ message: 'Errore: ' + error, type: 'error' });
+```
+
+### Legacy API Paths Removal ✅
+
+**Problema**: URL rewriting nel frontend (api.ts) per path legacy + route legacy nel backend
+
+**Soluzione**: Aggiornato TUTTO il frontend a usare `/api/v1/` direttamente
+
+| File | Modifiche |
+|------|-----------|
+| scheduleService.ts | `/employees` → `/api/v1/employees` |
+| validation.ts | `/persons/check-*` → `/api/v1/persons/check-*` (3 endpoint) |
+| CoursesPage.tsx | `/courses` → `/api/v1/courses` (2 occorrenze) |
+| useDashboardData.ts | `/courses` → `/api/v1/courses` |
+| CompanyForm.tsx | `/companies` → `/api/v1/companies` (2 occorrenze) |
+| CompanyEdit.tsx | `/companies/${id}` → `/api/v1/companies/${id}` |
+| CourseDetails.tsx | `/courses/${id}` → `/api/v1/courses/${id}` |
+
+**Backend Changes**:
+- api.ts: Rimossa sezione URL rewriting (100+ linee per trainers, companies, schedules, courses)
+- api-server.js: Rimosse route legacy `/courses`, `/employees`, `/trainers`, `/virtual-entities`
+- proxyRoutes.js: Rimosse 8 configurazioni CORS legacy per endpoint senza /api/v1
+- proxyRoutes.js: Rimosse 4 route proxy legacy per /courses, /employees, /schedules, /users
+- localRoutes.js: Disabilitate setupCoursesRoutes e setupSchedulesRoutes (duplicate di API server)
+
+**Risultato**: Zero backward compatibility layers - codice pulito E2E
+
+---
+
+*Progetto 46 - Code Optimization & Deep Restructuring - 29/12/2025 - Updated 30/12/2025*

@@ -1,7 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
-import ReactDOM from 'react-dom';
-import axios from 'axios';
-import { Button } from '../../design-system/atoms/Button';
+import React, { useState, useEffect } from 'react';
 import { SearchBar } from '../../design-system/molecules';
 import { SearchBarControls } from '../../design-system/molecules/SearchBarControls';
 import ResizableTable from '../../components/shared/ResizableTable';
@@ -9,6 +6,8 @@ import { sanitizeErrorMessage } from '../../utils/errorUtils';
 import { Company } from '../../types';
 import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
 import { useToast } from '../../hooks/useToast';
+import { ActionButton } from '../../components/ui';
+import { Eye, Edit, Trash2 } from 'lucide-react';
 
 interface Invoice {
   id: string;
@@ -20,52 +19,6 @@ interface Invoice {
   payment_date?: string;
   due_date: string;
 }
-
-// DropdownMenu component
-const DropdownMenu: React.FC<{ children: (close: () => void) => React.ReactNode; trigger: React.ReactNode }> = ({ children, trigger }) => {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      if (
-        ref.current && !ref.current.contains(e.target as Node) &&
-        menuRef.current && !menuRef.current.contains(e.target as Node)
-      ) {
-        setOpen(false);
-      }
-    };
-    if (open) document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [open]);
-
-  // Portal rendering
-  const [menuPos, setMenuPos] = useState<{ top: number, left: number } | null>(null);
-  const triggerRef = useRef<HTMLSpanElement>(null);
-
-  useEffect(() => {
-    if (open && triggerRef.current) {
-      const rect = triggerRef.current.getBoundingClientRect();
-      setMenuPos({
-        top: rect.bottom + window.scrollY,
-        left: rect.left + window.scrollX
-      });
-    }
-  }, [open]);
-
-  return (
-    <div ref={ref} className="relative inline-block text-left" style={{ overflow: 'visible' }}>
-      <span ref={triggerRef} onClick={() => setOpen(o => !o)}>{trigger}</span>
-      {open && menuPos && ReactDOM.createPortal(
-        <div ref={menuRef} style={{ position: 'absolute', zIndex: 99999, left: menuPos.left, top: menuPos.top, background: '#fffbe6', minWidth: '8rem', boxShadow: '0 8px 24px rgba(0,0,0,0.18)' }} className="w-32 bg-white border border-gray-200 rounded shadow-lg">
-          {children(() => setOpen(false))}
-        </div>,
-        document.body
-      )}
-    </div>
-  );
-};
 
 interface InvoicesProps {
   searchTerm: string;
@@ -96,7 +49,7 @@ const Invoices: React.FC<InvoicesProps> = ({
   const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [invoices, setInvoices] = useState<Invoice[]>();
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
 
   useEffect(() => {
     fetchInvoices();
@@ -118,12 +71,11 @@ const Invoices: React.FC<InvoicesProps> = ({
     }
   };
 
-  const handleDeleteInvoice = async (id: string, close?: () => void) => {
+  const handleDeleteInvoice = async (id: string) => {
     try {
       // In futuro qui verrà fatta una chiamata API reale
       // const res = await axios.delete('/api/invoices/${id}');
       setInvoices(invoices.filter(i => i.id !== id));
-      if (close) setTimeout(close, 100);
       showToast({ type: 'success', title: 'Successo', message: 'Fattura eliminata con successo' });
     } catch (err: any) {
       const userMessage = sanitizeErrorMessage(err, 'Errore durante l\'eliminazione della fattura');
@@ -170,20 +122,27 @@ const Invoices: React.FC<InvoicesProps> = ({
       label: 'Azioni',
       width: 120,
       renderCell: (invoice: Invoice) => (
-        <DropdownMenu
-          trigger={
-            <button type="button" className="inline-flex items-center px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm hover:bg-blue-200 transition-colors">
-              Azioni
-              <svg className="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
-            </button>
-          }
-        >
-          {(close) => <>
-            <button className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" onClick={() => { console.log('Visualizza'); close(); }}>Visualizza</button>
-            <button className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" onClick={() => { console.log('Modifica'); close(); }}>Modifica</button>
-            <button type="button" onClick={() => { handleDeleteInvoice(invoice.id, close); }} className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100">Elimina</button>
-          </>}
-        </DropdownMenu>
+        <ActionButton
+          theme="blue"
+          actions={[
+            {
+              label: 'Visualizza',
+              icon: <Eye className="w-4 h-4" />,
+              onClick: () => showToast({ type: 'info', message: 'Visualizzazione fattura non ancora implementata' }),
+            },
+            {
+              label: 'Modifica',
+              icon: <Edit className="w-4 h-4" />,
+              onClick: () => showToast({ type: 'info', message: 'Modifica fattura non ancora implementata' }),
+            },
+            {
+              label: 'Elimina',
+              icon: <Trash2 className="w-4 h-4" />,
+              onClick: () => handleDeleteInvoice(invoice.id),
+              variant: 'danger',
+            },
+          ]}
+        />
       )
     },
     {
@@ -342,6 +301,7 @@ const Invoices: React.FC<InvoicesProps> = ({
           <ResizableTable
             columns={invoiceColumns}
             data={filteredInvoices}
+            onRowClick={(invoice) => showToast({ type: 'info', message: `Dettagli fattura ${invoice.number} - funzionalità in arrivo` })}
             tableProps={{
               className: "min-w-full divide-y divide-gray-200"
             }}

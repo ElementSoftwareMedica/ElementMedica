@@ -146,55 +146,10 @@ export function setupApiProxyRoutes(app) {
       methods: ['GET', 'POST', 'OPTIONS'],
       allowedHeaders: ['Content-Type']
     },
-    // Endpoint legacy che richiedono CORS
-    '/courses': {
-      origin: process.env.FRONTEND_URL || 'http://localhost:5173',
-      credentials: true,
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-ID', 'x-tenant-id']
-    },
-    '/courses/*': {
-      origin: process.env.FRONTEND_URL || 'http://localhost:5173',
-      credentials: true,
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-ID', 'x-tenant-id']
-    },
-    '/employees': {
-      origin: process.env.FRONTEND_URL || 'http://localhost:5173',
-      credentials: true,
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-ID', 'x-tenant-id']
-    },
-    '/employees/*': {
-      origin: process.env.FRONTEND_URL || 'http://localhost:5173',
-      credentials: true,
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-ID', 'x-tenant-id']
-    },
-    '/schedules': {
-      origin: process.env.FRONTEND_URL || 'http://localhost:5173',
-      credentials: true,
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-ID', 'x-tenant-id']
-    },
-    '/schedules/*': {
-      origin: process.env.FRONTEND_URL || 'http://localhost:5173',
-      credentials: true,
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-ID', 'x-tenant-id']
-    },
-    '/users': {
-      origin: process.env.FRONTEND_URL || 'http://localhost:5173',
-      credentials: true,
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-ID', 'x-tenant-id']
-    },
-    '/users/*': {
-      origin: process.env.FRONTEND_URL || 'http://localhost:5173',
-      credentials: true,
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-ID', 'x-tenant-id']
-    },
+    // NOTE: Legacy CORS endpoints removed - all clients now use /api/v1/ endpoints
+    // See: Project 46 E2E optimization (2025-01-14)
+    // Removed: /courses, /employees, /schedules, /users (without /api/v1 prefix)
+    
     // AGGIUNTO: CORS per activity-logs (public POST, GET protetto dall'API)
     '/api/v1/activity-logs': {
       origin: process.env.FRONTEND_URL || 'http://localhost:5173',
@@ -519,52 +474,9 @@ export function setupApiProxyRoutes(app) {
     })
   );
   
-  // Route legacy per backward compatibility
-  
-  // Proxy per /courses (legacy)
-  app.use('/courses',
-    createAuthLogger('courses-legacy'),
-    createApiProxy(apiTarget, {
-      pathRewrite: {
-        '^/courses': '/courses'
-      },
-      enableLogging: true
-    })
-  );
-  
-  // Proxy per /employees (legacy - reindirizzato a /api/employees)
-  app.use('/employees',
-    createAuthLogger('employees-legacy'),
-    createApiProxy(apiTarget, {
-      pathRewrite: {
-        '^/employees': '/api/v1/employees'
-      },
-      requireAuth: true,
-      enableLogging: true
-    })
-  );
-  
-  // Proxy per /schedules (legacy)
-  app.use('/schedules',
-    createAuthLogger('schedules-legacy'),
-    createApiProxy(apiTarget, {
-      pathRewrite: {
-        '^/schedules': '/schedules'
-      },
-      enableLogging: true
-    })
-  );
-  
-  // Proxy per /users (legacy - backward compatibility)
-  app.use('/users',
-    createAuthLogger('users-legacy'),
-    createApiProxy(apiTarget, {
-      pathRewrite: {
-        '^/users': '/users'
-      },
-      enableLogging: true
-    })
-  );
+  // NOTE: Legacy routes removed - all clients now use /api/v1/ endpoints directly
+  // See: Project 46 E2E optimization (2025-01-14)
+  // Removed: /courses, /employees, /schedules, /users (legacy proxy routes)
   
   // /api/tenants è gestito in setupTenantRolesProxyRoutes
   
@@ -578,7 +490,6 @@ export function setupApiProxyRoutes(app) {
     console.log('   - Routes: /api/v2, /api/tenants (in setupTenantRolesProxyRoutes)');
     console.log('   - API Modern routes: /api/courses, /api/v1/courses, /api/employees -> /api/v1/employees, /api/trainers');
     console.log('   - AGGIUNTO: /api/v1/activity-logs, /api/activity-logs');
-    console.log('   - Legacy routes: /courses, /employees -> /api/v1/employees, /schedules, /users');
   }
 }
 

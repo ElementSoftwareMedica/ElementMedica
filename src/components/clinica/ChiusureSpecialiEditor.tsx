@@ -9,6 +9,7 @@
  */
 
 import React, { useState, useMemo } from 'react';
+import { useToast } from '../../hooks/useToast';
 import {
     Calendar,
     Plus,
@@ -107,6 +108,7 @@ const ChiusureSpecialiEditor: React.FC<ChiusureSpecialiEditorProps> = ({
     onChange,
     readonly = false
 }) => {
+    const { showToast } = useToast();
     const [editingId, setEditingId] = useState<string | null>(null);
     const [showAddForm, setShowAddForm] = useState(false);
     const [showPresets, setShowPresets] = useState(false);
@@ -233,7 +235,7 @@ const ChiusureSpecialiEditor: React.FC<ChiusureSpecialiEditorProps> = ({
         const festivitaDaAggiungere = nuoveFestivita.filter(f => !nomiEsistenti.has(f.nome));
 
         if (festivitaDaAggiungere.length === 0) {
-            alert('Tutte le festività italiane sono già presenti!');
+            showToast({ message: 'Tutte le festività italiane sono già presenti!', type: 'info' });
             return;
         }
 
@@ -244,7 +246,7 @@ const ChiusureSpecialiEditor: React.FC<ChiusureSpecialiEditorProps> = ({
     // Aggiungi periodo comune
     const addPeriodoComune = (periodo: typeof PERIODI_COMUNI[0]) => {
         if (periodo.variabile || !periodo.dataInizio || !periodo.dataFine) {
-            alert('Questo periodo ha data variabile. Inseriscilo manualmente.');
+            showToast({ message: 'Questo periodo ha data variabile. Inseriscilo manualmente.', type: 'warning' });
             return;
         }
 

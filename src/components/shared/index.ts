@@ -45,7 +45,7 @@ export { BranchFilter, BranchFilterChip, useBranchFilterState } from './BranchFi
 
 export type {
   AddEntityOption
-} from './ui/AddEntityDropdown';
+} from '../ui/AddEntityDropdown';
 
 // ButtonProps migrated to design-system/atoms/Button
 

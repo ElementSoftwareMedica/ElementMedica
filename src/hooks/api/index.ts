@@ -13,6 +13,4 @@ export {
 } from './useBranchApi';
 
 export { useEmployees } from './useEmployees';
-export { useMutation } from './useMutation';
-export { useOptimizedQuery } from './useOptimizedQuery';
-export { useQueryData } from './useQueryData';
+export { useCreate, useUpdate, useDelete } from './useMutation';

@@ -14,6 +14,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { dummyData } from '../data/dummyData';
 import StatCard from '../components/dashboard/StatCard';
 import ScheduleCalendar, { ScheduleEvent } from '../components/dashboard/ScheduleCalendar';
+import { ScheduleResource } from './Dashboard/hooks/useCalendarEvents';
 import ScheduleEventModal from '../components/schedules/ScheduleEventModal';
 import { useNavigate } from 'react-router-dom';
 import { apiGet, apiPost } from '../services/api';
@@ -26,9 +27,10 @@ import { checkConsent as checkGdprConsent, logGdprAction, ConsentRequiredError }
 import { recordApiCall, startTimer } from '../utils/metrics';
 import { useAuth } from '../context/AuthContext';
 import { useTenant } from '../context/TenantContext';
+import { useToast } from '../hooks/useToast';
 import { dbStatusToItalian } from '../utils/scheduleStatusColors';
 import { useExpiringCoursesCount } from '../hooks/useExpiringCoursesCount';
-import { useRoleBasedData } from '../hooks/useRoleBasedData';
+import { useRoleBasedData, FilterableSchedule } from '../hooks/useRoleBasedData';
 import preventiviService, { Preventivo } from '../services/preventiviService';
 
 // Interfaccia estesa per la dashboard che include campi aggiuntivi
@@ -64,11 +66,12 @@ interface DashboardSchedule {
   endDate: string;
   location?: string;
   trainerId?: string;
+  coTrainerId?: string; // Per FilterableSchedule compatibility
   trainer?: DashboardTrainer;
   maxParticipants?: number;
   status?: string;
-  companies?: Array<{ company: DashboardCompany }>;
-  enrollments?: Array<{ employee: DashboardEmployee }>;
+  companies?: Array<{ companyId: string; company: DashboardCompany }>;
+  enrollments?: Array<{ personId?: string; employeeId?: string; employee?: DashboardEmployee }>;
   sessions?: Array<{
     id: string;
     date: string;
@@ -98,7 +101,30 @@ function combineDateAndTime(dateStr: string, timeStr: string) {
   );
 }
 
+// Helper per convertire DashboardSchedule a ScheduleResource (per il calendario)
+function toScheduleResource(schedule: DashboardSchedule): ScheduleResource {
+  return {
+    id: schedule.id,
+    course: schedule.course ? { id: schedule.course.id, name: schedule.course.title || '', title: schedule.course.title } : undefined,
+    startDate: schedule.startDate,
+    endDate: schedule.endDate,
+    location: schedule.location,
+    status: schedule.status || 'scheduled',
+    sessions: schedule.sessions?.map(sess => ({
+      id: sess.id,
+      date: sess.date,
+      start: sess.start,
+      end: sess.end,
+      trainer: sess.trainer ? { id: sess.trainer.id, firstName: sess.trainer.firstName, lastName: sess.trainer.lastName } : undefined
+    })),
+    companies: schedule.companies?.map(c => ({
+      company: { id: c.company.id, ragioneSociale: c.company.ragioneSociale, name: c.company.name }
+    }))
+  };
+}
+
 const Dashboard: React.FC = () => {
+  const { showToast } = useToast();
   const [showForm, setShowForm] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<{ start: Date; end: Date; isAllDay?: boolean } | null>(null);
   const [coursesList, setCoursesList] = useState<Course[]>([]);
@@ -733,9 +759,9 @@ const Dashboard: React.FC = () => {
               title,
               start,
               end,
-              resource: s as unknown as Record<string, unknown>,
-              status: dbStatusToItalian(s.status),
-              tooltip: `Corso: ${s.course?.title}\nAziende: ${aziende}\nLuogo: ${s.location || '-'}\nData: ${new Date(day).toLocaleDateString('it-IT')}\nStato: ${dbStatusToItalian(s.status)}`,
+              resource: toScheduleResource(s),
+              status: dbStatusToItalian(s.status || 'scheduled'),
+              tooltip: `Corso: ${s.course?.title}\nAziende: ${aziende}\nLuogo: ${s.location || '-'}\nData: ${new Date(day).toLocaleDateString('it-IT')}\nStato: ${dbStatusToItalian(s.status || 'scheduled')}`,
               sessioniTooltipHtml
             });
           });
@@ -748,9 +774,9 @@ const Dashboard: React.FC = () => {
             title: s.course?.title || 'Corso',
             start: new Date(s.startDate),
             end: new Date(s.endDate),
-            resource: s as unknown as Record<string, unknown>,
-            status: dbStatusToItalian(s.status),
-            tooltip: `Corso: ${s.course?.title}\nAziende: ${aziende}\nLuogo: ${s.location || '-'}\nData: ${s.startDate ? new Date(s.startDate).toLocaleDateString('it-IT') : '-'}\nOrario: --:--\nStato: ${dbStatusToItalian(s.status)}`,
+            resource: toScheduleResource(s),
+            status: dbStatusToItalian(s.status || 'scheduled'),
+            tooltip: `Corso: ${s.course?.title}\nAziende: ${aziende}\nLuogo: ${s.location || '-'}\nData: ${s.startDate ? new Date(s.startDate).toLocaleDateString('it-IT') : '-'}\nOrario: --:--\nStato: ${dbStatusToItalian(s.status || 'scheduled')}`,
             sessioniTooltipHtml: ''
           });
         }
@@ -787,9 +813,9 @@ const Dashboard: React.FC = () => {
               start,
               end,
               allDay: false,
-              resource: s,
-              status: dbStatusToItalian(s.status),
-              tooltip: `Corso: ${s.course?.title}\nAziende: ${aziende}\nLuogo: ${s.location || '-'}\nData: ${new Date(sess.date).toLocaleDateString('it-IT')}\nStato: ${dbStatusToItalian(s.status)}`,
+              resource: toScheduleResource(s),
+              status: dbStatusToItalian(s.status || 'scheduled'),
+              tooltip: `Corso: ${s.course?.title}\nAziende: ${aziende}\nLuogo: ${s.location || '-'}\nData: ${new Date(sess.date).toLocaleDateString('it-IT')}\nStato: ${dbStatusToItalian(s.status || 'scheduled')}`,
               sessioniTooltipHtml
             };
           });
@@ -801,9 +827,9 @@ const Dashboard: React.FC = () => {
             title: s.course?.title || 'Corso',
             start: new Date(s.startDate),
             end: new Date(s.endDate),
-            resource: s,
-            status: dbStatusToItalian(s.status),
-            tooltip: `Corso: ${s.course?.title}\nAziende: ${aziende}\nLuogo: ${s.location || '-'}\nData: ${s.startDate ? new Date(s.startDate).toLocaleDateString('it-IT') : '-'}\nOrario: --:--\nStato: ${dbStatusToItalian(s.status)}`,
+            resource: toScheduleResource(s),
+            status: dbStatusToItalian(s.status || 'scheduled'),
+            tooltip: `Corso: ${s.course?.title}\nAziende: ${aziende}\nLuogo: ${s.location || '-'}\nData: ${s.startDate ? new Date(s.startDate).toLocaleDateString('it-IT') : '-'}\nOrario: --:--\nStato: ${dbStatusToItalian(s.status || 'scheduled')}`,
             sessioniTooltipHtml: ''
           }];
         }
@@ -814,7 +840,11 @@ const Dashboard: React.FC = () => {
     // - ADMIN/TRAINING_ADMIN: vedono tutto
     // - TRAINER: vede solo corsi dove è formatore/co-formatore  
     // - EMPLOYEE: vede solo corsi a cui è iscritto
-    const filteredSchedules = filterSchedules(schedulesData, { includeCoTrainer: true });
+    // Note: filterSchedules è type-safe con FilterableSchedule, DashboardSchedule è compatibile
+    const filteredSchedules = filterSchedules(
+      schedulesData as unknown as FilterableSchedule[], 
+      { includeCoTrainer: true }
+    ) as unknown as DashboardSchedule[];
 
     console.log('[Dashboard] 🔐 Role-based filtering applied:', {
       originalCount: schedulesData.length,
@@ -1090,7 +1120,7 @@ const Dashboard: React.FC = () => {
             const message = isLoading
               ? 'Caricamento dati in corso, attendi qualche secondo...'
               : 'Nessun corso disponibile. Verifica la connessione o ricarica la pagina.';
-            alert(message);
+            showToast({ message, type: 'warning' });
             return;
           }
 
@@ -1149,8 +1179,8 @@ const Dashboard: React.FC = () => {
                           minute: '2-digit'
                         })}
                       </p>
-                      {session.location && (
-                        <p className="text-xs text-gray-400 mt-0.5">{session.location}</p>
+                      {session.resource?.location && (
+                        <p className="text-xs text-gray-400 mt-0.5">{session.resource.location}</p>
                       )}
                     </div>
                     <span className={`px-2 py-1 text-xs rounded-full ${session.status === 'CONFIRMED' ? 'bg-green-100 text-green-700' :

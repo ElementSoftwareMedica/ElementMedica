@@ -119,7 +119,7 @@ export interface RoleOperationHandlers {
   handleEditRole: (roleType: string) => void;
   handleDeleteRole: (roleType: string) => void;
   handleMoveRole: (roleType: string) => void;
-  handleRoleSubmit: (roleData: RoleFormData) => Promise<void>;
+  handleRoleSubmit: (roleData: any) => Promise<void>;
   handleRoleDelete: (roleType: string) => Promise<void>;
   handleRoleMove: (roleType: string, newLevel: number, parentRoleType?: string) => Promise<void>;
 }

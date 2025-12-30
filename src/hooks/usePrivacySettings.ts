@@ -12,7 +12,6 @@ import {
   GDPRApiResponse
 } from '../types/gdpr';
 import { useAuth } from '../context/AuthContext';
-import { toast } from 'react-hot-toast';
 
 export const usePrivacySettings = (): UsePrivacySettingsReturn => {
   const [settings, setSettings] = useState<PrivacySettings | null>(null);
@@ -50,7 +49,7 @@ export const usePrivacySettings = (): UsePrivacySettingsReturn => {
           dataProcessingConsent: false,
           marketingConsent: false,
           analyticsConsent: false,
-          profileVisibility: false,
+          profileVisibility: 'private',
           dataRetentionOptOut: false,
           thirdPartySharing: false,
           emailNotifications: true,
@@ -95,7 +94,7 @@ export const usePrivacySettings = (): UsePrivacySettingsReturn => {
       if (response.data.success && response.data.data) {
         setSettings(response.data.data.settings);
         setHasUnsavedChanges(false);
-        toast.success('Privacy settings updated successfully');
+        // Toast handled by calling component
       } else {
         throw new Error(response.data.error || 'Failed to update privacy settings');
       }
@@ -103,7 +102,7 @@ export const usePrivacySettings = (): UsePrivacySettingsReturn => {
       const errorMessage = err instanceof Error ? err.message : 'Failed to update privacy settings';
       setError(errorMessage);
       console.error('Error updating privacy settings:', err);
-      toast.error(errorMessage);
+      // Toast handled by calling component
       throw err;
     } finally {
       setLoading(false);
@@ -167,7 +166,7 @@ export const usePrivacySettings = (): UsePrivacySettingsReturn => {
       if (response.data.success && response.data.data) {
         setSettings(response.data.data.settings);
         setHasUnsavedChanges(false);
-        toast.success('Privacy settings reset to defaults');
+        // Toast handled by calling component
       } else {
         throw new Error(response.data.error || 'Failed to reset privacy settings');
       }
@@ -175,7 +174,7 @@ export const usePrivacySettings = (): UsePrivacySettingsReturn => {
       const errorMessage = err instanceof Error ? err.message : 'Failed to reset privacy settings';
       setError(errorMessage);
       console.error('Error resetting privacy settings:', err);
-      toast.error(errorMessage);
+      // Toast handled by calling component
       throw err;
     } finally {
       setLoading(false);
@@ -375,7 +374,7 @@ export const usePrivacySettings = (): UsePrivacySettingsReturn => {
     document.body.removeChild(link);
     window.URL.revokeObjectURL(url);
 
-    toast.success('Privacy settings exported successfully');
+    // Toast handled by calling component
   }, [settings, getComplianceScore, getComplianceRecommendations]);
 
   /**

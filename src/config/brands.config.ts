@@ -32,6 +32,7 @@ export interface BrandConfig {
     address: string;
     pec?: string;
     vat?: string;
+    website?: string;
   };
 
   // Social Media

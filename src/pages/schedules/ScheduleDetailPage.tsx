@@ -72,6 +72,7 @@ interface Schedule {
     date: string;
     start: string;
     end: string;
+    duration?: number;
     trainer?: {
       id: string;
       firstName: string;
@@ -101,6 +102,11 @@ interface Schedule {
       lastName: string;
       email?: string;
       companyId?: string;
+      company?: {
+        id: string;
+        ragioneSociale?: string;
+        name?: string;
+      };
     };
   }>;
 }
@@ -479,8 +485,8 @@ const ScheduleDetailPage: React.FC = () => {
                     px-3 py-1.5 rounded-full text-sm font-medium cursor-pointer transition-all
                     focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500
                     disabled:opacity-50 disabled:cursor-not-allowed border-0
-                    ${statusBadgeColors[dbStatusToItalian(schedule.status)] || 'bg-gray-100 text-gray-800'} 
-                    ${statusBadgeHoverColors[dbStatusToItalian(schedule.status)] || 'hover:bg-gray-200'}
+                    ${statusBadgeColors[dbStatusToItalian(schedule.status || 'PENDING')] || 'bg-gray-100 text-gray-800'} 
+                    ${statusBadgeHoverColors[dbStatusToItalian(schedule.status || 'PENDING')] || 'hover:bg-gray-200'}
                   `}
                   style={{
                     appearance: 'none',
@@ -560,8 +566,8 @@ const ScheduleDetailPage: React.FC = () => {
                   <div>
                     <label className="text-xs font-medium text-gray-500">Rischio</label>
                     <p className="mt-0.5">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${schedule.course.riskLevel === 'ALTO' || schedule.course.riskLevel === 'A' ? 'bg-red-100 text-red-800' :
-                        schedule.course.riskLevel === 'MEDIO' || schedule.course.riskLevel === 'B' ? 'bg-yellow-100 text-yellow-800' :
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${schedule.course.riskLevel === 'ALTO' ? 'bg-red-100 text-red-800' :
+                        schedule.course.riskLevel === 'MEDIO' ? 'bg-yellow-100 text-yellow-800' :
                           'bg-green-100 text-green-800'
                         }`}>
                         <Shield className="h-2.5 w-2.5 mr-0.5" />

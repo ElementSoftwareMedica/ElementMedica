@@ -9,6 +9,7 @@ import React, { useState, useEffect } from 'react';
 import { X, History, RotateCcw, AlertTriangle, CheckCircle, Clock, User, FileText, ChevronDown, ChevronRight } from 'lucide-react';
 import { templateService } from '../../services/templateService';
 import type { TemplateVersion, RollbackVersionResponse } from '../../types/templates';
+import { useToast } from '../../hooks/useToast';
 
 interface VersionHistoryDialogProps {
   templateId: string;
@@ -23,6 +24,7 @@ const VersionHistoryDialog: React.FC<VersionHistoryDialogProps> = ({
   onClose,
   onRollbackSuccess
 }) => {
+  const { showToast } = useToast();
   const [versions, setVersions] = useState<TemplateVersion[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -85,8 +87,8 @@ const VersionHistoryDialog: React.FC<VersionHistoryDialogProps> = ({
       // Reload versions
       await loadVersions();
       
-      // Show success message (could use a toast notification here)
-      alert(`✅ Rollback completato!\nRipristinata versione ${result.rolledBackTo}\nNuova versione: ${result.newVersion}`);
+      // Show success message
+      showToast({ message: `Rollback completato! Ripristinata versione ${result.rolledBackTo}. Nuova versione: ${result.newVersion}`, type: 'success' });
       
     } catch (err: any) {
       setError(err.message || 'Errore durante il rollback');

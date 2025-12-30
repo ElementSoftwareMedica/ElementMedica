@@ -107,7 +107,7 @@ const scheduleService = {
       // Get all employees and filter client-side
       // This is more reliable than using a potentially missing endpoint
       console.log(`Getting all employees and filtering for companies: ${companyIds.join(', ')}`);
-      const data = await apiGet<Employee[]>('/employees');
+      const data = await apiGet<Employee[]>('/api/v1/employees');
       
       if (!data || !Array.isArray(data)) {
         console.warn('Invalid response from employees endpoint:', data);

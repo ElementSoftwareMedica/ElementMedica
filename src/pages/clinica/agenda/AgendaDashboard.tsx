@@ -163,7 +163,7 @@ const AppuntamentoCard: React.FC<{
                     {appuntamento.medico && (
                         <span className="flex items-center gap-1">
                             <Users className="h-3.5 w-3.5" />
-                            {getDoctorTitle(appuntamento.medico.taxCode, appuntamento.medico.gender)} {appuntamento.medico.cognome}
+                            {getDoctorTitle((appuntamento.medico as any).taxCode, (appuntamento.medico as any).gender)} {appuntamento.medico.cognome}
                         </span>
                     )}
                     {appuntamento.ambulatorio && (
@@ -350,7 +350,7 @@ export const AgendaDashboard: React.FC = () => {
                                 upcomingAppuntamenti.map(app => (
                                     <AppuntamentoCard
                                         key={app.id}
-                                        appuntamento={app}
+                                        appuntamento={app as any}
                                         onClick={() => navigate(`/poliambulatorio/agenda/appuntamenti/${app.id}`)}
                                     />
                                 ))

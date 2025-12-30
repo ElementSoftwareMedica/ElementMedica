@@ -3,7 +3,7 @@
  * Administrative operations for GDPR compliance
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { apiClient } from '../services';
 import {
   DeletionRequest,
@@ -28,7 +28,7 @@ export const useGDPRAdmin = (): UseGDPRAdminReturn => {
         '/api/gdpr/pending-deletions'
       );
       
-      if (response.data.success) {
+      if (response.data.success && response.data.data) {
         setDeletionRequests(response.data.data.requests);
       } else {
         throw new Error(response.data.message || 'Failed to fetch deletion requests');
@@ -93,7 +93,7 @@ export const useGDPRAdmin = (): UseGDPRAdminReturn => {
         `/api/gdpr/compliance-report?${params.toString()}`
       );
       
-      if (response.data.success) {
+      if (response.data.success && response.data.data) {
         setComplianceReport(response.data.data.report);
       } else {
         throw new Error(response.data.message || 'Failed to generate compliance report');

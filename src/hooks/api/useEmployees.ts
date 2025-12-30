@@ -8,45 +8,42 @@ const MOCK_EMPLOYEES: Employee[] = [
     firstName: "Mario",
     lastName: "Rossi",
     email: "mario.rossi@example.com",
+    username: "mario.rossi",
     phone: "+39 123 456 7890",
     companyId: "mock-company-1",
     isActive: true,
     status: "ACTIVE" as const,
     roleType: "EMPLOYEE" as const,
-    company: {
-      id: "mock-company-1",
-      ragioneSociale: "Azienda Demo SpA"
-    }
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
   },
   {
     id: "mock-emp-2", 
     firstName: "Luigi",
     lastName: "Verdi",
     email: "luigi.verdi@example.com",
+    username: "luigi.verdi",
     phone: "+39 123 456 7891",
     companyId: "mock-company-1",
     isActive: true,
     status: "ACTIVE" as const,
     roleType: "EMPLOYEE" as const,
-    company: {
-      id: "mock-company-1",
-      ragioneSociale: "Azienda Demo SpA"
-    }
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
   },
   {
     id: "mock-emp-3",
     firstName: "Giulia",
     lastName: "Bianchi",
     email: "giulia.bianchi@example.com",
+    username: "giulia.bianchi",
     phone: "+39 123 456 7892",
     companyId: "mock-company-2",
     isActive: true,
     status: "ACTIVE" as const,
     roleType: "EMPLOYEE" as const,
-    company: {
-      id: "mock-company-2",
-      ragioneSociale: "Test Srl"
-    }
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
   }
 ];
 
@@ -71,7 +68,7 @@ export function useEmployees() {
         employee.firstName.toLowerCase().includes(lowercaseFilter) ||
         employee.lastName.toLowerCase().includes(lowercaseFilter) ||
         (employee.email && employee.email.toLowerCase().includes(lowercaseFilter)) ||
-        (employee.company?.ragioneSociale && employee.company.ragioneSociale.toLowerCase().includes(lowercaseFilter))
+        (employee.companyId && String(employee.companyId).toLowerCase().includes(lowercaseFilter))
       );
       setFilteredEmployees(filtered);
     }

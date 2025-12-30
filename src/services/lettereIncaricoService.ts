@@ -186,7 +186,7 @@ class LettereIncaricoService {
       );
 
       // Crea un link per il download
-      const blob = new Blob([response.data], { type: 'application/zip' });
+      const blob = new Blob([response.data as BlobPart], { type: 'application/zip' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;

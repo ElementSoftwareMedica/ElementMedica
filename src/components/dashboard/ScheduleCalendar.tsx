@@ -9,6 +9,9 @@ import './ScheduleCalendar.custom.css';
 import { getStatusCalendarColor } from '../../utils/scheduleStatusColors';
 import type { ScheduleEvent } from '../../pages/Dashboard/hooks/useCalendarEvents';
 
+// Re-export ScheduleEvent for backward compatibility
+export type { ScheduleEvent };
+
 const locales = {
   'it-IT': it,
 };

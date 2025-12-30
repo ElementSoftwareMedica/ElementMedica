@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { apiGet, apiPut } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import { toast } from 'react-hot-toast';
+import { useToast } from '../../hooks/useToast';
 
 interface User {
   id: string;
@@ -39,6 +39,7 @@ interface Role {
 
 const PermissionsTab: React.FC = () => {
   const { hasPermission, isLoading: authLoading } = useAuth();
+  const { showToast } = useToast();
   const [users, setUsers] = useState<User[]>([]);
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
@@ -59,14 +60,14 @@ const PermissionsTab: React.FC = () => {
         apiGet('/api/v1/users'),
         apiGet('/api/v1/permissions'),
         apiGet('/api/v1/roles')
-      ]);
+      ]) as [any, any, any];
 
       setUsers(usersData.data || usersData);
       setPermissions(permissionsData.data || permissionsData);
       setRoles(rolesData.data || rolesData);
     } catch (error) {
       console.error('Errore nel caricamento dati:', error);
-      toast.error('Errore nel caricamento dei dati');
+      showToast({ message: 'Errore nel caricamento dei dati', type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -90,10 +91,10 @@ const PermissionsTab: React.FC = () => {
         setSelectedUser(prev => prev ? { ...prev, permissions: newPermissions } : null);
       }
 
-      toast.success('Permessi aggiornati con successo');
+      showToast({ message: 'Permessi aggiornati con successo', type: 'success' });
     } catch (error) {
       console.error('Errore nell\'aggiornamento permessi:', error);
-      toast.error('Errore nell\'aggiornamento dei permessi');
+      showToast({ message: 'Errore nell\'aggiornamento dei permessi', type: 'error' });
     } finally {
       setSaving(false);
     }
@@ -113,10 +114,10 @@ const PermissionsTab: React.FC = () => {
           : role
       ));
 
-      toast.success('Permessi del ruolo aggiornati con successo');
+      showToast({ message: 'Permessi del ruolo aggiornati con successo', type: 'success' });
     } catch (error) {
       console.error('Errore nell\'aggiornamento permessi ruolo:', error);
-      toast.error('Errore nell\'aggiornamento dei permessi del ruolo');
+      showToast({ message: 'Errore nell\'aggiornamento dei permessi del ruolo', type: 'error' });
     } finally {
       setSaving(false);
     }

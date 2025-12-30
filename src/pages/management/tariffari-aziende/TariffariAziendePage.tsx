@@ -35,7 +35,7 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger
 } from '../../../design-system';
-import { toast } from 'react-hot-toast';
+import { useToast } from '../../../hooks/useToast';
 import {
     tariffariAziendaliApi,
     TariffarioAziendaleListItem,
@@ -45,6 +45,7 @@ import {
 
 const TariffariAziendePage: React.FC = () => {
     const navigate = useNavigate();
+    const { showToast } = useToast();
 
     // State
     const [tariffari, setTariffari] = useState<TariffarioAziendaleListItem[]>([]);
@@ -80,7 +81,7 @@ const TariffariAziendePage: React.FC = () => {
             }
         } catch (error) {
             console.error('Error fetching tariffari:', error);
-            toast.error('Errore nel caricamento dei tariffari');
+            showToast({ message: 'Errore nel caricamento dei tariffari', type: 'error' });
         } finally {
             setLoading(false);
         }
@@ -104,12 +105,12 @@ const TariffariAziendePage: React.FC = () => {
 
         try {
             await tariffariAziendaliApi.delete(tariffario.id);
-            toast.success('Tariffario eliminato con successo');
+            showToast({ message: 'Tariffario eliminato con successo', type: 'success' });
             fetchTariffari();
         } catch (error: unknown) {
             console.error('Error deleting tariffario:', error);
             const errorMessage = error instanceof Error ? error.message : 'Errore durante l\'eliminazione';
-            toast.error(errorMessage);
+            showToast({ message: errorMessage, type: 'error' });
         }
     };
 

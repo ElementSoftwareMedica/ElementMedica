@@ -61,7 +61,7 @@ const FormFieldWrapper = (args: any) => {
       value={value}
       onChange={(e) => {
         if (args.type === 'checkbox') {
-          setValue(e.target.checked);
+          setValue((e.target as HTMLInputElement).checked);
         } else {
           setValue(e.target.value);
         }

@@ -2,7 +2,6 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { sanitizeErrorMessage } from '../utils/errorUtils';
-import { toast } from 'react-hot-toast';
 
 // Configurazione del QueryClient ottimizzata
 const queryClient = new QueryClient({
@@ -50,9 +49,10 @@ const queryClient = new QueryClient({
 queryClient.setMutationDefaults(['create', 'update', 'delete'], {
   onError: (error: any) => {
     console.error('Mutation error:', error);
-    // Mostra un toast con errore sanitizzato per le mutazioni fallite
-    const userMessage = sanitizeErrorMessage(error, 'Operazione fallita');
-    toast.error(userMessage);
+    // Errore sanitizzato - il componente che usa la mutation gestirà il proprio toast
+    const _userMessage = sanitizeErrorMessage(error, 'Operazione fallita');
+    // Toast rimosso per evitare dipendenza da react-hot-toast fuori dal contesto React
+    // I componenti che usano mutations dovrebbero gestire i propri errori con useToast
   },
 });
 

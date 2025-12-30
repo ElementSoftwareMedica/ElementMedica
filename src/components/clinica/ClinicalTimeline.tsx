@@ -295,7 +295,7 @@ export const ClinicalTimeline: React.FC<ClinicalTimelineProps> = ({
                             <div className="flex items-center gap-2 mt-3 text-sm text-gray-500">
                                 <User className="w-4 h-4" />
                                 <span>
-                                    {getDoctorTitle(event.medico.taxCode, event.medico.gender)} {event.medico.cognome} {event.medico.nome}
+                                    {getDoctorTitle((event.medico as any).taxCode, (event.medico as any).gender)} {event.medico.cognome} {event.medico.nome}
                                     {event.medico.specializzazione && (
                                         <span className="text-gray-400"> - {event.medico.specializzazione}</span>
                                     )}

@@ -3,7 +3,7 @@ import { Button } from '../../../design-system/atoms/Button';
 import { Dropdown, DropdownAction } from '../../../design-system/molecules/Dropdown';
 import { Modal } from '../../../design-system/molecules/Modal';
 import { ChevronDown, Trash2, Download, Archive } from 'lucide-react';
-import { toast } from 'react-hot-toast';
+import { useToast } from '../../../hooks/useToast';
 import { GDPRPermissions } from '../hooks/useGDPRPermissions';
 import { apiService } from '../../../services/api';
 
@@ -40,6 +40,7 @@ export function BatchOperations({
   entityNamePlural,
   customOperations = []
 }: BatchOperationsProps) {
+  const { showToast } = useToast();
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [currentOperation, setCurrentOperation] = useState<BatchOperation | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -74,9 +75,9 @@ export function BatchOperations({
           window.URL.revokeObjectURL(url);
           document.body.removeChild(a);
 
-          toast.success(`${ids.length} ${ids.length === 1 ? entityName : entityNamePlural} esportati con successo`);
+          showToast({ message: `${ids.length} ${ids.length === 1 ? entityName : entityNamePlural} esportati con successo`, type: 'success' });
         } catch (error) {
-          toast.error('Errore durante l\'esportazione');
+          showToast({ message: 'Errore durante l\'esportazione', type: 'error' });
           throw error;
         }
       }
@@ -94,9 +95,9 @@ export function BatchOperations({
         try {
           await apiService.post('/batch/archive', { ids, type: entityName });
           
-          toast.success(`${ids.length} ${ids.length === 1 ? entityName : entityNamePlural} archiviati con successo`);
+          showToast({ message: `${ids.length} ${ids.length === 1 ? entityName : entityNamePlural} archiviati con successo`, type: 'success' });
         } catch (error) {
-          toast.error('Errore durante l\'archiviazione');
+          showToast({ message: 'Errore durante l\'archiviazione', type: 'error' });
           throw error;
         }
       }
@@ -114,9 +115,9 @@ export function BatchOperations({
         try {
           await apiService.deleteWithPayload('/batch/delete', { ids, type: entityName });
           
-          toast.success(`${ids.length} ${ids.length === 1 ? entityName : entityNamePlural} eliminati con successo`);
+          showToast({ message: `${ids.length} ${ids.length === 1 ? entityName : entityNamePlural} eliminati con successo`, type: 'success' });
         } catch (error) {
-          toast.error('Errore durante l\'eliminazione');
+          showToast({ message: 'Errore durante l\'eliminazione', type: 'error' });
           throw error;
         }
       }

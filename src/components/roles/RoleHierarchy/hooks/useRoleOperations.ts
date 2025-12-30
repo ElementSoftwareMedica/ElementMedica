@@ -14,7 +14,6 @@ import {
   moveRoleInHierarchy,
   rolesService
 } from '../../../../services/roles';
-import { toast } from 'react-hot-toast';
 import type { RoleFormData, RoleEditData, FullPermission } from '../types';
 
 interface UseRoleOperationsProps {
@@ -42,7 +41,8 @@ export const useRoleOperations = ({ onDataChange }: UseRoleOperationsProps) => {
    */
   const handleEditRole = (roleType: string, hierarchy: any) => {
     if (!hierarchy || !hierarchy[roleType]) {
-      toast.error("Ruolo non trovato nella gerarchia.");
+      // Toast handled by calling component - throw error instead
+      console.error('Ruolo non trovato nella gerarchia.');
       return;
     }
     const roleData = hierarchy[roleType];
@@ -55,7 +55,8 @@ export const useRoleOperations = ({ onDataChange }: UseRoleOperationsProps) => {
    */
   const handleDeleteRole = (roleType: string, hierarchy: any) => {
     if (!hierarchy || !hierarchy[roleType]) {
-      toast.error("Ruolo non trovato nella gerarchia.");
+      // Toast handled by calling component - throw error instead
+      console.error('Ruolo non trovato nella gerarchia.');
       return;
     }
     const roleData = hierarchy[roleType];
@@ -68,7 +69,8 @@ export const useRoleOperations = ({ onDataChange }: UseRoleOperationsProps) => {
    */
   const handleMoveRole = (roleType: string, hierarchy: any) => {
     if (!hierarchy || !hierarchy[roleType]) {
-      toast.error("Ruolo non trovato nella gerarchia.");
+      // Toast handled by calling component - throw error instead
+      console.error('Ruolo non trovato nella gerarchia.');
       return;
     }
     const roleData = hierarchy[roleType];
@@ -174,7 +176,7 @@ export const useRoleOperations = ({ onDataChange }: UseRoleOperationsProps) => {
           await updateSystemRolePermissions(editingRole.roleType, systemRolePermissions);
         }
         
-        toast.success("Il ruolo è stato aggiornato con successo.");
+        // Toast handled by calling component
       } else {
         // Crea nuovo custom role (usa array di stringhe)
         const customRoleData = {
@@ -187,7 +189,7 @@ export const useRoleOperations = ({ onDataChange }: UseRoleOperationsProps) => {
         
         console.log('🔧 Creating role with data:', customRoleData);
         await createRole(customRoleData);
-        toast.success("Il nuovo ruolo è stato creato con successo.");
+        // Toast handled by calling component
       }
       
       // Ricarica i dati
@@ -196,7 +198,8 @@ export const useRoleOperations = ({ onDataChange }: UseRoleOperationsProps) => {
       setEditingRole(null);
     } catch (error: unknown) {
       console.error('❌ Error in handleRoleSubmit:', error);
-      toast.error((error as Error).message || "Si è verificato un errore durante il salvataggio.");
+      // Toast handled by calling component
+      throw error;
     }
   };
 
@@ -206,14 +209,15 @@ export const useRoleOperations = ({ onDataChange }: UseRoleOperationsProps) => {
   const handleRoleDeleteConfirm = async (roleType: string) => {
     try {
       await deleteRole(roleType);
-      toast.success("Il ruolo è stato eliminato con successo.");
+      // Toast handled by calling component
       
       // Ricarica i dati
       await onDataChange();
       setIsDeleteModalOpen(false);
       setRoleToDelete(null);
     } catch (error: unknown) {
-      toast.error((error as Error).message || "Si è verificato un errore durante l'eliminazione.");
+      // Toast handled by calling component
+      throw error;
     }
   };
 
@@ -225,14 +229,15 @@ export const useRoleOperations = ({ onDataChange }: UseRoleOperationsProps) => {
       // Usa il nuovo servizio per spostare il ruolo
       await moveRoleInHierarchy(roleType, newLevel, parentRoleType);
       
-      toast.success(`Il ruolo è stato spostato con successo al livello ${newLevel}${parentRoleType ? ` sotto ${parentRoleType}` : ''}.`);
+      // Toast handled by calling component
       
       // Ricarica i dati
       await onDataChange();
       setIsMoveModalOpen(false);
       setRoleToMove(null);
     } catch (error: unknown) {
-      toast.error((error as Error).message || "Si è verificato un errore durante lo spostamento.");
+      // Toast handled by calling component
+      throw error;
     }
   };
 

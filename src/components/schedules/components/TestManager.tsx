@@ -19,6 +19,7 @@ import {
     AlertCircle
 } from 'lucide-react';
 import { Button } from '../../../design-system/atoms/Button';
+import { useToast } from '../../../hooks/useToast';
 import {
     getTestsForCourse,
     getTestResultsForSchedule,
@@ -71,6 +72,7 @@ export const TestManager: React.FC<TestManagerProps> = ({
     const [tests, setTests] = useState<TestWithResults[]>([]);
     const [stats, setStats] = useState<TestStats[]>([]);
     const [expandedTests, setExpandedTests] = useState<Set<string>>(new Set());
+    const { showToast } = useToast();
 
     // Carica test e risultati
     const loadTestsAndResults = useCallback(async () => {
@@ -165,7 +167,7 @@ export const TestManager: React.FC<TestManagerProps> = ({
         const personIds = pendingParticipants.map(p => String(p.id));
 
         if (personIds.length === 0) {
-            alert('Tutti i partecipanti hanno già completato questo test');
+            showToast({ message: 'Tutti i partecipanti hanno già completato questo test', type: 'info' });
             return;
         }
 

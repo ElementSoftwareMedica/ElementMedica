@@ -283,8 +283,8 @@ const DiscountCodesPage: React.FC = () => {
 
   const handleEdit = (code: CodiceSconto) => {
     setEditingCode(code);
-    const hasAdvancedTargeting = code.etaMinima || code.etaMassima || code.genereApplicabile || code.soloNuoviPazienti;
-    setShowAdvancedTargeting(hasAdvancedTargeting || false);
+    const hasAdvancedTargeting = !!(code.etaMinima || code.etaMassima || code.genereApplicabile || code.soloNuoviPazienti);
+    setShowAdvancedTargeting(hasAdvancedTargeting);
     setFormData({
       codice: code.codice,
       nome: code.nome,
@@ -341,8 +341,8 @@ const DiscountCodesPage: React.FC = () => {
   };
 
   const handleDuplicate = async (code: CodiceSconto) => {
-    const hasAdvancedTargeting = code.etaMinima || code.etaMassima || code.genereApplicabile || code.soloNuoviPazienti;
-    setShowAdvancedTargeting(hasAdvancedTargeting || false);
+    const hasAdvancedTargeting = !!(code.etaMinima || code.etaMassima || code.genereApplicabile || code.soloNuoviPazienti);
+    setShowAdvancedTargeting(hasAdvancedTargeting);
     setFormData({
       codice: `${code.codice}_COPIA`,
       nome: `${code.nome} (Copia)`,
@@ -1034,7 +1034,7 @@ const DiscountCodesPage: React.FC = () => {
               <div className="border border-gray-200 rounded-lg overflow-hidden">
                 <button
                   type="button"
-                  onClick={() => setFormData({ ...formData, showAdvancedTargeting: !formData.showAdvancedTargeting })}
+                  onClick={() => setShowAdvancedTargeting(!showAdvancedTargeting)}
                   className="w-full p-4 bg-gradient-to-r from-purple-50 to-indigo-50 flex items-center justify-between hover:from-purple-100 hover:to-indigo-100 transition-colors"
                 >
                   <div className="flex items-center gap-2">
@@ -1044,14 +1044,14 @@ const DiscountCodesPage: React.FC = () => {
                       {(formData.etaMinima || formData.etaMassima || formData.genereApplicabile || formData.soloNuoviPazienti) ? 'Attivo' : 'Opzionale'}
                     </span>
                   </div>
-                  {formData.showAdvancedTargeting ? (
+                  {showAdvancedTargeting ? (
                     <ChevronUp className="w-5 h-5 text-gray-500" />
                   ) : (
                     <ChevronDown className="w-5 h-5 text-gray-500" />
                   )}
                 </button>
 
-                {formData.showAdvancedTargeting && (
+                {showAdvancedTargeting && (
                   <div className="p-4 space-y-4 bg-white">
                     {/* Range Età */}
                     <div>
@@ -1064,7 +1064,7 @@ const DiscountCodesPage: React.FC = () => {
                           <input
                             type="number"
                             value={formData.etaMinima || ''}
-                            onChange={(e) => setFormData({ ...formData, etaMinima: e.target.value ? parseInt(e.target.value) : null })}
+                            onChange={(e) => setFormData({ ...formData, etaMinima: e.target.value || '' })}
                             placeholder="Min"
                             min="0"
                             max="120"
@@ -1076,7 +1076,7 @@ const DiscountCodesPage: React.FC = () => {
                           <input
                             type="number"
                             value={formData.etaMassima || ''}
-                            onChange={(e) => setFormData({ ...formData, etaMassima: e.target.value ? parseInt(e.target.value) : null })}
+                            onChange={(e) => setFormData({ ...formData, etaMassima: e.target.value || '' })}
                             placeholder="Max"
                             min="0"
                             max="120"

@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { FileText, Download, Trash2, RefreshCw, Plus, Users, Clock } from 'lucide-react';
 import registriPresenzeService, { type RegistroPresenze } from '@/services/registriPresenzeService';
 import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
+import { useToast } from '../../hooks/useToast';
 import GenerateAttendanceDialog from './GenerateAttendanceDialog';
 
 interface Participant {
@@ -41,6 +42,7 @@ export default function SessionAttendanceCard({
   const [loading, setLoading] = useState(true);
   const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
   const { confirmDelete } = useConfirmDialog();
+  const { showToast } = useToast();
 
   useEffect(() => {
     loadRegistri();
@@ -67,7 +69,7 @@ export default function SessionAttendanceCard({
       await loadRegistri();
     } catch (error) {
       console.error('Failed to delete registro:', error);
-      alert('Errore durante l\'eliminazione del registro');
+      showToast({ message: 'Errore durante l\'eliminazione del registro', type: 'error' });
     }
   };
 
@@ -76,7 +78,7 @@ export default function SessionAttendanceCard({
       await registriPresenzeService.download(id);
     } catch (error) {
       console.error('Failed to download registro:', error);
-      alert('Errore durante il download del registro');
+      showToast({ message: 'Errore durante il download del registro', type: 'error' });
     }
   };
 

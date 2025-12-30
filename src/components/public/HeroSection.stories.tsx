@@ -51,10 +51,10 @@ export const Homepage: Story = {
       href: '/contatti',
     },
     stats: [
-      { number: '500+', label: 'Aziende Clienti' },
-      { number: '10.000+', label: 'Lavoratori Formati' },
-      { number: '15+', label: 'Anni di Esperienza' },
-      { number: '98%', label: 'Soddisfazione Cliente' }
+      { value: '500+', label: 'Aziende Clienti' },
+      { value: '10.000+', label: 'Lavoratori Formati' },
+      { value: '15+', label: 'Anni di Esperienza' },
+      { value: '98%', label: 'Soddisfazione Cliente' }
     ],
     showContactForm: true,
     backgroundVariant: 'gradient',
@@ -100,10 +100,10 @@ export const WithStats: Story = {
     subtitle: 'Element Formazione',
     description: 'Da oltre 15 anni al servizio delle aziende per garantire la massima sicurezza sul lavoro.',
     stats: [
-      { number: '500+', label: 'Aziende Clienti' },
-      { number: '10.000+', label: 'Lavoratori Formati' },
-      { number: '15+', label: 'Anni di Esperienza' },
-      { number: '98%', label: 'Soddisfazione Cliente' }
+      { value: '500+', label: 'Aziende Clienti' },
+      { value: '10.000+', label: 'Lavoratori Formati' },
+      { value: '15+', label: 'Anni di Esperienza' },
+      { value: '98%', label: 'Soddisfazione Cliente' }
     ],
     primaryButton: {
       text: 'Scopri di più',

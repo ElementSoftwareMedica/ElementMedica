@@ -8,6 +8,7 @@ import lettereIncaricoService from '../../../../../services/lettereIncaricoServi
 import registriPresenzeService from '../../../../../services/registriPresenzeService';
 import attestatiService from '../../../../../services/attestatiService';
 import preventiviService from '../../../../../services/preventiviService';
+import { useToast } from '../../../../../hooks/useToast';
 
 export interface UseDocumentActionsReturn {
   downloadLettera: (id: string) => Promise<void>;
@@ -33,6 +34,7 @@ export const useDocumentActions = (
   onRefresh: () => void,
   scheduleId?: string | number | null
 ): UseDocumentActionsReturn => {
+  const { showToast } = useToast();
 
   /**
    * Download lettera di incarico
@@ -42,7 +44,7 @@ export const useDocumentActions = (
       await lettereIncaricoService.download(id);
     } catch (error) {
       console.error('Errore download lettera:', error);
-      alert('❌ Errore durante il download');
+      showToast({ message: 'Errore durante il download della lettera', type: 'error' });
     }
   };
 
@@ -54,7 +56,7 @@ export const useDocumentActions = (
       await registriPresenzeService.download(id);
     } catch (error) {
       console.error('Errore download registro:', error);
-      alert('❌ Errore durante il download');
+      showToast({ message: 'Errore durante il download del registro', type: 'error' });
     }
   };
 
@@ -66,7 +68,7 @@ export const useDocumentActions = (
       await attestatiService.download(id);
     } catch (error) {
       console.error('Errore download attestato:', error);
-      alert('❌ Errore durante il download');
+      showToast({ message: 'Errore durante il download dell\'attestato', type: 'error' });
     }
   };
 
@@ -78,7 +80,7 @@ export const useDocumentActions = (
       await preventiviService.download(id);
     } catch (error) {
       console.error('Errore download preventivo:', error);
-      alert('❌ Errore durante il download');
+      showToast({ message: 'Errore durante il download del preventivo', type: 'error' });
     }
   };
 
@@ -90,7 +92,7 @@ export const useDocumentActions = (
       await attestatiService.downloadZipBatch(ids);
     } catch (error) {
       console.error('Errore download ZIP attestati:', error);
-      alert('❌ Errore durante il download del file ZIP');
+      showToast({ message: 'Errore durante il download del file ZIP attestati', type: 'error' });
     }
   };
 
@@ -99,14 +101,14 @@ export const useDocumentActions = (
    */
   const downloadLettereZip = async (ids: string[]) => {
     if (!scheduleId) {
-      alert('❌ Schedule ID non disponibile');
+      showToast({ message: 'Schedule ID non disponibile', type: 'error' });
       return;
     }
     try {
       await lettereIncaricoService.downloadZip(String(scheduleId), ids);
     } catch (error) {
       console.error('Errore download ZIP lettere:', error);
-      alert('❌ Errore durante il download del file ZIP');
+      showToast({ message: 'Errore durante il download del file ZIP lettere', type: 'error' });
     }
   };
 
@@ -115,14 +117,14 @@ export const useDocumentActions = (
    */
   const downloadRegistriZip = async (ids: string[]) => {
     if (!scheduleId) {
-      alert('❌ Schedule ID non disponibile');
+      showToast({ message: 'Schedule ID non disponibile', type: 'error' });
       return;
     }
     try {
       await registriPresenzeService.downloadZip(String(scheduleId), ids);
     } catch (error) {
       console.error('Errore download ZIP registri:', error);
-      alert('❌ Errore durante il download del file ZIP');
+      showToast({ message: 'Errore durante il download del file ZIP registri', type: 'error' });
     }
   };
 
@@ -135,9 +137,10 @@ export const useDocumentActions = (
     try {
       await lettereIncaricoService.delete(id);
       onRefresh();
+      showToast({ message: 'Lettera eliminata con successo', type: 'success' });
     } catch (error) {
       console.error('Errore eliminazione lettera:', error);
-      alert('❌ Errore durante l\'eliminazione');
+      showToast({ message: 'Errore durante l\'eliminazione della lettera', type: 'error' });
     }
   };
 
@@ -150,9 +153,10 @@ export const useDocumentActions = (
     try {
       await registriPresenzeService.delete(id);
       onRefresh();
+      showToast({ message: 'Registro eliminato con successo', type: 'success' });
     } catch (error) {
       console.error('Errore eliminazione registro:', error);
-      alert('❌ Errore durante l\'eliminazione');
+      showToast({ message: 'Errore durante l\'eliminazione del registro', type: 'error' });
     }
   };
 
@@ -165,9 +169,10 @@ export const useDocumentActions = (
     try {
       await attestatiService.delete(id);
       onRefresh();
+      showToast({ message: 'Attestato eliminato con successo', type: 'success' });
     } catch (error) {
       console.error('Errore eliminazione attestato:', error);
-      alert('❌ Errore durante l\'eliminazione');
+      showToast({ message: 'Errore durante l\'eliminazione dell\'attestato', type: 'error' });
     }
   };
 
@@ -180,9 +185,10 @@ export const useDocumentActions = (
     try {
       await preventiviService.delete(id);
       onRefresh();
+      showToast({ message: 'Preventivo eliminato con successo', type: 'success' });
     } catch (error) {
       console.error('Errore eliminazione preventivo:', error);
-      alert('❌ Errore durante l\'eliminazione');
+      showToast({ message: 'Errore durante l\'eliminazione del preventivo', type: 'error' });
     }
   };
 

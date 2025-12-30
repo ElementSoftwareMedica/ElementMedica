@@ -34,7 +34,7 @@ const FormSubmissionsPage: React.FC<FormSubmissionsPageProps> = ({ hideHeader = 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const { hasPermission, loading: authLoading } = useAuth();
+  const { hasPermission, isLoading: authLoading } = useAuth();
   const canView = hasPermission('form_submissions', 'read');
 
   useEffect(() => {

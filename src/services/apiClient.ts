@@ -11,8 +11,6 @@ const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  // CRITICAL: Set default method to prevent toUpperCase errors in axios internals
-  method: 'GET',
   withCredentials: true, // Include cookies for authentication
 });
 
@@ -21,8 +19,6 @@ const directApiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  // CRITICAL: Set default method to prevent toUpperCase errors
-  method: 'GET',
   withCredentials: true, // Include cookies for authentication
 });
 

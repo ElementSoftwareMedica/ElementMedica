@@ -273,8 +273,7 @@ const CompanyImportRefactored: React.FC<CompanyImportProps> = ({
           } catch (error) {
             console.error('Error creating site:', error);
             showToast({
-              title: 'Errore creazione sede',
-              description: error instanceof Error ? error.message : 'Errore sconosciuto',
+              message: `Errore creazione sede: ${error instanceof Error ? error.message : 'Errore sconosciuto'}`,
               type: 'error'
             });
           }
@@ -293,8 +292,7 @@ const CompanyImportRefactored: React.FC<CompanyImportProps> = ({
       } else if (sitesToCreate.length > 0) {
         // Just close and refresh if only sites were created
         showToast({
-          title: 'Operazione completata',
-          description: `${sitesToCreate.length} sedi create con successo`,
+          message: `Operazione completata: ${sitesToCreate.length} sedi create con successo`,
           type: 'success'
         });
         onClose();
@@ -302,8 +300,7 @@ const CompanyImportRefactored: React.FC<CompanyImportProps> = ({
     } catch (error) {
       console.error('Error in conflict resolution:', error);
       showToast({
-        title: 'Errore',
-        description: 'Errore durante la risoluzione dei conflitti',
+        message: 'Errore durante la risoluzione dei conflitti',
         type: 'error'
       });
     }

@@ -30,7 +30,7 @@ const CourseDetails: React.FC = () => {
     const fetchCourse = async () => {
       setLoading(true);
       try {
-        const data = await apiGet(`/courses/${id}`);
+        const data = await apiGet(`/api/v1/courses/${id}`);
         setCourse(data as Course);
       } catch {
         setNotFound(true);

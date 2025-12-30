@@ -103,8 +103,6 @@ const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  // CRITICAL: Set default method to prevent toUpperCase errors in axios internals
-  method: 'GET',
   // Abilita withCredentials per supportare CORS con credenziali
   withCredentials: true,
   // Rimuovo timeout globale per permettere timeout specifici per operazione
@@ -137,52 +135,8 @@ apiClient.interceptors.request.use(
     if (!config.headers) config.headers = {};
     (config.headers as Record<string, any>)['X-Frontend-Id'] = brandId;
 
-    // RISCRITTURA LEGACY URLs - DEVE ESSERE PRIMA DI QUALSIASI EARLY RETURN
-    // Applica riscritture per tutti i tipi di richiesta (GET, POST, PUT, DELETE, etc.)
-    if (typeof config.url === 'string') {
-      const u = config.url;
-
-      // Courses: '/courses/*' -> '/api/v1/courses/*' e '/api/courses/*' -> '/api/v1/courses/*'
-      if (u === '/courses' || u === '/api/courses') {
-        config.url = '/api/v1/courses';
-      } else if (u.startsWith('/courses/') || u.startsWith('/courses?')) {
-        config.url = `/api/v1${u}`;
-      } else if (u.startsWith('/api/courses/') || u.startsWith('/api/courses?')) {
-        config.url = `/api/v1${u.substring(4)}`;
-      }
-      // Trainers
-      else if (u === '/trainers' || u === '/api/trainers') {
-        config.url = '/api/v1/trainers';
-      } else if (u.startsWith('/trainers/') || u.startsWith('/trainers?')) {
-        config.url = `/api/v1${u}`;
-      } else if (u.startsWith('/api/trainers/') || u.startsWith('/api/trainers?')) {
-        config.url = `/api/v1${u.substring(4)}`;
-      }
-      // Companies
-      else if (u === '/companies' || u === '/api/companies') {
-        config.url = '/api/v1/companies';
-      } else if (u.startsWith('/companies/') || u.startsWith('/companies?')) {
-        config.url = `/api/v1${u}`;
-      } else if (u.startsWith('/api/companies/') || u.startsWith('/api/companies?')) {
-        config.url = `/api/v1${u.substring(4)}`;
-      }
-      // Persons
-      else if (u === '/persons' || u === '/api/persons') {
-        config.url = '/api/v1/persons';
-      } else if (u.startsWith('/persons/') || u.startsWith('/persons?')) {
-        config.url = `/api/v1${u}`;
-      } else if (u.startsWith('/api/persons/') || u.startsWith('/api/persons?')) {
-        config.url = `/api/v1${u.substring(4)}`;
-      }
-      // Schedules
-      else if (u === '/schedules' || u === '/api/schedules') {
-        config.url = '/api/v1/schedules';
-      } else if (u.startsWith('/schedules/') || u.startsWith('/schedules?')) {
-        config.url = `/api/v1${u}`;
-      } else if (u.startsWith('/api/schedules/') || u.startsWith('/api/schedules?')) {
-        config.url = `/api/v1${u.substring(4)}`;
-      }
-    }
+    // NOTE: Legacy URL rewriting removed - all services now use /api/v1/ directly
+    // See: Project 46 E2E optimization (2025-01-14)
 
     // SOLUZIONE ULTRA-SEMPLIFICATA: Per chiamate apiGet, fai il minimo indispensabile
     if (config._isApiGetCall) {
@@ -266,105 +220,9 @@ apiClient.interceptors.request.use(
       config.url = config.url.replace(/^\/api\//, '/');
     }
 
-    // RISCRITTURA LEGACY: mappa '/trainers' e '/api/trainers' su '/api/v1/trainers' (inclusi percorsi nidificati e query)
-    if (typeof config.url === 'string') {
-      const u = config.url;
-      // Casi senza prefisso /api
-      if (u === '/trainers') {
-        config.url = '/api/v1/trainers';
-      } else if (u.startsWith('/trainers/')) {
-        config.url = `/api/v1${u}`;
-      } else if (u.startsWith('/trainers?')) {
-        config.url = `/api/v1${u}`;
-      }
-      // Casi con prefisso /api
-      else if (u === '/api/trainers') {
-        config.url = '/api/v1/trainers';
-      } else if (u.startsWith('/api/trainers/')) {
-        config.url = `/api/v1${u.substring(4)}`;
-      } else if (u.startsWith('/api/trainers?')) {
-        config.url = `/api/v1${u.substring(4)}`;
-      }
-    }
-
-    // RISCRITTURA LEGACY per companies: mappa '/companies' e '/api/companies' su '/api/v1/companies' (inclusi percorsi nidificati e query)
-    if (typeof config.url === 'string') {
-      const u = config.url;
-      // Casi senza prefisso /api
-      if (u === '/companies') {
-        config.url = '/api/v1/companies';
-      } else if (u.startsWith('/companies/')) {
-        config.url = `/api/v1${u}`;
-      } else if (u.startsWith('/companies?')) {
-        config.url = `/api/v1${u}`;
-      }
-      // Casi con prefisso /api
-      else if (u === '/api/companies') {
-        config.url = '/api/v1/companies';
-      } else if (u.startsWith('/api/companies/')) {
-        config.url = `/api/v1${u.substring(4)}`;
-      } else if (u.startsWith('/api/companies?')) {
-        config.url = `/api/v1${u.substring(4)}`;
-      }
-    }
-
-    // RISCRITTURA LEGACY per schedules: mappa '/schedules' e '/api/schedules' su '/api/v1/schedules'
-    // e '/schedules-with-attestati' su '/api/v1/schedules/with-attestati'
-    if (typeof config.url === 'string') {
-      const u = config.url;
-      // Schedules (senza prefisso /api)
-      if (u === '/schedules') {
-        config.url = '/api/v1/schedules';
-      } else if (u.startsWith('/schedules/')) {
-        config.url = `/api/v1${u}`;
-      } else if (u.startsWith('/schedules?')) {
-        config.url = `/api/v1${u}`;
-      }
-      // Schedules (con prefisso /api)
-      else if (u === '/api/schedules') {
-        config.url = '/api/v1/schedules';
-      } else if (u.startsWith('/api/schedules/')) {
-        config.url = `/api/v1${u.substring(4)}`;
-      } else if (u.startsWith('/api/schedules?')) {
-        config.url = `/api/v1${u.substring(4)}`;
-      }
-      // with-attestati (senza prefisso /api)
-      else if (u === '/schedules-with-attestati') {
-        config.url = '/api/v1/schedules/with-attestati';
-      }
-      // with-attestati (con prefisso /api)
-      else if (u === '/api/schedules-with-attestati') {
-        config.url = '/api/v1/schedules/with-attestati';
-      }
-    }
-
-    // RISCRITTURA LEGACY per courses: mappa '/courses' e '/api/courses' su '/api/v1/courses'
-    // Include sottopercorsi (es. /courses/bulk-import) e querystring
-    if (typeof config.url === 'string') {
-      const u = config.url;
-      // Casi senza prefisso /api
-      if (u === '/courses') {
-        config.url = '/api/v1/courses';
-      } else if (u.startsWith('/courses/')) {
-        // Eccezione: non riscrivere l'endpoint di bulk-import corsi
-        if (!u.startsWith('/courses/bulk-import')) {
-          config.url = `/api/v1${u}`;
-        }
-      } else if (u.startsWith('/courses?')) {
-        config.url = `/api/v1${u}`;
-      }
-      // Casi con prefisso /api
-      else if (u === '/api/courses') {
-        config.url = '/api/v1/courses';
-      } else if (u.startsWith('/api/courses/')) {
-        // Eccezione: non riscrivere l'endpoint di bulk-import corsi
-        if (!u.startsWith('/api/courses/bulk-import')) {
-          config.url = `/api/v1${u.substring(4)}`;
-        }
-      } else if (u.startsWith('/api/courses?')) {
-        config.url = `/api/v1${u.substring(4)}`;
-      }
-    }
+    // NOTE: Legacy URL rewriting removed - all services now use /api/v1/ directly
+    // See: Project 46 E2E optimization (2025-01-14)
+    // Removed legacy rewriting for: /trainers, /companies, /schedules, /courses
 
     // Normalizzazione URL: se comincia con '/' ma non con '/api', prefissa '/api'
     if (

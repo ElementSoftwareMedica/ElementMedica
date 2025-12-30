@@ -322,5 +322,4 @@ const DataTable = <T extends object>({
   );
 };
 
-export type { DataTableColumn };
 export default DataTable;

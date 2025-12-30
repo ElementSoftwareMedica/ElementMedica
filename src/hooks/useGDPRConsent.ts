@@ -15,7 +15,6 @@ import {
   ConsentType
 } from '../types/gdpr';
 import { useAuth } from '../context/AuthContext';
-import { toast } from 'react-hot-toast';
 
 export const useGDPRConsent = (): UseGDPRConsentReturn => {
   const [consents, setConsents] = useState<GDPRConsent[]>([]);
@@ -86,7 +85,7 @@ export const useGDPRConsent = (): UseGDPRConsentReturn => {
           return [...filtered, newConsent];
         });
 
-        toast.success(`Consent granted for ${data.consentType}`);
+        // Toast handled by calling component
       } else {
         throw new Error('Failed to grant consent');
       }
@@ -94,7 +93,7 @@ export const useGDPRConsent = (): UseGDPRConsentReturn => {
       const errorMessage = err instanceof Error ? err.message : 'Failed to grant consent';
       setError(errorMessage);
       console.error('Error granting consent:', err);
-      toast.error('Failed to grant consent');
+      // Toast handled by calling component
       throw err;
     } finally {
       setLoading(false);
@@ -128,7 +127,7 @@ export const useGDPRConsent = (): UseGDPRConsentReturn => {
           )
         );
 
-        toast.success(`Consent withdrawn for ${data.consentType}`);
+        // Toast handled by calling component
       } else {
         throw new Error('Failed to withdraw consent');
       }
@@ -136,7 +135,7 @@ export const useGDPRConsent = (): UseGDPRConsentReturn => {
       const errorMessage = err instanceof Error ? err.message : 'Failed to withdraw consent';
       setError(errorMessage);
       console.error('Error withdrawing consent:', err);
-      toast.error('Failed to withdraw consent');
+      // Toast handled by calling component
       throw err;
     } finally {
       setLoading(false);

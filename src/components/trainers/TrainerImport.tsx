@@ -71,7 +71,7 @@ const TrainerImport: React.FC<TrainerImportProps> = ({
   // Funzione personalizzata per processare il file CSV
   const customProcessFile = async (file: File): Promise<any[]> => {
     // Processa il file e ottieni i dati grezzi
-    const processedData = await defaultProcessFile(file, csvHeaderMap);
+    const processedData = await defaultProcessFile(file, csvHeaderMap, ',');
     
     // Processa ogni riga per gestire il campo status
     const processedRows = processedData.map((trainer: any) => {

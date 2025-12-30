@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { Button } from './button';
 import { Label } from './label';
 import { Upload, X, Image as ImageIcon } from 'lucide-react';
+import { useToast } from '../../hooks/useToast';
 
 interface ImageUploadProps {
   label: string;
@@ -23,6 +24,7 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
   const [isUploading, setIsUploading] = useState(false);
   const [preview, setPreview] = useState<string | null>(value || null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { showToast } = useToast();
 
   const compressImage = (file: File, maxSizeKB: number): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -78,13 +80,13 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
 
     // Verifica tipo file
     if (!acceptedTypes.includes(file.type)) {
-      alert(`Tipo di file non supportato. Tipi accettati: ${acceptedTypes.join(', ')}`);
+      showToast({ message: `Tipo di file non supportato. Tipi accettati: ${acceptedTypes.join(', ')}`, type: 'error' });
       return;
     }
 
     // Verifica dimensione file (controllo iniziale)
     if (file.size > maxSizeKB * 1024 * 10) { // 10x il limite per file molto grandi
-      alert(`File troppo grande. Dimensione massima: ${maxSizeKB}KB`);
+      showToast({ message: `File troppo grande. Dimensione massima: ${maxSizeKB}KB`, type: 'error' });
       return;
     }
 
@@ -96,7 +98,7 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
       onChange(compressedDataUrl);
     } catch (error) {
       console.error('Errore nella compressione dell\'immagine:', error);
-      alert('Errore nel processamento dell\'immagine');
+      showToast({ message: 'Errore nel processamento dell\'immagine', type: 'error' });
     } finally {
       setIsUploading(false);
       // Reset input

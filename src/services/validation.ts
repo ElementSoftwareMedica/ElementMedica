@@ -9,7 +9,7 @@ export async function checkEmailAvailability(email: string): Promise<boolean> {
   }
 
   try {
-    const response = await apiGet<{ available: boolean }>('/persons/check-email', { 
+    const response = await apiGet<{ available: boolean }>('/api/v1/persons/check-email', { 
       email: email.toLowerCase().trim() 
     });
     return response.available;
@@ -28,7 +28,7 @@ export async function checkTaxCodeAvailability(taxCode: string): Promise<boolean
   }
 
   try {
-    const response = await apiGet<{ available: boolean }>('/persons/check-taxcode', { 
+    const response = await apiGet<{ available: boolean }>('/api/v1/persons/check-taxcode', { 
       taxCode: taxCode.toUpperCase().trim() 
     });
     return response.available;
@@ -47,7 +47,7 @@ export async function checkUsernameAvailability(username: string): Promise<boole
   }
 
   try {
-    const response = await apiGet<{ available: boolean }>('/persons/check-username', { 
+    const response = await apiGet<{ available: boolean }>('/api/v1/persons/check-username', { 
       username: username.trim() 
     });
     return response.available;

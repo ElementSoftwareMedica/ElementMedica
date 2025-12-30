@@ -1,4 +1,4 @@
-import React, { createContext, useContext } from 'react';
+import React, { createContext, useContext, useState } from 'react';
 import { cn } from '../../utils';
 
 interface TabsContextProps {
@@ -22,10 +22,12 @@ const useTabsContext = () => {
 export interface TabsProps {
   /** Contenuto dei tabs */
   children: React.ReactNode;
-  /** Valore del tab attivo */
-  value: string;
+  /** Valore del tab attivo (controlled mode) */
+  value?: string;
+  /** Valore iniziale del tab attivo (uncontrolled mode) */
+  defaultValue?: string;
   /** Callback chiamato quando cambia il tab attivo */
-  onValueChange: (value: string) => void;
+  onValueChange?: (value: string) => void;
   /** Classi CSS personalizzate */
   className?: string;
   /** Orientamento dei tabs */
@@ -83,15 +85,32 @@ export interface TabsContentProps {
  * </Tabs>
  * ```
  */
-export const Tabs: React.FC<TabsProps> = ({ 
+export const Tabs: React.FC<TabsProps> & {
+  List: typeof TabsList;
+  Trigger: typeof TabsTrigger;
+  Content: typeof TabsContent;
+} = ({ 
   children, 
-  value, 
+  value: controlledValue, 
+  defaultValue = '',
   onValueChange,
   className = '',
   orientation = 'horizontal'
 }) => {
+  // Supporto per modo controllato e non controllato
+  const [internalValue, setInternalValue] = useState(defaultValue);
+  const isControlled = controlledValue !== undefined;
+  const currentValue = isControlled ? controlledValue : internalValue;
+  
+  const handleValueChange = (newValue: string) => {
+    if (!isControlled) {
+      setInternalValue(newValue);
+    }
+    onValueChange?.(newValue);
+  };
+
   return (
-    <TabsContext.Provider value={{ value, onValueChange }}>
+    <TabsContext.Provider value={{ value: currentValue, onValueChange: handleValueChange }}>
       <div 
         className={cn(
           'tabs-root',
@@ -207,7 +226,7 @@ export const TabsContent: React.FC<TabsContentProps> = ({
   );
 };
 
-// Export compound component
+// Assign compound components
 Tabs.List = TabsList;
 Tabs.Trigger = TabsTrigger;
 Tabs.Content = TabsContent;

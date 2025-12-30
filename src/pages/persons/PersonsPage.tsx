@@ -49,7 +49,7 @@ export const PersonsPage: React.FC<PersonsPageProps> = ({
 }) => {
   const navigate = useNavigate();
   const { showToast } = useToast();
-  const { currentTenant } = useTenant();
+  const { tenant } = useTenant();
 
   // Stati per il modal di importazione
   const [showImportModal, setShowImportModal] = useState(false);
@@ -175,7 +175,7 @@ export const PersonsPage: React.FC<PersonsPageProps> = ({
         renderCell: (person: Person) => {
           const site = person.site;
           return site ? (
-            <span className="text-gray-900">{site.siteName}</span>
+            <span className="text-gray-900">{site.name}</span>
           ) : (
             <span className="text-gray-400">N/A</span>
           );
@@ -626,12 +626,12 @@ export const PersonsPage: React.FC<PersonsPageProps> = ({
       />
 
       {/* Modal di importazione - usa modali specifici per employees/trainers */}
-      {showImportModal && filterType === 'employees' && (
+      {showImportModal && filterType === 'employees' && tenant?.id && (
         <EmployeeImportModal
           isOpen={showImportModal}
           onClose={() => setShowImportModal(false)}
           companies={existingCompanies || []}
-          tenantId={currentTenant?.id || ''}
+          tenantId={tenant.id}
           onImportComplete={async () => {
             await refetchPersonsForImport();
             await refetchPersons();
@@ -643,10 +643,11 @@ export const PersonsPage: React.FC<PersonsPageProps> = ({
         />
       )}
 
-      {showImportModal && filterType === 'trainers' && (
+      {showImportModal && filterType === 'trainers' && tenant?.id && (
         <TrainerImportModal
           isOpen={showImportModal}
           onClose={() => setShowImportModal(false)}
+          tenantId={tenant.id}
           onImportComplete={async () => {
             await refetchPersonsForImport();
             await refetchPersons();

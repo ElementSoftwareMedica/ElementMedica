@@ -279,6 +279,7 @@ export interface Medico {
     status?: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' | 'PENDING';
     notes?: string;
     profileImage?: string;
+    gender?: 'MALE' | 'FEMALE' | 'OTHER' | 'NOT_SPECIFIED';
     createdAt?: string;
     updatedAt?: string;
     deletedAt?: string;

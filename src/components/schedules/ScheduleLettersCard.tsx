@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { FileText, Download, Trash2, RefreshCw, Plus } from 'lucide-react';
 import lettereIncaricoService, { type LetteraIncarico } from '@/services/lettereIncaricoService';
 import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
+import { useToast } from '../../hooks/useToast';
 import GenerateLetterDialog from './GenerateLetterDialog';
 
 interface Trainer {
@@ -42,6 +43,7 @@ export default function ScheduleLettersCard({
   const [loading, setLoading] = useState(true);
   const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
   const { confirmDelete } = useConfirmDialog();
+  const { showToast } = useToast();
 
   useEffect(() => {
     loadLetters();
@@ -68,7 +70,7 @@ export default function ScheduleLettersCard({
       await loadLetters();
     } catch (error) {
       console.error('Failed to delete letter:', error);
-      alert('Errore durante l\'eliminazione della lettera');
+      showToast({ message: 'Errore durante l\'eliminazione della lettera', type: 'error' });
     }
   };
 
@@ -77,7 +79,7 @@ export default function ScheduleLettersCard({
       await lettereIncaricoService.download(id);
     } catch (error) {
       console.error('Failed to download letter:', error);
-      alert('Errore durante il download della lettera');
+      showToast({ message: 'Errore durante il download della lettera', type: 'error' });
     }
   };
 

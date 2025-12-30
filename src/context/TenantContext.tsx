@@ -15,6 +15,7 @@ export interface TenantContextType {
   isLoading: boolean;
   error: string | null;
   loadTenant: () => Promise<void>;
+  refreshTenant: () => Promise<void>;
 }
 
 // Context
@@ -214,19 +215,20 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
                 fullResponse: userPermissions
               });
             } catch (error) {
+              const err = error as Error & { response?: { status?: number; statusText?: string; data?: unknown } };
               console.error('❌ TenantContext: Error getting user permissions:', {
-                error: error.message,
-                status: error.response?.status,
-                statusText: error.response?.statusText,
-                responseData: error.response?.data,
-                stack: error.stack,
+                error: err.message,
+                status: err.response?.status,
+                statusText: err.response?.statusText,
+                responseData: err.response?.data,
+                stack: err.stack,
                 userId: user.id,
                 fullError: error
               });
               console.error('❌ TenantContext: Will use default EMPLOYEE role due to error');
               
               // Se l'errore è 403, potrebbe essere un problema di autorizzazione
-              if (error.response?.status === 403) {
+              if (err.response?.status === 403) {
                 console.error('🚫 TenantContext: 403 Forbidden - User ID mismatch or authorization issue');
                 console.error('🚫 TenantContext: Check if user.id matches authenticated user ID');
               }
@@ -421,6 +423,7 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     hasPermission,
     isLoading,
     error,
+    loadTenant: refreshTenant, // Alias for backwards compatibility
     refreshTenant
   };
 

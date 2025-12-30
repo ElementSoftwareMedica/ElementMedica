@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { toast } from 'sonner';
+import { useToast } from '../../hooks/useToast';
 import { apiGet, apiPost, apiPut } from '../../services/api';
 import { ChevronLeft, Save, Download, Layout, Image, Eye, FileEdit, ChevronDown, ChevronUp, RotateCcw, Monitor, Smartphone, FileText, Presentation, Code } from 'lucide-react';
 import { Button } from '../../design-system/atoms/Button';
@@ -48,6 +48,7 @@ const TemplateEditor: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
   const navigate = useNavigate();
+  const { showToast } = useToast();
   const [template, setTemplate] = useState<Template | null>(null);
   const [templateName, setTemplateName] = useState<string>('');
   const [loading, setLoading] = useState(true);
@@ -416,12 +417,12 @@ const TemplateEditor: React.FC = () => {
       // Validate: do not save if content is empty and no Google Docs URL
       if (!googleDocsUrl) {
         if ((editorMode === 'document' || editorMode === 'html') && (!content || content.trim() === '')) {
-          toast.error('Il contenuto del template non può essere vuoto. Compila il template prima di salvare.');
+          showToast({ message: 'Il contenuto del template non può essere vuoto. Compila il template prima di salvare.', type: 'error' });
           setSaving(false);
           return;
         }
         if (editorMode === 'slide' && slideElements.length === 0) {
-          toast.error('Aggiungi almeno un elemento alla slide prima di salvare.');
+          showToast({ message: 'Aggiungi almeno un elemento alla slide prima di salvare.', type: 'error' });
           setSaving(false);
           return;
         }
@@ -1051,7 +1052,7 @@ const TemplateEditor: React.FC = () => {
                       style: { fontSize: 14, fontFamily: 'Arial', color: '#1e293b', textAlign: 'left' }
                     };
                     setSlideElements([...slideElements, newElement]);
-                    toast.success('Placeholder aggiunto come elemento');
+                    showToast({ message: 'Placeholder aggiunto come elemento', type: 'success' });
                   }}
                 />
 
@@ -1192,7 +1193,7 @@ const TemplateEditor: React.FC = () => {
                     } else {
                       setContent(content + placeholder);
                     }
-                    toast.success('Placeholder inserito');
+                    showToast({ message: 'Placeholder inserito', type: 'success' });
                   }}
                 />
 

@@ -39,7 +39,7 @@ export default function CompanyEdit() {
       isFetchingRef.current = true;
       
       try {
-        const data = await apiGet(`/companies/${id}`);
+        const data = await apiGet(`/api/v1/companies/${id}`);
         setCompany(data);
         companyDataFetchedRef.current = true; // Mark that we've successfully fetched company data
         setLoading(false);

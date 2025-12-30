@@ -24,7 +24,6 @@ import { Alert, AlertDescription } from '../../components/ui/alert';
 import { Switch } from '../../components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Separator } from '../../components/ui/separator';
-import { toast } from 'react-hot-toast';
 import { useUserPreferences } from '../../hooks/useUserPreferences';
 import { ThemeSelector } from '../../components/settings/ThemeSelector';
 import { useTheme } from '../../hooks/useTheme';

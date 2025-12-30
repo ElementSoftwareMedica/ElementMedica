@@ -1,6 +1,5 @@
 import { useCallback } from 'react';
 import { create, update } from '../../../services/apiClient';
-import { toast } from 'react-toastify';
 import { buildSchedulePayload as buildSchedulePayloadUtil, validateScheduleForm } from '../utils';
 import { timeStringToMinutes as timeStringToMinutesUtil } from '../utils';
 import type { Option, ScheduleFormData } from '../types';
@@ -65,7 +64,7 @@ export function useScheduleSave({
       );
       if (!validation.valid) {
         setError(validation.error);
-        toast.error(validation.error);
+        // Toast handled by calling component
         return;
       }
 
@@ -98,10 +97,10 @@ export function useScheduleSave({
       let result;
       if (isEditing && scheduleId) {
         result = await update('schedules', scheduleId, payload);
-        toast.success('Evento aggiornato con successo!');
+        // Toast handled by calling component
       } else {
         result = await create('schedules', payload);
-        toast.success('Evento creato con successo!');
+        // Toast handled by calling component
       }
 
       if (result && typeof result === 'object' && 'id' in result) {
@@ -118,7 +117,7 @@ export function useScheduleSave({
       const errorMessage = err instanceof Error ? err.message : 'Errore durante il salvataggio';
       console.error('Errore durante il salvataggio:', err);
       setError(errorMessage);
-      toast.error(errorMessage);
+      // Toast handled by calling component
     } finally {
       setLoading(false);
     }

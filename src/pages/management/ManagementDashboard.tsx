@@ -104,11 +104,13 @@ const ManagementDashboard: React.FC = () => {
             }
 
             if (personsRes.status === 'fulfilled') {
-                totalUsers = personsRes.value?.total || personsRes.value?.data?.length || 0;
+                const personsData = personsRes.value as any;
+                totalUsers = personsData?.total || personsData?.data?.length || 0;
             }
 
             if (rolesRes.status === 'fulfilled' && rolesRes.value?.data) {
-                const rolesData = rolesRes.value.data?.data || rolesRes.value.data;
+                const rolesValue = rolesRes.value as any;
+                const rolesData = rolesValue.data?.data || rolesValue.data;
                 totalRoles = Array.isArray(rolesData) ? rolesData.length : 22;
             }
 

@@ -10,6 +10,7 @@ import lettereIncaricoService from '../../../../../services/lettereIncaricoServi
 import registriPresenzeService from '../../../../../services/registriPresenzeService';
 import attestatiService from '../../../../../services/attestatiService';
 import { invalidateCache } from '../../../../../services/api';
+import { useToast } from '../../../../../hooks/useToast';
 import type { LoadingState, DateEntry, Attestato } from '../types';
 
 export interface UseDocumentGenerationProps {
@@ -47,6 +48,7 @@ export const useDocumentGeneration = ({
     registri: false,
     attestati: false
   });
+  const { showToast } = useToast();
 
   /**
    * Generate lettere di incarico for all trainers
@@ -62,14 +64,14 @@ export const useDocumentGeneration = ({
         sendEmail: false
       });
 
-      alert(`✅ ${result.message || `Avviate ${trainers.length} lettere di incarico!`}`);
+      showToast({ message: result.message || `Avviate ${trainers.length} lettere di incarico!`, type: 'success' });
 
       // Invalidate cache before refresh
       invalidateCache('/api/v1/lettere-incarico');
       onRefresh();
     } catch (error: any) {
       console.error('Errore generazione lettere:', error);
-      alert(`❌ Errore: ${error.response?.data?.message || error.message || 'Generazione fallita'}`);
+      showToast({ message: `Errore: ${error.response?.data?.message || error.message || 'Generazione fallita'}`, type: 'error' });
     } finally {
       setLoading(prev => ({ ...prev, lettere: false }));
     }
@@ -113,20 +115,20 @@ export const useDocumentGeneration = ({
       }
 
       if (successCount > 0) {
-        alert(
-          `✅ Generati ${successCount} registri presenze!${errorCount > 0 ? ` (${errorCount} errori)` : ''
-          }`
-        );
+        showToast({
+          message: `Generati ${successCount} registri presenze!${errorCount > 0 ? ` (${errorCount} errori)` : ''}`,
+          type: errorCount > 0 ? 'warning' : 'success'
+        });
 
         // Invalidate cache before refresh
         invalidateCache('/api/v1/registri-presenze');
         onRefresh();
       } else {
-        alert('❌ Nessun registro generato con successo');
+        showToast({ message: 'Nessun registro generato con successo', type: 'error' });
       }
     } catch (error: any) {
       console.error('Errore generazione registri:', error);
-      alert(`❌ Errore: ${error.response?.data?.message || error.message || 'Generazione fallita'}`);
+      showToast({ message: `Errore: ${error.response?.data?.message || error.message || 'Generazione fallita'}`, type: 'error' });
     } finally {
       setLoading(prev => ({ ...prev, registri: false }));
     }
@@ -170,9 +172,10 @@ export const useDocumentGeneration = ({
       }
 
       if (finalPersonIds.length === 0) {
-        alert(
-          '⚠️ Nessun attestato da generare (tutti i partecipanti selezionati hanno già un attestato)'
-        );
+        showToast({
+          message: 'Nessun attestato da generare (tutti i partecipanti selezionati hanno già un attestato)',
+          type: 'warning'
+        });
         return;
       }
 
@@ -183,10 +186,10 @@ export const useDocumentGeneration = ({
       });
 
       if (result.success > 0) {
-        alert(
-          `✅ Generati ${result.success} attestati!${result.failed > 0 ? ` (${result.failed} errori)` : ''
-          }`
-        );
+        showToast({
+          message: `Generati ${result.success} attestati!${result.failed > 0 ? ` (${result.failed} errori)` : ''}`,
+          type: result.failed > 0 ? 'warning' : 'success'
+        });
 
         // Invalidate cache before refresh
         invalidateCache('/api/v1/attestati');
@@ -201,9 +204,9 @@ export const useDocumentGeneration = ({
 
         // Check for common errors and provide helpful messages
         if (errorDetails.includes('not connected to Google')) {
-          alert('❌ Errore: Devi collegare il tuo account Google per generare attestati.\n\nVai in Impostazioni → Google Drive per collegare il tuo account.');
+          showToast({ message: 'Devi collegare il tuo account Google per generare attestati. Vai in Impostazioni → Google Drive.', type: 'error', duration: 8000 });
         } else {
-          alert(`❌ Nessun attestato generato: ${errorDetails}`);
+          showToast({ message: `Nessun attestato generato: ${errorDetails}`, type: 'error' });
         }
       }
     } catch (error: any) {
@@ -211,11 +214,13 @@ export const useDocumentGeneration = ({
 
       // Handle 409 Conflict error (existing attestati)
       if (error.response?.status === 409) {
-        alert(
-          "⚠️ Alcuni partecipanti hanno già un attestato. Usa il modal per rigenerarli o seleziona solo chi non ce l'ha."
-        );
+        showToast({
+          message: "Alcuni partecipanti hanno già un attestato. Usa il modal per rigenerarli o seleziona solo chi non ce l'ha.",
+          type: 'warning',
+          duration: 8000
+        });
       } else {
-        alert(`❌ Errore: ${error.response?.data?.message || error.message || 'Generazione fallita'}`);
+        showToast({ message: `Errore: ${error.response?.data?.message || error.message || 'Generazione fallita'}`, type: 'error' });
       }
     } finally {
       setLoading(prev => ({ ...prev, attestati: false }));
