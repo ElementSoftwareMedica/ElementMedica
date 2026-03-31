@@ -1,14 +1,13 @@
 /**
- * useNewSubmissionsCount - Hook per contatore submissions nuove del modulo Contatti
- * 
- * Restituisce il numero di form submissions con stato "NEW" (non ancora gestite)
- * SOLO per il modulo CONTATTI (type=CONTACT).
- * Usato per mostrare il badge nel menu laterale accanto a Forms.
- * 
+ * useNewPublicSubmissionsCount - Hook per contatore submissions nuove da form pubblici
+ *
+ * Restituisce il numero di form submissions con stato "NEW"
+ * provenienti dai form pubblici del sito (type=CONTACT).
+ * Usato per mostrare il badge nel menu del CMS.
+ *
  * Rispetta:
  * - Multi-tenancy (tenantId dal token)
- * - GDPR (usa audit trail standard)
- * - Permission check (VIEW_FORM_SUBMISSIONS)
+ * - Permission check (form_submissions:read)
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -26,51 +25,34 @@ interface SubmissionsStats {
     };
 }
 
-interface UseNewSubmissionsCountOptions {
-    /** Intervallo di refresh in ms (default 5 minuti) */
+interface UseNewPublicSubmissionsCountOptions {
     refreshInterval?: number;
-    /** Abilita/disabilita il polling (default true) */
     enablePolling?: boolean;
     /** ID tenant corrente - se cambia, il conteggio viene ricaricato */
     tenantId?: string;
 }
 
-interface UseNewSubmissionsCountReturn {
-    /** Numero di submissions con stato NEW */
+interface UseNewPublicSubmissionsCountReturn {
     count: number;
-    /** Statistiche complete */
     stats: SubmissionsStats | null;
-    /** Stato di caricamento */
     loading: boolean;
-    /** Errore eventuale */
     error: string | null;
-    /** Funzione per refresh manuale */
     refresh: () => Promise<void>;
 }
 
-/**
- * Hook per ottenere il contatore delle submissions nuove (non gestite)
- * del modulo CONTATTI (type=CONTACT).
- * 
- * @example
- * ```tsx
- * const { count, loading } = useNewSubmissionsCount();
- * // count = numero di submissions CONTACT con stato NEW
- * ```
- */
-export function useNewSubmissionsCount(
-    options: UseNewSubmissionsCountOptions = {}
-): UseNewSubmissionsCountReturn {
+export function useNewPublicSubmissionsCount(
+    options: UseNewPublicSubmissionsCountOptions = {}
+): UseNewPublicSubmissionsCountReturn {
     const {
-        refreshInterval = 5 * 60 * 1000, // 5 minuti
+        refreshInterval = 5 * 60 * 1000,
         enablePolling = true,
         tenantId
     } = options;
 
     const { hasPermission } = useAuth();
 
-    // Verifica se l'utente ha il permesso VIEW_FORM_SUBMISSIONS
-    const canViewSubmissions = hasPermission('submissions', 'view') ||
+    const canViewSubmissions = hasPermission('form_submissions', 'read') ||
+        hasPermission('submissions', 'view') ||
         hasPermission('form_submissions', 'view');
 
     const [stats, setStats] = useState<SubmissionsStats | null>(null);
@@ -78,14 +60,14 @@ export function useNewSubmissionsCount(
     const [error, setError] = useState<string | null>(null);
 
     const fetchCount = useCallback(async () => {
-        // Non chiamare l'API se l'utente non ha i permessi
         if (!canViewSubmissions) {
             setLoading(false);
             return;
         }
 
         try {
-            // Filtra solo per type=CONTACT (modulo contatti)
+            // Usa lo stesso endpoint del modulo contatti — le public form submissions
+            // sono salvate come contact submissions con type=CONTACT
             const response = await apiGet<{
                 success: boolean;
                 data: SubmissionsStats;
@@ -96,30 +78,25 @@ export function useNewSubmissionsCount(
                 setError(null);
             }
         } catch (err) {
-            // Non loggare errori di autenticazione (utente non loggato)
             if (err instanceof Error && !err.message.includes('401')) {
-                setError('Errore nel recupero delle submissions');
+                setError('Errore nel recupero delle submissions pubbliche');
             }
         } finally {
             setLoading(false);
         }
     }, [canViewSubmissions, tenantId]);
 
-    // Fetch iniziale
     useEffect(() => {
         fetchCount();
     }, [fetchCount]);
 
-    // Polling periodico (solo se ha i permessi)
     useEffect(() => {
         if (!enablePolling || !canViewSubmissions) return;
-
         const interval = setInterval(fetchCount, refreshInterval);
         return () => clearInterval(interval);
     }, [fetchCount, refreshInterval, enablePolling, canViewSubmissions]);
 
     return {
-        // Conta solo le submissions CONTACT con status NEW
         count: stats?.byStatus?.NEW ?? 0,
         stats,
         loading,
@@ -128,4 +105,4 @@ export function useNewSubmissionsCount(
     };
 }
 
-export default useNewSubmissionsCount;
+export default useNewPublicSubmissionsCount;

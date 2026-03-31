@@ -189,13 +189,14 @@ const ClinicaLayoutContent: React.FC<ClinicaLayoutProps> = ({ children }) => {
 
     // Conteggio prestazioni da refertare per badge sidebar
     // Usa AppuntamentoPrestazione con stato IN_ATTESA_REFERTO/ESEGUITA senza referto
+    // queryKey include currentTenant.id per refetch automatico su cambio tenant
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: prestazioniDaRefertareData } = useQuery({
-        queryKey: ['prestazioni-da-refertare-sidebar'],
+        queryKey: ['prestazioni-da-refertare-sidebar', currentTenant?.id],
         queryFn: () => appuntamentoPrestazioniApi.listDaRefertare({ limit: 1 }),
         refetchInterval: 60_000,
         staleTime: 30_000,
-        enabled: isAuthenticated,
+        enabled: isAuthenticated && !!currentTenant?.id,
     });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const prestazioniDaRefertareBadge = ((prestazioniDaRefertareData as any)?.total ?? 0) > 0

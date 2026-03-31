@@ -78,11 +78,11 @@ const Sidebar: React.FC<SidebarProps> = ({ open, setOpen, collapsed = false, onC
     onCollapsedChange?.(!newState);
   };
 
-  // Hook per il conteggio dei corsi in scadenza
-  const { count: expiringCoursesCount } = useExpiringCoursesCount();
+  // Hook per il conteggio dei corsi in scadenza (tenant-reactive)
+  const { count: expiringCoursesCount } = useExpiringCoursesCount({ tenantId: currentTenant?.id });
 
-  // Hook per il conteggio delle nuove risposte ai form (status NEW)
-  const { count: newSubmissionsCount } = useNewSubmissionsCount();
+  // Hook per il conteggio delle nuove risposte ai form (status NEW, tenant-reactive)
+  const { count: newSubmissionsCount } = useNewSubmissionsCount({ tenantId: currentTenant?.id });
 
   // Permission helpers — usa ruoli e permessi del tenant corrente (tenant-scoped via /auth/verify)
   const hasPermission = authHasPermission || ((): boolean => false);

@@ -207,8 +207,8 @@ const ManagementLayout: React.FC<{ children?: React.ReactNode }> = ({ children }
     const [expandedItems, setExpandedItems] = useState<string[]>([]);
     const [notifications] = useState(0);
 
-    // Badge CMS per risposte ai form pubblici
-    const { count: newCmsSubmissionsCount } = useNewPublicSubmissionsCount();
+    // Badge CMS per risposte ai form pubblici (tenant-reactive)
+    const { count: newCmsSubmissionsCount } = useNewPublicSubmissionsCount({ tenantId: currentTenant?.id });
 
     // Check if user is admin (TENANT_ADMIN and COMPANY_ADMIN included)
     const isAdmin = user?.role === 'Admin' ||

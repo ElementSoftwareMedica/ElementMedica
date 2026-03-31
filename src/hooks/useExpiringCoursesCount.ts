@@ -34,6 +34,8 @@ interface UseExpiringCoursesCountOptions {
     refreshInterval?: number;
     /** Abilita/disabilita il polling (default true) */
     enablePolling?: boolean;
+    /** ID tenant corrente - se cambia, il conteggio viene ricaricato */
+    tenantId?: string;
 }
 
 interface UseExpiringCoursesCountReturn {
@@ -65,7 +67,8 @@ export function useExpiringCoursesCount(
         expiredDays = 30,
         expiringDays = 60,
         refreshInterval = 24 * 60 * 60 * 1000, // 24 ore
-        enablePolling = true
+        enablePolling = true,
+        tenantId
     } = options;
 
     const { user } = useAuth();
@@ -107,13 +110,12 @@ export function useExpiringCoursesCount(
         } catch (err) {
             // Non loggare errori di autenticazione (utente non loggato)
             if (err instanceof Error && !err.message.includes('401')) {
-                console.error('Error fetching expiring courses count:', err);
                 setError('Errore nel recupero delle scadenze');
             }
         } finally {
             setLoading(false);
         }
-    }, [expiredDays, expiringDays, user, isEmployee]);
+    }, [expiredDays, expiringDays, user, isEmployee, tenantId]);
 
     // Fetch iniziale
     useEffect(() => {

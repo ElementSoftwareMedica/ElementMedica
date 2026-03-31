@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Session 64 - CMS Forms, Widget Fixes, Sidebar Counters Tenant Reactivity, Management Tenant Filters
+
+#### Sidebar Counters - Tenant Reactivity (Issue #3)
+- **File**: `src/components/layouts/ClinicaLayout.tsx`
+  - queryKey ora include `currentTenant?.id` → refresh automatico al cambio tenant
+  - Aggiunto `enabled: isAuthenticated && !!currentTenant?.id`
+- **File**: `src/components/layouts/Sidebar.tsx`
+  - Passa `{ tenantId: currentTenant?.id }` a `useExpiringCoursesCount` e `useNewSubmissionsCount`
+- **File**: `src/components/layouts/ManagementLayout.tsx`
+  - Passa `{ tenantId: currentTenant?.id }` a `useNewPublicSubmissionsCount`
+- **File**: `src/hooks/useExpiringCoursesCount.ts`
+  - Aggiunto `tenantId?: string` alle opzioni + dependency in useCallback
+- **File**: `src/hooks/useNewSubmissionsCount.ts`
+  - Aggiunto `tenantId?: string` alle opzioni + dependency in useCallback
+- **File**: `src/hooks/useNewPublicSubmissionsCount.ts`
+  - Aggiunto `tenantId?: string` alle opzioni + dependency in useCallback
+
+#### CMS Form Templates (Issue #1)
+- **Produzione**: Creati FormTemplate "Form Contatti Medica" (Element srl) e "Form Contatti Sicurezza" (Sicurezza)
+  - isPublic=true, isActive=true, allowAnonymous=true
+  - FormField records creati per ogni template (nome, cognome, email, telefono, servizio, messaggio)
+  - Ora visibili in /management/cms → form-templates e negli endpoint embed /forms
+
+#### Widget Embed Routes Fix (Issue #2)
+- **File**: `backend/routes/public-embed-routes.js`
+  - **Specialties**: Fix modello `prestazioneClinica` → `prestazione` (non esisteva)
+  - **Specialties**: Fix campo `brancaSpecialistica` → `brancheSpecialistiche` (array)
+  - **Specialties**: Logica grouping aggiornata per gestire array di branche
+  - **Booking**: Fix `personId` → `medicoId`, `durataMinuti` → `durataSlotMinuti`, `person` → `medico`
+  - Testato E2E: tutti i 7 widget (doctors, specialties, forms, courses, schedules, booking, contact) funzionanti
+
+#### Management Pages - Tenant Filter Audit (Issue #4)
+- **File**: `src/pages/management/documenti/DocumentManagementPage.tsx`
+  - Aggiunto `useTenantFilter()` con `tenantFilterKey` nelle queryKey e `enabled: isReady`
+- **File**: `src/hooks/management/useMovimentiContabili.ts`
+  - `useMovimentoContabile`: Aggiunto `tenantFilterKey` in queryKey + `isReady` guard
+  - `useMovimentiByAttivita`: Aggiunto `tenantFilterKey` in queryKey + `isReady` guard
+
 ### Session 63 - Sidebar Branding Fix (All Layouts) + TenantModeContext Sync
 
 #### Sidebar Branding - ClinicaLayout, Sidebar, ManagementLayout
