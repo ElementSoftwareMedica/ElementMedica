@@ -8,15 +8,26 @@
  * - Module switcher for cross-domain navigation
  * - Footer with version info
  * - Element Medica Teal theme
+ * - SidebarContext for programmatic control from child pages
  * 
  * @module components/layouts/ClinicaLayout
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../../hooks/auth/useAuth';
+import { useTenantAccess } from '../../hooks/useTenantAccess';
+import { getCurrentBrand } from '../../config/brands.config';
+import { getTenantBranding } from '../../utils/tenantBranding';
+import { visiteApi, appuntamentoPrestazioniApi } from '../../services/clinicaApi';
 import { ModuleSwitcher } from '../shared/ModuleSwitcher';
 import { TenantSelector } from '../common/TenantSelector';
+import { TenantModeSelector } from '../shared/TenantModeSelector';
+import Notifications from '../shared/Notifications';
+import NotificationBell from '../notifications/NotificationBell';
+import NotificationPopup from '../notifications/NotificationPopup';
+import { SidebarProvider, useSidebar } from '../../contexts/SidebarContext';
 
 // Import Element Medica theme
 import '../../styles/clinica-theme.css';
@@ -34,14 +45,22 @@ import {
     ChevronRight,
     Menu,
     X,
-    Bell,
     User,
     LogOut,
     HelpCircle,
     MapPin,
-    CreditCard,
     Package,
-    UserCog
+    UserCog,
+    ListOrdered,
+    Monitor,
+    HardHat,
+    Scale,
+    ShieldCheck,
+    UserCheck,
+    ClipboardCheck,
+    CalendarClock,
+    Pill,
+    Euro
 } from 'lucide-react';
 
 interface NavItem {
@@ -54,12 +73,56 @@ interface NavItem {
 
 /**
  * Navigation configuration for clinical sidebar
+ * Order: Dashboard, Agenda (open), Clinica (open), Fatturazione, Catalogo, Struttura
  */
 const navigationItems: NavItem[] = [
     {
         label: 'Dashboard',
-        href: '/poliambulatorio',
+        href: '/poliambulatorio/agenda',
         icon: Home
+    },
+    {
+        label: 'Agenda',
+        icon: Calendar,
+        children: [
+            { label: 'Calendario', href: '/poliambulatorio/calendario', icon: Calendar },
+            { label: 'Appuntamenti', href: '/poliambulatorio/appuntamenti', icon: Calendar },
+            { label: 'Disponibilità', href: '/poliambulatorio/disponibilita', icon: Calendar },
+            { label: 'Coda', href: '/poliambulatorio/coda', icon: ListOrdered }
+        ]
+    },
+    {
+        label: 'Clinica',
+        icon: Stethoscope,
+        children: [
+            { label: 'Visite', href: '/poliambulatorio/visite', icon: Stethoscope },
+            { label: 'Pazienti', href: '/poliambulatorio/pazienti', icon: Users },
+            { label: 'Medici', href: '/poliambulatorio/personale/medici', icon: User }
+        ]
+    },
+    {
+        label: 'Med. del Lavoro',
+        icon: HardHat,
+        children: [
+            { label: 'Dashboard Scadenze', href: '/poliambulatorio/mdl/scadenze', icon: Calendar },
+            { label: 'Allegato 3A', href: '/poliambulatorio/mdl/allegato-3a', icon: FileText },
+            { label: 'Allegato 3B', href: '/poliambulatorio/mdl/allegato-3b', icon: FileText },
+            { label: 'Mansioni', href: '/poliambulatorio/mdl/mansioni', icon: HardHat },
+            { label: 'Giudizi Idoneità', href: '/poliambulatorio/mdl/giudizi-idoneita', icon: Scale },
+            { label: 'Rischio → Prestazioni', href: '/poliambulatorio/mdl/rischio-prestazioni', icon: ShieldCheck },
+            { label: 'Protocolli Sanitari', href: '/poliambulatorio/mdl/protocolli-sanitari', icon: ClipboardCheck },
+            { label: 'Nomine Figure', href: '/poliambulatorio/mdl/nomine-ruolo', icon: UserCheck },
+            { label: 'Tariffari Aziende', href: '/poliambulatorio/mdl/tariffari-aziende', icon: Euro }
+        ]
+    },
+    {
+        label: 'Catalogo',
+        icon: ClipboardList,
+        children: [
+            { label: 'Prestazioni', href: '/poliambulatorio/catalogo/prestazioni', icon: ClipboardList },
+            { label: 'Convenzioni', href: '/poliambulatorio/catalogo/convenzioni', icon: FileText },
+            { label: 'Bundle/Offerte', href: '/poliambulatorio/catalogo/bundles', icon: Package }
+        ]
     },
     {
         label: 'Struttura',
@@ -68,47 +131,16 @@ const navigationItems: NavItem[] = [
             { label: 'Poliambulatori', href: '/poliambulatorio/poliambulatori', icon: Building2 },
             { label: 'Sedi', href: '/poliambulatorio/sedi', icon: MapPin },
             { label: 'Ambulatori', href: '/poliambulatorio/ambulatori', icon: Building2 },
-            { label: 'Strumenti', href: '/poliambulatorio/strumenti', icon: Activity }
+            { label: 'Strumenti', href: '/poliambulatorio/strumenti', icon: Activity },
+            { label: 'Monitor Display', href: '/poliambulatorio/struttura/monitors', icon: Monitor }
         ]
     },
     {
-        label: 'Catalogo',
-        icon: ClipboardList,
+        label: 'Scadenzario',
+        icon: CalendarClock,
         children: [
-            { label: 'Prestazioni', href: '/poliambulatorio/prestazioni', icon: ClipboardList },
-            { label: 'Convenzioni', href: '/poliambulatorio/convenzioni', icon: FileText },
-            { label: 'Bundle/Offerte', href: '/poliambulatorio/catalogo/bundles', icon: Package }
-        ]
-    },
-    {
-        label: 'Agenda',
-        icon: Calendar,
-        children: [
-            { label: 'Dashboard', href: '/poliambulatorio/agenda', icon: Home },
-            { label: 'Calendario', href: '/poliambulatorio/calendario', icon: Calendar },
-            { label: 'Appuntamenti', href: '/poliambulatorio/appuntamenti', icon: Calendar },
-            { label: 'Disponibilità', href: '/poliambulatorio/disponibilita', icon: Calendar },
-            { label: 'Accettazione', href: '/poliambulatorio/accettazione', icon: Users }
-        ]
-    },
-    {
-        label: 'Clinica',
-        icon: Stethoscope,
-        children: [
-            { label: 'Dashboard Medico', href: '/poliambulatorio/medico', icon: Stethoscope },
-            { label: 'Visite', href: '/poliambulatorio/visite', icon: Stethoscope },
-            { label: 'Referti', href: '/poliambulatorio/referti', icon: FileText },
-            { label: 'Pazienti', href: '/poliambulatorio/pazienti', icon: Users },
-            { label: 'Medici', href: '/poliambulatorio/personale/medici', icon: User }
-        ]
-    },
-    {
-        label: 'Fatturazione',
-        icon: CreditCard,
-        children: [
-            { label: 'Dashboard', href: '/poliambulatorio/fatturazione', icon: Home },
-            { label: 'Fatture', href: '/poliambulatorio/fatturazione/fatture', icon: FileText },
-            { label: 'Report', href: '/poliambulatorio/fatturazione/report', icon: Activity }
+            { label: 'Dashboard', href: '/poliambulatorio/scadenze', icon: CalendarClock },
+            { label: 'Farmaci', href: '/poliambulatorio/scadenze?tab=farmaci', icon: Pill }
         ]
     },
     {
@@ -126,15 +158,61 @@ interface ClinicaLayoutProps {
     children?: React.ReactNode;
 }
 
-const ClinicaLayout: React.FC<ClinicaLayoutProps> = ({ children }) => {
+/**
+ * Inner layout component that uses SidebarContext
+ */
+const ClinicaLayoutContent: React.FC<ClinicaLayoutProps> = ({ children }) => {
     const location = useLocation();
     const navigate = useNavigate();
-    const { user, logout, userRole, isAuthenticated, isLoading } = useAuth();
+    const { user, logout, userRole, userRoleType, isAuthenticated, isLoading } = useAuth();
+    const { isCollapsed, setCollapsed } = useSidebar();
+    const { currentTenant } = useTenantAccess();
 
-    const [sidebarOpen, setSidebarOpen] = useState(true);
+    // Branch-specific branding for clinical module (MEDICA)
+    const tenantBranding = getTenantBranding(
+        currentTenant,
+        'element-medica',
+        'ElementMedica',
+        getCurrentBrand().logoIcon
+    );
+
+    // Use sidebar context for desktop, local state for mobile
+    const sidebarOpen = !isCollapsed;
+    const setSidebarOpen = (open: boolean) => setCollapsed(!open);
+
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-    const [expandedItems, setExpandedItems] = useState<string[]>(['Struttura', 'Catalogo']);
-    const [notifications] = useState(3);
+    const [expandedItems, setExpandedItems] = useState<string[]>(['Agenda', 'Clinica']);
+
+    // Nascondi header ClinicaLayout quando l'overlay dettaglio visita è attivo
+    // (VisitaPage ha il proprio StickyVisitHeader con navigazione completa)
+    const isVisitaDetailActive = /\/poliambulatorio\/visite\/[^/]+/.test(location.pathname);
+
+    // Conteggio prestazioni da refertare per badge sidebar
+    // Usa AppuntamentoPrestazione con stato IN_ATTESA_REFERTO/ESEGUITA senza referto
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: prestazioniDaRefertareData } = useQuery({
+        queryKey: ['prestazioni-da-refertare-sidebar'],
+        queryFn: () => appuntamentoPrestazioniApi.listDaRefertare({ limit: 1 }),
+        refetchInterval: 60_000,
+        staleTime: 30_000,
+        enabled: isAuthenticated,
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const prestazioniDaRefertareBadge = ((prestazioniDaRefertareData as any)?.total ?? 0) > 0
+        ? (prestazioniDaRefertareData as any).total
+        : undefined;
+
+    // Versione dinamica di navigationItems con badge "Visite"
+    const dynamicNavItems = useMemo((): NavItem[] => {
+        return navigationItems.map(group => ({
+            ...group,
+            children: group.children?.map(child =>
+                child.href === '/poliambulatorio/visite'
+                    ? { ...child, badge: prestazioniDaRefertareBadge }
+                    : child
+            )
+        }));
+    }, [prestazioniDaRefertareBadge]);
 
     // Auth protection: redirect to login if not authenticated
     useEffect(() => {
@@ -162,16 +240,19 @@ const ClinicaLayout: React.FC<ClinicaLayoutProps> = ({ children }) => {
         return null;
     }
 
-    // Check if user is admin
+    // Check if user is admin (include TENANT_ADMIN — tenant-scoped via user.roles da /auth/verify)
     const isAdmin = user?.role === 'Admin' ||
+        user?.role === 'Administrator' ||
         user?.globalRole === 'ADMIN' ||
         user?.globalRole === 'SUPER_ADMIN' ||
         user?.roles?.includes('ADMIN') ||
-        user?.roles?.includes('SUPER_ADMIN');
+        user?.roles?.includes('SUPER_ADMIN') ||
+        user?.roles?.includes('TENANT_ADMIN') ||
+        user?.roles?.includes('COMPANY_ADMIN');
 
     // Auto-expand active menu
     useEffect(() => {
-        navigationItems.forEach(item => {
+        dynamicNavItems.forEach(item => {
             if (item.children) {
                 const isActive = item.children.some(child =>
                     child.href && location.pathname.startsWith(child.href)
@@ -203,16 +284,46 @@ const ClinicaLayout: React.FC<ClinicaLayoutProps> = ({ children }) => {
         );
     };
 
-    // Check if nav item is active
+    // Raccogli tutti gli href foglia dalla navigazione per il longest-prefix-match
+    const allLeafHrefs = useMemo(() => {
+        const hrefs: string[] = [];
+        const collect = (items: NavItem[]) => {
+            for (const item of items) {
+                if (item.href) hrefs.push(item.href);
+                if (item.children) collect(item.children);
+            }
+        };
+        collect(dynamicNavItems);
+        return hrefs;
+    }, [dynamicNavItems]);
+
+    // Check if nav item is active — usa longest-prefix-match per evitare
+    // che /poliambulatorio/coda matchi quando siamo su /poliambulatorio/coda/monitors
     const isNavItemActive = (item: NavItem): boolean => {
         if (item.href) {
-            if (item.href === '/poliambulatorio') {
-                return location.pathname === '/poliambulatorio' || location.pathname === '/poliambulatorio/';
+            // Dashboard now points to /poliambulatorio/agenda
+            if (item.href === '/poliambulatorio/agenda' && item.label === 'Dashboard') {
+                return location.pathname === '/poliambulatorio/agenda' ||
+                    location.pathname === '/poliambulatorio' ||
+                    location.pathname === '/poliambulatorio/';
             }
-            return location.pathname.startsWith(item.href);
+            // Match esatto
+            if (location.pathname === item.href || location.pathname === item.href + '/') {
+                return true;
+            }
+            // Prefix match: attivo solo se nessun altro href è un match più specifico (più lungo)
+            if (location.pathname.startsWith(item.href! + '/') || location.pathname.startsWith(item.href!)) {
+                const hasMoreSpecificMatch = allLeafHrefs.some(
+                    otherHref => otherHref !== item.href &&
+                        otherHref.length > (item.href?.length ?? 0) &&
+                        location.pathname.startsWith(otherHref)
+                );
+                return !hasMoreSpecificMatch;
+            }
+            return false;
         }
         if (item.children) {
-            return item.children.some(child => child.href && location.pathname.startsWith(child.href));
+            return item.children.some(child => isNavItemActive(child));
         }
         return false;
     };
@@ -222,7 +333,7 @@ const ClinicaLayout: React.FC<ClinicaLayoutProps> = ({ children }) => {
         if (user) {
             const firstName = user.firstName || '';
             const lastName = user.lastName || '';
-            const isMedico = userRole === 'MEDICO';
+            const isMedico = userRoleType === 'MEDICO';
             if (isMedico) {
                 const userGender = (user as { gender?: string }).gender;
                 const title = userGender === 'F' ? 'Dott.ssa' : 'Dott.';
@@ -233,17 +344,79 @@ const ClinicaLayout: React.FC<ClinicaLayoutProps> = ({ children }) => {
         return 'Utente';
     };
 
-    const getUserRoleDisplay = () => {
-        if (userRole) {
-            switch (userRole) {
-                case 'MEDICO': return 'Medico';
-                case 'INFERMIERE': return 'Infermiere';
-                case 'ADMIN': return 'Amministratore';
-                case 'RECEPTIONIST': return 'Segreteria';
-                default: return userRole;
-            }
+    /**
+     * Generate smart breadcrumb title from path
+     * Handles UUIDs by showing parent segment with "Dettagli" suffix
+     */
+    const getBreadcrumbTitle = (): string => {
+        const segments = location.pathname.split('/').filter(Boolean);
+        if (segments.length === 0) return 'Dashboard';
+
+        const lastSegment = segments[segments.length - 1];
+
+        // Check if last segment is a UUID (36 chars with dashes or 32 chars without)
+        const isUuid = /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i.test(lastSegment);
+
+        // Path label mapping for better readability
+        const pathLabels: Record<string, string> = {
+            'poliambulatorio': 'Dashboard',
+            'poliambulatori': 'Poliambulatori',
+            'sedi': 'Sedi',
+            'ambulatori': 'Ambulatori',
+            'strumenti': 'Strumenti',
+            'prestazioni': 'Prestazioni',
+            'convenzioni': 'Convenzioni',
+            'bundles': 'Bundle/Offerte',
+            'agenda': 'Agenda',
+            'calendario': 'Calendario',
+            'appuntamenti': 'Appuntamenti',
+            'disponibilita': 'Disponibilità',
+            'accettazione': 'Accettazione',
+            'medico': 'Dashboard Medico',
+            'visite': 'Visite',
+            'pazienti': 'Pazienti',
+            'medici': 'Medici',
+            'fatturazione': 'Fatturazione',
+            'fatture': 'Fatture',
+            'report': 'Report',
+            'impostazioni': 'Impostazioni',
+            'modifica': 'Modifica',
+            'nuovo': 'Nuovo',
+            'nuova': 'Nuova'
+        };
+
+        // Singular form mapping for detail pages
+        const singularLabels: Record<string, string> = {
+            'poliambulatori': 'Poliambulatorio',
+            'sedi': 'Sede',
+            'ambulatori': 'Ambulatorio',
+            'strumenti': 'Strumento',
+            'prestazioni': 'Prestazione',
+            'convenzioni': 'Convenzione',
+            'bundles': 'Bundle',
+            'appuntamenti': 'Appuntamento',
+            'visite': 'Visita',
+            'pazienti': 'Paziente',
+            'medici': 'Medico',
+            'fatture': 'Fattura'
+        };
+
+        if (isUuid && segments.length > 1) {
+            // Get parent segment for context
+            const parentSegment = segments[segments.length - 2];
+            const singularLabel = singularLabels[parentSegment] ||
+                pathLabels[parentSegment] ||
+                parentSegment.replace(/-/g, ' ').replace(/^\w/, c => c.toUpperCase());
+            return `Dettaglio ${singularLabel}`;
         }
-        return 'Operatore';
+
+        return pathLabels[lastSegment] ||
+            lastSegment.replace(/-/g, ' ').replace(/^\w/, c => c.toUpperCase());
+    };
+
+    const getUserRoleDisplay = () => {
+        // userRole from useAuth already returns the display name (e.g. 'Medico', 'Admin')
+        return userRole || 'Operatore';
     };
 
     // Handle logout
@@ -252,7 +425,6 @@ const ClinicaLayout: React.FC<ClinicaLayoutProps> = ({ children }) => {
             await logout();
             navigate('/poliambulatorio/login');
         } catch (error) {
-            console.error('Logout error:', error);
         }
     };
 
@@ -267,7 +439,19 @@ const ClinicaLayout: React.FC<ClinicaLayoutProps> = ({ children }) => {
             return (
                 <div key={item.label}>
                     <button
-                        onClick={() => toggleExpand(item.label)}
+                        onClick={() => {
+                            // When sidebar is collapsed, expand it first then show children
+                            if (!sidebarOpen) {
+                                setSidebarOpen(true);
+                                // Ensure the item is expanded after sidebar opens
+                                if (!expandedItems.includes(item.label)) {
+                                    setExpandedItems(prev => [...prev, item.label]);
+                                }
+                            } else {
+                                toggleExpand(item.label);
+                            }
+                        }}
+                        title={!sidebarOpen ? item.label : undefined}
                         className={`
                             w-full flex items-center justify-between px-3 py-2.5 rounded-lg
                             text-sm font-medium transition-all duration-200
@@ -342,12 +526,14 @@ const ClinicaLayout: React.FC<ClinicaLayoutProps> = ({ children }) => {
                 {/* Logo */}
                 <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200 dark:border-gray-700">
                     <Link to="/poliambulatorio" className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-gradient-to-br from-teal-500 to-teal-700 rounded-lg flex items-center justify-center">
-                            <Stethoscope className="h-6 w-6 text-white" />
-                        </div>
+                        <img
+                            src={tenantBranding.logoUrl || getCurrentBrand().logoIcon}
+                            alt={tenantBranding.displayName}
+                            className="w-10 h-10 rounded-lg object-contain"
+                        />
                         {sidebarOpen && (
                             <div>
-                                <span className="text-lg font-bold text-gray-900 dark:text-white">ElementMedica</span>
+                                <span className="text-lg font-bold text-gray-900 dark:text-white">{tenantBranding.displayName}</span>
                                 <p className="text-xs text-gray-500">Poliambulatorio</p>
                             </div>
                         )}
@@ -362,7 +548,7 @@ const ClinicaLayout: React.FC<ClinicaLayoutProps> = ({ children }) => {
 
                 {/* Navigation */}
                 <nav className="flex-1 overflow-y-auto p-4 space-y-1">
-                    {navigationItems.map(item => renderNavItem(item))}
+                    {dynamicNavItems.map(item => renderNavItem(item))}
                 </nav>
 
                 {/* Sidebar Footer - Module Switcher */}
@@ -384,90 +570,85 @@ const ClinicaLayout: React.FC<ClinicaLayoutProps> = ({ children }) => {
 
             {/* Main Content */}
             <div className={`transition-all duration-300 ${sidebarOpen ? 'lg:ml-64' : 'lg:ml-20'}`}>
-                {/* Header */}
-                <header className="sticky top-0 z-30 h-16 bg-gradient-to-r from-white via-teal-50/50 to-white dark:from-gray-800 dark:via-gray-800 dark:to-gray-800 border-b border-teal-100 dark:border-gray-700">
-                    <div className="flex items-center justify-between h-full px-4">
-                        {/* Mobile menu button */}
-                        <button
-                            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                            className="lg:hidden p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
-                        >
-                            {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-                        </button>
-
-                        {/* Breadcrumb / Title */}
-                        <div className="flex items-center gap-2">
-                            <span className="text-sm font-semibold text-teal-600">ElementMedica</span>
-                            <ChevronRight className="h-4 w-4 text-gray-400" />
-                            <span className="text-sm font-medium text-gray-900 dark:text-white">
-                                {location.pathname.split('/').pop()?.replace(/-/g, ' ').replace(/^\w/, c => c.toUpperCase()) || 'Dashboard'}
-                            </span>
-                        </div>
-
-                        {/* Tenant Filter Selector - Visible for multi-tenant users */}
-                        <div className="flex-1 flex justify-center">
-                            <TenantSelector variant="compact" />
-                        </div>
-
-                        {/* Right side */}
-                        <div className="flex items-center gap-4">
-                            {/* Notifications */}
-                            <button className="relative p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
-                                <Bell className="h-5 w-5 text-gray-500" />
-                                {notifications > 0 && (
-                                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
-                                        {notifications}
-                                    </span>
-                                )}
+                {/* Header — nascosto quando l'overlay dettaglio visita è attivo (VisitaPage ha il proprio header) */}
+                {!isVisitaDetailActive && (
+                    <header className="sticky top-0 z-30 h-16 bg-gradient-to-r from-white via-teal-50/50 to-white dark:from-gray-800 dark:via-gray-800 dark:to-gray-800 border-b border-teal-100 dark:border-gray-700">
+                        <div className="flex items-center justify-between h-full px-4">
+                            {/* Mobile menu button */}
+                            <button
+                                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                                className="lg:hidden p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+                            >
+                                {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
                             </button>
 
-                            {/* Help */}
-                            <button className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
-                                <HelpCircle className="h-5 w-5 text-gray-500" />
-                            </button>
+                            {/* Breadcrumb / Title */}
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm font-semibold text-teal-600">ElementMedica</span>
+                                <ChevronRight className="h-4 w-4 text-gray-400" />
+                                <span className="text-sm font-medium text-gray-900 dark:text-white">
+                                    {getBreadcrumbTitle()}
+                                </span>
+                            </div>
 
-                            {/* User menu */}
-                            <div className="relative group">
-                                <button className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
-                                    <div className="w-8 h-8 bg-teal-100 rounded-full flex items-center justify-center">
-                                        <User className="h-5 w-5 text-teal-600" />
-                                    </div>
-                                    <span className="hidden md:block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                        {user?.firstName || 'Utente'}
-                                    </span>
-                                    <ChevronDown className="h-4 w-4 text-gray-400" />
+                            {/* Tenant Filter Selector - Visible for multi-tenant users */}
+                            <div className="flex-1 flex justify-end px-4">
+                                <TenantModeSelector compact />
+                            </div>
+
+                            {/* Right side */}
+                            <div className="flex items-center gap-4">
+                                {/* Advanced Notification System */}
+                                <NotificationBell />
+
+                                {/* Help */}
+                                <button className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
+                                    <HelpCircle className="h-5 w-5 text-gray-500" />
                                 </button>
 
-                                {/* Dropdown */}
-                                <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all">
-                                    <div className="px-4 py-2 border-b border-gray-100 dark:border-gray-700">
-                                        <p className="text-sm font-medium text-gray-900 dark:text-white">
-                                            {getUserDisplayName()}
-                                        </p>
-                                        <p className="text-xs text-gray-500">{user?.email}</p>
-                                        <span className="inline-block mt-1 px-2 py-0.5 text-xs bg-teal-100 text-teal-800 rounded">
-                                            {getUserRoleDisplay()}
+                                {/* User menu */}
+                                <div className="relative group">
+                                    <button className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
+                                        <div className="w-8 h-8 bg-teal-100 rounded-full flex items-center justify-center">
+                                            <User className="h-5 w-5 text-teal-600" />
+                                        </div>
+                                        <span className="hidden md:block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                            {user?.firstName || 'Utente'}
                                         </span>
-                                    </div>
-                                    <Link
-                                        to="/profile"
-                                        className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                                    >
-                                        <User className="h-4 w-4" />
-                                        Profilo
-                                    </Link>
-                                    <button
-                                        onClick={handleLogout}
-                                        className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
-                                    >
-                                        <LogOut className="h-4 w-4" />
-                                        Esci
+                                        <ChevronDown className="h-4 w-4 text-gray-400" />
                                     </button>
+
+                                    {/* Dropdown */}
+                                    <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all">
+                                        <div className="px-4 py-2 border-b border-gray-100 dark:border-gray-700">
+                                            <p className="text-sm font-medium text-gray-900 dark:text-white">
+                                                {getUserDisplayName()}
+                                            </p>
+                                            <p className="text-xs text-gray-500">{user?.email}</p>
+                                            <span className="inline-block mt-1 px-2 py-0.5 text-xs bg-teal-100 text-teal-800 rounded">
+                                                {getUserRoleDisplay()}
+                                            </span>
+                                        </div>
+                                        <Link
+                                            to="/profile"
+                                            className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                        >
+                                            <User className="h-4 w-4" />
+                                            Profilo
+                                        </Link>
+                                        <button
+                                            onClick={handleLogout}
+                                            className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                        >
+                                            <LogOut className="h-4 w-4" />
+                                            Esci
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                </header>
+                    </header>
+                )}
 
                 {/* Page Content */}
                 <main className="p-6">
@@ -482,7 +663,24 @@ const ClinicaLayout: React.FC<ClinicaLayoutProps> = ({ children }) => {
                     </div>
                 </footer>
             </div>
+
+            {/* Sistema di notifiche toast globale */}
+            <Notifications />
+
+            {/* Real-time notification popups */}
+            <NotificationPopup position="top-right" />
         </div>
+    );
+};
+
+/**
+ * Main ClinicaLayout component - wraps content with SidebarProvider
+ */
+const ClinicaLayout: React.FC<ClinicaLayoutProps> = ({ children }) => {
+    return (
+        <SidebarProvider>
+            <ClinicaLayoutContent>{children}</ClinicaLayoutContent>
+        </SidebarProvider>
     );
 };
 

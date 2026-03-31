@@ -14,9 +14,12 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useTenantAccess } from '../../hooks/useTenantAccess';
 import { useExpiringCoursesCount } from '../../hooks/useExpiringCoursesCount';
 import { useNewSubmissionsCount } from '../../hooks/useNewSubmissionsCount';
 import { ModuleSwitcher } from '../shared/ModuleSwitcher';
+import { getCurrentBrand } from '../../config/brands.config';
+import { getTenantBranding } from '../../utils/tenantBranding';
 import {
   Building2,
   Calendar,
@@ -29,7 +32,6 @@ import {
   LayoutDashboard,
   Menu,
   Settings,
-  Settings2,
   UserCheck,
   UserCog,
   Users
@@ -54,6 +56,16 @@ const Sidebar: React.FC<SidebarProps> = ({ open, setOpen, collapsed = false, onC
   const location = useLocation();
   const { pathname } = location;
   const { user, hasPermission: authHasPermission } = useAuth();
+  const { currentTenant } = useTenantAccess();
+  const brand = getCurrentBrand();
+
+  // Branch-specific branding for training module (FORMAZIONE)
+  const tenantBranding = getTenantBranding(
+    currentTenant,
+    'element-sicurezza',
+    'ElementSicurezza',
+    brand.logoIcon
+  );
 
   // State for sidebar collapse (desktop) - use prop if provided
   const [sidebarOpen, setSidebarOpen] = useState(!collapsed);
@@ -72,14 +84,17 @@ const Sidebar: React.FC<SidebarProps> = ({ open, setOpen, collapsed = false, onC
   // Hook per il conteggio delle nuove risposte ai form (status NEW)
   const { count: newSubmissionsCount } = useNewSubmissionsCount();
 
-  // Permission helpers
+  // Permission helpers — usa ruoli e permessi del tenant corrente (tenant-scoped via /auth/verify)
   const hasPermission = authHasPermission || ((): boolean => false);
-  const userRole = user?.role || 'Employee';
-  const isAdmin = userRole === 'Admin' || userRole === 'Administrator';
+  const userRoles = user?.roles || [];
+  // isAdmin: vero se l'utente ha un ruolo admin/tenant-admin SUL TENANT CORRENTE
+  // user.roles è aggiornato da refreshUser() dopo ogni switchTenant()
+  const isAdmin = userRoles.some(r => ['ADMIN', 'SUPER_ADMIN', 'COMPANY_ADMIN', 'TENANT_ADMIN'].includes(r))
+    || user?.role === 'Admin' || user?.role === 'Administrator';
 
-  // Verifica se l'utente è un semplice EMPLOYEE
-  const isEmployeeOnly = user?.roles?.includes('EMPLOYEE') &&
-    !user?.roles?.some(r => ['ADMIN', 'TRAINING_ADMIN', 'HR_MANAGER', 'COMPANY_MANAGER', 'SITE_MANAGER'].includes(r));
+  // Verifica se l'utente è un semplice EMPLOYEE (senza ruoli di gestione)
+  const isEmployeeOnly = userRoles.includes('EMPLOYEE') &&
+    !userRoles.some(r => ['ADMIN', 'SUPER_ADMIN', 'TENANT_ADMIN', 'COMPANY_ADMIN', 'TRAINING_ADMIN', 'HR_MANAGER', 'COMPANY_MANAGER', 'SITE_MANAGER'].includes(r));
 
   // Navigation configuration
   const navigationItems: NavItem[] = [
@@ -103,7 +118,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, setOpen, collapsed = false, onC
           icon: UserCog
         }] : []),
         ...(!isEmployeeOnly && (isAdmin || hasPermission('trainers', 'read')) ? [{
-          label: 'Formatori',
+          label: 'Formatori e RSPP',
           href: '/trainers',
           icon: UserCheck
         }] : [])
@@ -136,13 +151,13 @@ const Sidebar: React.FC<SidebarProps> = ({ open, setOpen, collapsed = false, onC
       icon: FileText,
       children: [
         {
-          label: 'Preventivi e Fatture',
-          href: '/quotes-and-invoices',
+          label: 'Preventivi',
+          href: '/preventivi',
           icon: FileText
         },
         ...(isAdmin || hasPermission('form_templates', 'read') ? [{
-          label: 'Forms',
-          href: '/forms',
+          label: 'Test',
+          href: '/test',
           icon: ClipboardList,
           badge: newSubmissionsCount > 0 ? newSubmissionsCount : undefined
         }] : [])
@@ -152,14 +167,9 @@ const Sidebar: React.FC<SidebarProps> = ({ open, setOpen, collapsed = false, onC
       label: 'Impostazioni',
       icon: Settings,
       children: [
-        ...(isAdmin ? [{
-          label: 'Management',
-          href: '/management',
-          icon: Settings2
-        }] : []),
         {
           label: 'Impostazioni',
-          href: '/settings/users',
+          href: '/formazione/impostazioni',
           icon: Settings
         }
       ]
@@ -283,12 +293,14 @@ const Sidebar: React.FC<SidebarProps> = ({ open, setOpen, collapsed = false, onC
       {/* Logo */}
       <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200 dark:border-gray-700">
         <Link to="/dashboard" className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-700 rounded-lg flex items-center justify-center">
-            <GraduationCap className="h-6 w-6 text-white" />
-          </div>
+          <img
+            src={tenantBranding.logoUrl || brand.logoIcon}
+            alt={tenantBranding.displayName}
+            className="w-10 h-10 rounded-lg object-contain"
+          />
           {sidebarOpen && (
             <div>
-              <span className="text-lg font-bold text-gray-900 dark:text-white">ElementSicurezza</span>
+              <span className="text-lg font-bold text-gray-900 dark:text-white">{tenantBranding.displayName}</span>
               <p className="text-xs text-gray-500">Sicurezza e Formazione</p>
             </div>
           )}

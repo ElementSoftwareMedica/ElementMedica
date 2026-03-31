@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Session 63 - Sidebar Branding Fix (All Layouts) + TenantModeContext Sync
+
+#### Sidebar Branding - ClinicaLayout, Sidebar, ManagementLayout
+- **File**: `src/components/layouts/ClinicaLayout.tsx`
+  - **Problema**: sidebar Poliambulatorio mostrava sempre "Element srl" con logo generico invece del branch MEDICA.
+  - **Fix**: Sostituita logica inline (`currentTenant?.name`) con `getTenantBranding(currentTenant, 'element-medica', 'ElementMedica', ...)`. Ora mostra nome e logo del branch MEDICA.
+- **File**: `src/components/layouts/Sidebar.tsx`
+  - **Problema**: sidebar Formazione/Sicurezza mostrava sempre "Element srl" con logo generico.
+  - **Fix**: Sostituita logica inline con `getTenantBranding(currentTenant, 'element-sicurezza', 'ElementSicurezza', ...)`. Ora mostra nome e logo del branch FORMAZIONE.
+- **File**: `src/components/layouts/ManagementLayout.tsx`
+  - **Problema**: sidebar Management mostrava il nome del branch specifico invece del nome generale del tenant.
+  - **Fix**: Passato `undefined` come brandId → usa nome e logo generali del tenant.
+
+#### tenantBranding.ts - Null branchKey support
+- **File**: `src/utils/tenantBranding.ts`
+- `getBrandBranchKey()` ora ritorna `null` per brandId non riconosciuti (prima defaultava a 'FORMAZIONE').
+- `getTenantBranding()` salta il branch lookup quando branchKey è null → mostra dati generali del tenant.
+
+#### TenantModeContext - Sync fix on tenant switch
+- **File**: `src/contexts/TenantModeContext.tsx`
+- **Problema**: Quando l'utente cambiava tenant via TenantSelector, `operateTenantId` in localStorage restava al vecchio valore. L'interceptor API inviava l'header `X-Operate-Tenant-Id` sbagliato → FK constraint violation.
+- **Fix**: Il sync effect ora aggiorna `operateTenantId` quando `viewMode === 'single'` E `currentTenant.id` è diverso dal valore corrente.
+
+#### CMS Forms - Verifica infrastruttura
+- Verificato che backend embed routes per forms sono complete (GET /forms, GET /forms/:formId, POST /forms/:formId/submit).
+- Widget-options include correttamente i forms nell'elenco.
+- Nessun template form esiste nel database → l'utente deve crearli via /cms/forms e impostare `isPublic: true`.
+
+#### Deploy produzione
+- Build entrambi i brand (`element-medica` → dist-public, `element-sicurezza` → dist).
+- Deploy via rsync + fix permessi www-data.
+- E2E: login, API key creation/deletion per Element srl, widget-options, health checks OK.
+
+---
+
 ### Session 62 - Branding Debug Tracing & PublicApiSettingsPage Tenant Awareness
 
 #### tenantBranding.ts - Dev tracing

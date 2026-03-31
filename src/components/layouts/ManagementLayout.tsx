@@ -16,13 +16,17 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/auth/useAuth';
+import { useTenantAccess } from '../../hooks/useTenantAccess';
+import { getCurrentBrand } from '../../config/brands.config';
+import { getTenantBranding } from '../../utils/tenantBranding';
 import { ModuleSwitcher } from '../shared/ModuleSwitcher';
+import { TenantModeSelector } from '../shared/TenantModeSelector';
+import { useNewPublicSubmissionsCount } from '../../hooks/useNewPublicSubmissionsCount';
 
 // Import Management theme
 import '../../styles/management-theme.css';
 import {
     Home,
-    Users,
     Shield,
     Building2,
     Settings,
@@ -40,13 +44,23 @@ import {
     HelpCircle,
     Layers,
     Key,
-    UserCog,
-    Lock,
     ClipboardList,
     BarChart3,
     FolderCog,
     Tag,
-    Sparkles
+    Sparkles,
+    // P68 HR Icons
+    Clock,
+    Calendar,
+    CalendarCheck,
+    Briefcase,
+    UserCheck,
+    FileSpreadsheet,
+    // P97 Billing Icons
+    Receipt,
+    ArrowDownLeft,
+    // P74 Document Management
+    FolderOpen
 } from 'lucide-react';
 
 interface NavItem {
@@ -56,6 +70,7 @@ interface NavItem {
     children?: NavItem[];
     badge?: number;
     permission?: string;
+    feature?: string | string[];
     adminOnly?: boolean;
 }
 
@@ -63,44 +78,89 @@ interface NavItem {
  * Navigation configuration for management sidebar
  */
 const navigationItems: NavItem[] = [
+    // === DASHBOARD ===
     {
         label: 'Dashboard',
         href: '/management',
         icon: Home
     },
+
+    // === P68: GESTIONE HR (PERSONALE INTERNO) ===
+    {
+        label: 'Gestione HR',
+        icon: Briefcase,
+        permission: 'hr',
+        children: [
+            { label: 'Dashboard HR', href: '/management/hr', icon: BarChart3 },
+            { label: 'Profili Personale', href: '/management/hr/profili', icon: UserCheck },
+            { label: 'Mansionario', href: '/management/hr/mansioni', icon: Briefcase },
+            { label: 'Disponibilità', href: '/management/hr/disponibilita', icon: CalendarCheck },
+            { label: 'Turni', href: '/management/hr/turni', icon: Calendar },
+            { label: 'Timbratura', href: '/management/hr/timbrature', icon: Clock },
+            { label: 'Assenze', href: '/management/hr/assenze', icon: CalendarCheck },
+            { label: 'Cartellini', href: '/management/hr/cartellini', icon: FileSpreadsheet }
+        ]
+    },
+
+    // === GESTIONE UTENTI (P69: Consolidato - Persone rimosso dalla sidebar) ===
     {
         label: 'Tenant & Accessi',
         icon: Building2,
         children: [
             { label: 'I Miei Tenant', href: '/management/my-tenants', icon: Building2 },
             { label: 'Tutti i Tenant', href: '/management/tenants', icon: Layers, adminOnly: true },
-            { label: 'Accessi Utenti', href: '/management/tenant-access', icon: Key }
-        ]
-    },
-    {
-        label: 'Gestione Persone',
-        icon: Users,
-        children: [
-            { label: 'Tutte le Persone', href: '/management/persons', icon: Users },
-            { label: 'Persone per Tenant', href: '/management/tenant-users', icon: UserCog }
+            { label: 'Accessi Utenti', href: '/management/tenant-access', icon: Key },
+            { label: 'Approvazioni Cross-Tenant', href: '/management/cross-tenant-approvals', icon: Shield, adminOnly: true }
         ]
     },
     {
         label: 'Ruoli & Permessi',
         icon: Shield,
+        adminOnly: true,
         children: [
-            { label: 'Ruoli', href: '/management/roles', icon: Shield },
-            { label: 'Gerarchia Ruoli', href: '/management/role-hierarchy', icon: Layers },
-            { label: 'Permessi Avanzati', href: '/management/permissions/advanced', icon: Key },
-            { label: 'Matrice Permessi', href: '/management/permissions', icon: Lock },
+            { label: 'Ruoli e Gerarchia', href: '/management/role-hierarchy', icon: Layers },
+            { label: 'Permessi', href: '/management/permissions', icon: Key }
         ]
     },
+
+    // === CONTENUTI ===
     {
         label: 'CMS',
         href: '/management/cms',
         icon: Globe,
         permission: 'CMS'
     },
+    {
+        label: 'Contenuti',
+        icon: Sparkles,
+        children: [
+            { label: 'Templates', href: '/management/templates', icon: FileText },
+            { label: 'Codici Sconto', href: '/management/codici-sconto', icon: Tag }
+        ]
+    },
+    // === P74: DOCUMENTI INTERNI ===
+    {
+        label: 'Documenti',
+        href: '/management/documenti',
+        icon: FolderOpen
+    },
+    // === P97: FATTURAZIONE ELETTRONICA & SISTEMA TS ===
+    {
+        label: 'Fatturazione',
+        icon: Receipt,
+        permission: 'billing',
+        feature: 'billing',
+        children: [
+            { label: 'Dashboard', href: '/management/billing', icon: BarChart3 },
+            { label: 'Fatture Elettroniche', href: '/management/billing/fatture', icon: FileText },
+            { label: 'Spese / Fatture passive', href: '/management/billing/spese', icon: ArrowDownLeft },
+            { label: 'Enti Emittenti', href: '/management/billing/enti-emittenti', icon: Building2 },
+            { label: 'Sistema TS (MEF)', href: '/management/billing/sistema-ts', icon: Shield },
+            { label: 'Stato integrazioni', href: '/management/billing/integrazioni', icon: Activity }
+        ]
+    },
+
+    // === COMPLIANCE & SISTEMA ===
     {
         label: 'GDPR & Privacy',
         icon: FileText,
@@ -118,15 +178,8 @@ const navigationItems: NavItem[] = [
             { label: 'Activity Logs', href: '/management/logs', icon: Activity },
             { label: 'Backup & Restore', href: '/management/backup', icon: Database },
             { label: 'Configurazioni', href: '/management/config', icon: FolderCog },
+            { label: 'API Pubbliche', href: '/management/api-pubbliche', icon: Globe },
             { label: 'Reports', href: '/management/reports', icon: BarChart3 }
-        ]
-    },
-    {
-        label: 'Contenuti',
-        icon: Sparkles,
-        children: [
-            { label: 'Templates', href: '/management/templates', icon: FileText },
-            { label: 'Codici Sconto', href: '/management/codici-sconto', icon: Tag }
         ]
     }
 ];
@@ -138,18 +191,34 @@ const ManagementLayout: React.FC<{ children?: React.ReactNode }> = ({ children }
     const location = useLocation();
     const navigate = useNavigate();
     const { user, logout, hasPermission } = useAuth();
+    const { currentTenant, currentTenantId, loading: tenantLoading, hasFeature } = useTenantAccess();
+    const currentBrand = getCurrentBrand();
+    const isResolvingTenant = Boolean(currentTenantId) && !currentTenant && tenantLoading;
+    // Management: general tenant name/logo (no branch-specific lookup)
+    const tenantBranding = getTenantBranding(
+        currentTenant,
+        undefined,
+        isResolvingTenant ? undefined : currentBrand.displayName,
+        currentBrand.logoIcon
+    );
 
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [expandedItems, setExpandedItems] = useState<string[]>([]);
     const [notifications] = useState(0);
 
-    // Check if user is admin
+    // Badge CMS per risposte ai form pubblici
+    const { count: newCmsSubmissionsCount } = useNewPublicSubmissionsCount();
+
+    // Check if user is admin (TENANT_ADMIN and COMPANY_ADMIN included)
     const isAdmin = user?.role === 'Admin' ||
+        user?.role === 'Administrator' ||
         user?.globalRole === 'ADMIN' ||
         user?.globalRole === 'SUPER_ADMIN' ||
         user?.roles?.includes('ADMIN') ||
-        user?.roles?.includes('SUPER_ADMIN');
+        user?.roles?.includes('SUPER_ADMIN') ||
+        user?.roles?.includes('TENANT_ADMIN') ||
+        user?.roles?.includes('COMPANY_ADMIN');
 
     // Auto-expand active menu
     useEffect(() => {
@@ -180,6 +249,18 @@ const ManagementLayout: React.FC<{ children?: React.ReactNode }> = ({ children }
             if (item.href === '/management') {
                 return location.pathname === '/management' || location.pathname === '/management/';
             }
+            // P69: For items that are part of parent menu (like Dashboard HR), use exact match
+            // This prevents both "Dashboard HR" and "Profili Personale" from being highlighted
+            const parentItem = navigationItems.find(nav =>
+                nav.children?.some(child => child.href === item.href)
+            );
+            if (parentItem && parentItem.children && parentItem.children.length > 1) {
+                // Check if this is a dashboard/overview item (first child or ends with parent path)
+                const isDashboardItem = item.href === `/management/${item.href.split('/').pop()}`;
+                if (isDashboardItem || item.href.split('/').length <= 3) {
+                    return location.pathname === item.href || location.pathname === item.href + '/';
+                }
+            }
             return location.pathname.startsWith(item.href);
         }
         if (item.children) {
@@ -188,11 +269,75 @@ const ManagementLayout: React.FC<{ children?: React.ReactNode }> = ({ children }
         return false;
     };
 
+    /**
+     * Generate smart breadcrumb title from path
+     * Handles UUIDs by showing parent segment with "Dettagli" suffix
+     */
+    const getBreadcrumbTitle = (): string => {
+        const segments = location.pathname.split('/').filter(Boolean);
+        if (segments.length === 0) return 'Dashboard';
+
+        const lastSegment = segments[segments.length - 1];
+
+        // Check if last segment is a UUID (36 chars with dashes or 32 chars without)
+        const isUuid = /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i.test(lastSegment);
+
+        // Path label mapping for better readability
+        const pathLabels: Record<string, string> = {
+            'management': 'Dashboard',
+            'aziende': 'Aziende',
+            'employees': 'Dipendenti',
+            'dipendenti': 'Dipendenti',
+            'tariffari': 'Tariffari',
+            'tariffari-aziende': 'Tariffari Aziende',
+            'tenants': 'Tenant',
+            'users': 'Utenti',
+            'system': 'Sistema',
+            'logs': 'Log',
+            'settings': 'Impostazioni',
+            'modifica': 'Modifica',
+            'nuovo': 'Nuovo',
+            'nuova': 'Nuova',
+            'documenti': 'Documenti',
+            'cartelle': 'Cartelle'
+        };
+
+        // Singular form mapping for detail pages
+        const singularLabels: Record<string, string> = {
+            'aziende': 'Azienda',
+            'employees': 'Dipendente',
+            'dipendenti': 'Dipendente',
+            'tariffari': 'Tariffario',
+            'tariffari-aziende': 'Tariffario Aziendale',
+            'tenants': 'Tenant',
+            'users': 'Utente',
+            'codici-sconto': 'Codice Sconto'
+        };
+
+        if (isUuid && segments.length > 1) {
+            // Get parent segment for context
+            const parentSegment = segments[segments.length - 2];
+            const singularLabel = singularLabels[parentSegment] ||
+                pathLabels[parentSegment] ||
+                parentSegment.replace(/-/g, ' ').replace(/^\w/, c => c.toUpperCase());
+            return `Dettaglio ${singularLabel}`;
+        }
+
+        return pathLabels[lastSegment] ||
+            lastSegment.replace(/-/g, ' ').replace(/^\w/, c => c.toUpperCase());
+    };
+
     // Filter nav items by permission
     const filterNavItems = (items: NavItem[]): NavItem[] => {
         return items.filter(item => {
             if (item.adminOnly && !isAdmin) return false;
-            if (item.permission && !hasPermission(item.permission, 'read') && !isAdmin) return false;
+            if (item.feature && !hasFeature(Array.isArray(item.feature) ? item.feature[0] : item.feature)) return false;
+            if (item.permission) {
+                const hasPerm = hasPermission(item.permission, 'read');
+                if (!hasPerm && !isAdmin) {
+                    return false;
+                }
+            }
             return true;
         }).map(item => ({
             ...item,
@@ -200,15 +345,19 @@ const ManagementLayout: React.FC<{ children?: React.ReactNode }> = ({ children }
         }));
     };
 
-    const filteredNavItems = filterNavItems(navigationItems);
+    const filteredNavItems = filterNavItems(navigationItems).map(item =>
+        item.href === '/management/cms'
+            ? { ...item, badge: newCmsSubmissionsCount > 0 ? newCmsSubmissionsCount : undefined }
+            : item
+    );
 
     // Handle logout
     const handleLogout = async () => {
         try {
             await logout();
             navigate('/login');
-        } catch (error) {
-            console.error('Logout error:', error);
+        } catch {
+            navigate('/login');
         }
     };
 
@@ -297,12 +446,16 @@ const ManagementLayout: React.FC<{ children?: React.ReactNode }> = ({ children }
                 {/* Logo */}
                 <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200 dark:border-gray-700">
                     <Link to="/management" className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-purple-700 rounded-lg flex items-center justify-center">
-                            <Settings className="h-6 w-6 text-white" />
-                        </div>
+                        <img
+                            src={tenantBranding.logoUrl || currentBrand.logoIcon}
+                            alt={tenantBranding.displayName}
+                            className="w-10 h-10 rounded-lg object-contain"
+                        />
                         {sidebarOpen && (
                             <div>
-                                <span className="text-lg font-bold text-gray-900 dark:text-white">Management</span>
+                                <span className="text-lg font-bold text-gray-900 dark:text-white">
+                                    {tenantBranding.displayName}
+                                </span>
                                 <p className="text-xs text-gray-500">Sistema Gestionale</p>
                             </div>
                         )}
@@ -352,15 +505,20 @@ const ManagementLayout: React.FC<{ children?: React.ReactNode }> = ({ children }
 
                         {/* Breadcrumb / Title */}
                         <div className="flex items-center gap-2">
-                            <span className="text-sm text-gray-500">Management</span>
+                            <span className="text-sm text-gray-500">{tenantBranding.displayName}</span>
                             <ChevronRight className="h-4 w-4 text-gray-400" />
                             <span className="text-sm font-medium text-gray-900 dark:text-white">
-                                {location.pathname.split('/').pop()?.replace(/-/g, ' ').replace(/^\w/, c => c.toUpperCase()) || 'Dashboard'}
+                                {getBreadcrumbTitle()}
                             </span>
                         </div>
 
+                        {/* Spacer + TenantMode Selector */}
+                        <div className="flex-1 flex justify-end px-4">
+                            <TenantModeSelector compact />
+                        </div>
+
                         {/* Right side */}
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-3">
                             {/* Notifications */}
                             <button className="relative p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
                                 <Bell className="h-5 w-5 text-gray-500" />

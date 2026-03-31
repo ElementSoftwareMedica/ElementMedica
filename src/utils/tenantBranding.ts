@@ -19,8 +19,10 @@ type ParsedSettings = {
   branches?: Record<string, BranchBranding | undefined>;
 };
 
-function getBrandBranchKey(brandId?: string): string {
-  return brandId === 'element-medica' ? 'MEDICA' : 'FORMAZIONE';
+function getBrandBranchKey(brandId?: string): string | null {
+  if (brandId === 'element-medica') return 'MEDICA';
+  if (brandId === 'element-sicurezza') return 'FORMAZIONE';
+  return null;
 }
 
 function pickNonEmptyString(...values: unknown[]): string | null {
@@ -82,7 +84,7 @@ export function getTenantBranding(
 ): { displayName: string; logoUrl: string | null; branchKey: string } {
   const branchKey = getBrandBranchKey(brandId);
   const settings = parseTenantSettings(tenant?.settings);
-  const branchBranding = getBranchBranding(settings, branchKey);
+  const branchBranding = branchKey ? getBranchBranding(settings, branchKey) : null;
 
   const branchDisplayName = pickNonEmptyString(
     branchBranding?.name,
@@ -99,7 +101,7 @@ export function getTenantBranding(
   const result = {
     displayName: branchDisplayName || tenantDisplayName || settingsDisplayName || fallbackName || 'Management',
     logoUrl: branchLogo || tenantLogo || pickNonEmptyString(fallbackLogo) || null,
-    branchKey
+    branchKey: branchKey || ''
   };
 
   if (import.meta.env.DEV && tenant) {
